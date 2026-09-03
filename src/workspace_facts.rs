@@ -3,8 +3,9 @@
 //! `gitdir`, and `config` under the directory it names (specification section 14). Runs no
 //! command.
 
-use std::fs::{self, File};
+use std::fs::{self, OpenOptions};
 use std::io::Read;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::environment::HostEnvironment;
@@ -134,8 +135,11 @@ impl GitFile {
 }
 
 /// Reads a file git may have written. The directory it sits in can be written from inside
-/// the isolation, so nothing that is not a regular file is opened (a FIFO would block
-/// forever), symbolic links are not followed, and the length is bounded.
+/// the isolation, so nothing that is not a regular file is used, symbolic links are not
+/// followed, and the length is bounded. The entry can be swapped for a FIFO between the
+/// type check and the open, and an open that waits for a writer would stop the start-up,
+/// so the open itself refuses to follow a link and does not wait; a regular file is read
+/// the same way either way.
 fn read_git_file(path: &Path) -> GitFile {
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return GitFile::Absent;
@@ -143,7 +147,11 @@ fn read_git_file(path: &Path) -> GitFile {
     if !metadata.file_type().is_file() {
         return GitFile::Unusable;
     }
-    let Ok(file) = File::open(path) else {
+    let Ok(file) = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+    else {
         return GitFile::Unusable;
     };
     // Checked again on the open descriptor: the entry may have been replaced since.
