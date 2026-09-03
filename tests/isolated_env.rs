@@ -244,3 +244,69 @@ fn an_unusable_secret_file_is_a_secret_diagnostic() {
 
     assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
+
+const INSTEAD_OF: &str =
+    "[git.instead-of]\n\"git@x:\" = \"https://x/\"\n\"git@y:\" = \"https://y/\"";
+
+#[test]
+fn instead_of_entries_continue_the_git_config_count() {
+    let assembled = assemble(
+        INSTEAD_OF,
+        &host(&[
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", "user.name"),
+            ("GIT_CONFIG_VALUE_0", "u"),
+        ]),
+        &BTreeMap::new(),
+        &[],
+    )
+    .unwrap();
+
+    let expected: Vec<(OsString, OsString)> = host(&[
+        ("GIT_CONFIG_COUNT", "3"),
+        ("GIT_CONFIG_KEY_0", "user.name"),
+        ("GIT_CONFIG_KEY_1", "url.https://x/.insteadof"),
+        ("GIT_CONFIG_KEY_2", "url.https://y/.insteadof"),
+        ("GIT_CONFIG_VALUE_0", "u"),
+        ("GIT_CONFIG_VALUE_1", "git@x:"),
+        ("GIT_CONFIG_VALUE_2", "git@y:"),
+        ("PROCESS_WRAP", "1"),
+    ])
+    .into_iter()
+    .collect();
+    let actual: Vec<(OsString, OsString)> = assembled
+        .environment
+        .values()
+        .iter()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn instead_of_starts_at_zero_when_the_count_is_absent() {
+    let assembled = assemble(INSTEAD_OF, &host(&[]), &BTreeMap::new(), &[]).unwrap();
+
+    assert_eq!(
+        assembled.environment.values()[&OsString::from("GIT_CONFIG_COUNT")],
+        OsString::from("2")
+    );
+    assert_eq!(
+        assembled.environment.values()[&OsString::from("GIT_CONFIG_KEY_0")],
+        OsString::from("url.https://x/.insteadof")
+    );
+}
+
+#[test]
+fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
+    let bogus = host(&[("GIT_CONFIG_COUNT", "abc")]);
+
+    let diagnostic = assemble(INSTEAD_OF, &bogus, &BTreeMap::new(), &[]).unwrap_err();
+    assert_eq!(diagnostic.kind(), Kind::Env, "{diagnostic}");
+
+    let without_entries = assemble("", &bogus, &BTreeMap::new(), &[]).unwrap();
+    assert_eq!(
+        without_entries.environment.values()[&OsString::from("GIT_CONFIG_COUNT")],
+        OsString::from("abc")
+    );
+}

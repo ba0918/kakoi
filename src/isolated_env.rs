@@ -106,11 +106,19 @@ pub fn assemble_environment(
     }
     // 5. The git rewrite, numbered after the pairs already there.
     if !policy.instead_of.is_empty() {
-        let count = values
-            .get(OsStr::new("GIT_CONFIG_COUNT"))
-            .and_then(|count| count.to_str())
-            .and_then(|count| count.parse::<usize>().ok())
-            .unwrap_or(0);
+        let count = match values.get(OsStr::new("GIT_CONFIG_COUNT")) {
+            None => 0,
+            Some(count) => count
+                .to_str()
+                .filter(|text| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
+                .and_then(|text| text.parse::<usize>().ok())
+                .ok_or_else(|| {
+                    Diagnostic::env(format!(
+                        "GIT_CONFIG_COUNT is not a number: {}",
+                        count.to_string_lossy()
+                    ))
+                })?,
+        };
         for (index, (original, replacement)) in policy.instead_of.iter().enumerate() {
             let number = count + index;
             values.insert(
