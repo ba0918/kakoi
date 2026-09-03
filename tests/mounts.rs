@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
 mod common;
@@ -580,6 +582,27 @@ fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
             mount("/usr/lib/wsl/drivers", "9p"),
             mount("/mnt/c", "drvfs"),
             mount("/mnt/with space", "9p"),
+        ]
+    );
+}
+
+#[test]
+fn a_mount_point_with_a_byte_that_is_not_utf8_does_not_empty_the_mount_list() {
+    let copy = TempDir::new();
+    let mut text = b"91 82 0:51 / /mnt/ok rw - 9p tag rw\n".to_vec();
+    text.extend_from_slice(b"92 82 0:52 / /mnt/\xff rw - 9p tag rw\n");
+    let path = copy.write("mountinfo", text);
+
+    let mounts = read_mount_list(&path);
+
+    assert_eq!(
+        mounts,
+        [
+            mount("/mnt/ok", "9p"),
+            Mount {
+                target: PathBuf::from(OsString::from_vec(b"/mnt/\xff".to_vec())),
+                fstype: "9p".to_string(),
+            },
         ]
     );
 }
