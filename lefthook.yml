@@ -1,0 +1,11 @@
+# Git hooks (lefthook). Install once per clone: `lefthook install`.
+# Each command is guarded by run-if-present so the hooks are inert until Cargo.toml exists.
+pre-commit:
+  parallel: false
+  commands:
+    fmt:
+      glob: "*.rs"
+      run: run-if-present path Cargo.toml -- cargo fmt --check
+    clippy:
+      glob: "{*.rs,Cargo.toml,Cargo.lock}"
+      run: run-if-present path Cargo.toml -- cargo clippy --all-targets --locked -- -D warnings

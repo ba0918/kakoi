@@ -1,3 +1,4 @@
 /.agents/
 /target/
 /mise.local.toml
+/lefthook-local.yml
