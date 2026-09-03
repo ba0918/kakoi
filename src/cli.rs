@@ -102,10 +102,15 @@ where
     if parsed.command.is_empty() && has_end_of_options(&arguments) {
         return Err(Diagnostic::usage("nothing follows `--`"));
     }
-    if matches.get_flag("help") {
-        return Ok(Parsed::Help(parser.render_help().to_string()));
-    }
-    if matches.get_flag("version") {
+    if matches.get_flag("help") || matches.get_flag("version") {
+        if arguments.len() != 1 {
+            return Err(Diagnostic::usage(
+                "--help and --version cannot be combined with any other argument",
+            ));
+        }
+        if matches.get_flag("help") {
+            return Ok(Parsed::Help(parser.render_help().to_string()));
+        }
         return Ok(Parsed::Version(parser.render_version()));
     }
     if parsed.command.is_empty() && !parsed.print_plan {

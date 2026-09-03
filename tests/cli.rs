@@ -164,3 +164,18 @@ fn a_profile_name_that_is_not_a_single_path_component_is_a_usage_diagnostic() {
         assert_diagnostic(&output, 125, "usage");
     }
 }
+
+#[test]
+fn help_beside_a_valid_option_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["--help", "--profile", "x"][..],
+        &["--version", "--", "true"][..],
+        &["--print-plan", "--help"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+}
