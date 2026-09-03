@@ -3,6 +3,7 @@
 //! outer layer collected (sections 5.4 and 6). Pure.
 
 use std::collections::BTreeMap;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
@@ -253,8 +254,17 @@ pub fn resolve_mounts(
             written: item.written.to_string(),
         });
     }
+    resolved.items.sort_by(|a, b| byte_order(&a.real, &b.real));
     check_kinds(&resolved.items)?;
     Ok(resolved)
+}
+
+/// The order of specification section 6.4. An ancestor is a proper prefix of its
+/// descendants' bytes, so the byte order of the real path already puts ancestors first and
+/// unrelated paths in byte order. `Path`'s own order compares by component and would put
+/// `/a/b` before `/a-x`.
+fn byte_order(a: &Path, b: &Path) -> std::cmp::Ordering {
+    a.as_os_str().as_bytes().cmp(b.as_os_str().as_bytes())
 }
 
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).

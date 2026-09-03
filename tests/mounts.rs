@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 mod common;
 
@@ -209,4 +209,40 @@ fn rw_file_on_a_directory_is_a_path_diagnostic() {
     .unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+}
+
+/// The directives and real paths of the items, in resolved order.
+fn order(resolved: &ResolvedMounts) -> Vec<(Directive, &Path)> {
+    resolved
+        .items
+        .iter()
+        .map(|item| (item.directive, item.real.as_path()))
+        .collect()
+}
+
+#[test]
+fn ancestors_come_before_descendants() {
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nrw = [\"/home/u/proj/a/b\", \"/home/u/proj/a\"]\nhide = [\"/home/u/proj\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new()
+            .dir("/home/u/proj")
+            .dir("/home/u/proj/a")
+            .dir("/home/u/proj/a/b"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Hide, Path::new("/home/u/proj")),
+            (Directive::Rw, Path::new("/home/u/proj/a")),
+            (Directive::Rw, Path::new("/home/u/proj/a/b")),
+        ]
+    );
 }
