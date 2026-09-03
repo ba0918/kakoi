@@ -185,3 +185,16 @@ fn an_upper_layer_directive_replaces_the_same_real_path() {
         LayerOrigin::PolicyFile(PathBuf::from(POLICY_FILE))
     );
 }
+
+#[test]
+fn rw_on_a_regular_file_is_a_path_diagnostic_naming_rw_file() {
+    let diagnostic = resolve(
+        &layers("[mounts]\nrw = [\"/home/u/file\"]", None, &[], &[]),
+        &variables(),
+        Facts::new().file("/home/u/file"),
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+    assert!(diagnostic.description().contains("rw-file"), "{diagnostic}");
+}

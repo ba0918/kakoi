@@ -253,7 +253,22 @@ pub fn resolve_mounts(
             written: item.written.to_string(),
         });
     }
+    check_kinds(&resolved.items)?;
     Ok(resolved)
+}
+
+/// `rw` takes a directory and `rw-file` anything else (specification section 6.1).
+fn check_kinds(items: &[ResolvedItem]) -> Result<(), Diagnostic> {
+    for item in items {
+        if item.directive == Directive::Rw && item.kind == EntryKind::NotDirectory {
+            return Err(Diagnostic::path(format!(
+                "`rw` needs a directory but `{}` is {}; use `rw-file` for a file",
+                item.written,
+                item.real.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// A written item with its identity: the real path when something exists, else the
