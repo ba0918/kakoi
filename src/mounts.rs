@@ -260,12 +260,22 @@ pub fn resolve_mounts(
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).
 fn check_kinds(items: &[ResolvedItem]) -> Result<(), Diagnostic> {
     for item in items {
-        if item.directive == Directive::Rw && item.kind == EntryKind::NotDirectory {
-            return Err(Diagnostic::path(format!(
-                "`rw` needs a directory but `{}` is {}; use `rw-file` for a file",
-                item.written,
-                item.real.display()
-            )));
+        match (item.directive, item.kind) {
+            (Directive::Rw, EntryKind::NotDirectory) => {
+                return Err(Diagnostic::path(format!(
+                    "`rw` needs a directory but `{}` is {}; use `rw-file` for a file",
+                    item.written,
+                    item.real.display()
+                )));
+            }
+            (Directive::RwFile, EntryKind::Directory) => {
+                return Err(Diagnostic::path(format!(
+                    "`rw-file` takes a file but `{}` is the directory {}",
+                    item.written,
+                    item.real.display()
+                )));
+            }
+            _ => {}
         }
     }
     Ok(())

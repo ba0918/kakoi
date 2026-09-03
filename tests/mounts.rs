@@ -198,3 +198,15 @@ fn rw_on_a_regular_file_is_a_path_diagnostic_naming_rw_file() {
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
     assert!(diagnostic.description().contains("rw-file"), "{diagnostic}");
 }
+
+#[test]
+fn rw_file_on_a_directory_is_a_path_diagnostic() {
+    let diagnostic = resolve(
+        &layers("[mounts]\nrw-file = [\"/home/u/dir\"]", None, &[], &[]),
+        &variables(),
+        Facts::new().dir("/home/u/dir"),
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+}
