@@ -85,25 +85,10 @@ where
         host: &host,
     };
     let isolation = resolve_isolation(&inputs, &facts)?;
-    // Stage 8: `bwrap` on the host's `PATH`.
-    let bwrap = first_executable(&command_candidates(
-        OsStr::new("bwrap"),
-        host.get(OsStr::new("PATH")).map(OsString::as_os_str),
-    ))
-    .ok_or_else(|| Diagnostic::bwrap("bwrap is not on the host's PATH"))?;
-    // Stage 9: the command on the isolated `PATH`; none to resolve for a bare
-    // `--print-plan`.
+    let bwrap = locate_bwrap(&host)?;
     let command = match invocation.command.first() {
         None => None,
-        Some(command) => {
-            let path = isolation
-                .environment
-                .values()
-                .get(OsStr::new("PATH"))
-                .map(OsString::as_os_str);
-            let found = first_executable(&command_candidates(command, path));
-            Some(resolve_command(command, found)?)
-        }
+        Some(command) => Some(locate_command(command, isolation.environment.values())?),
     };
     let plan = plan::plan(&inputs, isolation, bwrap, command);
     Ok(Outcome::Prepared(Box::new(Prepared {
@@ -111,4 +96,23 @@ where
         current_dir,
         plan,
     })))
+}
+
+/// Stage 8: `bwrap` on the host's `PATH` (specification section 14).
+fn locate_bwrap(host: &BTreeMap<OsString, OsString>) -> Result<PathBuf, Diagnostic> {
+    first_executable(&command_candidates(OsStr::new("bwrap"), path_of(host)))
+        .ok_or_else(|| Diagnostic::bwrap("bwrap is not on the host's PATH"))
+}
+
+/// Stage 9: the command on the `PATH` of `environment` (specification section 4.2).
+fn locate_command(
+    command: &OsStr,
+    environment: &BTreeMap<OsString, OsString>,
+) -> Result<PathBuf, Diagnostic> {
+    let found = first_executable(&command_candidates(command, path_of(environment)));
+    resolve_command(command, found)
+}
+
+fn path_of(environment: &BTreeMap<OsString, OsString>) -> Option<&OsStr> {
+    environment.get(OsStr::new("PATH")).map(OsString::as_os_str)
 }
