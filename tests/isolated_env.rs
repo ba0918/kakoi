@@ -310,3 +310,34 @@ fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
         OsString::from("abc")
     );
 }
+
+#[test]
+fn secret_values_never_appear_in_the_plan_or_its_warnings() {
+    let assembled = assemble(
+        "[secrets]\nS = \"/home/u/tokens/s\"\nT = \"/home/u/tokens/t\"",
+        &host(&[("KEEP", "1")]),
+        &[
+            ("S".to_string(), SecretFile::Bytes(b"hunter2\n".to_vec())),
+            ("T".to_string(), SecretFile::Absent),
+        ]
+        .into_iter()
+        .collect(),
+        &[],
+    )
+    .unwrap();
+
+    let shown = assembled.environment.shown();
+    assert_eq!(shown[&OsString::from("KEEP")], Some(OsString::from("1")));
+    assert_eq!(shown[&OsString::from("S")], None);
+    let text = format!("{shown:?} {:?}", assembled.warnings);
+    assert!(!text.contains("hunter2"), "{text}");
+
+    let diagnostic = assemble(
+        SECRET,
+        &host(&[]),
+        &secret_bytes(&[("S", b"hunter2\0")]),
+        &[],
+    )
+    .unwrap_err();
+    assert!(!diagnostic.to_string().contains("hunter2"), "{diagnostic}");
+}

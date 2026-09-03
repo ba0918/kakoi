@@ -39,6 +39,18 @@ impl Environment {
     pub fn values(&self) -> &BTreeMap<OsString, OsString> {
         &self.values
     }
+
+    /// The environment as it may be shown: a secret's value is `None` (specification
+    /// section 9).
+    pub fn shown(&self) -> BTreeMap<OsString, Option<OsString>> {
+        self.values
+            .iter()
+            .map(|(name, value)| {
+                let shown = (!self.secret_names.contains(name)).then(|| value.clone());
+                (name.clone(), shown)
+            })
+            .collect()
+    }
 }
 
 /// The environment and the warnings raised while assembling it.
