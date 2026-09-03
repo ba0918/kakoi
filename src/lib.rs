@@ -16,6 +16,7 @@ pub mod placement;
 pub mod policy;
 pub mod regular_file;
 pub mod scan;
+pub mod secret_facts;
 pub mod startup;
 pub mod variables;
 pub mod wildcard;

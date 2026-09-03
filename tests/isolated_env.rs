@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 mod common;
 
 use common::fixture::{layers, merged};
+use common::TempDir;
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::isolated_env::{assemble_environment, Assembled, SecretFile};
+use process_wrap::secret_facts::read_secret_file;
 
 fn host(pairs: &[(&str, &str)]) -> BTreeMap<OsString, OsString> {
     pairs
@@ -340,4 +343,52 @@ fn secret_values_never_appear_in_the_plan_or_its_warnings() {
     )
     .unwrap_err();
     assert!(!diagnostic.to_string().contains("hunter2"), "{diagnostic}");
+}
+
+fn assemble_from_file(path: &std::path::Path) -> Result<Assembled, Diagnostic> {
+    let secrets = [("S".to_string(), read_secret_file(path))]
+        .into_iter()
+        .collect();
+    assemble(SECRET, &host(&[]), &secrets, &[])
+}
+
+#[test]
+fn a_fifo_secret_file_is_a_secret_diagnostic() {
+    let dir = TempDir::new();
+    let fifo = dir.path().join("fifo");
+    let status = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let diagnostic = assemble_from_file(&fifo).unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
+}
+
+#[test]
+fn a_secret_file_behind_a_symlink_is_read() {
+    let dir = TempDir::new();
+    let target = dir.write("vault/s", "linked\n");
+    let link = dir.path().join("s");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let assembled = assemble_from_file(&link).unwrap();
+
+    assert_eq!(
+        assembled.environment.values()[&OsString::from("S")],
+        OsString::from("linked")
+    );
+}
+
+#[test]
+fn an_unreadable_secret_file_is_a_secret_diagnostic() {
+    let dir = TempDir::new();
+    let file = dir.write("s", "v\n");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    let diagnostic = assemble_from_file(&file).unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
