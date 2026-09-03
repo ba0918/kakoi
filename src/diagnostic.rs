@@ -47,6 +47,10 @@ impl Diagnostic {
         Self::new(Kind::Usage, description)
     }
 
+    pub fn policy(description: impl Into<String>) -> Self {
+        Self::new(Kind::Policy, description)
+    }
+
     pub fn kind(&self) -> Kind {
         self.kind
     }
