@@ -358,6 +358,8 @@ fn secret_values_never_appear_in_the_plan_or_its_warnings() {
     assert_eq!(shown[&OsString::from("S")], None);
     let text = format!("{shown:?} {:?}", assembled.warnings);
     assert!(!text.contains("hunter2"), "{text}");
+    let debug = format!("{:?}", assembled.environment);
+    assert!(!debug.contains("hunter2"), "{debug}");
 
     let diagnostic = assemble(
         SECRET,

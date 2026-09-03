@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{OsStr, OsString};
+use std::fmt;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 
@@ -28,10 +29,20 @@ pub enum SecretFile {
 
 /// The final environment. The names of the secrets are kept so that any display masks
 /// their values.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct Environment {
     values: BTreeMap<OsString, OsString>,
     secret_names: BTreeSet<OsString>,
+}
+
+/// Written by hand rather than derived: a derived `Debug` would print the secret values,
+/// and every type holding an `Environment` inherits this one (specification section 9).
+impl fmt::Debug for Environment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Environment")
+            .field("values", &self.shown())
+            .finish()
+    }
 }
 
 impl Environment {
