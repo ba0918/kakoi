@@ -142,3 +142,11 @@ impl Facts {
         self
     }
 }
+
+/// The variables of a workspace at the worktree that is not under git.
+pub fn variables_without_git() -> Variables {
+    Variables {
+        git_common_dir: None,
+        ..variables()
+    }
+}

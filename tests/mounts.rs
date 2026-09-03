@@ -2,9 +2,29 @@ use std::path::PathBuf;
 
 mod common;
 
-use common::fixture::{home, layers, merged, variables};
+use common::fixture::{home, layers, merged, variables, variables_without_git, Facts};
+use process_wrap::diagnostic::Diagnostic;
 use process_wrap::environment::{HostEnvironment, RealEntry};
-use process_wrap::mounts::{expand_policy, Expansion};
+use process_wrap::layers::{Directive, Layer};
+use process_wrap::mounts::{expand_policy, resolve_mounts, Expansion, MountFacts, ResolvedMounts};
+use process_wrap::variables::Variables;
+
+/// Resolves the mount items of the written layers against `facts`, with no scan hits and
+/// no mount list.
+fn resolve(
+    layers: &[Layer],
+    variables: &Variables,
+    facts: Facts,
+) -> Result<ResolvedMounts, Diagnostic> {
+    let policy = merged(layers);
+    let expanded = expand_policy(&policy, variables, &home());
+    let facts = MountFacts {
+        paths: facts.0,
+        scan_hits: Vec::new(),
+        mounts: Vec::new(),
+    };
+    resolve_mounts(&expanded, layers, variables, &facts)
+}
 
 #[test]
 fn tilde_expands_to_the_real_home_directory() {
@@ -61,4 +81,19 @@ fn variables_expand_only_in_path_values() {
         path("/home/u/.config/process-wrap/secrets/t")
     );
     assert_eq!(policy.env_set["X"], "${worktree}");
+}
+
+#[test]
+fn an_item_with_a_valueless_variable_is_skipped() {
+    let resolved = resolve(
+        &layers("[mounts]\nrw = [\"${git_common_dir}\"]", None, &[], &[]),
+        &variables_without_git(),
+        Facts::new(),
+    )
+    .unwrap();
+
+    assert!(resolved.items.is_empty(), "{resolved:?}");
+    assert_eq!(resolved.skipped.len(), 1, "{resolved:?}");
+    assert_eq!(resolved.skipped[0].directive, Directive::Rw);
+    assert!(!resolved.skipped[0].reason.is_empty());
 }

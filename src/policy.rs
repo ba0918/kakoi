@@ -2,6 +2,7 @@
 //! and 5.2.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -59,6 +60,27 @@ impl TryFrom<String> for PolicyPath {
         Err(format!(
             "{text:?}: a path must be absolute, start with `~`, or start with a variable"
         ))
+    }
+}
+
+impl Variable {
+    pub fn name(self) -> &'static str {
+        VARIABLES
+            .iter()
+            .find(|(_, variable)| *variable == self)
+            .map(|(name, _)| *name)
+            .expect("every variable is in the table")
+    }
+}
+
+/// The path as it was written.
+impl fmt::Display for PolicyPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PolicyPath::Absolute(path) => write!(f, "{}", path.display()),
+            PolicyPath::Home(rest) => write!(f, "~{rest}"),
+            PolicyPath::Variable(variable, rest) => write!(f, "${{{}}}{rest}", variable.name()),
+        }
     }
 }
 
