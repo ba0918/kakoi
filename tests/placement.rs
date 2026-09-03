@@ -2,20 +2,28 @@ use std::path::Path;
 
 mod common;
 
-use common::fixture::{home, layers, merged, variables, Facts, CONFIG_DIR, POLICY_FILE, WORKTREE};
+use std::path::PathBuf;
+
+use common::fixture::{
+    command_line_layer, home, layers, merged, variables, xdg_profile_layer, xdg_variables, Facts,
+    CONFIG_DIR, POLICY_FILE, WORKTREE, XDG_CONFIG_DIR, XDG_PROFILE,
+};
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
-use process_wrap::layers::Layer;
+use process_wrap::layers::{Layer, LayerOrigin};
 use process_wrap::mounts::{expand_policy, resolve_mounts, MountFacts};
 use process_wrap::placement::{check_placement, protected_paths};
+use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
 /// Resolves the mounts of the written layers against `facts` and checks their placement
-/// with the current directory at `current_dir`.
-fn check(
+/// with the current directory at `current_dir` and the configuration directory at
+/// `config_dir`.
+fn check_at(
     layers: &[Layer],
     variables: &Variables,
     facts: Facts,
     current_dir: &str,
+    config_dir: &str,
 ) -> Result<Vec<Warning>, Diagnostic> {
     let policy = merged(layers);
     let expanded = expand_policy(&policy, variables, &home());
@@ -25,7 +33,7 @@ fn check(
         mounts: Vec::new(),
     };
     let resolved = resolve_mounts(&expanded, layers, variables, &facts)?;
-    let protected = protected_paths(&expanded, layers, Path::new(CONFIG_DIR));
+    let protected = protected_paths(&expanded, layers, Path::new(config_dir));
     check_placement(
         &resolved,
         &protected,
@@ -34,6 +42,16 @@ fn check(
         Path::new(current_dir),
         &facts,
     )
+}
+
+/// `check_at` with the configuration directory under the home.
+fn check(
+    layers: &[Layer],
+    variables: &Variables,
+    facts: Facts,
+    current_dir: &str,
+) -> Result<Vec<Warning>, Diagnostic> {
+    check_at(layers, variables, facts, current_dir, CONFIG_DIR)
 }
 
 /// Facts for the fixture host: the home, the worktree, the profile, and the configuration
@@ -170,4 +188,62 @@ fn path_prepend_inside_a_writable_area_is_rejected() {
     .unwrap_err();
 
     assert_path_diagnostic(&diagnostic, &["/home/u/proj/bin", WORKTREE]);
+}
+
+#[test]
+fn rw_on_home_is_rejected_from_any_layer() {
+    // With the configuration directory outside the home, no protected path has the home
+    // as a prefix, so only the rule about the width of `rw` can stop these.
+    let facts = Facts::new()
+        .dir_with_ancestors(WORKTREE)
+        .file_with_ancestors(XDG_PROFILE)
+        .file_with_ancestors("/etc/xdg/p.toml");
+    let policy_file = |text: &str| Layer {
+        origin: LayerOrigin::PolicyFile(PathBuf::from("/etc/xdg/p.toml")),
+        policy: parse_policy(text, Path::new("/etc/xdg/p.toml")).unwrap(),
+    };
+    for (name, layers) in [
+        (
+            "rw ~ in the profile",
+            vec![
+                xdg_profile_layer("[mounts]\nrw = [\"~\"]"),
+                command_line_layer(&[], &[]),
+            ],
+        ),
+        (
+            "rw /home in the policy file",
+            vec![
+                xdg_profile_layer(""),
+                policy_file("[mounts]\nrw = [\"/home\"]"),
+                command_line_layer(&[], &[]),
+            ],
+        ),
+    ] {
+        let diagnostic = check_at(
+            &layers,
+            &xdg_variables(),
+            facts.clone(),
+            WORKTREE,
+            XDG_CONFIG_DIR,
+        )
+        .unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert!(
+            !diagnostic.description().contains("p.toml")
+                && !diagnostic.description().contains("default.toml"),
+            "{name} was stopped by a prefix check, not the width rule: {diagnostic}"
+        );
+    }
+    // `/` is a prefix of every protected path, so the prefix check stops it first (the
+    // order of specification section 13); the kind is the same.
+    let diagnostic = check_at(
+        &[xdg_profile_layer(""), command_line_layer(&["/"], &[])],
+        &xdg_variables(),
+        facts,
+        WORKTREE,
+        XDG_CONFIG_DIR,
+    )
+    .unwrap_err();
+    assert_eq!(diagnostic.kind(), Kind::Path, "--rw /: {diagnostic}");
 }

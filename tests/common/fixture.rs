@@ -150,3 +150,22 @@ pub fn variables_without_git() -> Variables {
         ..variables()
     }
 }
+
+/// A configuration directory outside the home, as `XDG_CONFIG_HOME=/etc/xdg` gives.
+pub const XDG_CONFIG_DIR: &str = "/etc/xdg/process-wrap";
+pub const XDG_PROFILE: &str = "/etc/xdg/process-wrap/profile/default.toml";
+
+pub fn xdg_profile_layer(text: &str) -> Layer {
+    Layer {
+        origin: LayerOrigin::Profile(PathBuf::from(XDG_PROFILE)),
+        policy: parse_policy(text, Path::new(XDG_PROFILE)).unwrap(),
+    }
+}
+
+/// The variables with the configuration directory outside the home.
+pub fn xdg_variables() -> Variables {
+    Variables {
+        config_dir: PathBuf::from(XDG_CONFIG_DIR),
+        ..variables()
+    }
+}

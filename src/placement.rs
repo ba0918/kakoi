@@ -54,7 +54,7 @@ pub fn check_placement(
     resolved: &ResolvedMounts,
     protected: &ProtectedPaths,
     _variables: &Variables,
-    _home: &HomeDirectory,
+    home: &HomeDirectory,
     _current_dir: &Path,
     facts: &MountFacts,
 ) -> Result<Vec<Warning>, Diagnostic> {
@@ -85,7 +85,24 @@ pub fn check_placement(
     for path in &protected.path_prepend {
         check_prefixes(path, "the `path-prepend` entry", &writable, facts)?;
     }
+    // Making the whole home writable is refused from every layer.
+    if let Some(item) = writable
+        .iter()
+        .find(|item| is_or_ancestor_of(&item.real, home.path()))
+    {
+        return Err(Diagnostic::path(format!(
+            "the `{}` item {} is `/`, the home directory, or an ancestor of it",
+            directive_name(item.directive),
+            item.real.display()
+        )));
+    }
     Ok(Vec::new())
+}
+
+/// Whether `candidate` is `/`, `path`, or an ancestor of `path`. `/` is named on its own so
+/// that the rule holds whatever `path` looks like.
+fn is_or_ancestor_of(candidate: &Path, path: &Path) -> bool {
+    candidate == Path::new("/") || path.ancestors().any(|ancestor| ancestor == candidate)
 }
 
 /// Every prefix of `path` (itself and each ancestor) that exists must not have its real
