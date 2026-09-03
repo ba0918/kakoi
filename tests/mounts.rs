@@ -10,7 +10,8 @@ use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
 use process_wrap::mounts::{
-    expand_policy, resolve_mounts, Expansion, ItemOrigin, MountFacts, ResolvedMounts, ScanHit,
+    expand_policy, resolve_mounts, Expansion, ItemOrigin, Mount, MountFacts, ResolvedMounts,
+    ScanHit,
 };
 use process_wrap::scan::scan;
 use process_wrap::variables::Variables;
@@ -460,4 +461,48 @@ fn scan_does_not_enter_symlinked_directories() {
     let found = scan(&root.join("inside"), &[".env".to_string()], &[], &[]);
 
     assert!(found.is_empty(), "{found:?}");
+}
+
+fn mount(target: &str, fstype: &str) -> Mount {
+    Mount {
+        target: PathBuf::from(target),
+        fstype: fstype.to_string(),
+    }
+}
+
+const HIDE_MNT: &str = "[[mounts.hide-mounts]]\nunder = \"/mnt\"\nfstype = [\"9p\", \"drvfs\"]";
+
+#[test]
+fn hide_mounts_hides_each_matching_mount_target() {
+    let resolved = resolve_with(
+        &layers(HIDE_MNT, None, &[], &[]),
+        &variables(),
+        MountFacts {
+            paths: Facts::new()
+                .dir("/mnt")
+                .dir("/mnt/c")
+                .dir("/mnt/d")
+                .dir("/mnt/wsl")
+                .dir("/usr/lib/wsl/drivers")
+                .0,
+            scan_hits: Vec::new(),
+            mounts: vec![
+                mount("/mnt/d", "9p"),
+                mount("/mnt/c", "drvfs"),
+                mount("/mnt/wsl", "tmpfs"),
+                mount("/usr/lib/wsl/drivers", "9p"),
+                mount("/mnt-other", "9p"),
+            ],
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Hide, Path::new("/mnt/c")),
+            (Directive::Hide, Path::new("/mnt/d")),
+        ]
+    );
+    assert_eq!(resolved.items[0].origin, ItemOrigin::HideMounts);
 }

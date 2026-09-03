@@ -165,6 +165,7 @@ pub enum EntryKind {
 pub enum ItemOrigin {
     Written(LayerOrigin),
     Scan,
+    HideMounts,
 }
 
 /// A mount item that applies: its real path and what is there.
@@ -248,7 +249,7 @@ pub fn resolve_mounts(
             None => merged.push(candidate),
         }
     }
-    for generated in generated_items(layers, facts) {
+    for generated in generated_items(expanded, layers, facts) {
         match merged
             .iter_mut()
             .find(|existing| existing.key == generated.key)
@@ -303,9 +304,37 @@ pub fn loaded_policy_files(layers: &[Layer], facts: &MountFacts) -> Vec<PathBuf>
 }
 
 /// The `hide` items of specification section 6.3, from the facts.
-fn generated_items(layers: &[Layer], facts: &MountFacts) -> Vec<Candidate> {
+fn generated_items(
+    expanded: &ExpandedPolicy,
+    layers: &[Layer],
+    facts: &MountFacts,
+) -> Vec<Candidate> {
     let policy_files = loaded_policy_files(layers, facts);
     let mut generated = Vec::new();
+    for hide_mounts in &expanded.hide_mounts {
+        let Expansion::Path(under) = &hide_mounts.under else {
+            continue;
+        };
+        let Some(under) = facts.entry(under).path().map(Path::to_path_buf) else {
+            continue;
+        };
+        for mount in &facts.mounts {
+            if !mount.target.starts_with(&under) || !hide_mounts.fstype.contains(&mount.fstype) {
+                continue;
+            }
+            let entry = facts.entry(&mount.target);
+            if entry == RealEntry::Missing {
+                continue;
+            }
+            generated.push(Candidate {
+                directive: Directive::Hide,
+                written: mount.target.display().to_string(),
+                origin: ItemOrigin::HideMounts,
+                key: mount.target.clone(),
+                entry,
+            });
+        }
+    }
     for hit in &facts.scan_hits {
         // A directory, or a link whose target is a directory, is not hidden; a link to
         // nothing names nothing to hide.
