@@ -3,7 +3,7 @@ use std::path::PathBuf;
 mod common;
 
 use common::fixture::{home, layers, merged, variables, variables_without_git, Facts};
-use process_wrap::diagnostic::Diagnostic;
+use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer};
 use process_wrap::mounts::{expand_policy, resolve_mounts, Expansion, MountFacts, ResolvedMounts};
@@ -131,4 +131,23 @@ fn the_same_directive_twice_in_one_layer_collapses() {
     assert_eq!(resolved.items[0].directive, Directive::Rw);
     assert_eq!(resolved.items[0].real, PathBuf::from("/home/u/proj"));
     assert!(resolved.skipped.is_empty(), "{resolved:?}");
+}
+
+#[test]
+fn conflicting_directives_in_one_layer_are_a_policy_diagnostic() {
+    let diagnostic = resolve(
+        &layers(
+            "[mounts]\nrw = [\"/home/u/a\"]\nhide = [\"/home/u/link\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new()
+            .dir("/home/u/a")
+            .link_to_dir("/home/u/link", "/home/u/a"),
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Policy, "{diagnostic}");
 }

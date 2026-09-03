@@ -209,7 +209,15 @@ pub fn resolve_mounts(
         };
         let entry = facts.entry(path);
         let key = entry.path().unwrap_or(path).to_path_buf();
-        match merged.iter().position(|candidate| candidate.key == key) {
+        match merged.iter().find(|candidate| candidate.key == key) {
+            Some(existing) if existing.item.directive != item.directive => {
+                return Err(Diagnostic::policy(format!(
+                    "`{}` and `{}` name the same path {} with different directives",
+                    existing.item.written,
+                    item.written,
+                    key.display()
+                )));
+            }
             Some(_) => {}
             None => merged.push(Candidate { item, key, entry }),
         }
