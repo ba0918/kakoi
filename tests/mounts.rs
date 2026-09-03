@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 mod common;
 
-use common::fixture::{home, layers, merged, variables, variables_without_git, Facts};
+use common::fixture::{home, layers, merged, variables, variables_without_git, Facts, POLICY_FILE};
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
-use process_wrap::layers::{Directive, Layer};
+use process_wrap::layers::{Directive, Layer, LayerOrigin};
 use process_wrap::mounts::{expand_policy, resolve_mounts, Expansion, MountFacts, ResolvedMounts};
 use process_wrap::variables::Variables;
 
@@ -162,4 +162,26 @@ fn conflicting_directives_on_the_command_line_are_a_usage_diagnostic() {
     .unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Usage, "{diagnostic}");
+}
+
+#[test]
+fn an_upper_layer_directive_replaces_the_same_real_path() {
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nhide = [\"/home/u/a\"]",
+            Some("[mounts]\nrw = [\"/home/u/a\"]"),
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new().dir("/home/u/a"),
+    )
+    .unwrap();
+
+    assert_eq!(resolved.items.len(), 1, "{resolved:?}");
+    assert_eq!(resolved.items[0].directive, Directive::Rw);
+    assert_eq!(
+        resolved.items[0].origin,
+        LayerOrigin::PolicyFile(PathBuf::from(POLICY_FILE))
+    );
 }

@@ -209,7 +209,11 @@ pub fn resolve_mounts(
         };
         let entry = facts.entry(path);
         let key = entry.path().unwrap_or(path).to_path_buf();
-        match merged.iter().find(|candidate| candidate.key == key) {
+        match merged.iter_mut().find(|candidate| candidate.key == key) {
+            Some(existing) if existing.item.origin != item.origin => {
+                // Lower layers come first, so a later item is the upper layer replacing.
+                *existing = Candidate { item, key, entry };
+            }
             Some(existing) if existing.item.directive != item.directive => {
                 let description = format!(
                     "`{}` and `{}` name the same path {} with different directives",
