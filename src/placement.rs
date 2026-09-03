@@ -66,6 +66,22 @@ pub fn check_placement(
     for path in &protected.policy_files {
         check_prefixes(path, "the policy file", &writable, facts)?;
     }
+    check_prefixes(
+        &protected.config_dir,
+        "the configuration directory",
+        &writable,
+        facts,
+    )?;
+    // A secret file inside `rw` could be swapped for a link to any host file, whose
+    // content the next start would bring into the isolation as a variable.
+    for (name, path) in &protected.secrets {
+        check_prefixes(
+            path,
+            &format!("the file of secret `{name}`"),
+            &writable,
+            facts,
+        )?;
+    }
     Ok(Vec::new())
 }
 

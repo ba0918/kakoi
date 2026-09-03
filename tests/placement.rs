@@ -95,3 +95,21 @@ fn the_config_dir_inside_a_writable_area_is_rejected() {
 
     assert_path_diagnostic(&diagnostic, &[CONFIG_DIR, "/home/u/.config"]);
 }
+
+#[test]
+fn a_secret_file_inside_a_writable_area_is_rejected() {
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\"]\n[secrets]\nT = \"${worktree}/token\"",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host().file_with_ancestors("/home/u/proj/token"),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/proj/token", WORKTREE]);
+}
