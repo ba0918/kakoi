@@ -67,3 +67,18 @@ fn a_policy_file_inside_a_writable_area_is_rejected_with_the_three_reasons() {
 
     assert_path_diagnostic(&diagnostic, &[POLICY_FILE, "/home/u/policies"]);
 }
+
+#[test]
+fn a_policy_file_reached_through_a_symlink_in_a_writable_area_is_rejected() {
+    let diagnostic = check(
+        &layers("", Some("[mounts]\nrw = [\"${worktree}\"]"), &[], &[]),
+        &variables(),
+        host()
+            .link_to_dir("/home/u/policies", "/home/u/proj/policies")
+            .link_to_file(POLICY_FILE, "/home/u/proj/policies/p.toml"),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[POLICY_FILE, WORKTREE]);
+}
