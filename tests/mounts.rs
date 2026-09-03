@@ -9,6 +9,7 @@ use common::TempDir;
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
+use process_wrap::mount_list::read_mount_list;
 use process_wrap::mounts::{
     expand_policy, resolve_mounts, Expansion, ItemOrigin, Mount, MountFacts, ResolvedMounts,
     ScanHit,
@@ -540,5 +541,31 @@ fn hide_mounts_leaves_the_workspace_worktree_and_common_dir_alone() {
     assert_eq!(
         order(&resolved),
         [(Directive::Hide, Path::new("/mnt/c/other"))]
+    );
+}
+
+#[test]
+fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
+    let copy = TempDir::new();
+    let path = copy.write(
+        "mountinfo",
+        "82 67 8:48 / / rw,relatime - ext4 /dev/sdd rw,discard\n\
+         78 82 0:34 / /mnt/wsl rw,relatime shared:1 - tmpfs none rw\n\
+         79 82 0:36 / /usr/lib/wsl/drivers ro,nosuid,nodev,noatime - 9p drivers ro,aname=drivers\n\
+         90 82 0:50 / /mnt/c rw,noatime - drvfs C:\\134 rw,dirsync\n\
+         91 82 0:51 / /mnt/with\\040space rw - 9p tag rw\n",
+    );
+
+    let mounts = read_mount_list(&path);
+
+    assert_eq!(
+        mounts,
+        [
+            mount("/", "ext4"),
+            mount("/mnt/wsl", "tmpfs"),
+            mount("/usr/lib/wsl/drivers", "9p"),
+            mount("/mnt/c", "drvfs"),
+            mount("/mnt/with space", "9p"),
+        ]
     );
 }
