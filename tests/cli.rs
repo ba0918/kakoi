@@ -40,6 +40,21 @@ fn empty_command_after_dashes_is_a_usage_diagnostic() {
 }
 
 #[test]
+fn help_or_version_beside_an_invalid_command_line_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["--help", "--bogus"][..],
+        &["--version", "--bogus"][..],
+        &["--help", "--"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+}
+
+#[test]
 fn help_prints_to_stdout_and_exits_zero() {
     let home = TempDir::new();
 

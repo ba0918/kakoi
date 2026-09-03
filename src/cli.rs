@@ -3,7 +3,6 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser};
 
 use crate::diagnostic::Diagnostic;
@@ -79,41 +78,40 @@ where
     I: IntoIterator<Item = OsString>,
 {
     let arguments: Vec<OsString> = arguments.into_iter().collect();
-    let parser = Arguments::command()
+    // `--help` and `--version` are plain flags, so that the whole command line is checked
+    // before either is answered (specification section 4.1).
+    let mut parser = Arguments::command()
         .arg(
             Arg::new("help")
                 .long("help")
-                .action(ArgAction::Help)
+                .action(ArgAction::SetTrue)
                 .help("Print the usage and exit"),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .action(ArgAction::Version)
+                .action(ArgAction::SetTrue)
                 .help("Print the version and exit"),
         );
-    let matches = match parser.try_get_matches_from(
-        std::iter::once(OsString::from("process-wrap")).chain(arguments.iter().cloned()),
-    ) {
-        Ok(matches) => matches,
-        Err(error) if error.kind() == ErrorKind::DisplayHelp => {
-            return Ok(Parsed::Help(error.render().to_string()));
-        }
-        Err(error) if error.kind() == ErrorKind::DisplayVersion => {
-            return Ok(Parsed::Version(error.render().to_string()));
-        }
-        Err(_) => return Err(Diagnostic::usage("invalid command line")),
-    };
+    let matches = parser
+        .try_get_matches_from_mut(
+            std::iter::once(OsString::from("process-wrap")).chain(arguments.iter().cloned()),
+        )
+        .map_err(|_| Diagnostic::usage("invalid command line"))?;
     let parsed = Arguments::from_arg_matches(&matches).expect("matches follow the definition");
-    if parsed.command.is_empty() {
-        if has_end_of_options(&arguments) {
-            return Err(Diagnostic::usage("nothing follows `--`"));
-        }
-        if !parsed.print_plan {
-            return Err(Diagnostic::usage(
-                "COMMAND is required unless --print-plan is given",
-            ));
-        }
+    if parsed.command.is_empty() && has_end_of_options(&arguments) {
+        return Err(Diagnostic::usage("nothing follows `--`"));
+    }
+    if matches.get_flag("help") {
+        return Ok(Parsed::Help(parser.render_help().to_string()));
+    }
+    if matches.get_flag("version") {
+        return Ok(Parsed::Version(parser.render_version()));
+    }
+    if parsed.command.is_empty() && !parsed.print_plan {
+        return Err(Diagnostic::usage(
+            "COMMAND is required unless --print-plan is given",
+        ));
     }
     Ok(Parsed::Invocation(Invocation {
         profile: parsed.profile,
