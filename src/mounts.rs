@@ -168,6 +168,8 @@ pub enum ItemOrigin {
     HideMounts,
     /// The file of the secret with this environment variable name.
     SecretFile(String),
+    /// The `secrets/` directory of the configuration directory.
+    ConfigSecrets,
 }
 
 /// A mount item that applies: its real path and what is there.
@@ -320,6 +322,18 @@ fn generated_items(
         variables.git_common_dir.as_deref(),
     ];
     let mut generated = Vec::new();
+    // Hidden so that a secret file the policy does not name cannot be read from inside.
+    let config_secrets = variables.config_dir.join("secrets");
+    let entry = facts.entry(&config_secrets);
+    if let Some(real) = entry.path() {
+        generated.push(Candidate {
+            directive: Directive::Hide,
+            written: config_secrets.display().to_string(),
+            origin: ItemOrigin::ConfigSecrets,
+            key: real.to_path_buf(),
+            entry: entry.clone(),
+        });
+    }
     for (name, path) in &expanded.secrets {
         let Expansion::Path(path) = path else {
             continue;

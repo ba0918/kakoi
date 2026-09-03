@@ -599,3 +599,25 @@ fn existing_secret_files_are_hidden() {
     );
     assert!(resolved.skipped.is_empty(), "{resolved:?}");
 }
+
+#[test]
+fn the_config_secrets_directory_is_hidden() {
+    let resolved = resolve(
+        &layers("", None, &[], &[]),
+        &variables(),
+        Facts::new().dir("/home/u/.config/process-wrap/secrets"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(
+            Directive::Hide,
+            Path::new("/home/u/.config/process-wrap/secrets")
+        )]
+    );
+    assert_eq!(resolved.items[0].origin, ItemOrigin::ConfigSecrets);
+
+    let without = resolve(&layers("", None, &[], &[]), &variables(), Facts::new()).unwrap();
+    assert!(without.items.is_empty(), "{without:?}");
+}
