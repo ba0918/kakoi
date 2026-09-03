@@ -153,8 +153,8 @@ pub struct Candidates {
 
 /// The candidate paths of `expanded`: every expanded path, plus every prefix (each
 /// ancestor and the path itself) of the paths specification section 5.6 protects — the
-/// policy files read, the configuration directory, and the secret files — and the
-/// configuration directory's `secrets/`.
+/// policy files read, the configuration directory, the secret files, and the
+/// `path-prepend` entries — and the configuration directory's `secrets/`.
 pub fn candidates(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
@@ -181,7 +181,8 @@ pub fn candidates(
             LayerOrigin::CommandLine => None,
         })
         .chain(std::iter::once(config_dir))
-        .chain(expanded.secrets.values().filter_map(Expansion::path));
+        .chain(expanded.secrets.values().filter_map(Expansion::path))
+        .chain(expanded.path_prepend.iter().filter_map(Expansion::path));
     for path in protected {
         paths.extend(path.ancestors().map(Path::to_path_buf));
     }

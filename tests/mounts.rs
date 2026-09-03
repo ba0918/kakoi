@@ -802,6 +802,7 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
         "/home/u/proj",
         "/mnt",
         "/opt/bin",
+        "/opt",
         "/home/u/tokens/t",
         "/home/u/tokens",
         "/home/u",
