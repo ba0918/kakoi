@@ -61,7 +61,6 @@ fn linked_worktree_links() -> GitFileLinks {
 #[test]
 fn a_git_directory_is_the_common_dir() {
     let variables = derive_variables(
-        &home(),
         &config_dir(),
         &facts(
             [
@@ -86,7 +85,6 @@ fn a_git_directory_is_the_common_dir() {
 #[test]
 fn a_linked_worktree_with_a_back_link_yields_the_common_dir() {
     let variables = derive_variables(
-        &home(),
         &config_dir(),
         &facts(
             [DotGit::Absent, DotGit::File, DotGit::Absent, DotGit::Absent],
@@ -119,7 +117,6 @@ fn a_linked_worktree_whose_back_link_points_elsewhere_is_a_path_diagnostic() {
 
     for links in [elsewhere, outside_worktrees, dangling] {
         let diagnostic = derive_variables(
-            &home(),
             &config_dir(),
             &facts(
                 [DotGit::Absent, DotGit::File, DotGit::Absent, DotGit::Absent],
@@ -135,7 +132,6 @@ fn a_linked_worktree_whose_back_link_points_elsewhere_is_a_path_diagnostic() {
 #[test]
 fn a_submodule_with_core_worktree_pointing_back_yields_its_gitdir() {
     let variables = derive_variables(
-        &home(),
         &config_dir(),
         &facts(
             [
@@ -190,7 +186,6 @@ fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
         unresolvable_commondir,
     ] {
         let diagnostic = derive_variables(
-            &home(),
             &config_dir(),
             &facts(
                 [
@@ -211,7 +206,6 @@ fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
 #[test]
 fn a_symlinked_dot_git_is_not_a_worktree_marker() {
     let outer_repo = derive_variables(
-        &home(),
         &config_dir(),
         &facts(
             [
@@ -231,7 +225,6 @@ fn a_symlinked_dot_git_is_not_a_worktree_marker() {
     );
 
     let no_repo = derive_variables(
-        &home(),
         &config_dir(),
         &facts(
             [
@@ -249,76 +242,8 @@ fn a_symlinked_dot_git_is_not_a_worktree_marker() {
 }
 
 #[test]
-fn a_worktree_at_home_is_a_path_diagnostic() {
-    let diagnostic = derive_variables(
-        &home(),
-        &config_dir(),
-        &facts(
-            [
-                DotGit::Absent,
-                DotGit::Absent,
-                DotGit::Directory,
-                DotGit::Absent,
-            ],
-            None,
-        ),
-    )
-    .unwrap_err();
-
-    assert_eq!(diagnostic.kind(), Kind::Path);
-}
-
-#[test]
-fn a_worktree_at_an_ancestor_of_home_is_a_path_diagnostic() {
-    let at_home_parent = derive_variables(
-        &home(),
-        &config_dir(),
-        &facts(
-            [
-                DotGit::Absent,
-                DotGit::Absent,
-                DotGit::Absent,
-                DotGit::Directory,
-            ],
-            None,
-        ),
-    )
-    .unwrap_err();
-    assert_eq!(at_home_parent.kind(), Kind::Path);
-
-    let at_root = derive_variables(
-        &home(),
-        &config_dir(),
-        &WorkspaceFacts {
-            workspace: RealEntry::Directory(PathBuf::from("/")),
-            ancestors: vec![ancestor("/", DotGit::Absent)],
-            links: None,
-        },
-    )
-    .unwrap_err();
-    assert_eq!(at_root.kind(), Kind::Path);
-
-    let workspace_at_home = derive_variables(
-        &home(),
-        &config_dir(),
-        &WorkspaceFacts {
-            workspace: RealEntry::Directory(PathBuf::from("/home/u")),
-            ancestors: vec![
-                ancestor("/home/u", DotGit::Absent),
-                ancestor("/home", DotGit::Absent),
-                ancestor("/", DotGit::Absent),
-            ],
-            links: None,
-        },
-    )
-    .unwrap_err();
-    assert_eq!(workspace_at_home.kind(), Kind::Path);
-}
-
-#[test]
 fn a_missing_workspace_is_a_path_diagnostic() {
     let diagnostic = derive_variables(
-        &home(),
         &config_dir(),
         &WorkspaceFacts {
             workspace: RealEntry::Missing,
@@ -334,7 +259,6 @@ fn a_missing_workspace_is_a_path_diagnostic() {
 #[test]
 fn a_workspace_that_is_a_regular_file_is_a_path_diagnostic() {
     let diagnostic = derive_variables(
-        &home(),
         &config_dir(),
         &WorkspaceFacts {
             workspace: RealEntry::NotDirectory(PathBuf::from("/home/u/proj/file")),
@@ -422,7 +346,6 @@ fn a_checked_home_is_the_real_path_of_home() {
 #[test]
 fn a_config_dir_without_a_real_path_is_a_path_diagnostic() {
     let diagnostic = derive_variables(
-        &home(),
         &RealEntry::Missing,
         &facts(
             [
@@ -465,7 +388,6 @@ fn the_config_dir_follows_xdg_config_home() {
         None,
     );
     let variables = derive_variables(
-        &home(),
         &RealEntry::Directory(PathBuf::from("/real/xdg/process-wrap")),
         &repository,
     )
@@ -492,15 +414,6 @@ fn git(cwd: &Path, arguments: &[&str]) {
         "git {arguments:?}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-}
-
-fn checked_home(home: &TempDir) -> HomeDirectory {
-    HostEnvironment {
-        home: Some(home.path().to_path_buf()),
-        xdg_config_home: None,
-    }
-    .home_directory(&real_entry(home.path()))
-    .unwrap()
 }
 
 fn real_config_dir(home: &TempDir) -> RealEntry {
@@ -548,8 +461,7 @@ fn raw_git_facts_are_read_from_a_real_linked_worktree() {
             core_worktree: None,
         })
     );
-    let variables =
-        derive_variables(&checked_home(&home), &real_config_dir(&home), &facts).unwrap();
+    let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();
     assert_eq!(variables.worktree, worktree);
     assert_eq!(variables.git_common_dir, Some(main.join(".git")));
 }
@@ -582,8 +494,7 @@ fn raw_git_facts_are_read_from_a_real_submodule() {
             core_worktree: Some(submodule.clone()),
         })
     );
-    let variables =
-        derive_variables(&checked_home(&home), &real_config_dir(&home), &facts).unwrap();
+    let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();
     assert_eq!(variables.worktree, submodule);
     assert_eq!(
         variables.git_common_dir,
@@ -606,8 +517,7 @@ fn a_fifo_under_the_named_gitdir_is_a_path_diagnostic() {
         assert!(status.success(), "mkfifo {name}");
 
         let facts = collect_workspace_facts(&worktree);
-        let diagnostic = derive_variables(&checked_home(&home), &real_config_dir(&home), &facts)
-            .expect_err(name);
+        let diagnostic = derive_variables(&real_config_dir(&home), &facts).expect_err(name);
 
         assert_eq!(diagnostic.kind(), Kind::Path, "{name}");
     }
@@ -630,7 +540,6 @@ fn the_config_dir_variable_is_the_real_path() {
     assert_eq!(config_dir, real_home.join("link/process-wrap"));
 
     let variables = derive_variables(
-        &checked,
         &real_entry(&config_dir),
         &collect_workspace_facts(&workspace),
     )
@@ -659,8 +568,7 @@ fn a_symlinked_commondir_is_a_path_diagnostic() {
     std::os::unix::fs::symlink(&copy, &commondir).unwrap();
 
     let facts = collect_workspace_facts(&worktree);
-    let diagnostic =
-        derive_variables(&checked_home(&home), &real_config_dir(&home), &facts).unwrap_err();
+    let diagnostic = derive_variables(&real_config_dir(&home), &facts).unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Path);
 }
@@ -682,8 +590,7 @@ fn a_gitdir_reached_through_a_symlinked_directory_is_accepted() {
     );
 
     let facts = collect_workspace_facts(&worktree);
-    let variables =
-        derive_variables(&checked_home(&home), &real_config_dir(&home), &facts).unwrap();
+    let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();
 
     assert_eq!(variables.worktree, worktree);
     assert_eq!(variables.git_common_dir, Some(main.join(".git")));

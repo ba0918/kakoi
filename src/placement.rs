@@ -53,7 +53,7 @@ pub fn protected_paths(
 pub fn check_placement(
     resolved: &ResolvedMounts,
     protected: &ProtectedPaths,
-    _variables: &Variables,
+    variables: &Variables,
     home: &HomeDirectory,
     _current_dir: &Path,
     facts: &MountFacts,
@@ -95,6 +95,20 @@ pub fn check_placement(
             directive_name(item.directive),
             item.real.display()
         )));
+    }
+    // A worktree or workspace this wide would make the whole home the work place
+    // (specification section 6.5); running from an unmanaged home without `--workspace`
+    // lands here.
+    for (name, path) in [
+        ("worktree", &variables.worktree),
+        ("workspace", &variables.workspace),
+    ] {
+        if is_or_ancestor_of(path, home.path()) {
+            return Err(Diagnostic::path(format!(
+                "the {name} {} is `/`, the home directory, or an ancestor of it",
+                path.display()
+            )));
+        }
     }
     Ok(Vec::new())
 }

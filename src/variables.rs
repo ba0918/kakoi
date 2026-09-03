@@ -1,11 +1,10 @@
 //! The four policy variables, derived from the workspace and the facts git left on disk
-//! (specification sections 2, 5.2, and 6.5). Pure: the facts come from
-//! `workspace_facts`.
+//! (specification sections 2 and 5.2). Pure: the facts come from `workspace_facts`.
 
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
-use crate::environment::{HomeDirectory, RealEntry};
+use crate::environment::RealEntry;
 
 /// What the `.git` entry of a directory is, looked at without following symbolic links.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,11 +107,9 @@ pub fn core_worktree(config: &str) -> Option<String> {
 /// Derives the variables, or the diagnostic that stops the run. `config_dir` is what the
 /// outer layer found behind the configuration directory.
 pub fn derive_variables(
-    home: &HomeDirectory,
     config_dir: &RealEntry,
     facts: &WorkspaceFacts,
 ) -> Result<Variables, Diagnostic> {
-    let home = home.path();
     let config_dir = config_dir
         .path()
         .ok_or_else(|| Diagnostic::path("the configuration directory has no real path"))?;
@@ -128,14 +125,6 @@ pub fn derive_variables(
     };
     let marker = worktree_marker(&facts.ancestors);
     let worktree = marker.map_or(workspace.clone(), |marker| marker.path.clone());
-    for (name, path) in [("worktree", &worktree), ("workspace", &workspace)] {
-        if is_or_ancestor_of(path, home) {
-            return Err(Diagnostic::path(format!(
-                "the {name} {} is `/`, the home directory, or an ancestor of it",
-                path.display()
-            )));
-        }
-    }
     let git_common_dir = match marker.map(|marker| marker.dot_git) {
         None => None,
         Some(DotGit::Directory) => Some(worktree.join(".git")),
@@ -184,10 +173,4 @@ fn verified_common_dir(
         }
         Reference::Unresolvable => Err(reject("has a commondir that names nothing")),
     }
-}
-
-/// Whether `candidate` is `/`, `path`, or an ancestor of `path`. `/` is named on its own so
-/// that the rule holds whatever `path` looks like.
-fn is_or_ancestor_of(candidate: &Path, path: &Path) -> bool {
-    candidate == Path::new("/") || path.ancestors().any(|ancestor| ancestor == candidate)
 }

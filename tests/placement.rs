@@ -247,3 +247,54 @@ fn rw_on_home_is_rejected_from_any_layer() {
     .unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Path, "--rw /: {diagnostic}");
 }
+
+#[test]
+fn a_worktree_at_home_is_a_path_diagnostic() {
+    let at_home = Variables {
+        workspace: PathBuf::from("/home/u/proj"),
+        worktree: PathBuf::from("/home/u"),
+        git_common_dir: Some(PathBuf::from("/home/u/.git")),
+        ..variables()
+    };
+
+    let diagnostic = check(&layers("", None, &[], &[]), &at_home, host(), WORKTREE).unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+}
+
+#[test]
+fn a_worktree_or_workspace_at_an_ancestor_of_home_is_a_path_diagnostic() {
+    for (name, variables) in [
+        (
+            "worktree at /home",
+            Variables {
+                worktree: PathBuf::from("/home"),
+                git_common_dir: Some(PathBuf::from("/home/.git")),
+                ..variables()
+            },
+        ),
+        (
+            "workspace at /",
+            Variables {
+                workspace: PathBuf::from("/"),
+                worktree: PathBuf::from("/"),
+                git_common_dir: None,
+                ..variables()
+            },
+        ),
+        (
+            "workspace at home",
+            Variables {
+                workspace: PathBuf::from("/home/u"),
+                worktree: PathBuf::from("/home/u"),
+                git_common_dir: None,
+                ..variables()
+            },
+        ),
+    ] {
+        let diagnostic =
+            check(&layers("", None, &[], &[]), &variables, host(), WORKTREE).unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+    }
+}

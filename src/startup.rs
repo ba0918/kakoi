@@ -61,7 +61,7 @@ where
         .clone()
         .unwrap_or_else(|| current_dir.clone());
     let facts = collect_workspace_facts(&workspace);
-    let variables = derive_variables(&home, &real_entry(&config_dir), &facts)?;
+    let variables = derive_variables(&real_entry(&config_dir), &facts)?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,
         current_dir,
