@@ -641,3 +641,50 @@ fn the_config_dir_variable_is_the_real_path() {
         real_home.join("dotfiles/config/process-wrap")
     );
 }
+
+#[test]
+fn a_symlinked_commondir_is_a_path_diagnostic() {
+    let home = TempDir::new();
+    let real_home = home.path().canonicalize().unwrap();
+    let main = real_home.join("main");
+    std::fs::create_dir(&main).unwrap();
+    git(&main, &["init", "-q"]);
+    git(&main, &["commit", "-q", "--allow-empty", "-m", "init"]);
+    git(&main, &["worktree", "add", "-q", "../wt", "-b", "wt"]);
+    let worktree = real_home.join("wt");
+    let commondir = main.join(".git/worktrees/wt/commondir");
+    let content = std::fs::read(&commondir).unwrap();
+    let copy = home.write("commondir-copy", content);
+    std::fs::remove_file(&commondir).unwrap();
+    std::os::unix::fs::symlink(&copy, &commondir).unwrap();
+
+    let facts = collect_workspace_facts(&worktree);
+    let diagnostic =
+        derive_variables(&checked_home(&home), &real_config_dir(&home), &facts).unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path);
+}
+
+#[test]
+fn a_gitdir_reached_through_a_symlinked_directory_is_accepted() {
+    let home = TempDir::new();
+    let real_home = home.path().canonicalize().unwrap();
+    let main = real_home.join("main");
+    std::fs::create_dir(&main).unwrap();
+    git(&main, &["init", "-q"]);
+    git(&main, &["commit", "-q", "--allow-empty", "-m", "init"]);
+    git(&main, &["worktree", "add", "-q", "../wt", "-b", "wt"]);
+    let worktree = real_home.join("wt");
+    std::os::unix::fs::symlink(main.join(".git/worktrees"), real_home.join("link")).unwrap();
+    home.write(
+        "wt/.git",
+        format!("gitdir: {}\n", real_home.join("link/wt").display()),
+    );
+
+    let facts = collect_workspace_facts(&worktree);
+    let variables =
+        derive_variables(&checked_home(&home), &real_config_dir(&home), &facts).unwrap();
+
+    assert_eq!(variables.worktree, worktree);
+    assert_eq!(variables.git_common_dir, Some(main.join(".git")));
+}
