@@ -621,3 +621,28 @@ fn the_config_secrets_directory_is_hidden() {
     let without = resolve(&layers("", None, &[], &[]), &variables(), Facts::new()).unwrap();
     assert!(without.items.is_empty(), "{without:?}");
 }
+
+#[test]
+fn generated_items_replace_written_items() {
+    let resolved = resolve_with(
+        &layers(
+            &format!("[mounts]\nro = [\"/home/u/proj/.env\"]\n{SCAN_ENV}"),
+            None,
+            &[],
+            &["/home/u/proj/.env"],
+        ),
+        &variables(),
+        MountFacts {
+            paths: Facts::new().dir("/home/u/proj").file("/home/u/proj/.env").0,
+            scan_hits: vec![hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(Directive::Hide, Path::new("/home/u/proj/.env"))]
+    );
+    assert_eq!(resolved.items[0].origin, ItemOrigin::Scan);
+}
