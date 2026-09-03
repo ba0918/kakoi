@@ -55,7 +55,7 @@ pub fn check_placement(
     protected: &ProtectedPaths,
     variables: &Variables,
     home: &HomeDirectory,
-    _current_dir: &Path,
+    current_dir: &Path,
     facts: &MountFacts,
 ) -> Result<Vec<Warning>, Diagnostic> {
     let writable: Vec<&ResolvedItem> = resolved
@@ -109,6 +109,20 @@ pub fn check_placement(
                 path.display()
             )));
         }
+    }
+    // The items are in the order they are applied, so the last one containing the current
+    // directory is what bwrap would `--chdir` into; a `hide` there has nowhere to go
+    // (specification section 6.5).
+    let last_over_cwd = resolved
+        .items
+        .iter()
+        .rfind(|item| current_dir.starts_with(&item.real));
+    if let Some(item) = last_over_cwd.filter(|item| item.directive == Directive::Hide) {
+        return Err(Diagnostic::path(format!(
+            "the current directory {} is inside the `hide` item {}",
+            current_dir.display(),
+            item.real.display()
+        )));
     }
     Ok(Vec::new())
 }

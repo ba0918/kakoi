@@ -298,3 +298,21 @@ fn a_worktree_or_workspace_at_an_ancestor_of_home_is_a_path_diagnostic() {
         assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
     }
 }
+
+#[test]
+fn a_cwd_under_a_hide_is_rejected() {
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\"]\nhide = [\"/tmp\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host().dir_with_ancestors("/tmp/work"),
+        "/tmp/work",
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+}
