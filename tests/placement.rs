@@ -153,3 +153,21 @@ fn the_first_placement_violation_follows_the_specified_order() {
     assert_path_diagnostic(&diagnostic, &[POLICY_FILE]);
     assert!(!diagnostic.description().contains("token"), "{diagnostic}");
 }
+
+#[test]
+fn path_prepend_inside_a_writable_area_is_rejected() {
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\"]\n[env]\npath-prepend = [\"${worktree}/bin\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host().dir_with_ancestors("/home/u/proj/bin"),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/proj/bin", WORKTREE]);
+}

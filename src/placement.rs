@@ -82,6 +82,9 @@ pub fn check_placement(
             facts,
         )?;
     }
+    for path in &protected.path_prepend {
+        check_prefixes(path, "the `path-prepend` entry", &writable, facts)?;
+    }
     Ok(Vec::new())
 }
 
