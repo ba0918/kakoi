@@ -19,6 +19,16 @@ pub enum Expansion {
     Valueless(Variable),
 }
 
+impl Expansion {
+    /// The expanded path, when the value has one.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Expansion::Path(path) => Some(path),
+            Expansion::Valueless(_) => None,
+        }
+    }
+}
+
 /// One written mount item with its path expanded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpandedItem {
@@ -159,11 +169,11 @@ pub fn candidates(
         .chain(expanded.scans.iter().map(|scan| &scan.root))
         .chain(expanded.hide_mounts.iter().map(|hide| &hide.under))
         .chain(expanded.path_prepend.iter());
-    for path in expanded_paths {
-        if let Expansion::Path(path) = path {
-            paths.push(path.clone());
-        }
-    }
+    paths.extend(
+        expanded_paths
+            .filter_map(Expansion::path)
+            .map(Path::to_path_buf),
+    );
     let protected = layers
         .iter()
         .filter_map(|layer| match &layer.origin {
@@ -171,10 +181,7 @@ pub fn candidates(
             LayerOrigin::CommandLine => None,
         })
         .chain(std::iter::once(config_dir))
-        .chain(expanded.secrets.values().filter_map(|path| match path {
-            Expansion::Path(path) => Some(path.as_path()),
-            Expansion::Valueless(_) => None,
-        }));
+        .chain(expanded.secrets.values().filter_map(Expansion::path));
     for path in protected {
         paths.extend(path.ancestors().map(Path::to_path_buf));
     }
@@ -199,10 +206,7 @@ pub fn candidates(
         hide_mounts_under: expanded
             .hide_mounts
             .iter()
-            .filter_map(|hide| match &hide.under {
-                Expansion::Path(under) => Some(under.clone()),
-                Expansion::Valueless(_) => None,
-            })
+            .filter_map(|hide| hide.under.path().map(Path::to_path_buf))
             .collect(),
     }
 }
@@ -409,34 +413,23 @@ fn generated_items(
     let mut generated = Vec::new();
     // Hidden so that a secret file the policy does not name cannot be read from inside.
     let config_secrets = variables.config_dir.join("secrets");
-    let entry = facts.entry(&config_secrets);
-    if let Some(real) = entry.path() {
-        generated.push(Candidate {
-            directive: Directive::Hide,
-            written: config_secrets.display().to_string(),
-            origin: ItemOrigin::ConfigSecrets,
-            key: real.to_path_buf(),
-            entry: entry.clone(),
-        });
-    }
+    generated.extend(Candidate::hidden(
+        &config_secrets,
+        ItemOrigin::ConfigSecrets,
+        facts.entry(&config_secrets),
+    ));
+    // A secret file that does not exist is the warning of section 9, not a hide.
     for (name, path) in &expanded.secrets {
-        let Expansion::Path(path) = path else {
-            continue;
-        };
-        // A secret file that does not exist is the warning of section 9, not a hide.
-        let entry = facts.entry(path);
-        if let Some(real) = entry.path() {
-            generated.push(Candidate {
-                directive: Directive::Hide,
-                written: path.display().to_string(),
-                origin: ItemOrigin::SecretFile(name.clone()),
-                key: real.to_path_buf(),
-                entry: entry.clone(),
-            });
+        if let Some(path) = path.path() {
+            generated.extend(Candidate::hidden(
+                path,
+                ItemOrigin::SecretFile(name.clone()),
+                facts.entry(path),
+            ));
         }
     }
     for hide_mounts in &expanded.hide_mounts {
-        let Expansion::Path(under) = &hide_mounts.under else {
+        let Some(under) = hide_mounts.under.path() else {
             continue;
         };
         let Some(under) = facts.entry(under).path().map(Path::to_path_buf) else {
@@ -449,17 +442,11 @@ fn generated_items(
             {
                 continue;
             }
-            let entry = facts.entry(&mount.target);
-            if entry == RealEntry::Missing {
-                continue;
-            }
-            generated.push(Candidate {
-                directive: Directive::Hide,
-                written: mount.target.display().to_string(),
-                origin: ItemOrigin::HideMounts,
-                key: mount.target.clone(),
-                entry,
-            });
+            generated.extend(Candidate::hidden(
+                &mount.target,
+                ItemOrigin::HideMounts,
+                facts.entry(&mount.target),
+            ));
         }
     }
     for hit in &facts.scan_hits {
@@ -469,13 +456,11 @@ fn generated_items(
             if policy_files.contains(real) {
                 continue;
             }
-            generated.push(Candidate {
-                directive: Directive::Hide,
-                written: hit.found_at.display().to_string(),
-                origin: ItemOrigin::Scan,
-                key: real.clone(),
-                entry: hit.target.clone(),
-            });
+            generated.extend(Candidate::hidden(
+                &hit.found_at,
+                ItemOrigin::Scan,
+                hit.target.clone(),
+            ));
         }
     }
     generated
@@ -489,6 +474,20 @@ struct Candidate {
     origin: ItemOrigin,
     key: PathBuf,
     entry: RealEntry,
+}
+
+impl Candidate {
+    /// A generated `hide` on what exists at `written`; nothing when nothing exists.
+    fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<Self> {
+        let key = entry.path()?.to_path_buf();
+        Some(Self {
+            directive: Directive::Hide,
+            written: written.display().to_string(),
+            origin,
+            key,
+            entry,
+        })
+    }
 }
 
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).
