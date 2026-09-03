@@ -207,3 +207,65 @@ fn an_empty_option_value_is_a_usage_diagnostic() {
         assert_diagnostic(&output, 125, "usage");
     }
 }
+
+#[test]
+fn a_repeated_single_use_option_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["--profile", "a", "--profile", "b", "--", "true"][..],
+        &["--print-plan", "--print-plan"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+
+    let Parsed::Invocation(invocation) = interpret_ok(
+        &["--rw", "/a", "--rw", "/b", "--", "true"],
+        Path::new("/cwd"),
+    ) else {
+        panic!("not an invocation");
+    };
+    assert_eq!(invocation.rw, [PathBuf::from("/a"), PathBuf::from("/b")]);
+}
+
+#[test]
+fn the_equals_form_means_the_same_as_the_separated_form() {
+    let separated = interpret_ok(
+        &[
+            "--profile",
+            "p",
+            "--policy-file",
+            "f.toml",
+            "--workspace",
+            "w",
+            "--rw",
+            "a",
+            "--hide",
+            "b",
+            "--",
+            "true",
+        ],
+        Path::new("/cwd"),
+    );
+    let equals = interpret_ok(
+        &[
+            "--profile=p",
+            "--policy-file=f.toml",
+            "--workspace=w",
+            "--rw=a",
+            "--hide=b",
+            "--",
+            "true",
+        ],
+        Path::new("/cwd"),
+    );
+
+    assert_eq!(separated, equals);
+    let Parsed::Invocation(invocation) = equals else {
+        panic!("not an invocation");
+    };
+    assert_eq!(invocation.profile, "p");
+    assert_eq!(invocation.workspace, Some(PathBuf::from("/cwd/w")));
+}
