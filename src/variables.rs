@@ -178,7 +178,8 @@ fn verified_common_dir(
     }
 }
 
-/// Whether `candidate` is `/`, `path`, or an ancestor of `path`.
+/// Whether `candidate` is `/`, `path`, or an ancestor of `path`. `/` is named on its own so
+/// that the rule holds whatever `path` looks like.
 fn is_or_ancestor_of(candidate: &Path, path: &Path) -> bool {
-    path.ancestors().any(|ancestor| ancestor == candidate)
+    candidate == Path::new("/") || path.ancestors().any(|ancestor| ancestor == candidate)
 }
