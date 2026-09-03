@@ -151,3 +151,15 @@ fn conflicting_directives_in_one_layer_are_a_policy_diagnostic() {
 
     assert_eq!(diagnostic.kind(), Kind::Policy, "{diagnostic}");
 }
+
+#[test]
+fn conflicting_directives_on_the_command_line_are_a_usage_diagnostic() {
+    let diagnostic = resolve(
+        &layers("", None, &["/x"], &["/x"]),
+        &variables(),
+        Facts::new(),
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Usage, "{diagnostic}");
+}

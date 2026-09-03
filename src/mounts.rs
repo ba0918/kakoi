@@ -211,12 +211,16 @@ pub fn resolve_mounts(
         let key = entry.path().unwrap_or(path).to_path_buf();
         match merged.iter().find(|candidate| candidate.key == key) {
             Some(existing) if existing.item.directive != item.directive => {
-                return Err(Diagnostic::policy(format!(
+                let description = format!(
                     "`{}` and `{}` name the same path {} with different directives",
                     existing.item.written,
                     item.written,
                     key.display()
-                )));
+                );
+                return Err(match item.origin {
+                    LayerOrigin::CommandLine => Diagnostic::usage(description),
+                    _ => Diagnostic::policy(description),
+                });
             }
             Some(_) => {}
             None => merged.push(Candidate { item, key, entry }),
