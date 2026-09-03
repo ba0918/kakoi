@@ -363,3 +363,41 @@ fn scan_skips_loaded_policy_files() {
         [(Directive::Hide, Path::new("/home/u/other.toml"))]
     );
 }
+
+#[test]
+fn scan_hides_the_target_of_a_matching_symlink() {
+    let resolved = resolve_with(
+        &layers(SCAN_ENV, None, &[], &[]),
+        &variables(),
+        MountFacts {
+            paths: Facts::new().dir("/home/u/proj").0,
+            scan_hits: vec![hit("/home/u/proj/.env", file_at("/home/u/secrets/env"))],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(Directive::Hide, Path::new("/home/u/secrets/env"))]
+    );
+}
+
+#[test]
+fn scan_skips_a_matching_symlink_to_a_directory() {
+    let resolved = resolve_with(
+        &layers(SCAN_ENV, None, &[], &[]),
+        &variables(),
+        MountFacts {
+            paths: Facts::new().dir("/home/u/proj").0,
+            scan_hits: vec![
+                hit("/home/u/proj/.env", dir_at("/home/u/envs")),
+                hit("/home/u/proj/.env.broken", RealEntry::Missing),
+            ],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert!(resolved.items.is_empty(), "{resolved:?}");
+}
