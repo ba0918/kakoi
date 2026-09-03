@@ -113,6 +113,12 @@ where
             "COMMAND is required unless --print-plan is given",
         ));
     }
+    if !is_single_path_component(&parsed.profile) {
+        return Err(Diagnostic::usage(format!(
+            "the profile name `{}` is not a single path component",
+            parsed.profile
+        )));
+    }
     Ok(Parsed::Invocation(Invocation {
         profile: parsed.profile,
         policy_file: parsed.policy_file.map(|path| current_dir.join(path)),
@@ -128,6 +134,12 @@ where
 /// first `--` is always the end-of-options marker.
 fn has_end_of_options(arguments: &[OsString]) -> bool {
     arguments.iter().any(|argument| argument == "--")
+}
+
+/// Whether `name` is one path component: not empty, without `/`, and neither `.` nor `..`
+/// (specification section 4.1).
+fn is_single_path_component(name: &str) -> bool {
+    !name.is_empty() && !name.contains('/') && name != "." && name != ".."
 }
 
 fn resolve_all(paths: Vec<PathBuf>, current_dir: &Path) -> Vec<PathBuf> {

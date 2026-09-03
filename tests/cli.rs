@@ -153,3 +153,14 @@ fn command_is_passed_through_unresolved() {
     );
     assert!(invocation.rw.is_empty());
 }
+
+#[test]
+fn a_profile_name_that_is_not_a_single_path_component_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for name in ["", "a/b", ".", ".."] {
+        let output = run(home.path(), ["--profile", name, "--", "true"]);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+}
