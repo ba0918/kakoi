@@ -142,11 +142,14 @@ pub struct ScanRequest {
 }
 
 /// What the outer layer must look up for the mount resolution: the paths whose existence,
-/// kind, and real path are needed, the scans to walk, and the `under` of each
-/// `hide-mounts` (the mount list is read only when there is one).
+/// kind, and real path are needed, the paths whose resolution must report the symbolic
+/// links it passes through (the ones specification section 5.6 protects), the scans to
+/// walk, and the `under` of each `hide-mounts` (the mount list is read only when there is
+/// one).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Candidates {
     pub paths: Vec<PathBuf>,
+    pub traversals: Vec<PathBuf>,
     pub scans: Vec<ScanRequest>,
     pub hide_mounts_under: Vec<PathBuf>,
 }
@@ -174,7 +177,7 @@ pub fn candidates(
             .filter_map(Expansion::path)
             .map(Path::to_path_buf),
     );
-    let protected = layers
+    let mut traversals: Vec<PathBuf> = layers
         .iter()
         .filter_map(|layer| match &layer.origin {
             LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.as_path()),
@@ -182,15 +185,20 @@ pub fn candidates(
         })
         .chain(std::iter::once(config_dir))
         .chain(expanded.secrets.values().filter_map(Expansion::path))
-        .chain(expanded.path_prepend.iter().filter_map(Expansion::path));
-    for path in protected {
+        .chain(expanded.path_prepend.iter().filter_map(Expansion::path))
+        .map(Path::to_path_buf)
+        .collect();
+    for path in &traversals {
         paths.extend(path.ancestors().map(Path::to_path_buf));
     }
     paths.push(variables.config_dir.join("secrets"));
     paths.sort();
     paths.dedup();
+    traversals.sort();
+    traversals.dedup();
     Candidates {
         paths,
+        traversals,
         scans: expanded
             .scans
             .iter()

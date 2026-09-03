@@ -893,6 +893,29 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
 }
 
 #[test]
+fn the_links_a_resolution_passes_through_are_reported_by_their_place() {
+    let tree = TempDir::new();
+    let root = tree.path().canonicalize().unwrap();
+    let policy_file = tree.write("real/pol/p.toml", "");
+    std::fs::create_dir(root.join("cache")).unwrap();
+    // A relative target is taken against the link's own directory, as the kernel does.
+    std::os::unix::fs::symlink("../real", root.join("cache/link")).unwrap();
+    std::os::unix::fs::symlink(root.join("cache/link/pol"), root.join("policies")).unwrap();
+
+    let facts = collect_mount_facts(&Candidates {
+        traversals: vec![root.join("policies/p.toml"), root.join("missing/x")],
+        ..Candidates::default()
+    });
+
+    assert_eq!(
+        facts.traversed_links(&root.join("policies/p.toml")),
+        [root.join("policies"), root.join("cache/link")]
+    );
+    assert!(facts.traversed_links(&root.join("missing/x")).is_empty());
+    assert!(facts.traversed_links(&policy_file).is_empty());
+}
+
+#[test]
 fn mount_facts_are_collected_from_the_file_system() {
     let tree = TempDir::new();
     let root = tree.path().canonicalize().unwrap();
@@ -908,6 +931,7 @@ fn mount_facts_are_collected_from_the_file_system() {
             prune: Vec::new(),
         }],
         hide_mounts_under: vec![PathBuf::from("/")],
+        ..Candidates::default()
     });
 
     assert_eq!(

@@ -324,6 +324,58 @@ fn print_plan_without_a_command_skips_resolution() {
     assert_diagnostic(&with, 127, "command not found");
 }
 
+/// A policy file at `real/pol/p.toml` reached through `policies -> cache/link/pol` and
+/// `cache/link -> real`: no prefix of the given path resolves into `cache`, but the chain
+/// passes through a link that sits inside it.
+fn home_with_a_policy_file_behind_a_chain_of_links(profile: &str, policy_file: &str) -> TempDir {
+    let (home, _) = home_with_workspace();
+    home.write(".config/process-wrap/profile/default.toml", profile);
+    home.write("real/pol/p.toml", policy_file);
+    std::fs::create_dir(home.path().join("cache")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("real"), home.path().join("cache/link")).unwrap();
+    std::os::unix::fs::symlink(
+        home.path().join("cache/link/pol"),
+        home.path().join("policies"),
+    )
+    .unwrap();
+    home
+}
+
+#[test]
+fn a_policy_file_behind_a_link_inside_a_writable_area_is_a_path_diagnostic() {
+    let rw_cache = "[mounts]\nrw = [\"~/cache\"]";
+
+    for (name, profile, policy_file) in [
+        ("rw in the profile", rw_cache, ""),
+        ("rw in the policy file itself", "", rw_cache),
+    ] {
+        let home = home_with_a_policy_file_behind_a_chain_of_links(profile, policy_file);
+        let workspace = home.path().join("ws");
+
+        let output = binary(home.path())
+            .args([
+                "--policy-file",
+                home.path().join("policies/p.toml").to_str().unwrap(),
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--",
+                "true",
+            ])
+            .output()
+            .unwrap();
+
+        let diagnostic = assert_diagnostic(&output, 125, "path");
+        let real_home = home.path().canonicalize().unwrap();
+        for element in [real_home.join("cache/link"), real_home.join("cache")] {
+            assert!(
+                diagnostic.contains(element.to_str().unwrap()),
+                "{name}: {diagnostic} does not mention {}",
+                element.display()
+            );
+        }
+    }
+}
+
 #[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     let (home, _) = home_with_workspace();
