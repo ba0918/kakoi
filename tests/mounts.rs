@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::fixture::{
-    home, layers, merged, variables, variables_without_git, Facts, POLICY_FILE, PROFILE,
+    home, layers, merged, variables, variables_without_git, Facts, CONFIG_DIR, POLICY_FILE, PROFILE,
 };
 use common::TempDir;
 use process_wrap::diagnostic::{Diagnostic, Kind};
@@ -11,8 +11,8 @@ use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
 use process_wrap::mount_list::read_mount_list;
 use process_wrap::mounts::{
-    expand_policy, resolve_mounts, Expansion, ItemOrigin, Mount, MountFacts, ResolvedMounts,
-    ScanHit,
+    candidates, expand_policy, resolve_mounts, Expansion, ItemOrigin, Mount, MountFacts,
+    ResolvedMounts, ScanHit,
 };
 use process_wrap::scan::scan;
 use process_wrap::variables::Variables;
@@ -779,4 +779,53 @@ fn a_scanned_env_file_under_an_rw_cache_is_hidden() {
             (Directive::Hide, Path::new("/home/u/.cache/x/.env")),
         ]
     );
+}
+
+#[test]
+fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_ones() {
+    let layers = layers(
+        "[mounts]\nrw = [\"~/.cache\"]\n[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env\"]\n\
+         [[mounts.hide-mounts]]\nunder = \"/mnt\"\nfstype = [\"9p\"]\n\
+         [env]\npath-prepend = [\"/opt/bin\"]\n[secrets]\nT = \"/home/u/tokens/t\"",
+        Some(""),
+        &["/cli/rw"],
+        &[],
+    );
+    let expanded = expand_policy(&merged(&layers), &variables(), &home());
+
+    let candidates = candidates(&expanded, &layers, &variables(), Path::new(CONFIG_DIR));
+
+    for expected in [
+        "/home/u/.cache",
+        "/cli/rw",
+        "/home/u/proj",
+        "/mnt",
+        "/opt/bin",
+        "/home/u/tokens/t",
+        "/home/u/tokens",
+        "/home/u",
+        "/",
+        PROFILE,
+        "/home/u/.config/process-wrap/profile",
+        POLICY_FILE,
+        "/home/u/policies",
+        CONFIG_DIR,
+        "/home/u/.config",
+        "/home/u/.config/process-wrap/secrets",
+    ] {
+        assert!(
+            candidates.paths.contains(&PathBuf::from(expected)),
+            "{expected} missing from {:?}",
+            candidates.paths
+        );
+    }
+    assert_eq!(
+        candidates
+            .scans
+            .iter()
+            .map(|scan| &scan.root)
+            .collect::<Vec<_>>(),
+        [Path::new("/home/u/proj")]
+    );
+    assert_eq!(candidates.hide_mounts_under, [PathBuf::from("/mnt")]);
 }

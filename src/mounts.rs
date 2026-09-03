@@ -122,6 +122,91 @@ pub fn expand_policy(
     }
 }
 
+/// One scan the outer layer is asked to walk, with its root as expanded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScanRequest {
+    pub root: PathBuf,
+    pub names: Vec<String>,
+    pub exclude: Vec<String>,
+    pub prune: Vec<String>,
+}
+
+/// What the outer layer must look up for the mount resolution: the paths whose existence,
+/// kind, and real path are needed, the scans to walk, and the `under` of each
+/// `hide-mounts` (the mount list is read only when there is one).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Candidates {
+    pub paths: Vec<PathBuf>,
+    pub scans: Vec<ScanRequest>,
+    pub hide_mounts_under: Vec<PathBuf>,
+}
+
+/// The candidate paths of `expanded`: every expanded path, plus every prefix (each
+/// ancestor and the path itself) of the paths specification section 5.6 protects — the
+/// policy files read, the configuration directory, and the secret files — and the
+/// configuration directory's `secrets/`.
+pub fn candidates(
+    expanded: &ExpandedPolicy,
+    layers: &[Layer],
+    variables: &Variables,
+    config_dir: &Path,
+) -> Candidates {
+    let mut paths = Vec::new();
+    let expanded_paths = expanded
+        .mounts
+        .iter()
+        .map(|item| &item.path)
+        .chain(expanded.scans.iter().map(|scan| &scan.root))
+        .chain(expanded.hide_mounts.iter().map(|hide| &hide.under))
+        .chain(expanded.path_prepend.iter());
+    for path in expanded_paths {
+        if let Expansion::Path(path) = path {
+            paths.push(path.clone());
+        }
+    }
+    let protected = layers
+        .iter()
+        .filter_map(|layer| match &layer.origin {
+            LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.as_path()),
+            LayerOrigin::CommandLine => None,
+        })
+        .chain(std::iter::once(config_dir))
+        .chain(expanded.secrets.values().filter_map(|path| match path {
+            Expansion::Path(path) => Some(path.as_path()),
+            Expansion::Valueless(_) => None,
+        }));
+    for path in protected {
+        paths.extend(path.ancestors().map(Path::to_path_buf));
+    }
+    paths.push(variables.config_dir.join("secrets"));
+    paths.sort();
+    paths.dedup();
+    Candidates {
+        paths,
+        scans: expanded
+            .scans
+            .iter()
+            .filter_map(|scan| match &scan.root {
+                Expansion::Path(root) => Some(ScanRequest {
+                    root: root.clone(),
+                    names: scan.names.clone(),
+                    exclude: scan.exclude.clone(),
+                    prune: scan.prune.clone(),
+                }),
+                Expansion::Valueless(_) => None,
+            })
+            .collect(),
+        hide_mounts_under: expanded
+            .hide_mounts
+            .iter()
+            .filter_map(|hide| match &hide.under {
+                Expansion::Path(under) => Some(under.clone()),
+                Expansion::Valueless(_) => None,
+            })
+            .collect(),
+    }
+}
+
 /// One entry the scan found by name: where it was found and what is behind it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanHit {
