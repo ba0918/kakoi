@@ -8,7 +8,7 @@ mod common;
 use common::fixture::{
     home, layers, merged, variables, Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
-use common::{assert_diagnostic, binary, TempDir};
+use common::{assert_diagnostic, binary, output_report, TempDir};
 use process_wrap::command::{command_candidates, resolve_command};
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::executables::first_executable;
@@ -273,4 +273,77 @@ fn a_missing_bwrap_is_a_bwrap_diagnostic() {
         .unwrap();
 
     assert_diagnostic(&output, 125, "bwrap");
+}
+
+/// A `PATH` holding only a stand-in `bwrap`, so that the whereabouts check passes
+/// without the real one and nothing else is on it.
+fn path_with_a_fake_bwrap() -> TempDir {
+    let bin = TempDir::new();
+    executable(&bin, "bwrap");
+    bin
+}
+
+#[test]
+fn print_plan_without_a_command_skips_resolution() {
+    let (home, workspace) = home_with_workspace();
+    let bin = path_with_a_fake_bwrap();
+    let workspace = workspace.to_str().unwrap();
+
+    let without = binary(home.path())
+        .env("PATH", bin.path())
+        .args(["--workspace", workspace, "--print-plan"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        without.status.code(),
+        Some(0),
+        "{}",
+        output_report(&without)
+    );
+
+    let with = binary(home.path())
+        .env("PATH", bin.path())
+        .args([
+            "--workspace",
+            workspace,
+            "--print-plan",
+            "--",
+            "no-such-tool",
+        ])
+        .output()
+        .unwrap();
+    assert_diagnostic(&with, 127, "command not found");
+}
+
+#[test]
+fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
+    let (home, _) = home_with_workspace();
+    let collision = home.path().join("x");
+
+    let output = binary(home.path())
+        .args([
+            "--workspace",
+            home.path().to_str().unwrap(),
+            "--rw",
+            collision.to_str().unwrap(),
+            "--hide",
+            collision.to_str().unwrap(),
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "usage");
+
+    let home_alone = binary(home.path())
+        .args([
+            "--workspace",
+            home.path().to_str().unwrap(),
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+    assert_diagnostic(&home_alone, 125, "path");
 }
