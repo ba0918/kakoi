@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+pub mod fixture;
+
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
