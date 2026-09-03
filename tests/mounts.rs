@@ -6,24 +6,52 @@ use common::fixture::{home, layers, merged, variables, variables_without_git, Fa
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
-use process_wrap::mounts::{expand_policy, resolve_mounts, Expansion, MountFacts, ResolvedMounts};
+use process_wrap::mounts::{
+    expand_policy, resolve_mounts, Expansion, ItemOrigin, MountFacts, ResolvedMounts, ScanHit,
+};
 use process_wrap::variables::Variables;
 
-/// Resolves the mount items of the written layers against `facts`, with no scan hits and
-/// no mount list.
+/// Resolves the mount items of the written layers against `facts`.
+fn resolve_with(
+    layers: &[Layer],
+    variables: &Variables,
+    facts: MountFacts,
+) -> Result<ResolvedMounts, Diagnostic> {
+    let policy = merged(layers);
+    let expanded = expand_policy(&policy, variables, &home());
+    resolve_mounts(&expanded, layers, variables, &facts)
+}
+
+/// Resolves with path facts only: no scan hits and no mount list.
 fn resolve(
     layers: &[Layer],
     variables: &Variables,
     facts: Facts,
 ) -> Result<ResolvedMounts, Diagnostic> {
-    let policy = merged(layers);
-    let expanded = expand_policy(&policy, variables, &home());
-    let facts = MountFacts {
-        paths: facts.0,
-        scan_hits: Vec::new(),
-        mounts: Vec::new(),
-    };
-    resolve_mounts(&expanded, layers, variables, &facts)
+    resolve_with(
+        layers,
+        variables,
+        MountFacts {
+            paths: facts.0,
+            scan_hits: Vec::new(),
+            mounts: Vec::new(),
+        },
+    )
+}
+
+fn hit(found_at: &str, target: RealEntry) -> ScanHit {
+    ScanHit {
+        found_at: PathBuf::from(found_at),
+        target,
+    }
+}
+
+fn file_at(path: &str) -> RealEntry {
+    RealEntry::NotDirectory(PathBuf::from(path))
+}
+
+fn dir_at(path: &str) -> RealEntry {
+    RealEntry::Directory(PathBuf::from(path))
 }
 
 #[test]
@@ -182,7 +210,7 @@ fn an_upper_layer_directive_replaces_the_same_real_path() {
     assert_eq!(resolved.items[0].directive, Directive::Rw);
     assert_eq!(
         resolved.items[0].origin,
-        LayerOrigin::PolicyFile(PathBuf::from(POLICY_FILE))
+        ItemOrigin::Written(LayerOrigin::PolicyFile(PathBuf::from(POLICY_FILE)))
     );
 }
 
@@ -272,4 +300,29 @@ fn siblings_are_ordered_by_bytes() {
             (Directive::Ro, Path::new("/home/u/proj/a/b")),
         ]
     );
+}
+
+const SCAN_ENV: &str = "[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env*\"]";
+
+#[test]
+fn scan_hides_matching_non_directory_entries() {
+    let resolved = resolve_with(
+        &layers(SCAN_ENV, None, &[], &[]),
+        &variables(),
+        MountFacts {
+            paths: Facts::new().dir("/home/u/proj").0,
+            scan_hits: vec![
+                hit("/home/u/proj/.env", file_at("/home/u/proj/.env")),
+                hit("/home/u/proj/.env.d", dir_at("/home/u/proj/.env.d")),
+            ],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(Directive::Hide, Path::new("/home/u/proj/.env"))]
+    );
+    assert_eq!(resolved.items[0].origin, ItemOrigin::Scan);
 }

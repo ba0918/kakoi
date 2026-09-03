@@ -159,13 +159,21 @@ pub enum EntryKind {
     NotDirectory,
 }
 
+/// Where a resolved item came from: a written layer, or one of the generators of
+/// specification section 6.3.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ItemOrigin {
+    Written(LayerOrigin),
+    Scan,
+}
+
 /// A mount item that applies: its real path and what is there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedItem {
     pub directive: Directive,
     pub real: PathBuf,
     pub kind: EntryKind,
-    pub origin: LayerOrigin,
+    pub origin: ItemOrigin,
     pub written: String,
 }
 
@@ -209,18 +217,27 @@ pub fn resolve_mounts(
             Expansion::Path(path) => path,
         };
         let entry = facts.entry(path);
-        let key = entry.path().unwrap_or(path).to_path_buf();
-        match merged.iter_mut().find(|candidate| candidate.key == key) {
-            Some(existing) if existing.item.origin != item.origin => {
+        let candidate = Candidate {
+            directive: item.directive,
+            written: item.written.to_string(),
+            origin: ItemOrigin::Written(item.origin.clone()),
+            key: entry.path().unwrap_or(path).to_path_buf(),
+            entry,
+        };
+        match merged
+            .iter_mut()
+            .find(|existing| existing.key == candidate.key)
+        {
+            Some(existing) if existing.origin != candidate.origin => {
                 // Lower layers come first, so a later item is the upper layer replacing.
-                *existing = Candidate { item, key, entry };
+                *existing = candidate;
             }
-            Some(existing) if existing.item.directive != item.directive => {
+            Some(existing) if existing.directive != candidate.directive => {
                 let description = format!(
                     "`{}` and `{}` name the same path {} with different directives",
-                    existing.item.written,
-                    item.written,
-                    key.display()
+                    existing.written,
+                    candidate.written,
+                    candidate.key.display()
                 );
                 return Err(match item.origin {
                     LayerOrigin::CommandLine => Diagnostic::usage(description),
@@ -228,17 +245,30 @@ pub fn resolve_mounts(
                 });
             }
             Some(_) => {}
-            None => merged.push(Candidate { item, key, entry }),
+            None => merged.push(candidate),
+        }
+    }
+    for generated in generated_items(facts) {
+        match merged
+            .iter_mut()
+            .find(|existing| existing.key == generated.key)
+        {
+            // A generated item replaces a written one; generated items are all `hide`, so
+            // two of them on one path collapse.
+            Some(existing) => *existing = generated,
+            None => merged.push(generated),
         }
     }
     for candidate in merged {
-        let item = candidate.item;
         let (real, kind) = match candidate.entry {
             RealEntry::Missing => {
+                let ItemOrigin::Written(origin) = candidate.origin else {
+                    unreachable!("generated items come from things that exist");
+                };
                 resolved.skipped.push(SkippedItem {
-                    directive: item.directive,
-                    written: item.written.to_string(),
-                    origin: item.origin.clone(),
+                    directive: candidate.directive,
+                    written: candidate.written,
+                    origin,
                     reason: "does not exist".to_string(),
                 });
                 continue;
@@ -247,11 +277,11 @@ pub fn resolve_mounts(
             RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
         };
         resolved.items.push(ResolvedItem {
-            directive: item.directive,
+            directive: candidate.directive,
             real,
             kind,
-            origin: item.origin.clone(),
-            written: item.written.to_string(),
+            origin: candidate.origin,
+            written: candidate.written,
         });
     }
     resolved.items.sort_by(|a, b| byte_order(&a.real, &b.real));
@@ -259,12 +289,33 @@ pub fn resolve_mounts(
     Ok(resolved)
 }
 
-/// The order of specification section 6.4. An ancestor is a proper prefix of its
-/// descendants' bytes, so the byte order of the real path already puts ancestors first and
-/// unrelated paths in byte order. `Path`'s own order compares by component and would put
-/// `/a/b` before `/a-x`.
-fn byte_order(a: &Path, b: &Path) -> std::cmp::Ordering {
-    a.as_os_str().as_bytes().cmp(b.as_os_str().as_bytes())
+/// The `hide` items of specification section 6.3, from the facts.
+fn generated_items(facts: &MountFacts) -> Vec<Candidate> {
+    let mut generated = Vec::new();
+    for hit in &facts.scan_hits {
+        // A directory, or a link whose target is a directory, is not hidden; a link to
+        // nothing names nothing to hide.
+        if let RealEntry::NotDirectory(real) = &hit.target {
+            generated.push(Candidate {
+                directive: Directive::Hide,
+                written: hit.found_at.display().to_string(),
+                origin: ItemOrigin::Scan,
+                key: real.clone(),
+                entry: hit.target.clone(),
+            });
+        }
+    }
+    generated
+}
+
+/// An item with its identity: the real path when something exists, else the expanded path
+/// as written (specification section 5.4).
+struct Candidate {
+    directive: Directive,
+    written: String,
+    origin: ItemOrigin,
+    key: PathBuf,
+    entry: RealEntry,
 }
 
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).
@@ -291,10 +342,10 @@ fn check_kinds(items: &[ResolvedItem]) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-/// A written item with its identity: the real path when something exists, else the
-/// expanded path as written (specification section 5.4).
-struct Candidate<'a> {
-    item: &'a ExpandedItem,
-    key: PathBuf,
-    entry: RealEntry,
+/// The order of specification section 6.4. An ancestor is a proper prefix of its
+/// descendants' bytes, so the byte order of the real path already puts ancestors first and
+/// unrelated paths in byte order. `Path`'s own order compares by component and would put
+/// `/a/b` before `/a-x`.
+fn byte_order(a: &Path, b: &Path) -> std::cmp::Ordering {
+    a.as_os_str().as_bytes().cmp(b.as_os_str().as_bytes())
 }
