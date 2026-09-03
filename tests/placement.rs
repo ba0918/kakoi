@@ -113,3 +113,43 @@ fn a_secret_file_inside_a_writable_area_is_rejected() {
 
     assert_path_diagnostic(&diagnostic, &["/home/u/proj/token", WORKTREE]);
 }
+
+#[test]
+fn a_missing_secret_file_under_a_writable_area_is_rejected() {
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\"]\n[secrets]\nT = \"${worktree}/missing/token\"",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host(),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[WORKTREE]);
+}
+
+#[test]
+fn the_first_placement_violation_follows_the_specified_order() {
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"/home/u/policies\", \"${worktree}\"]\n\
+             [secrets]\nT = \"${worktree}/token\"",
+            Some(""),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .file_with_ancestors(POLICY_FILE)
+            .file_with_ancestors("/home/u/proj/token"),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[POLICY_FILE]);
+    assert!(!diagnostic.description().contains("token"), "{diagnostic}");
+}
