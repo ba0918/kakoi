@@ -82,7 +82,10 @@ pub fn assemble_environment(
         let variable = OsString::from(name);
         values.remove(&variable);
         if let Some(SecretFile::Bytes(bytes)) = secrets.get(name) {
-            values.insert(variable.clone(), OsString::from_vec(secret_value(bytes)));
+            values.insert(
+                variable.clone(),
+                OsString::from_vec(secret_value(name, bytes)?),
+            );
             secret_names.insert(variable);
         }
     }
@@ -135,7 +138,14 @@ pub fn assemble_environment(
     })
 }
 
-/// The value of a secret: the file's content without one trailing newline.
-fn secret_value(bytes: &[u8]) -> Vec<u8> {
-    bytes.strip_suffix(b"\n").unwrap_or(bytes).to_vec()
+/// The value of a secret: the file's content without one trailing newline. The value
+/// itself never enters the diagnostic.
+fn secret_value(name: &str, bytes: &[u8]) -> Result<Vec<u8>, Diagnostic> {
+    let value = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    if value.is_empty() {
+        return Err(Diagnostic::secret(format!(
+            "the file of secret `{name}` is empty"
+        )));
+    }
+    Ok(value.to_vec())
 }

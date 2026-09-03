@@ -77,6 +77,10 @@ impl Diagnostic {
         Self::new(Kind::Path, description)
     }
 
+    pub fn secret(description: impl Into<String>) -> Self {
+        Self::new(Kind::Secret, description)
+    }
+
     pub fn env(description: impl Into<String>) -> Self {
         Self::new(Kind::Env, description)
     }

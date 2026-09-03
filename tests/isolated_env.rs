@@ -5,7 +5,7 @@ use std::path::PathBuf;
 mod common;
 
 use common::fixture::{layers, merged};
-use process_wrap::diagnostic::Diagnostic;
+use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::isolated_env::{assemble_environment, Assembled, SecretFile};
 
 fn host(pairs: &[(&str, &str)]) -> BTreeMap<OsString, OsString> {
@@ -121,4 +121,58 @@ fn clear_without_path_leaves_path_absent() {
         with_prepend.environment.values()[&OsString::from("PATH")],
         OsString::from("/opt/bin")
     );
+}
+
+const SECRET: &str = "[secrets]\nS = \"/home/u/tokens/s\"";
+
+#[test]
+fn a_secret_removes_the_host_value_before_injecting() {
+    let injected = assemble(
+        SECRET,
+        &host(&[("S", "host")]),
+        &secret_bytes(&[("S", b"file")]),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        injected.environment.values()[&OsString::from("S")],
+        OsString::from("file")
+    );
+
+    let absent = assemble(
+        SECRET,
+        &host(&[("S", "host")]),
+        &[("S".to_string(), SecretFile::Absent)]
+            .into_iter()
+            .collect(),
+        &[],
+    )
+    .unwrap();
+    assert!(!names(&absent).contains(&"S"), "{:?}", names(&absent));
+}
+
+#[test]
+fn a_secret_strips_one_trailing_newline() {
+    for (bytes, expected) in [
+        (&b"v\n\n"[..], "v\n"),
+        (b"v\n", "v"),
+        (b"v", "v"),
+        (b"v\r\n", "v\r"),
+    ] {
+        let assembled = assemble(SECRET, &host(&[]), &secret_bytes(&[("S", bytes)]), &[]).unwrap();
+        assert_eq!(
+            assembled.environment.values()[&OsString::from("S")],
+            OsString::from(expected),
+            "{bytes:?}"
+        );
+    }
+}
+
+#[test]
+fn an_empty_secret_file_is_a_secret_diagnostic() {
+    for bytes in [&b""[..], b"\n"] {
+        let diagnostic =
+            assemble(SECRET, &host(&[]), &secret_bytes(&[("S", bytes)]), &[]).unwrap_err();
+        assert_eq!(diagnostic.kind(), Kind::Secret, "{bytes:?}: {diagnostic}");
+    }
 }
