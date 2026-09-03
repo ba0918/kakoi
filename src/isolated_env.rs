@@ -147,5 +147,10 @@ fn secret_value(name: &str, bytes: &[u8]) -> Result<Vec<u8>, Diagnostic> {
             "the file of secret `{name}` is empty"
         )));
     }
+    if value.contains(&0) {
+        return Err(Diagnostic::secret(format!(
+            "the file of secret `{name}` contains a NUL byte"
+        )));
+    }
     Ok(value.to_vec())
 }

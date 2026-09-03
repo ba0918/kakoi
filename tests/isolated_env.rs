@@ -176,3 +176,11 @@ fn an_empty_secret_file_is_a_secret_diagnostic() {
         assert_eq!(diagnostic.kind(), Kind::Secret, "{bytes:?}: {diagnostic}");
     }
 }
+
+#[test]
+fn a_secret_with_nul_is_a_secret_diagnostic() {
+    let diagnostic =
+        assemble(SECRET, &host(&[]), &secret_bytes(&[("S", b"a\0b")]), &[]).unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
+}
