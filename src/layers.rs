@@ -1,12 +1,12 @@
 //! The written layers of a policy and their merge (specification sections 5.3 and 5.5).
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cli::Invocation;
 use crate::diagnostic::Diagnostic;
 use crate::policy::{parse_policy, EnvMode, HideMounts, NetworkMode, PolicyFile, PolicyPath, Scan};
+use crate::regular_file::{read_regular_file, Links};
 
 /// Where a written layer came from, lowest first: the profile, the `--policy-file`, the
 /// command line.
@@ -168,13 +168,14 @@ pub fn load_layers(invocation: &Invocation, config_dir: &Path) -> Result<Vec<Lay
     Ok(layers)
 }
 
+/// Reads one policy file following a symbolic link at its path (a user keeps policy files
+/// in dotfiles behind links), within the reading rules of specification section 14.
 fn read_policy_file(path: &Path, role: impl FnOnce() -> String) -> Result<PolicyFile, Diagnostic> {
-    let text = fs::read_to_string(path).map_err(|error| {
-        Diagnostic::policy(format!(
-            "{} cannot be read at {}: {error}",
-            role(),
-            path.display()
-        ))
-    })?;
+    let text = read_regular_file(path, Links::Follow)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| String::from_utf8(bytes).map_err(|_| "is not valid UTF-8".to_string()))
+        .map_err(|reason| {
+            Diagnostic::policy(format!("{} at {} {reason}", role(), path.display()))
+        })?;
     parse_policy(&text, path)
 }

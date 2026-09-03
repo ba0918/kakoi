@@ -389,3 +389,68 @@ fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
     let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
+
+#[test]
+fn a_fifo_policy_file_is_a_policy_diagnostic() {
+    let home = TempDir::new();
+    let config = config_dir(&home);
+    home.write(".config/process-wrap/profile/default.toml", "");
+    let fifo = home.path().join("policy.fifo");
+    let status = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .unwrap();
+    assert!(status.success(), "mkfifo");
+
+    let diagnostic = load_layers(
+        &invocation("default", Some(fifo.to_str().unwrap())),
+        &config,
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Policy);
+}
+
+#[test]
+fn an_oversized_policy_file_is_a_policy_diagnostic() {
+    let home = TempDir::new();
+    let config = config_dir(&home);
+    home.write(".config/process-wrap/profile/default.toml", "");
+    let line = format!("#{}\n", "x".repeat(62));
+    let exactly_one_mib = line.repeat((1 << 20) / line.len());
+    assert_eq!(exactly_one_mib.len(), 1 << 20);
+    let one_byte_over = format!("{exactly_one_mib}\n");
+    let fits = home.write("fits.toml", &exactly_one_mib);
+    let oversized = home.write("oversized.toml", &one_byte_over);
+
+    load_layers(
+        &invocation("default", Some(fits.to_str().unwrap())),
+        &config,
+    )
+    .unwrap();
+    let diagnostic = load_layers(
+        &invocation("default", Some(oversized.to_str().unwrap())),
+        &config,
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Policy);
+}
+
+#[test]
+fn a_policy_file_behind_a_symlink_is_read() {
+    let home = TempDir::new();
+    let config = config_dir(&home);
+    home.write(".config/process-wrap/profile/default.toml", "");
+    let target = home.write("dotfiles/policy.toml", "[mounts]\nro = [\"/p\"]");
+    let link = home.path().join("policy.toml");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let layers = load_layers(
+        &invocation("default", Some(link.to_str().unwrap())),
+        &config,
+    )
+    .unwrap();
+
+    assert_eq!(layers[1].policy.mounts.ro, [absolute("/p")]);
+}
