@@ -144,3 +144,24 @@ fn fixed_arguments_come_first_in_the_specified_order() {
         ]
     );
 }
+
+#[test]
+fn share_net_is_present_only_for_host_mode() {
+    let host = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &[]);
+    let none = bwrap_arguments(NetworkMode::None, Path::new("/home/u/proj"), &[]);
+
+    assert!(host.contains(&literal("--share-net")));
+    assert!(!none.contains(&literal("--share-net")));
+    assert!(none.contains(&literal("--unshare-all")));
+}
+
+#[test]
+fn the_argument_list_carries_no_environment_flags() {
+    let items = [item(Directive::Rw, "/home/u/proj", EntryKind::Directory)];
+
+    let arguments = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &items);
+
+    for flag in ["--setenv", "--unsetenv", "--clearenv"] {
+        assert!(!arguments.contains(&literal(flag)), "{flag}");
+    }
+}
