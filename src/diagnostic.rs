@@ -108,3 +108,25 @@ impl fmt::Display for Diagnostic {
         )
     }
 }
+
+/// A warning: one line on standard error, `process-wrap: warning: <description>`, that
+/// does not stop the run (specification section 13).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Warning(String);
+
+impl Warning {
+    /// Control characters in `description` are escaped as for a diagnostic.
+    pub fn new(description: impl Into<String>) -> Self {
+        Self(escape_control(&description.into()))
+    }
+
+    pub fn description(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Warning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "process-wrap: warning: {}", self.0)
+    }
+}
