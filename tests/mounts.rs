@@ -17,6 +17,7 @@ use process_wrap::mounts::{
 };
 use process_wrap::scan::scan;
 use process_wrap::variables::Variables;
+use process_wrap::wildcard::matches;
 
 /// Resolves the mount items of the written layers against `facts`.
 fn resolve_with(
@@ -450,6 +451,18 @@ fn scan_walks_a_real_tree_with_prune_and_exclude() {
             ),
         ]
     );
+}
+
+#[test]
+fn a_name_the_isolation_planted_cannot_stall_a_pattern_with_many_stars() {
+    // The name comes from the worktree, which the isolation writes; a match that tries
+    // every split would not return before the next start is given up on.
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || sender.send(matches("*a*a*a*a*a*b", &[b'a'; 255])));
+
+    let matched = receiver.recv_timeout(std::time::Duration::from_secs(1));
+
+    assert_eq!(matched, Ok(false));
 }
 
 #[test]

@@ -7,11 +7,36 @@ pub fn matches(pattern: &str, text: &[u8]) -> bool {
     matches_bytes(pattern.as_bytes(), text)
 }
 
+/// Linear in the lengths: a `*` is given the shortest run first, and a later mismatch
+/// backtracks to the most recent `*` alone. Trying every split of every `*` instead would
+/// take time exponential in the number of stars, and the text is a file name the
+/// isolation can write.
 fn matches_bytes(pattern: &[u8], text: &[u8]) -> bool {
-    match pattern.split_first() {
-        None => text.is_empty(),
-        Some((b'*', rest)) => (0..=text.len()).any(|skip| matches_bytes(rest, &text[skip..])),
-        Some((b'?', rest)) => !text.is_empty() && matches_bytes(rest, &text[1..]),
-        Some((byte, rest)) => text.first() == Some(byte) && matches_bytes(rest, &text[1..]),
+    let (mut p, mut t) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while t < text.len() {
+        match pattern.get(p) {
+            Some(b'*') => {
+                star = Some((p, t));
+                p += 1;
+            }
+            Some(b'?') => {
+                p += 1;
+                t += 1;
+            }
+            Some(byte) if *byte == text[t] => {
+                p += 1;
+                t += 1;
+            }
+            _ => match star {
+                Some((star_p, star_t)) => {
+                    p = star_p + 1;
+                    t = star_t + 1;
+                    star = Some((star_p, star_t + 1));
+                }
+                None => return false,
+            },
+        }
     }
+    pattern[p..].iter().all(|byte| *byte == b'*')
 }
