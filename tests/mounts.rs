@@ -448,3 +448,16 @@ fn scan_walks_a_real_tree_with_prune_and_exclude() {
         ]
     );
 }
+
+#[test]
+fn scan_does_not_enter_symlinked_directories() {
+    let tree = TempDir::new();
+    let root = tree.path().canonicalize().unwrap();
+    tree.write("outside/.env", "");
+    std::fs::create_dir(root.join("inside")).unwrap();
+    std::os::unix::fs::symlink(root.join("outside"), root.join("inside/linked")).unwrap();
+
+    let found = scan(&root.join("inside"), &[".env".to_string()], &[], &[]);
+
+    assert!(found.is_empty(), "{found:?}");
+}
