@@ -75,3 +75,50 @@ fn the_environment_is_assembled_in_the_seven_stages() {
     assert_eq!(actual, expected);
     assert!(assembled.warnings.is_empty(), "{:?}", assembled.warnings);
 }
+
+fn names(assembled: &Assembled) -> Vec<&str> {
+    assembled
+        .environment
+        .values()
+        .keys()
+        .map(|name| name.to_str().unwrap())
+        .collect()
+}
+
+#[test]
+fn unset_accepts_wildcards() {
+    let assembled = assemble(
+        "[env]\nunset = [\"*_TOKEN\", \"A?\"]",
+        &host(&[("GH_TOKEN", "1"), ("AB", "1"), ("ABC", "1"), ("TOKEN", "1")]),
+        &BTreeMap::new(),
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(names(&assembled), ["ABC", "PROCESS_WRAP", "TOKEN"]);
+}
+
+#[test]
+fn clear_without_path_leaves_path_absent() {
+    let without_prepend = assemble(
+        "[env]\nmode = \"clear\"\npass = [\"KEEP\"]",
+        &host(&[("KEEP", "1"), ("PATH", "/usr/bin"), ("OTHER", "1")]),
+        &BTreeMap::new(),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(names(&without_prepend), ["KEEP", "PROCESS_WRAP"]);
+    assert!(without_prepend.warnings.is_empty());
+
+    let with_prepend = assemble(
+        "[env]\nmode = \"clear\"\npath-prepend = [\"/opt/bin\"]",
+        &host(&[("PATH", "/usr/bin")]),
+        &BTreeMap::new(),
+        &["/opt/bin"],
+    )
+    .unwrap();
+    assert_eq!(
+        with_prepend.environment.values()[&OsString::from("PATH")],
+        OsString::from("/opt/bin")
+    );
+}
