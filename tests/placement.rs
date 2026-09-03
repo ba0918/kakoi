@@ -353,3 +353,25 @@ fn no_rw_over_the_workspace_yields_a_warning() {
         "{warnings:?}"
     );
 }
+
+#[test]
+fn rw_over_the_workspace_alone_yields_no_warning() {
+    for profile in [
+        "[mounts]\nrw = [\"${worktree}\"]",
+        "[mounts]\nrw = [\"/home/u/proj/sub\"]",
+    ] {
+        let variables = Variables {
+            workspace: PathBuf::from("/home/u/proj/sub"),
+            ..variables()
+        };
+        let warnings = check(
+            &layers(profile, None, &[], &[]),
+            &variables,
+            host().dir("/home/u/proj/sub"),
+            WORKTREE,
+        )
+        .unwrap();
+
+        assert!(warnings.is_empty(), "{profile}: {warnings:?}");
+    }
+}
