@@ -231,6 +231,10 @@ pub struct Mount {
 pub struct MountFacts {
     /// What exists behind each candidate path, keyed by the expanded path.
     pub paths: BTreeMap<PathBuf, RealEntry>,
+    /// The symbolic links passed through while resolving each path specification
+    /// section 5.6 protects, keyed by the given path. Each link is named by its own place:
+    /// its parent's real path and its name.
+    pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub scan_hits: Vec<ScanHit>,
     pub mounts: Vec<Mount>,
 }
@@ -239,6 +243,12 @@ impl MountFacts {
     /// What exists behind `path`; a path the outer layer did not look up is missing.
     pub fn entry(&self, path: &Path) -> RealEntry {
         self.paths.get(path).cloned().unwrap_or(RealEntry::Missing)
+    }
+
+    /// The symbolic links resolving `path` passes through; none for a path the outer
+    /// layer did not walk.
+    pub fn traversed_links(&self, path: &Path) -> &[PathBuf] {
+        self.links.get(path).map_or(&[], Vec::as_slice)
     }
 }
 

@@ -172,8 +172,9 @@ fn work_place_warning(items: &[ResolvedItem], variables: &Variables) -> Option<W
 }
 
 /// Every prefix of `path` (itself and each ancestor) that exists must not have its real
-/// path inside a writable item: a link on the way could be re-pointed from inside the
-/// isolation.
+/// path inside a writable item, and no symbolic link the resolution passes through may
+/// itself sit inside one: either could be re-pointed from inside the isolation. The
+/// links are not all prefixes of `path`: a link's target may pass through further links.
 fn check_prefixes(
     path: &Path,
     role: &str,
@@ -188,6 +189,18 @@ fn check_prefixes(
             return Err(Diagnostic::path(format!(
                 "{role} {} is inside the `{}` item {} and could be replaced from inside the \
                  isolation",
+                path.display(),
+                directive_name(item.directive),
+                item.real.display()
+            )));
+        }
+    }
+    for link in facts.traversed_links(path) {
+        if let Some(item) = writable.iter().find(|item| link.starts_with(&item.real)) {
+            return Err(Diagnostic::path(format!(
+                "the symbolic link {} on the way to {role} {} is inside the `{}` item {} and \
+                 could be re-pointed from inside the isolation",
+                link.display(),
                 path.display(),
                 directive_name(item.directive),
                 item.real.display()

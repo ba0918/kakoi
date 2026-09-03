@@ -14,7 +14,7 @@ use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::executables::first_executable;
 use process_wrap::isolated_env::SecretFile;
 use process_wrap::layers::{Directive, LayerOrigin};
-use process_wrap::mounts::{expand_policy, EntryKind, ItemOrigin, MountFacts, ResolvedItem};
+use process_wrap::mounts::{expand_policy, EntryKind, ItemOrigin, ResolvedItem};
 use process_wrap::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
 };
@@ -196,11 +196,7 @@ fn isolation(
         host: &BTreeMap::new(),
     };
     let facts = IsolationFacts {
-        mounts: MountFacts {
-            paths: facts.0,
-            scan_hits: Vec::new(),
-            mounts: Vec::new(),
-        },
+        mounts: facts.mount_facts(),
         secrets: secrets
             .iter()
             .map(|(name, file)| (name.to_string(), file.clone()))

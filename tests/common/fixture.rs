@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use process_wrap::cli::Invocation;
 use process_wrap::environment::{HomeDirectory, HostEnvironment, RealEntry};
 use process_wrap::layers::{merge, Layer, LayerOrigin, Policy};
+use process_wrap::mounts::MountFacts;
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
@@ -78,18 +79,31 @@ pub fn merged(layers: &[Layer]) -> Policy {
     merge(layers).unwrap()
 }
 
-/// Facts about paths: what exists behind each. A path not listed is missing.
+/// Facts about paths: what exists behind each, and the symbolic links a resolution passes
+/// through. A path not listed is missing and passes through no link.
 #[derive(Debug, Default, Clone)]
-pub struct Facts(pub BTreeMap<PathBuf, RealEntry>);
+pub struct Facts {
+    pub paths: BTreeMap<PathBuf, RealEntry>,
+    pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
+}
 
 impl Facts {
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// The facts as the mount resolution takes them: no scan hits and no mount list.
+    pub fn mount_facts(self) -> MountFacts {
+        MountFacts {
+            paths: self.paths,
+            links: self.links,
+            ..MountFacts::default()
+        }
+    }
+
     /// A directory whose real path is itself.
     pub fn dir(mut self, path: &str) -> Self {
-        self.0.insert(
+        self.paths.insert(
             PathBuf::from(path),
             RealEntry::Directory(PathBuf::from(path)),
         );
@@ -98,7 +112,7 @@ impl Facts {
 
     /// A non-directory (a regular file, a socket, a FIFO) whose real path is itself.
     pub fn file(mut self, path: &str) -> Self {
-        self.0.insert(
+        self.paths.insert(
             PathBuf::from(path),
             RealEntry::NotDirectory(PathBuf::from(path)),
         );
@@ -107,7 +121,7 @@ impl Facts {
 
     /// A symbolic link at `path` to the directory `real`.
     pub fn link_to_dir(mut self, path: &str, real: &str) -> Self {
-        self.0.insert(
+        self.paths.insert(
             PathBuf::from(path),
             RealEntry::Directory(PathBuf::from(real)),
         );
@@ -116,9 +130,18 @@ impl Facts {
 
     /// A symbolic link at `path` to the non-directory `real`.
     pub fn link_to_file(mut self, path: &str, real: &str) -> Self {
-        self.0.insert(
+        self.paths.insert(
             PathBuf::from(path),
             RealEntry::NotDirectory(PathBuf::from(real)),
+        );
+        self
+    }
+
+    /// The symbolic links, each by its own place, that resolving `path` passes through.
+    pub fn links_traversed(mut self, path: &str, links: &[&str]) -> Self {
+        self.links.insert(
+            PathBuf::from(path),
+            links.iter().map(PathBuf::from).collect(),
         );
         self
     }

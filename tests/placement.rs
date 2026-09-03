@@ -10,7 +10,7 @@ use common::fixture::{
 };
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
 use process_wrap::layers::{Layer, LayerOrigin};
-use process_wrap::mounts::{expand_policy, resolve_mounts, MountFacts};
+use process_wrap::mounts::{expand_policy, resolve_mounts};
 use process_wrap::placement::{check_placement, protected_paths};
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
@@ -27,11 +27,7 @@ fn check_at(
 ) -> Result<Vec<Warning>, Diagnostic> {
     let policy = merged(layers);
     let expanded = expand_policy(&policy, variables, &home());
-    let facts = MountFacts {
-        paths: facts.0,
-        scan_hits: Vec::new(),
-        mounts: Vec::new(),
-    };
+    let facts = facts.mount_facts();
     let resolved = resolve_mounts(&expanded, layers, variables, &facts)?;
     let protected = protected_paths(&expanded, layers, Path::new(config_dir));
     check_placement(
@@ -99,6 +95,36 @@ fn a_policy_file_reached_through_a_symlink_in_a_writable_area_is_rejected() {
     .unwrap_err();
 
     assert_path_diagnostic(&diagnostic, &[POLICY_FILE, WORKTREE]);
+}
+
+#[test]
+fn a_symlink_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
+    // `/home/u/policies` points at `/home/u/cache/link/pol` and `/home/u/cache/link` at
+    // `/home/u/real`: every prefix of the policy file resolves outside `~/cache`, but the
+    // chain passes through a link that sits inside it.
+    let chain = |profile: &str, policy_file: &str| {
+        check(
+            &layers(profile, Some(policy_file), &[], &[]),
+            &variables(),
+            host()
+                .dir("/home/u/cache")
+                .dir_with_ancestors("/home/u/real/pol")
+                .link_to_dir("/home/u/policies", "/home/u/real/pol")
+                .link_to_file(POLICY_FILE, "/home/u/real/pol/p.toml")
+                .links_traversed(POLICY_FILE, &["/home/u/policies", "/home/u/cache/link"]),
+            WORKTREE,
+        )
+    };
+    let rw_cache = "[mounts]\nrw = [\"~/cache\"]";
+
+    for (name, diagnostic) in [
+        ("rw in the profile", chain(rw_cache, "")),
+        ("rw in the policy file itself", chain("", rw_cache)),
+    ] {
+        let diagnostic = diagnostic.unwrap_err();
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert_path_diagnostic(&diagnostic, &["/home/u/cache/link", "/home/u/cache"]);
+    }
 }
 
 #[test]
