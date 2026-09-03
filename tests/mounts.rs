@@ -97,3 +97,18 @@ fn an_item_with_a_valueless_variable_is_skipped() {
     assert_eq!(resolved.skipped[0].directive, Directive::Rw);
     assert!(!resolved.skipped[0].reason.is_empty());
 }
+
+#[test]
+fn a_missing_real_path_is_skipped_with_a_reason() {
+    let resolved = resolve(
+        &layers("[mounts]\nrw = [\"/home/u/gone\"]", None, &[], &[]),
+        &variables(),
+        Facts::new(),
+    )
+    .unwrap();
+
+    assert!(resolved.items.is_empty(), "{resolved:?}");
+    assert_eq!(resolved.skipped.len(), 1, "{resolved:?}");
+    assert_eq!(resolved.skipped[0].written, "/home/u/gone");
+    assert!(!resolved.skipped[0].reason.is_empty());
+}

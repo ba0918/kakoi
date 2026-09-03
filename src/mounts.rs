@@ -210,7 +210,10 @@ pub fn resolve_mounts(
             Expansion::Path(path) => path,
         };
         let (real, kind) = match facts.entry(path) {
-            RealEntry::Missing => continue,
+            RealEntry::Missing => {
+                resolved.skipped.push(skip("does not exist".to_string()));
+                continue;
+            }
             RealEntry::Directory(real) => (real, EntryKind::Directory),
             RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
         };
