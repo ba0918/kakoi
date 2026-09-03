@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
-use crate::environment::HostEnvironment;
+use crate::environment::{HomeDirectory, RealEntry};
 
 /// What the `.git` entry of a directory is, looked at without following symbolic links.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,9 +57,6 @@ pub struct WorkspaceFacts {
     pub ancestors: Vec<Ancestor>,
     /// The links of the worktree's `.git` file, when that marker is a regular file.
     pub links: Option<GitFileLinks>,
-    /// The real path of the home directory (`HOME` itself when it cannot be resolved);
-    /// `None` when `HOME` is unset.
-    pub home: Option<PathBuf>,
 }
 
 /// The values of `${workspace}`, `${worktree}`, `${git_common_dir}`, and `${config_dir}`.
@@ -108,12 +105,17 @@ pub fn core_worktree(config: &str) -> Option<String> {
     value
 }
 
-/// Derives the variables, or the diagnostic that stops the run.
+/// Derives the variables, or the diagnostic that stops the run. `config_dir` is what the
+/// outer layer found behind the configuration directory.
 pub fn derive_variables(
-    env: &HostEnvironment,
+    home: &HomeDirectory,
+    config_dir: &RealEntry,
     facts: &WorkspaceFacts,
 ) -> Result<Variables, Diagnostic> {
-    let home = facts.home.as_deref().unwrap_or(env.home()?);
+    let home = home.path();
+    let config_dir = config_dir
+        .path()
+        .ok_or_else(|| Diagnostic::path("the configuration directory has no real path"))?;
     let workspace = facts
         .workspace
         .clone()
@@ -137,7 +139,7 @@ pub fn derive_variables(
         workspace,
         worktree,
         git_common_dir,
-        config_dir: env.config_dir()?,
+        config_dir: config_dir.to_path_buf(),
     })
 }
 

@@ -8,23 +8,30 @@ use std::io::Read;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use crate::environment::HostEnvironment;
+use crate::environment::RealEntry;
 use crate::variables::{
     core_worktree, worktree_marker, Ancestor, DotGit, GitFileLinks, Reference, WorkspaceFacts,
 };
 
+/// What exists behind `path`, following symbolic links.
+pub fn real_entry(path: &Path) -> RealEntry {
+    let Ok(real) = fs::canonicalize(path) else {
+        return RealEntry::Missing;
+    };
+    match fs::metadata(&real) {
+        Ok(metadata) if metadata.is_dir() => RealEntry::Directory(real),
+        Ok(_) => RealEntry::NotDirectory(real),
+        Err(_) => RealEntry::Missing,
+    }
+}
+
 /// Reads the facts for `workspace`.
-pub fn collect_workspace_facts(workspace: &Path, env: &HostEnvironment) -> WorkspaceFacts {
-    let home = env
-        .home
-        .as_ref()
-        .map(|home| fs::canonicalize(home).unwrap_or_else(|_| home.clone()));
+pub fn collect_workspace_facts(workspace: &Path) -> WorkspaceFacts {
     let Ok(workspace) = fs::canonicalize(workspace) else {
         return WorkspaceFacts {
             workspace: None,
             ancestors: Vec::new(),
             links: None,
-            home,
         };
     };
     let ancestors: Vec<Ancestor> = workspace
@@ -41,7 +48,6 @@ pub fn collect_workspace_facts(workspace: &Path, env: &HostEnvironment) -> Works
         workspace: Some(workspace),
         ancestors,
         links,
-        home,
     }
 }
 

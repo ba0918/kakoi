@@ -7,9 +7,10 @@ mod common;
 use common::TempDir;
 use process_wrap::cli::Invocation;
 use process_wrap::diagnostic::Kind;
-use process_wrap::environment::HostEnvironment;
+use process_wrap::environment::{HomeDirectory, HostEnvironment};
 use process_wrap::layers::{load_layers, merge, Directive, Layer, LayerOrigin, MountItem};
 use process_wrap::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
+use process_wrap::workspace_facts::real_entry;
 
 fn profile(text: &str) -> Layer {
     Layer {
@@ -41,6 +42,15 @@ fn invocation(profile: &str, policy_file: Option<&str>) -> Invocation {
     }
 }
 
+fn home_directory(home: &TempDir) -> HomeDirectory {
+    HostEnvironment {
+        home: Some(home.path().to_path_buf()),
+        xdg_config_home: None,
+    }
+    .home_directory(&real_entry(home.path()))
+    .unwrap()
+}
+
 /// A configuration directory under a temporary `XDG_CONFIG_HOME`, derived the way the
 /// binary derives it.
 fn config_dir(home: &TempDir) -> PathBuf {
@@ -48,8 +58,7 @@ fn config_dir(home: &TempDir) -> PathBuf {
         home: Some(home.path().to_path_buf()),
         xdg_config_home: Some(home.path().join(".config")),
     }
-    .config_dir()
-    .unwrap()
+    .config_dir(&home_directory(home))
 }
 
 #[test]
@@ -328,4 +337,55 @@ fn a_named_profile_does_not_read_default_toml() {
     );
     assert_eq!(layers[0].policy.mounts.rw, [absolute("/s")]);
     assert_eq!(layers[1].policy.mounts.ro, [absolute("/p")]);
+}
+
+#[test]
+fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts\nbroken",
+    );
+
+    let config = HostEnvironment {
+        home: Some(home.path().to_path_buf()),
+        xdg_config_home: Some(PathBuf::new()),
+    }
+    .config_dir(&home_directory(&home));
+
+    assert_eq!(
+        config,
+        home.path()
+            .canonicalize()
+            .unwrap()
+            .join(".config/process-wrap")
+    );
+    let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
+    assert_eq!(diagnostic.kind(), Kind::Policy);
+}
+
+#[test]
+fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts\nbroken",
+    );
+    home.write("xdg/process-wrap/profile/default.toml", "");
+
+    let config = HostEnvironment {
+        home: Some(home.path().to_path_buf()),
+        xdg_config_home: Some(PathBuf::from("xdg")),
+    }
+    .config_dir(&home_directory(&home));
+
+    assert_eq!(
+        config,
+        home.path()
+            .canonicalize()
+            .unwrap()
+            .join(".config/process-wrap")
+    );
+    let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
+    assert_eq!(diagnostic.kind(), Kind::Policy);
 }
