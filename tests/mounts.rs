@@ -5,12 +5,14 @@ mod common;
 use common::fixture::{
     home, layers, merged, variables, variables_without_git, Facts, POLICY_FILE, PROFILE,
 };
+use common::TempDir;
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
 use process_wrap::mounts::{
     expand_policy, resolve_mounts, Expansion, ItemOrigin, MountFacts, ResolvedMounts, ScanHit,
 };
+use process_wrap::scan::scan;
 use process_wrap::variables::Variables;
 
 /// Resolves the mount items of the written layers against `facts`.
@@ -400,4 +402,49 @@ fn scan_skips_a_matching_symlink_to_a_directory() {
     .unwrap();
 
     assert!(resolved.items.is_empty(), "{resolved:?}");
+}
+
+/// The scan hits as (path found, what is behind it), sorted for comparison.
+fn hits(mut found: Vec<ScanHit>) -> Vec<(PathBuf, RealEntry)> {
+    found.sort_by(|a, b| a.found_at.cmp(&b.found_at));
+    found
+        .into_iter()
+        .map(|hit| (hit.found_at, hit.target))
+        .collect()
+}
+
+#[test]
+fn scan_walks_a_real_tree_with_prune_and_exclude() {
+    let tree = TempDir::new();
+    let root = tree.path().canonicalize().unwrap();
+    tree.write(".env", "");
+    tree.write(".env.example", "");
+    tree.write("node_modules/.env", "");
+    tree.write("sub/deeper/.env.local", "");
+    std::fs::create_dir(root.join(".env.d")).unwrap();
+
+    let found = scan(
+        &root,
+        &[".env*".to_string()],
+        &["*.example".to_string()],
+        &["node_modules".to_string()],
+    );
+
+    assert_eq!(
+        hits(found),
+        [
+            (
+                root.join(".env"),
+                file_at(root.join(".env").to_str().unwrap())
+            ),
+            (
+                root.join(".env.d"),
+                dir_at(root.join(".env.d").to_str().unwrap())
+            ),
+            (
+                root.join("sub/deeper/.env.local"),
+                file_at(root.join("sub/deeper/.env.local").to_str().unwrap()),
+            ),
+        ]
+    );
 }

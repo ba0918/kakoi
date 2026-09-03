@@ -11,6 +11,8 @@ pub mod layers;
 pub mod mounts;
 pub mod policy;
 pub mod regular_file;
+pub mod scan;
 pub mod startup;
 pub mod variables;
+pub mod wildcard;
 pub mod workspace_facts;
