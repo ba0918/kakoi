@@ -12,6 +12,11 @@ use crate::layers::Policy;
 use crate::policy::EnvMode;
 use crate::wildcard::matches;
 
+/// The most a secret's value may be: half of what Linux allows one environment variable
+/// (128 KiB with the name and the terminator), so that the limit is reported as `secret`
+/// rather than as a failed exec (specification section 9).
+pub const SECRET_VALUE_LIMIT: usize = 64 * 1024;
+
 /// What the outer layer found at a secret's file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretFile {
@@ -150,6 +155,11 @@ fn secret_value(name: &str, bytes: &[u8]) -> Result<Vec<u8>, Diagnostic> {
     if value.contains(&0) {
         return Err(Diagnostic::secret(format!(
             "the file of secret `{name}` contains a NUL byte"
+        )));
+    }
+    if value.len() > SECRET_VALUE_LIMIT {
+        return Err(Diagnostic::secret(format!(
+            "the value of secret `{name}` is longer than {SECRET_VALUE_LIMIT} bytes"
         )));
     }
     Ok(value.to_vec())

@@ -184,3 +184,22 @@ fn a_secret_with_nul_is_a_secret_diagnostic() {
 
     assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
+
+#[test]
+fn an_oversized_secret_value_is_a_secret_diagnostic() {
+    let limit = 64 * 1024;
+    let at_limit = vec![b'x'; limit];
+    let mut at_limit_with_newline = at_limit.clone();
+    at_limit_with_newline.push(b'\n');
+    let over = vec![b'x'; limit + 1];
+
+    for bytes in [&at_limit, &at_limit_with_newline] {
+        let assembled = assemble(SECRET, &host(&[]), &secret_bytes(&[("S", bytes)]), &[]).unwrap();
+        assert_eq!(
+            assembled.environment.values()[&OsString::from("S")].len(),
+            limit
+        );
+    }
+    let diagnostic = assemble(SECRET, &host(&[]), &secret_bytes(&[("S", &over)]), &[]).unwrap_err();
+    assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
+}
