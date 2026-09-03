@@ -19,6 +19,7 @@ pub mod plan;
 pub mod policy;
 pub mod regular_file;
 pub mod scan;
+pub mod seccomp;
 pub mod secret_facts;
 pub mod startup;
 pub mod variables;
