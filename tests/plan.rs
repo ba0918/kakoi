@@ -1,16 +1,23 @@
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 mod common;
 
+use common::fixture::{
+    home, layers, merged, variables, Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
+};
 use common::TempDir;
 use process_wrap::command::{command_candidates, resolve_command};
-use process_wrap::diagnostic::Kind;
+use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::executables::first_executable;
+use process_wrap::isolated_env::SecretFile;
 use process_wrap::layers::{Directive, LayerOrigin};
-use process_wrap::mounts::{EntryKind, ItemOrigin, ResolvedItem};
-use process_wrap::plan::{bwrap_arguments, Argument};
+use process_wrap::mounts::{expand_policy, EntryKind, ItemOrigin, MountFacts, ResolvedItem};
+use process_wrap::plan::{
+    bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
+};
 use process_wrap::policy::NetworkMode;
 
 /// Writes an executable script at `relative` under `dir`.
@@ -164,4 +171,78 @@ fn the_argument_list_carries_no_environment_flags() {
     for flag in ["--setenv", "--unsetenv", "--clearenv"] {
         assert!(!arguments.contains(&literal(flag)), "{flag}");
     }
+}
+
+/// The stage-seven checks on the fixture host: the profile `profile` with the policy
+/// file at the fixture path, the facts, and the secret files given.
+fn isolation(
+    profile: &str,
+    facts: Facts,
+    secrets: &[(&str, SecretFile)],
+) -> Result<Isolation, Diagnostic> {
+    let layers = layers(profile, Some(""), &[], &[]);
+    let policy = merged(&layers);
+    let variables = variables();
+    let home = home();
+    let expanded = expand_policy(&policy, &variables, &home);
+    let inputs = Inputs {
+        layers: &layers,
+        policy: &policy,
+        expanded: &expanded,
+        variables: &variables,
+        home: &home,
+        config_dir: Path::new(CONFIG_DIR),
+        current_dir: Path::new(WORKTREE),
+        host: &BTreeMap::new(),
+    };
+    let facts = IsolationFacts {
+        mounts: MountFacts {
+            paths: facts.0,
+            scan_hits: Vec::new(),
+            mounts: Vec::new(),
+        },
+        secrets: secrets
+            .iter()
+            .map(|(name, file)| (name.to_string(), file.clone()))
+            .collect(),
+    };
+    resolve_isolation(&inputs, &facts)
+}
+
+#[test]
+fn stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order() {
+    let host = Facts::new()
+        .dir_with_ancestors(WORKTREE)
+        .file_with_ancestors(PROFILE)
+        .file_with_ancestors(POLICY_FILE)
+        .file("/home/u/tokens/s");
+    let collision = "hide = [\"/home/u/link\"]\n";
+    let policy_file_inside_rw = "\"/home/u/policies\", ";
+    let empty_secret = [("S", SecretFile::Bytes(Vec::new()))];
+    let profile = |collision: &str, inside: &str| {
+        format!(
+            "[mounts]\nrw = [{inside}\"${{worktree}}\"]\n{collision}\
+             [secrets]\nS = \"/home/u/tokens/s\""
+        )
+    };
+    let facts = host.clone().link_to_dir("/home/u/link", WORKTREE);
+
+    let all_three = isolation(
+        &profile(collision, policy_file_inside_rw),
+        facts.clone(),
+        &empty_secret,
+    )
+    .unwrap_err();
+    assert_eq!(all_three.kind(), Kind::Policy, "{all_three}");
+
+    let without_collision = isolation(
+        &profile("", policy_file_inside_rw),
+        facts.clone(),
+        &empty_secret,
+    )
+    .unwrap_err();
+    assert_eq!(without_collision.kind(), Kind::Path, "{without_collision}");
+
+    let only_the_secret = isolation(&profile("", ""), facts, &empty_secret).unwrap_err();
+    assert_eq!(only_the_secret.kind(), Kind::Secret, "{only_the_secret}");
 }
