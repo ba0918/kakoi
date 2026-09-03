@@ -3,12 +3,11 @@
 //! `gitdir`, and `config` under the directory it names (specification section 14). Runs no
 //! command.
 
-use std::fs::{self, OpenOptions};
-use std::io::Read;
-use std::os::unix::fs::OpenOptionsExt;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::environment::RealEntry;
+use crate::regular_file::{read_regular_file, Links, ReadError};
 use crate::variables::{
     core_worktree, worktree_marker, Ancestor, DotGit, GitFileLinks, Reference, WorkspaceFacts,
 };
@@ -118,15 +117,11 @@ fn read_links(worktree: &Path) -> GitFileLinks {
     }
 }
 
-/// The most a file git wrote is read up to. Git writes one path per file, or a small
-/// configuration; anything larger was not written by git.
-const GIT_FILE_LIMIT: u64 = 1 << 20;
-
 /// What is found at the name of a file git may have written.
 enum GitFile {
     /// Nothing exists at the name.
     Absent,
-    /// Something exists there but is not a regular file within `GIT_FILE_LIMIT`, or could
+    /// Something exists there but is not a regular file within the reading limit, or could
     /// not be read.
     Unusable,
     Text(String),
@@ -142,40 +137,14 @@ impl GitFile {
 }
 
 /// Reads a file git may have written. The directory it sits in can be written from inside
-/// the isolation, so nothing that is not a regular file is used, symbolic links are not
-/// followed, and the length is bounded. The entry can be swapped for a FIFO between the
-/// type check and the open, and an open that waits for a writer would stop the start-up,
-/// so the open itself refuses to follow a link and does not wait; a regular file is read
-/// the same way either way.
+/// the isolation, so a link at the name is not followed (specification section 5.2), and
+/// the reading rules of section 14 apply.
 fn read_git_file(path: &Path) -> GitFile {
-    let Ok(metadata) = fs::symlink_metadata(path) else {
-        return GitFile::Absent;
-    };
-    if !metadata.file_type().is_file() {
-        return GitFile::Unusable;
+    match read_regular_file(path, Links::DoNotFollow) {
+        Ok(bytes) => String::from_utf8(bytes).map_or(GitFile::Unusable, GitFile::Text),
+        Err(ReadError::Absent) => GitFile::Absent,
+        Err(_) => GitFile::Unusable,
     }
-    let Ok(file) = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-        .open(path)
-    else {
-        return GitFile::Unusable;
-    };
-    // Checked again on the open descriptor: the entry may have been replaced since.
-    match file.metadata() {
-        Ok(metadata) if metadata.file_type().is_file() => {}
-        _ => return GitFile::Unusable,
-    }
-    let mut text = String::new();
-    if file
-        .take(GIT_FILE_LIMIT + 1)
-        .read_to_string(&mut text)
-        .is_err()
-        || text.len() as u64 > GIT_FILE_LIMIT
-    {
-        return GitFile::Unusable;
-    }
-    GitFile::Text(text)
 }
 
 /// The real path of `target` taken relative to `base`; `None` when nothing exists there.
