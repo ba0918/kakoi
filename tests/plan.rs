@@ -273,6 +273,19 @@ fn a_missing_bwrap_is_a_bwrap_diagnostic() {
         .unwrap();
 
     assert_diagnostic(&output, 125, "bwrap");
+
+    // Stage 8 comes before stage 9: an unresolvable command does not change the answer.
+    let with_a_missing_command = binary(home.path())
+        .env("PATH", empty_path.path())
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "no-such-tool",
+        ])
+        .output()
+        .unwrap();
+    assert_diagnostic(&with_a_missing_command, 125, "bwrap");
 }
 
 /// A `PATH` holding only a stand-in `bwrap`, so that the whereabouts check passes
