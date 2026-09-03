@@ -1,10 +1,11 @@
 # process-wrap 0.1 実装計画（全体像）
 
-この文書は 3 本の計画の共通部分と全体の対応表である。cycle で回すのはこの文書ではなく、次の 3 本を順に回す。それぞれが自分のステップを持ち、方針と表はここを参照する。
+この文書は 4 本の計画の共通部分と全体の対応表である。cycle で回すのはこの文書ではなく、次の 4 本を順に回す。それぞれが自分のステップを持ち、方針と表はここを参照する。
 
-1. `docs/plans/implement-0.1-a-policy.md` — ステップ 1〜5（ブランチ `implement-0.1-a-policy`）
-2. `docs/plans/implement-0.1-b-mounts.md` — ステップ 6〜10（ブランチ `implement-0.1-b-mounts`）。A のマージ後
-3. `docs/plans/implement-0.1-c-launch.md` — ステップ 11〜16（ブランチ `implement-0.1-c-launch`）。B のマージ後
+1. `docs/plans/implement-0.1-a-policy.md` — ステップ 1〜5（ブランチ `implement-0.1-a-policy`）。済み
+2. `docs/plans/implement-0.1-a2-followup.md` — ステップ 5.1〜5.5（ブランチ `implement-0.1-a2-followup`）。A のマージ後。仕様の改訂（コミット 1142262）への追従
+3. `docs/plans/implement-0.1-b-mounts.md` — ステップ 6〜10（ブランチ `implement-0.1-b-mounts`）。A2 のマージ後
+4. `docs/plans/implement-0.1-c-launch.md` — ステップ 11〜16（ブランチ `implement-0.1-c-launch`）。B のマージ後
 
 ## Goal
 

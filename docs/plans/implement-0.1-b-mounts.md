@@ -11,7 +11,7 @@
 
 ## Specification
 
-`docs/spec/process-wrap.md`（コミット e0df7b4 で承認済み）。節の書き方は全体像と同じ
+`docs/spec/process-wrap.md`（コミット e0df7b4 で承認、1142262 で改訂済み）。節の書き方は全体像と同じ
 （`仕様#3 対応環境` は `## 3. 対応環境`）。用語は `CONTEXT.md` に従う。
 
 ## Approach and why
@@ -28,7 +28,7 @@
 
 ## Step order and prerequisites
 
-6 → 7 → 8 → 9。ステップ 10（seccomp）は独立で、いつでもよい。前提は計画 A が `main` にマージされていること。
+6 → 7 → 8 → 9。ステップ 10（seccomp）は独立で、いつでもよい。前提は計画 A と A2 が `main` にマージされていること。
 
 ## Verification map（この計画の分）
 
@@ -36,15 +36,17 @@
 |---|---|
 | 2 用語（計画） | 9 |
 | 4.2 コマンドの解決 | 9 |
-| 5.2 パスの書き方（展開と値を持たない変数） | 6 |
+| 5.2 パスの書き方（`~` の展開先、変数の展開と値を持たない変数） | 6 |
 | 5.4 マウント項目の同一性 | 6 |
 | 5.6 ポリシーを書き換えられない置き場 | 7 |
 | 6.1 指令の意味、6.2 実体への解決と存在しないパス、6.3 生成される項目、6.4 順序 | 6 |
 | 6.5 作業場所への警告と危険な広さの拒否（警告とカレントディレクトリ） | 7 |
 | 7 ネットワーク | 9 |
-| 8 環境変数、9 認証情報、10 git の URL 書き換え | 8 |
+| 8 環境変数、9 認証情報（値の上限を含む）、10 git の URL 書き換え | 8 |
+| 13 出力と終了コードの契約（検査順序の段階 7〜9 と 1 つの検査の中の順序、5.6 の出す順） | 7、9 |
 | 11 端末の保護（バイト列） | 10 |
 | 13 出力と終了コードの契約（`path`、`secret`、`env`、`bwrap`、`command not found` の生成側） | 6〜9 |
+| 14 実行時の境界（ファイルの読み方: 秘密ファイル） | 8 |
 | 14 実行時の境界（固定引数、`bwrap` の所在） | 9 |
 
 ## Left to the implementer / Stop conditions / Test command
@@ -62,7 +64,7 @@
 Purpose: 合成後のポリシーと変数から、展開済みの候補パスを作り、外周が集めた事実（存在・種類・
 実体、走査結果、マウント一覧、秘密ファイルの有無）と合わせて、同一性を実体で判定し、生成の段を
 加え、仕様#6.4 の順序で並べたマウント項目の列を作る。
-Specification: 仕様#5.2 パスの書き方（変数展開の効く位置、値を持たない変数）、仕様#5.4 マウント
+Specification: 仕様#5.2 パスの書き方（`~` の展開先、変数展開の効く位置、値を持たない変数）、仕様#5.4 マウント
 項目の同一性、仕様#6.1 指令の意味、仕様#6.2 実体への解決と存在しないパス、仕様#6.3 生成される
 項目、仕様#6.4 順序、仕様#13 出力と終了コードの契約（`path` 行の `rw` にディレクトリ以外、
 `rw-file` にディレクトリ、`usage` 行のコマンドラインでの衝突）。
@@ -70,7 +72,7 @@ Prerequisites: ステップ 4、5。
 May change: `src/` のマウント解決モジュール（核）と、走査・マウント一覧・パスの事実を集める
 モジュール（外周）、`tests/` の該当ファイル。
 Done when: 核が候補パスの一覧を返し（外周が事実を集めるため）、事実を与えると次を満たす項目列を
-返す: 変数はパスを取る値でだけ展開され `env.set` の値では展開されない、値を持たない変数を含む
+返す: `~` と `~/` はホームディレクトリの実体（計画 A2 が用意する値）に展開され字面の `HOME` は使われない、変数はパスを取る値でだけ展開され `env.set` の値では展開されない、値を持たない変数を含む
 項目は存在しないパスと同じく飛ばされる、同じ段の中で同じ実体への同じ指令は 1 つになり違う指令は
 `policy`（コマンドライン段なら `usage`）の診断になる、段をまたぐ同じ実体は上の段が置き換える、
 存在しない実体は「飛ばした」と理由付きで記録される、走査で名前が一致したディレクトリ以外の
@@ -81,7 +83,7 @@ Done when: 核が候補パスの一覧を返し（外周が事実を集めるた
 なる、生成された項目が書かれた項目を置き換える、祖先が先で兄弟は実体のバイト順に並ぶ、`rw` に
 ディレクトリ以外は `rw-file` を案内する説明付きの `path` 診断になり `rw-file` にディレクトリも
 `path` の診断になる。仕様#6.4 の表の 5 場面が項目列として再現される。
-Shown by: test — `variables_expand_only_in_path_values`、
+Shown by: test — `tilde_expands_to_the_real_home_directory`、`variables_expand_only_in_path_values`、
 `an_item_with_a_valueless_variable_is_skipped`、
 `the_same_directive_twice_in_one_layer_collapses`、
 `conflicting_directives_in_one_layer_are_a_policy_diagnostic`、
@@ -108,19 +110,21 @@ Stop and hand back if: `/proc/self/mountinfo` の列の並びが想定と違う�
 
 Purpose: 仕様#5.6 の 3 種類の拒否、仕様#6.5 のカレントディレクトリの規則と作業場所への警告を、
 ステップ 6 の項目列に対して判定する。
-Specification: 仕様#5.6 ポリシーを書き換えられない置き場、仕様#6.5 作業場所への警告と危険な広さの
-拒否（警告の段落、カレントディレクトリの段落）、仕様#13（`path` 行の該当項目）。
+Specification: 仕様#5.6 ポリシーを書き換えられない置き場（秘密ファイルの段落を含む）、仕様#6.5 作業場所への警告と危険な広さの
+拒否（警告の段落、カレントディレクトリの段落）、仕様#13（`path` 行の該当項目、5.6 の検査で出す順）。
 Prerequisites: ステップ 6。
 May change: `src/` の判定モジュール（核）、`tests/` の該当ファイル。
-Done when: 読み込んだポリシーファイルと設定ディレクトリの与えられたパスの各前置きの実体が `rw` か
-`rw-file` の中にあれば、そのパスと `rw` 項目のパスと理由を含む説明の `path` 診断になり、
+Done when: 読み込んだポリシーファイルと設定ディレクトリと `secrets` の値が指す秘密ファイルの与えられたパスの各前置きの実体が `rw` か
+`rw-file` の中にあれば、そのパスと `rw` 項目のパスと理由を含む説明の `path` 診断になり、秘密ファイルが存在しなくても存在する前置きが同じ検査を受け、複数の対象が同時に当たるときは仕様#13 の順（プロファイル、`--policy-file`、設定ディレクトリ、秘密ファイル、`path-prepend`）で最初のものが出て、
 `path-prepend` の項目が `rw`/`rw-file` の中でも `path` 診断になり、`rw`/`rw-file` の実体が `/`・
 ホーム・ホームの祖先でも `path` 診断になり、カレントディレクトリを含む項目のうち順序で最後に
 適用されるものが `hide` なら `path` 診断になり、再露出していれば通り、ワークスペースかワークツリーか
 その祖先を指す `rw` が無ければ警告が計画に載る。
 Shown by: test — `a_policy_file_inside_a_writable_area_is_rejected_with_the_three_reasons`、
 `a_policy_file_reached_through_a_symlink_in_a_writable_area_is_rejected`、
-`the_config_dir_inside_a_writable_area_is_rejected`、`path_prepend_inside_a_writable_area_is_rejected`、
+`the_config_dir_inside_a_writable_area_is_rejected`、`a_secret_file_inside_a_writable_area_is_rejected`、
+`a_missing_secret_file_under_a_writable_area_is_rejected`、`the_first_placement_violation_follows_the_specified_order`、
+`path_prepend_inside_a_writable_area_is_rejected`、
 `rw_on_home_is_rejected_from_any_layer`、`a_cwd_under_a_hide_is_rejected`、
 `a_cwd_re_exposed_by_a_descendant_rw_is_accepted`、`no_rw_over_the_workspace_yields_a_warning`、
 `rw_over_the_workspace_alone_yields_no_warning`。
@@ -131,15 +135,15 @@ Stop and hand back if: なし。
 
 Purpose: 隔離の中の環境の最終形を、仕様#8 の 7 段階のとおりに組み立てる。
 Specification: 仕様#8 環境変数、仕様#9 認証情報、仕様#10 git の URL 書き換え、仕様#13（`secret`、
-`env` 行）。
-Prerequisites: ステップ 7。
+`env` 行）、仕様#14 実行時の境界（「ファイルの読み方」の段落: 秘密ファイル）。
+Prerequisites: ステップ 7。計画 A2 のステップ 5.3 が作った読み込みの部品（通常ファイルに限る、待たずに開く、上限）を秘密ファイルにも使う。
 May change: `src/` の環境・秘密・git の各モジュール（核）と、秘密ファイルの内容を集める外周、
 `tests/` の該当ファイル。
 Done when:
 - 7 段階の順で環境ができ、`unset` のワイルドカードが効き、`clear` で `PATH` が無く `path-prepend` も
   空なら `PATH` は無いまま。
 - 秘密は名前のバイト順に「由来を問わず消してから、ファイルがあれば入れる」で動き、末尾の改行 1 つが
-  除かれ、除いた後の 0 バイト・読めない・NUL が `secret` 診断になり、不在が警告になり、値が計画にも
+  除かれ、除いた後の 0 バイト・読めない・NUL・値が 64 KiB を超える・通常ファイルでない（FIFO で待たない）が `secret` 診断になり、シンボリックリンクの先の通常ファイルは読め、不在が警告になり、値が計画にも
   警告にも診断にも出ない。
 - `git.instead-of` に項目があれば、キーのバイト順に `GIT_CONFIG_KEY_n`/`VALUE_n`/`COUNT` を、4 段階目
   までの環境の `GIT_CONFIG_COUNT` の続き（無ければ 0）から足し、既存の組を保持し、数値でない
@@ -147,7 +151,8 @@ Done when:
 Shown by: test — `the_environment_is_assembled_in_the_seven_stages`、`unset_accepts_wildcards`、
 `clear_without_path_leaves_path_absent`、`a_secret_removes_the_host_value_before_injecting`、
 `a_secret_strips_one_trailing_newline`、`an_empty_secret_file_is_a_secret_diagnostic`、
-`a_secret_with_nul_is_a_secret_diagnostic`、`an_unreadable_secret_file_is_a_secret_diagnostic`（テストは
+`a_secret_with_nul_is_a_secret_diagnostic`、`an_oversized_secret_value_is_a_secret_diagnostic`（64 KiB + 1 バイトが `secret`、ちょうど 64 KiB が通ることを対にする）、
+`a_fifo_secret_file_is_a_secret_diagnostic`、`a_secret_file_behind_a_symlink_is_read`、`an_unreadable_secret_file_is_a_secret_diagnostic`（テストは
 root 以外で実行する前提。root では読めないファイルを作れない）、
 `a_missing_secret_file_is_a_warning_without_the_variable`、
 `secret_values_never_appear_in_the_plan_or_its_warnings`、`instead_of_entries_continue_the_git_config_count`、
@@ -161,7 +166,7 @@ Stop and hand back if: `GIT_CONFIG_*` の命名や `GIT_CONFIG_COUNT` の意味�
 Purpose: 計画を完成させる。コマンドの解決、`bwrap` の所在、ネットワーク、固定引数とマウント項目から
 なる記号付きの bwrap 引数列。
 Specification: 仕様#4.2 コマンドの解決、仕様#7 ネットワーク、仕様#14 実行時の境界（固定引数の
-段落、`bwrap` の探索）、仕様#2 用語（計画）、仕様#13（`command not found`、`bwrap` 行）。
+段落、`bwrap` の探索）、仕様#2 用語（計画）、仕様#13（`command not found`、`bwrap` 行、検査順序の段階 7〜9 と 1 つの検査の中の順序）。
 Prerequisites: ステップ 8。
 May change: `src/` のコマンド解決・引数列のモジュール（核）と、`PATH` 上の実行ファイルの有無と
 `bwrap` の有無を集める外周、`tests/` の該当ファイル。
@@ -170,8 +175,8 @@ Done when: `/` を含むコマンドは存在と実行可能性を確かめ、�
 で `COMMAND` 省略なら解決せず計画の該当欄が「無し」になり、`bwrap` がホストの `PATH` に無ければ
 `bwrap` 診断になり、引数列が仕様#14 の順の固定部分（`host` のときだけ `--share-net`）+ ステップ 6 の
 順序付きマウント項目で、`hide` の空ファイルと seccomp のファイル記述子は記号、環境変数を設定する
-引数を含まない。
-Shown by: test — `a_command_with_a_slash_must_exist_and_be_executable`、
+引数を含まない。段階 7（マウントの解決）の中の検査は仕様#13 の順（5.4 の同一性 → 6.1/6.2 の種類 → 5.6 → 6.5 → 9 の秘密 → 8 の `GIT_CONFIG_COUNT`）で行われ、その後に `bwrap` の所在、コマンドの解決の順で、最初に当たった診断で終わる。1 つの検査の中で複数の項目が当たるときはマウント項目は 6.4 の順序、環境変数と秘密は名前のバイト順の最初のものが出る。
+Shown by: test — `stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order`（同一性の衝突と 5.6 の違反と空の秘密ファイルを同時に含むポリシーで、出る種類が仕様の順の最初のものになる）、`a_command_with_a_slash_must_exist_and_be_executable`、
 `a_command_is_searched_on_the_isolated_path`、
 `an_unresolvable_command_is_a_command_not_found_diagnostic_naming_the_command`、
 `print_plan_without_a_command_skips_resolution`、`a_missing_bwrap_is_a_bwrap_diagnostic`、

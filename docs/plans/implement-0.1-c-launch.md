@@ -11,7 +11,7 @@
 
 ## Specification
 
-`docs/spec/process-wrap.md`（コミット e0df7b4 で承認済み）。節の書き方は全体像と同じ
+`docs/spec/process-wrap.md`（コミット e0df7b4 で承認、1142262 で改訂済み）。節の書き方は全体像と同じ
 （`仕様#3 対応環境` は `## 3. 対応環境`）。用語は `CONTEXT.md` に従う。
 
 ## Approach and why
@@ -64,21 +64,22 @@
 
 Purpose: 核の出力を実際の振る舞いにする。診断と警告の標準エラー出力と終了コード、`--print-plan` の
 表示、入れ子の分岐、ファイル記述子の準備と exec。
-Specification: 仕様#13 出力と終了コードの契約、仕様#12.1 入れ子、仕様#14 実行時の境界（ファイル
+Specification: 仕様#13 出力と終了コードの契約（検査順序の段階 2 の後の入れ子の分岐と段階 9、制御文字の逃がしの警告と計画の表示への適用）、仕様#12.1 入れ子、仕様#4.2 コマンドの解決（入れ子でのホストの `PATH`）、仕様#14 実行時の境界（ファイル
 記述子、exec）、仕様#8 環境変数（環境を bwrap に引き継がせる）。
 Prerequisites: ステップ 2〜10。
 May change: `src/main.rs`、`src/` の起動モジュール（外周）、`tests/cli.rs`。
 Done when: 診断が `process-wrap: <種類>: <説明>` の 1 行で標準エラーに出て 125（`command not found`
 は 127）で終わり、警告が `process-wrap: warning: ` で始まり、`--print-plan` が診断の無いとき計画を
 標準出力に出して 0 で終わり診断のあるときは計画を出さず、`PROCESS_WRAP=1` のとき `--print-plan`
-以外はポリシーを読まず環境を変えず警告 1 行の後にコマンドを exec し、`PROCESS_WRAP=1` での
+以外は仕様#13 の段階 3〜8 を飛ばし（カレントディレクトリとホームの検査も行わない）、ポリシーを読まず環境を変えず、受け取ったホストの `PATH` でコマンドを解決して見つからなければ `command not found` の 127 で終わり、見つかれば警告 1 行の後にコマンドを exec し、警告と計画の表示に埋め込む値の制御文字が計画 A2 の逃がしの部品で逃がされ、`PROCESS_WRAP=1` での
 `--print-plan` は計画の先頭に入れ子であることを示し、秘密の値が標準出力にも標準エラーにも出ず、
 通常時は `hide` の空ファイルの内容（空）と seccomp のフィルタをファイル記述子で用意し、記号を番号に
 置き換え、組み立てた環境で `bwrap` を exec する。exec 先の観測はステップ 15。
 Shown by: test — `a_policy_diagnostic_exits_125_with_one_stderr_line`、
 `print_plan_with_a_diagnostic_prints_no_plan`、`print_plan_exits_zero_and_prints_the_resolved_command`、
 `a_nested_launch_warns_and_runs_the_command_without_bwrap`、
-`a_nested_launch_leaves_the_environment_unchanged`、
+`a_nested_launch_leaves_the_environment_unchanged`、`a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_missing`、
+`a_control_character_in_a_warning_is_escaped`、
 `a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested`、
 `secret_values_never_reach_stdout_or_stderr`（ビルド済みバイナリを起動）。
 Left to the implementer: パイプかメモリ上のファイルか、番号の割り当て、計画の整形。
@@ -142,7 +143,7 @@ Specification: 仕様#15.2 ビルド済みバイナリのテスト、仕様#1 �
 コマンド）。
 Prerequisites: ステップ 11。開発機に `bwrap` 0.9.0 以上。
 May change: `tests/` の統合テストファイルと `tests/common/mod.rs`。
-Done when: 次が一時ディレクトリ上のポリシーとワークスペースで観測される。コマンドの終了コード n が
+Done when: 次が一時ディレクトリ上のポリシーとワークスペースで観測される。隣り合う段階の診断が同時に成り立つ入力（仕様#13 の検査順序）で先の段階の種類が出る。FIFO と 1 MiB 超のポリシーファイルが仕様#14 のとおり診断で終わる。コマンドの終了コード n が
 n で、シグナル s が 128 + s で返り、コマンドの引数が隔離の中で書き換えられずに届く。`hide` の中に
 あるコマンドを `/` 付きで指すと bwrap の exec 失敗となり、bwrap の出力と終了コードがそのまま返る
 （仕様#13 の「bwrap 自身の失敗」の行の生成手段）。5 場面を隔離の中から読み書きして表どおり。
@@ -154,7 +155,7 @@ n で、シグナル s が 128 + s で返り、コマンドの引数が隔離の
 入れ子でない 2 つの起動を同時に行っても両方が終了コードを透過する。ホームをワークツリーとする起動と
 `hide` の中を作業ディレクトリとする起動が 125 で終わる。起動の前後で一時ディレクトリの木（ポリシーと
 ワークスペース以外）の一覧が変わらない。
-Shown by: test — `a_command_exit_code_passes_through`、`a_command_signal_passes_through_as_128_plus_s`、
+Shown by: test — `adjacent_stages_yield_the_earlier_diagnostic`（段階の対ごとに 1 入力）、`a_fifo_policy_file_ends_in_a_diagnostic_from_the_binary`、`a_command_exit_code_passes_through`、`a_command_signal_passes_through_as_128_plus_s`、
 `command_arguments_arrive_unchanged`、
 `a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status`、
 `a_hidden_ancestor_does_not_hide_the_rw_worktree`、`an_ro_file_inside_an_rw_directory_is_read_only`、
