@@ -3,7 +3,8 @@
 //! `gitdir`, and `config` under the directory it names (specification section 14). Runs no
 //! command.
 
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::environment::HostEnvironment;
@@ -63,8 +64,8 @@ fn dot_git_kind(path: &Path) -> DotGit {
 
 /// Reads the `.git` file of `worktree` and the links under the directory it names.
 fn read_links(worktree: &Path) -> GitFileLinks {
-    let gitdir = fs::read_to_string(worktree.join(".git"))
-        .ok()
+    let gitdir = read_git_file(&worktree.join(".git"))
+        .text()
         .and_then(|text| {
             text.lines()
                 .find_map(|line| line.strip_prefix("gitdir:"))
@@ -79,21 +80,24 @@ fn read_links(worktree: &Path) -> GitFileLinks {
             core_worktree: None,
         };
     };
-    let commondir = match fs::read_to_string(gitdir.join("commondir")) {
-        Err(_) => Reference::Absent,
-        Ok(text) => match resolve_from(&gitdir, text.trim_end()) {
+    // A `commondir` that exists but cannot be used is not "no commondir" (specification
+    // section 5.2), so it does not open the submodule case.
+    let commondir = match read_git_file(&gitdir.join("commondir")) {
+        GitFile::Absent => Reference::Absent,
+        GitFile::Unusable => Reference::Unresolvable,
+        GitFile::Text(text) => match resolve_from(&gitdir, text.trim_end()) {
             Some(path) => Reference::Resolved(path),
             None => Reference::Unresolvable,
         },
     };
-    let back_link = fs::read_to_string(gitdir.join("gitdir"))
-        .ok()
+    let back_link = read_git_file(&gitdir.join("gitdir"))
+        .text()
         .and_then(|text| resolve_from(&gitdir, text.trim_end()));
     // Only a submodule's config is read (specification section 14); a linked worktree is
     // recognised by its commondir and needs no config.
     let core_worktree = match commondir {
-        Reference::Absent => fs::read_to_string(gitdir.join("config"))
-            .ok()
+        Reference::Absent => read_git_file(&gitdir.join("config"))
+            .text()
             .and_then(|text| core_worktree(&text))
             .and_then(|value| resolve_from(&gitdir, &value)),
         _ => None,
@@ -104,6 +108,59 @@ fn read_links(worktree: &Path) -> GitFileLinks {
         back_link,
         core_worktree,
     }
+}
+
+/// The most a file git wrote is read up to. Git writes one path per file, or a small
+/// configuration; anything larger was not written by git.
+const GIT_FILE_LIMIT: u64 = 1 << 20;
+
+/// What is found at the name of a file git may have written.
+enum GitFile {
+    /// Nothing exists at the name.
+    Absent,
+    /// Something exists there but is not a regular file within `GIT_FILE_LIMIT`, or could
+    /// not be read.
+    Unusable,
+    Text(String),
+}
+
+impl GitFile {
+    fn text(self) -> Option<String> {
+        match self {
+            GitFile::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+}
+
+/// Reads a file git may have written. The directory it sits in can be written from inside
+/// the isolation, so nothing that is not a regular file is opened (a FIFO would block
+/// forever), symbolic links are not followed, and the length is bounded.
+fn read_git_file(path: &Path) -> GitFile {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return GitFile::Absent;
+    };
+    if !metadata.file_type().is_file() {
+        return GitFile::Unusable;
+    }
+    let Ok(file) = File::open(path) else {
+        return GitFile::Unusable;
+    };
+    // Checked again on the open descriptor: the entry may have been replaced since.
+    match file.metadata() {
+        Ok(metadata) if metadata.file_type().is_file() => {}
+        _ => return GitFile::Unusable,
+    }
+    let mut text = String::new();
+    if file
+        .take(GIT_FILE_LIMIT + 1)
+        .read_to_string(&mut text)
+        .is_err()
+        || text.len() as u64 > GIT_FILE_LIMIT
+    {
+        return GitFile::Unusable;
+    }
+    GitFile::Text(text)
 }
 
 /// The real path of `target` taken relative to `base`; `None` when nothing exists there.

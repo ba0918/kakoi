@@ -24,8 +24,8 @@ pub struct Ancestor {
     pub dot_git: DotGit,
 }
 
-/// A file git wrote that names a path: absent, present but naming nothing that exists, or
-/// resolved to a real path.
+/// A file git wrote that names a path: absent, present but unusable (naming nothing that
+/// exists, not a regular file, or too large to be git's), or resolved to a real path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reference {
     Absent,

@@ -477,3 +477,24 @@ fn raw_git_facts_are_read_from_a_real_submodule() {
         Some(main.join(".git/modules/sub"))
     );
 }
+
+#[test]
+fn a_fifo_under_the_named_gitdir_is_a_path_diagnostic() {
+    for name in ["commondir", "gitdir", "config"] {
+        let home = TempDir::new();
+        let worktree = home.path().canonicalize().unwrap().join("wt");
+        home.write("wt/.git", "gitdir: g\n");
+        let gitdir = worktree.join("g");
+        std::fs::create_dir(&gitdir).unwrap();
+        let status = Command::new("mkfifo")
+            .arg(gitdir.join(name))
+            .status()
+            .unwrap();
+        assert!(status.success(), "mkfifo {name}");
+
+        let facts = collect_workspace_facts(&worktree, &real_env(&home));
+        let diagnostic = derive_variables(&real_env(&home), &facts).expect_err(name);
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}");
+    }
+}
