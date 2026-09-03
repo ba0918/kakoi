@@ -82,3 +82,16 @@ fn a_policy_file_reached_through_a_symlink_in_a_writable_area_is_rejected() {
 
     assert_path_diagnostic(&diagnostic, &[POLICY_FILE, WORKTREE]);
 }
+
+#[test]
+fn the_config_dir_inside_a_writable_area_is_rejected() {
+    let diagnostic = check(
+        &layers("[mounts]\nrw = [\"~/.config\"]", None, &[], &[]),
+        &variables(),
+        host(),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[CONFIG_DIR, "/home/u/.config"]);
+}
