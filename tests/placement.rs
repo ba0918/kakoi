@@ -334,3 +334,22 @@ fn a_cwd_re_exposed_by_a_descendant_rw_is_accepted() {
 
     assert!(warnings.is_empty(), "{warnings:?}");
 }
+
+#[test]
+fn no_rw_over_the_workspace_yields_a_warning() {
+    let warnings = check(
+        &layers("[mounts]\nro = [\"${worktree}\"]", None, &[], &[]),
+        &variables(),
+        host(),
+        WORKTREE,
+    )
+    .unwrap();
+
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0]
+            .to_string()
+            .starts_with("process-wrap: warning: "),
+        "{warnings:?}"
+    );
+}

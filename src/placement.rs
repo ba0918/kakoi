@@ -124,7 +124,20 @@ pub fn check_placement(
             item.real.display()
         )));
     }
-    Ok(Vec::new())
+    let mut warnings = Vec::new();
+    let rw_over_work_place = resolved.items.iter().any(|item| {
+        item.directive == Directive::Rw
+            && (variables.workspace.starts_with(&item.real)
+                || variables.worktree.starts_with(&item.real))
+    });
+    if !rw_over_work_place {
+        warnings.push(Warning::new(format!(
+            "no `rw` item covers the workspace {} or the worktree {}",
+            variables.workspace.display(),
+            variables.worktree.display()
+        )));
+    }
+    Ok(warnings)
 }
 
 /// Whether `candidate` is `/`, `path`, or an ancestor of `path`. `/` is named on its own so
