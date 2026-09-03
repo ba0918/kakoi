@@ -112,3 +112,23 @@ fn a_missing_real_path_is_skipped_with_a_reason() {
     assert_eq!(resolved.skipped[0].written, "/home/u/gone");
     assert!(!resolved.skipped[0].reason.is_empty());
 }
+
+#[test]
+fn the_same_directive_twice_in_one_layer_collapses() {
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nrw = [\"/home/u/proj\", \"~/proj\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new().dir("/home/u/proj"),
+    )
+    .unwrap();
+
+    assert_eq!(resolved.items.len(), 1, "{resolved:?}");
+    assert_eq!(resolved.items[0].directive, Directive::Rw);
+    assert_eq!(resolved.items[0].real, PathBuf::from("/home/u/proj"));
+    assert!(resolved.skipped.is_empty(), "{resolved:?}");
+}

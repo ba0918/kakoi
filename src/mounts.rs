@@ -193,25 +193,37 @@ pub fn resolve_mounts(
     facts: &MountFacts,
 ) -> Result<ResolvedMounts, Diagnostic> {
     let mut resolved = ResolvedMounts::default();
+    let mut merged: Vec<Candidate> = Vec::new();
     for item in &expanded.mounts {
-        let skip = |reason: String| SkippedItem {
-            directive: item.directive,
-            written: item.written.to_string(),
-            origin: item.origin.clone(),
-            reason,
-        };
         let path = match &item.path {
             Expansion::Valueless(variable) => {
-                resolved
-                    .skipped
-                    .push(skip(format!("`${{{}}}` has no value", variable.name())));
+                resolved.skipped.push(SkippedItem {
+                    directive: item.directive,
+                    written: item.written.to_string(),
+                    origin: item.origin.clone(),
+                    reason: format!("`${{{}}}` has no value", variable.name()),
+                });
                 continue;
             }
             Expansion::Path(path) => path,
         };
-        let (real, kind) = match facts.entry(path) {
+        let entry = facts.entry(path);
+        let key = entry.path().unwrap_or(path).to_path_buf();
+        match merged.iter().position(|candidate| candidate.key == key) {
+            Some(_) => {}
+            None => merged.push(Candidate { item, key, entry }),
+        }
+    }
+    for candidate in merged {
+        let item = candidate.item;
+        let (real, kind) = match candidate.entry {
             RealEntry::Missing => {
-                resolved.skipped.push(skip("does not exist".to_string()));
+                resolved.skipped.push(SkippedItem {
+                    directive: item.directive,
+                    written: item.written.to_string(),
+                    origin: item.origin.clone(),
+                    reason: "does not exist".to_string(),
+                });
                 continue;
             }
             RealEntry::Directory(real) => (real, EntryKind::Directory),
@@ -226,4 +238,12 @@ pub fn resolve_mounts(
         });
     }
     Ok(resolved)
+}
+
+/// A written item with its identity: the real path when something exists, else the
+/// expanded path as written (specification section 5.4).
+struct Candidate<'a> {
+    item: &'a ExpandedItem,
+    key: PathBuf,
+    entry: RealEntry,
 }
