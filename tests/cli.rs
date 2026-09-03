@@ -290,8 +290,16 @@ fn an_unknown_option_from_a_deleted_current_directory_is_a_usage_diagnostic() {
 fn a_deleted_current_directory_is_a_path_diagnostic() {
     let home = TempDir::new();
     home.write(".config/process-wrap/profile/default.toml", "");
+    let workspace = home
+        .write("workspace/.keep", "")
+        .parent()
+        .unwrap()
+        .to_path_buf();
 
-    let output = run_from_deleted_dir(home.path(), ["--", "true"]);
+    let output = run_from_deleted_dir(
+        home.path(),
+        ["--workspace", workspace.to_str().unwrap(), "--", "true"],
+    );
 
     assert_diagnostic(&output, 125, "path");
 }
