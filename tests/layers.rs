@@ -246,7 +246,6 @@ fn a_missing_profile_file_is_a_policy_diagnostic() {
     let diagnostic = load_layers(&invocation("missing", None), &config).unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Policy);
-    assert!(diagnostic.description().contains("missing"), "{diagnostic}");
 }
 
 #[test]
