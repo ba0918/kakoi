@@ -166,6 +166,11 @@ fn apply_instead_of(
             // reported.
             .ok_or_else(|| Diagnostic::env("GIT_CONFIG_COUNT is not a number"))?,
     };
+    // A count the entries cannot be numbered after is as unusable to git as a
+    // non-numeric one.
+    let total = count
+        .checked_add(instead_of.len())
+        .ok_or_else(|| Diagnostic::env("GIT_CONFIG_COUNT is too large"))?;
     for (index, (original, replacement)) in instead_of.iter().enumerate() {
         let number = count + index;
         values.insert(
@@ -179,7 +184,7 @@ fn apply_instead_of(
     }
     values.insert(
         OsString::from("GIT_CONFIG_COUNT"),
-        OsString::from((count + instead_of.len()).to_string()),
+        OsString::from(total.to_string()),
     );
     Ok(())
 }

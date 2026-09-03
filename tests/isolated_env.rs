@@ -315,6 +315,15 @@ fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
 }
 
 #[test]
+fn a_git_config_count_too_large_to_number_the_entries_is_an_env_diagnostic() {
+    let at_the_limit = host(&[("GIT_CONFIG_COUNT", "18446744073709551615")]);
+
+    let diagnostic = assemble(INSTEAD_OF, &at_the_limit, &BTreeMap::new(), &[]).unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Env, "{diagnostic}");
+}
+
+#[test]
 fn a_secret_git_config_count_that_is_not_a_number_is_reported_without_its_value() {
     let diagnostic = assemble(
         "[secrets]\nGIT_CONFIG_COUNT = \"/home/u/tokens/c\"\n\
