@@ -1,6 +1,7 @@
 //! The mount items of the merged policy: the expansion of `~` and the variables
 //! (specification section 5.2). Pure.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use crate::environment::HomeDirectory;
@@ -24,10 +25,30 @@ pub struct ExpandedItem {
     pub path: Expansion,
 }
 
+/// One `mounts.scan` entry with its root expanded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandedScan {
+    pub root: Expansion,
+    pub names: Vec<String>,
+    pub exclude: Vec<String>,
+    pub prune: Vec<String>,
+}
+
+/// One `mounts.hide-mounts` entry with its `under` expanded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandedHideMounts {
+    pub under: Expansion,
+    pub fstype: Vec<String>,
+}
+
 /// The merged policy with every path-taking value expanded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpandedPolicy {
     pub mounts: Vec<ExpandedItem>,
+    pub scans: Vec<ExpandedScan>,
+    pub hide_mounts: Vec<ExpandedHideMounts>,
+    pub secrets: BTreeMap<String, Expansion>,
+    pub path_prepend: Vec<Expansion>,
 }
 
 /// Expands `~` to the home directory and the variables to their values.
@@ -59,6 +80,7 @@ pub fn expand_policy(
     variables: &Variables,
     home: &HomeDirectory,
 ) -> ExpandedPolicy {
+    let expand = |path: &PolicyPath| expand(path, variables, home);
     ExpandedPolicy {
         mounts: policy
             .mounts
@@ -67,8 +89,32 @@ pub fn expand_policy(
                 directive: item.directive,
                 written: item.path.clone(),
                 origin: item.origin.clone(),
-                path: expand(&item.path, variables, home),
+                path: expand(&item.path),
             })
             .collect(),
+        scans: policy
+            .scan
+            .iter()
+            .map(|scan| ExpandedScan {
+                root: expand(&scan.root),
+                names: scan.names.clone(),
+                exclude: scan.exclude.clone(),
+                prune: scan.prune.clone(),
+            })
+            .collect(),
+        hide_mounts: policy
+            .hide_mounts
+            .iter()
+            .map(|hide_mounts| ExpandedHideMounts {
+                under: expand(&hide_mounts.under),
+                fstype: hide_mounts.fstype.clone(),
+            })
+            .collect(),
+        secrets: policy
+            .secrets
+            .iter()
+            .map(|(name, path)| (name.clone(), expand(path)))
+            .collect(),
+        path_prepend: policy.path_prepend.iter().map(expand).collect(),
     }
 }
