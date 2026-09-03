@@ -8,6 +8,7 @@ pub mod cli;
 pub mod diagnostic;
 pub mod environment;
 pub mod layers;
+pub mod mount_facts;
 pub mod mount_list;
 pub mod mounts;
 pub mod policy;

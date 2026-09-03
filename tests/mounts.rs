@@ -9,10 +9,11 @@ use common::TempDir;
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
+use process_wrap::mount_facts::collect_mount_facts;
 use process_wrap::mount_list::read_mount_list;
 use process_wrap::mounts::{
-    candidates, expand_policy, resolve_mounts, Expansion, ItemOrigin, Mount, MountFacts,
-    ResolvedMounts, ScanHit,
+    candidates, expand_policy, resolve_mounts, Candidates, Expansion, ItemOrigin, Mount,
+    MountFacts, ResolvedMounts, ScanHit, ScanRequest,
 };
 use process_wrap::scan::scan;
 use process_wrap::variables::Variables;
@@ -828,4 +829,40 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
         [Path::new("/home/u/proj")]
     );
     assert_eq!(candidates.hide_mounts_under, [PathBuf::from("/mnt")]);
+}
+
+#[test]
+fn mount_facts_are_collected_from_the_file_system() {
+    let tree = TempDir::new();
+    let root = tree.path().canonicalize().unwrap();
+    let env = tree.write("proj/.env", "");
+    std::os::unix::fs::symlink(root.join("proj"), root.join("link")).unwrap();
+
+    let facts = collect_mount_facts(&Candidates {
+        paths: vec![root.join("link"), env.clone(), root.join("missing")],
+        scans: vec![ScanRequest {
+            root: root.join("link"),
+            names: vec![".env".to_string()],
+            exclude: Vec::new(),
+            prune: Vec::new(),
+        }],
+        hide_mounts_under: vec![PathBuf::from("/")],
+    });
+
+    assert_eq!(
+        facts.entry(&root.join("link")),
+        dir_at(root.join("proj").to_str().unwrap())
+    );
+    assert_eq!(facts.entry(&env), file_at(env.to_str().unwrap()));
+    assert_eq!(facts.entry(&root.join("missing")), RealEntry::Missing);
+    assert_eq!(
+        hits(facts.scan_hits.clone()),
+        [(root.join("proj/.env"), file_at(env.to_str().unwrap()))]
+    );
+    let root_mount = facts
+        .mounts
+        .iter()
+        .find(|mount| mount.target == Path::new("/"));
+    assert!(root_mount.is_some(), "{:?}", facts.mounts);
+    assert_eq!(facts.entry(Path::new("/")), dir_at("/"));
 }
