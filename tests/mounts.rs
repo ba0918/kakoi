@@ -246,3 +246,30 @@ fn ancestors_come_before_descendants() {
         ]
     );
 }
+
+#[test]
+fn siblings_are_ordered_by_bytes() {
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nro = [\"/home/u/proj/a/b\", \"/home/u/proj/a-x\", \"/home/u/proj/B\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new()
+            .dir("/home/u/proj/a/b")
+            .dir("/home/u/proj/a-x")
+            .dir("/home/u/proj/B"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Ro, Path::new("/home/u/proj/B")),
+            (Directive::Ro, Path::new("/home/u/proj/a-x")),
+            (Directive::Ro, Path::new("/home/u/proj/a/b")),
+        ]
+    );
+}
