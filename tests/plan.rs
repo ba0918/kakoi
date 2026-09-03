@@ -8,7 +8,7 @@ mod common;
 use common::fixture::{
     home, layers, merged, variables, Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
-use common::TempDir;
+use common::{assert_diagnostic, binary, TempDir};
 use process_wrap::command::{command_candidates, resolve_command};
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::executables::first_executable;
@@ -245,4 +245,32 @@ fn stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order() {
 
     let only_the_secret = isolation(&profile("", ""), facts, &empty_secret).unwrap_err();
     assert_eq!(only_the_secret.kind(), Kind::Secret, "{only_the_secret}");
+}
+
+/// A home for a binary test: an empty profile and a workspace directory under it.
+fn home_with_workspace() -> (TempDir, PathBuf) {
+    let home = TempDir::new();
+    home.write(".config/process-wrap/profile/default.toml", "");
+    let workspace = home.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+    (home, workspace)
+}
+
+#[test]
+fn a_missing_bwrap_is_a_bwrap_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    let empty_path = TempDir::new();
+
+    let output = binary(home.path())
+        .env("PATH", empty_path.path())
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "bwrap");
 }

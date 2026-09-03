@@ -85,6 +85,10 @@ impl Diagnostic {
         Self::new(Kind::Env, description)
     }
 
+    pub fn bwrap(description: impl Into<String>) -> Self {
+        Self::new(Kind::Bwrap, description)
+    }
+
     pub fn kind(&self) -> Kind {
         self.kind
     }

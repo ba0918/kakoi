@@ -1,40 +1,44 @@
 //! The start-up, in the order of the checks of specification section 13: the `--help` and
 //! `--version` forms, the grammar, the current directory, the home directory, the policy
-//! files and their merge, then the workspace and the variables. The first diagnostic ends
-//! the run. This is the outer layer: it reads the environment and the file system and
-//! hands the facts to the pure functions.
+//! files and their merge, the workspace and the variables, the mount resolution, the
+//! whereabouts of `bwrap`, and the command. The first diagnostic ends the run. This is
+//! the outer layer: it reads the environment and the file system and hands the facts to
+//! the pure functions.
 
-use std::ffi::OsString;
+use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 use crate::cli::{self, Invocation, Parsed};
+use crate::command::{command_candidates, resolve_command};
 use crate::diagnostic::Diagnostic;
-use crate::environment::{HomeDirectory, HostEnvironment, RealEntry};
-use crate::layers::{load_layers, merge, Layer, Policy};
-use crate::variables::{derive_variables, Variables};
+use crate::environment::{HostEnvironment, RealEntry};
+use crate::executables::first_executable;
+use crate::layers::{load_layers, merge};
+use crate::mount_facts::collect_mount_facts;
+use crate::mounts::{candidates, expand_policy};
+use crate::plan::{self, resolve_isolation, Inputs, IsolationFacts, Plan};
+use crate::secret_facts::read_secret_files;
+use crate::variables::derive_variables;
 use crate::workspace_facts::{collect_workspace_facts, real_entry};
 
 /// What the start-up ends with: text to print (the usage or the version), or everything
-/// the later stages need.
+/// the start needs.
 #[derive(Debug)]
 pub enum Outcome {
     Text(String),
     Prepared(Box<Prepared>),
 }
 
-/// The results of stages 3 to 6.
+/// The results of stages 3 to 9.
 #[derive(Debug)]
 pub struct Prepared {
     pub invocation: Invocation,
     pub current_dir: PathBuf,
-    pub home: HomeDirectory,
-    pub config_dir: PathBuf,
-    pub layers: Vec<Layer>,
-    pub policy: Policy,
-    pub variables: Variables,
+    pub plan: Plan,
 }
 
-/// Runs stages 1 to 6 on `arguments` (without the program name).
+/// Runs stages 1 to 9 on `arguments` (without the program name).
 pub fn prepare<I>(arguments: I) -> Result<Outcome, Diagnostic>
 where
     I: IntoIterator<Item = OsString>,
@@ -62,13 +66,49 @@ where
         .unwrap_or_else(|| current_dir.clone());
     let facts = collect_workspace_facts(&workspace);
     let variables = derive_variables(&real_entry(&config_dir), &facts)?;
+    // Stage 7: the core names the paths to look up, the outer layer looks them up.
+    let host: BTreeMap<OsString, OsString> = std::env::vars_os().collect();
+    let expanded = expand_policy(&policy, &variables, &home);
+    let wanted = candidates(&expanded, &layers, &variables, &config_dir);
+    let facts = IsolationFacts {
+        mounts: collect_mount_facts(&wanted),
+        secrets: read_secret_files(&expanded.secrets),
+    };
+    let inputs = Inputs {
+        layers: &layers,
+        policy: &policy,
+        expanded: &expanded,
+        variables: &variables,
+        home: &home,
+        config_dir: &config_dir,
+        current_dir: &current_dir,
+        host: &host,
+    };
+    let isolation = resolve_isolation(&inputs, &facts)?;
+    // Stage 8: `bwrap` on the host's `PATH`.
+    let bwrap = first_executable(&command_candidates(
+        OsStr::new("bwrap"),
+        host.get(OsStr::new("PATH")).map(OsString::as_os_str),
+    ))
+    .ok_or_else(|| Diagnostic::bwrap("bwrap is not on the host's PATH"))?;
+    // Stage 9: the command on the isolated `PATH`; none to resolve for a bare
+    // `--print-plan`.
+    let command = match invocation.command.first() {
+        None => None,
+        Some(command) => {
+            let path = isolation
+                .environment
+                .values()
+                .get(OsStr::new("PATH"))
+                .map(OsString::as_os_str);
+            let found = first_executable(&command_candidates(command, path));
+            Some(resolve_command(command, found)?)
+        }
+    };
+    let plan = plan::plan(&inputs, isolation, bwrap, command);
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,
         current_dir,
-        home,
-        config_dir,
-        layers,
-        policy,
-        variables,
+        plan,
     })))
 }

@@ -89,6 +89,48 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     })
 }
 
+/// The plan: what `--print-plan` shows and what the start uses (specification
+/// sections 2 and 13).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Plan {
+    pub policy: Policy,
+    /// The real paths of the policy files read.
+    pub policy_files: Vec<PathBuf>,
+    pub variables: Variables,
+    pub mounts: ResolvedMounts,
+    pub environment: Environment,
+    pub warnings: Vec<Warning>,
+    pub bwrap: PathBuf,
+    /// The resolved command; none when `--print-plan` was given without one.
+    pub command: Option<PathBuf>,
+    pub arguments: Vec<Argument>,
+}
+
+/// The plan of `isolation` with `bwrap` at `bwrap` and the command resolved to `command`.
+pub fn plan(
+    inputs: &Inputs,
+    isolation: Isolation,
+    bwrap: PathBuf,
+    command: Option<PathBuf>,
+) -> Plan {
+    let arguments = bwrap_arguments(
+        inputs.policy.network_mode,
+        inputs.current_dir,
+        &isolation.mounts.items,
+    );
+    Plan {
+        policy: inputs.policy.clone(),
+        policy_files: isolation.policy_files,
+        variables: inputs.variables.clone(),
+        mounts: isolation.mounts,
+        environment: isolation.environment,
+        warnings: isolation.warnings,
+        bwrap,
+        command,
+        arguments,
+    }
+}
+
 /// One bwrap argument. The descriptors are symbols: their numbers are assigned right
 /// before the start.
 #[derive(Debug, Clone, PartialEq, Eq)]
