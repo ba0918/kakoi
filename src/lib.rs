@@ -15,6 +15,7 @@ pub mod mount_facts;
 pub mod mount_list;
 pub mod mounts;
 pub mod placement;
+pub mod plan;
 pub mod policy;
 pub mod regular_file;
 pub mod scan;
