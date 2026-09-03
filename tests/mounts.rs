@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
-use common::fixture::{home, layers, merged, variables, variables_without_git, Facts, POLICY_FILE};
+use common::fixture::{
+    home, layers, merged, variables, variables_without_git, Facts, POLICY_FILE, PROFILE,
+};
 use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::environment::{HostEnvironment, RealEntry};
 use process_wrap::layers::{Directive, Layer, LayerOrigin};
@@ -325,4 +327,39 @@ fn scan_hides_matching_non_directory_entries() {
         [(Directive::Hide, Path::new("/home/u/proj/.env"))]
     );
     assert_eq!(resolved.items[0].origin, ItemOrigin::Scan);
+}
+
+#[test]
+fn scan_skips_loaded_policy_files() {
+    let resolved = resolve_with(
+        &layers(
+            "[[mounts.scan]]\nroot = \"/home/u\"\nnames = [\"*.toml\"]",
+            Some(""),
+            &[],
+            &[],
+        ),
+        &variables(),
+        MountFacts {
+            paths: Facts::new()
+                .dir("/home/u")
+                .link_to_file(PROFILE, "/home/u/dotfiles/default.toml")
+                .file(POLICY_FILE)
+                .0,
+            scan_hits: vec![
+                hit(
+                    "/home/u/dotfiles/default.toml",
+                    file_at("/home/u/dotfiles/default.toml"),
+                ),
+                hit(POLICY_FILE, file_at(POLICY_FILE)),
+                hit("/home/u/other.toml", file_at("/home/u/other.toml")),
+            ],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(Directive::Hide, Path::new("/home/u/other.toml"))]
+    );
 }

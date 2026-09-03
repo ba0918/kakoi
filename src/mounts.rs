@@ -197,7 +197,7 @@ pub struct ResolvedMounts {
 /// Resolves the expanded mount items to real paths.
 pub fn resolve_mounts(
     expanded: &ExpandedPolicy,
-    _layers: &[Layer],
+    layers: &[Layer],
     _variables: &Variables,
     facts: &MountFacts,
 ) -> Result<ResolvedMounts, Diagnostic> {
@@ -248,7 +248,7 @@ pub fn resolve_mounts(
             None => merged.push(candidate),
         }
     }
-    for generated in generated_items(facts) {
+    for generated in generated_items(layers, facts) {
         match merged
             .iter_mut()
             .find(|existing| existing.key == generated.key)
@@ -289,13 +289,30 @@ pub fn resolve_mounts(
     Ok(resolved)
 }
 
+/// The real paths of the policy files that were read, for the scan to leave alone. A
+/// file that no longer has a real path cannot be hit by the scan anyway.
+pub fn loaded_policy_files(layers: &[Layer], facts: &MountFacts) -> Vec<PathBuf> {
+    layers
+        .iter()
+        .filter_map(|layer| match &layer.origin {
+            LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path),
+            LayerOrigin::CommandLine => None,
+        })
+        .map(|path| facts.entry(path).path().unwrap_or(path).to_path_buf())
+        .collect()
+}
+
 /// The `hide` items of specification section 6.3, from the facts.
-fn generated_items(facts: &MountFacts) -> Vec<Candidate> {
+fn generated_items(layers: &[Layer], facts: &MountFacts) -> Vec<Candidate> {
+    let policy_files = loaded_policy_files(layers, facts);
     let mut generated = Vec::new();
     for hit in &facts.scan_hits {
         // A directory, or a link whose target is a directory, is not hidden; a link to
         // nothing names nothing to hide.
         if let RealEntry::NotDirectory(real) = &hit.target {
+            if policy_files.contains(real) {
+                continue;
+            }
             generated.push(Candidate {
                 directive: Directive::Hide,
                 written: hit.found_at.display().to_string(),
