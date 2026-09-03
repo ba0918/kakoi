@@ -316,3 +316,21 @@ fn a_cwd_under_a_hide_is_rejected() {
 
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
 }
+
+#[test]
+fn a_cwd_re_exposed_by_a_descendant_rw_is_accepted() {
+    let warnings = check(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\", \"/tmp/work\"]\nhide = [\"/tmp\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host().dir_with_ancestors("/tmp/work/x"),
+        "/tmp/work/x",
+    )
+    .unwrap();
+
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
