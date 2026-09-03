@@ -35,13 +35,33 @@ pub struct Diagnostic {
     description: String,
 }
 
+/// Writes the control characters of `text` (0x00 to 0x1F and 0x7F) in a visible form: `\n`,
+/// `\r`, and `\t` for the usual three, `\xNN` for the rest. A value taken from the command
+/// line or a policy file then cannot split a line or reach the terminal as a control
+/// sequence (specification section 13). Unicode line separators are left as they are.
+pub fn escape_control(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for character in text.chars() {
+        match character {
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            '\x00'..='\x1f' | '\x7f' => {
+                escaped.push_str(&format!("\\x{:02X}", character as u32));
+            }
+            _ => escaped.push(character),
+        }
+    }
+    escaped
+}
+
 impl Diagnostic {
-    /// Line breaks in `description` are written as the escapes `\n` and `\r`, so that a
-    /// name taken from the command line or a policy file cannot split the line.
+    /// Control characters in `description` are escaped with `escape_control`, so the
+    /// diagnostic stays one line without them whatever value it embeds.
     pub fn new(kind: Kind, description: impl Into<String>) -> Self {
         Self {
             kind,
-            description: description.into().replace('\n', "\\n").replace('\r', "\\r"),
+            description: escape_control(&description.into()),
         }
     }
 

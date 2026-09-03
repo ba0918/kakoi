@@ -241,3 +241,16 @@ fn env_set_secrets_and_instead_of_accept_any_key_name() {
         Some("https://example.com/")
     );
 }
+
+#[test]
+fn a_control_character_in_a_variable_name_is_escaped_in_the_diagnostic() {
+    let diagnostic = parse_policy("[mounts]\nrw = [\"${x\\u001bMARKER}\"]", origin()).unwrap_err();
+
+    let rendered = diagnostic.to_string();
+
+    assert!(rendered.contains("MARKER"), "{rendered:?}");
+    assert!(
+        !rendered.bytes().any(|byte| byte < 0x20 || byte == 0x7f),
+        "{rendered:?}"
+    );
+}
