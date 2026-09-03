@@ -78,6 +78,7 @@ where
     I: IntoIterator<Item = OsString>,
 {
     let arguments: Vec<OsString> = arguments.into_iter().collect();
+    check_option_values(&arguments)?;
     // `--help` and `--version` are plain flags, so that the whole command line is checked
     // before either is answered (specification section 4.1).
     let mut parser = Arguments::command()
@@ -133,6 +134,46 @@ where
         print_plan: parsed.print_plan,
         command: parsed.command,
     }))
+}
+
+const OPTIONS_WITH_A_VALUE: [&str; 5] = [
+    "--profile",
+    "--policy-file",
+    "--workspace",
+    "--rw",
+    "--hide",
+];
+
+/// In the separated form `--opt VALUE`, the value must follow and must not start with `-`;
+/// in either form it must not be empty (specification section 4.1). Checked on the words as
+/// written, because after parsing `--opt=-x` and `--opt -x` look the same.
+fn check_option_values(arguments: &[OsString]) -> Result<(), Diagnostic> {
+    let mut words = arguments.iter().take_while(|word| *word != "--");
+    while let Some(word) = words.next() {
+        let Some(word) = word.to_str() else {
+            continue;
+        };
+        if OPTIONS_WITH_A_VALUE.contains(&word) {
+            match words.next() {
+                Some(value) if !value.is_empty() && !value.as_encoded_bytes().starts_with(b"-") => {
+                }
+                _ => {
+                    return Err(Diagnostic::usage(format!(
+                        "{word} needs a value that is not empty and does not start with `-`"
+                    )));
+                }
+            }
+            continue;
+        }
+        if let Some((option, value)) = word.split_once('=') {
+            if OPTIONS_WITH_A_VALUE.contains(&option) && value.is_empty() {
+                return Err(Diagnostic::usage(format!(
+                    "{option} needs a value that is not empty"
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Whether a bare `--` appears. No option takes a value that may start with a hyphen, so the

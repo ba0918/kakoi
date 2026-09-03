@@ -179,3 +179,31 @@ fn help_beside_a_valid_option_is_a_usage_diagnostic() {
         assert_diagnostic(&output, 125, "usage");
     }
 }
+
+#[test]
+fn a_dash_led_option_value_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["--profile", "--rw", "/x", "--", "true"][..],
+        &["--workspace", "-", "--", "true"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+}
+
+#[test]
+fn an_empty_option_value_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["--workspace", "", "--", "true"][..],
+        &["--profile=", "--", "true"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+}
