@@ -903,7 +903,11 @@ fn the_links_a_resolution_passes_through_are_reported_by_their_place() {
     std::os::unix::fs::symlink(root.join("cache/link/pol"), root.join("policies")).unwrap();
 
     let facts = collect_mount_facts(&Candidates {
-        traversals: vec![root.join("policies/p.toml"), root.join("missing/x")],
+        traversals: vec![
+            root.join("policies/p.toml"),
+            root.join("missing/x"),
+            policy_file.clone(),
+        ],
         ..Candidates::default()
     });
 
