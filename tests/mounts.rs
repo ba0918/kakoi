@@ -569,3 +569,33 @@ fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
         ]
     );
 }
+
+#[test]
+fn existing_secret_files_are_hidden() {
+    let resolved = resolve(
+        &layers(
+            "[secrets]\nA = \"/home/u/tokens/a\"\nB = \"~/tokens/b\"\nC = \"${config_dir}/secrets/c\"",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new()
+            .file("/home/u/tokens/a")
+            .link_to_file("/home/u/.config/process-wrap/secrets/c", "/home/u/vault/c"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Hide, Path::new("/home/u/tokens/a")),
+            (Directive::Hide, Path::new("/home/u/vault/c")),
+        ]
+    );
+    assert_eq!(
+        resolved.items[0].origin,
+        ItemOrigin::SecretFile("A".to_string())
+    );
+    assert!(resolved.skipped.is_empty(), "{resolved:?}");
+}

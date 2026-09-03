@@ -166,6 +166,8 @@ pub enum ItemOrigin {
     Written(LayerOrigin),
     Scan,
     HideMounts,
+    /// The file of the secret with this environment variable name.
+    SecretFile(String),
 }
 
 /// A mount item that applies: its real path and what is there.
@@ -318,6 +320,22 @@ fn generated_items(
         variables.git_common_dir.as_deref(),
     ];
     let mut generated = Vec::new();
+    for (name, path) in &expanded.secrets {
+        let Expansion::Path(path) = path else {
+            continue;
+        };
+        // A secret file that does not exist is the warning of section 9, not a hide.
+        let entry = facts.entry(path);
+        if let Some(real) = entry.path() {
+            generated.push(Candidate {
+                directive: Directive::Hide,
+                written: path.display().to_string(),
+                origin: ItemOrigin::SecretFile(name.clone()),
+                key: real.to_path_buf(),
+                entry: entry.clone(),
+            });
+        }
+    }
     for hide_mounts in &expanded.hide_mounts {
         let Expansion::Path(under) = &hide_mounts.under else {
             continue;
