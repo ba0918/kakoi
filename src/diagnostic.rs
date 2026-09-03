@@ -36,10 +36,12 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    /// Line breaks in `description` are written as the escapes `\n` and `\r`, so that a
+    /// name taken from the command line or a policy file cannot split the line.
     pub fn new(kind: Kind, description: impl Into<String>) -> Self {
         Self {
             kind,
-            description: description.into(),
+            description: description.into().replace('\n', "\\n").replace('\r', "\\r"),
         }
     }
 

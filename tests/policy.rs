@@ -202,6 +202,15 @@ fn an_unknown_variable_is_a_policy_diagnostic() {
 }
 
 #[test]
+fn a_newline_in_a_variable_name_keeps_the_diagnostic_on_one_line() {
+    let diagnostic = parse_policy("[mounts]\nrw = [\"${a\\nb}\"]", origin()).unwrap_err();
+
+    let rendered = diagnostic.to_string();
+
+    assert_eq!(rendered.matches('\n').count(), 0, "{rendered:?}");
+}
+
+#[test]
 fn env_set_secrets_and_instead_of_accept_any_key_name() {
     let policy = parse_policy(
         "[env.set]\n\"my weird key\" = \"1\"\nlower-case = \"2\"\n\
