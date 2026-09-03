@@ -37,7 +37,7 @@ fn ancestor(path: &str, dot_git: DotGit) -> Ancestor {
 /// from the workspace upward.
 fn facts(dot_gits: [DotGit; 4], links: Option<GitFileLinks>) -> WorkspaceFacts {
     WorkspaceFacts {
-        workspace: Some(PathBuf::from("/home/u/proj/sub")),
+        workspace: RealEntry::Directory(PathBuf::from("/home/u/proj/sub")),
         ancestors: vec![
             ancestor("/home/u/proj/sub", dot_gits[0]),
             ancestor("/home/u/proj", dot_gits[1]),
@@ -290,7 +290,7 @@ fn a_worktree_at_an_ancestor_of_home_is_a_path_diagnostic() {
         &home(),
         &config_dir(),
         &WorkspaceFacts {
-            workspace: Some(PathBuf::from("/")),
+            workspace: RealEntry::Directory(PathBuf::from("/")),
             ancestors: vec![ancestor("/", DotGit::Absent)],
             links: None,
         },
@@ -302,7 +302,7 @@ fn a_worktree_at_an_ancestor_of_home_is_a_path_diagnostic() {
         &home(),
         &config_dir(),
         &WorkspaceFacts {
-            workspace: Some(PathBuf::from("/home/u")),
+            workspace: RealEntry::Directory(PathBuf::from("/home/u")),
             ancestors: vec![
                 ancestor("/home/u", DotGit::Absent),
                 ancestor("/home", DotGit::Absent),
@@ -321,7 +321,23 @@ fn a_missing_workspace_is_a_path_diagnostic() {
         &home(),
         &config_dir(),
         &WorkspaceFacts {
-            workspace: None,
+            workspace: RealEntry::Missing,
+            ancestors: vec![],
+            links: None,
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path);
+}
+
+#[test]
+fn a_workspace_that_is_a_regular_file_is_a_path_diagnostic() {
+    let diagnostic = derive_variables(
+        &home(),
+        &config_dir(),
+        &WorkspaceFacts {
+            workspace: RealEntry::NotDirectory(PathBuf::from("/home/u/proj/file")),
             ancestors: vec![],
             links: None,
         },
@@ -508,7 +524,7 @@ fn raw_git_facts_are_read_from_a_real_linked_worktree() {
 
     let facts = collect_workspace_facts(&inside);
 
-    assert_eq!(facts.workspace.as_deref(), Some(inside.as_path()));
+    assert_eq!(facts.workspace, RealEntry::Directory(inside.clone()));
     assert_eq!(
         &facts.ancestors[..2],
         [
@@ -595,4 +611,33 @@ fn a_fifo_under_the_named_gitdir_is_a_path_diagnostic() {
 
         assert_eq!(diagnostic.kind(), Kind::Path, "{name}");
     }
+}
+
+#[test]
+fn the_config_dir_variable_is_the_real_path() {
+    let home = TempDir::new();
+    let real_home = home.path().canonicalize().unwrap();
+    std::fs::create_dir_all(real_home.join("dotfiles/config/process-wrap")).unwrap();
+    std::os::unix::fs::symlink(real_home.join("dotfiles/config"), real_home.join("link")).unwrap();
+    let workspace = real_home.join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+    let env = HostEnvironment {
+        home: Some(home.path().to_path_buf()),
+        xdg_config_home: Some(real_home.join("link")),
+    };
+    let checked = env.home_directory(&real_entry(home.path())).unwrap();
+    let config_dir = env.config_dir(&checked);
+    assert_eq!(config_dir, real_home.join("link/process-wrap"));
+
+    let variables = derive_variables(
+        &checked,
+        &real_entry(&config_dir),
+        &collect_workspace_facts(&workspace),
+    )
+    .unwrap();
+
+    assert_eq!(
+        variables.config_dir,
+        real_home.join("dotfiles/config/process-wrap")
+    );
 }

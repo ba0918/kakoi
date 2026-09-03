@@ -51,8 +51,8 @@ pub struct GitFileLinks {
 /// The facts about the workspace and its git metadata that the variables are derived from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceFacts {
-    /// The real path of the workspace; `None` when it does not exist.
-    pub workspace: Option<PathBuf>,
+    /// What exists behind the workspace path.
+    pub workspace: RealEntry,
     /// The workspace and each of its ancestors up to `/`, nearest first.
     pub ancestors: Vec<Ancestor>,
     /// The links of the worktree's `.git` file, when that marker is a regular file.
@@ -116,10 +116,16 @@ pub fn derive_variables(
     let config_dir = config_dir
         .path()
         .ok_or_else(|| Diagnostic::path("the configuration directory has no real path"))?;
-    let workspace = facts
-        .workspace
-        .clone()
-        .ok_or_else(|| Diagnostic::path("the workspace does not exist"))?;
+    let workspace = match &facts.workspace {
+        RealEntry::Directory(path) => path.clone(),
+        RealEntry::NotDirectory(path) => {
+            return Err(Diagnostic::path(format!(
+                "the workspace {} is not a directory",
+                path.display()
+            )))
+        }
+        RealEntry::Missing => return Err(Diagnostic::path("the workspace does not exist")),
+    };
     let marker = worktree_marker(&facts.ancestors);
     let worktree = marker.map_or(workspace.clone(), |marker| marker.path.clone());
     for (name, path) in [("worktree", &worktree), ("workspace", &workspace)] {

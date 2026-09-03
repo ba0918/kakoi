@@ -27,9 +27,10 @@ pub fn real_entry(path: &Path) -> RealEntry {
 
 /// Reads the facts for `workspace`.
 pub fn collect_workspace_facts(workspace: &Path) -> WorkspaceFacts {
-    let Ok(workspace) = fs::canonicalize(workspace) else {
+    let workspace = real_entry(workspace);
+    let RealEntry::Directory(workspace) = &workspace else {
         return WorkspaceFacts {
-            workspace: None,
+            workspace,
             ancestors: Vec::new(),
             links: None,
         };
@@ -45,7 +46,7 @@ pub fn collect_workspace_facts(workspace: &Path) -> WorkspaceFacts {
         .filter(|marker| marker.dot_git == DotGit::File)
         .map(|marker| read_links(&marker.path));
     WorkspaceFacts {
-        workspace: Some(workspace),
+        workspace: RealEntry::Directory(workspace.clone()),
         ancestors,
         links,
     }
