@@ -60,17 +60,38 @@ pub struct Assembled {
     pub warnings: Vec<Warning>,
 }
 
+type Values = BTreeMap<OsString, OsString>;
+
 /// Assembles the environment of `policy` from `host`, the secret files, and the real
-/// paths of the `path-prepend` entries.
+/// paths of the `path-prepend` entries, in the seven stages of specification section 8.
 pub fn assemble_environment(
     policy: &Policy,
-    host: &BTreeMap<OsString, OsString>,
+    host: &Values,
     secrets: &BTreeMap<String, SecretFile>,
     path_prepend: &[impl AsRef<Path>],
 ) -> Result<Assembled, Diagnostic> {
-    let mut warnings = Vec::new();
-    // 1. Start from the host, or from the `pass` variables alone.
-    let mut values: BTreeMap<OsString, OsString> = match policy.env_mode {
+    let mut values = initial_values(policy, host);
+    unset(&mut values, &policy.env_unset);
+    // `set` is literal: no expansion in these values.
+    for (name, value) in &policy.env_set {
+        values.insert(OsString::from(name), OsString::from(value));
+    }
+    let (secret_names, warnings) = apply_secrets(&mut values, policy, secrets)?;
+    apply_instead_of(&mut values, &policy.instead_of)?;
+    prepend_path(&mut values, path_prepend);
+    values.insert(OsString::from("PROCESS_WRAP"), OsString::from("1"));
+    Ok(Assembled {
+        environment: Environment {
+            values,
+            secret_names,
+        },
+        warnings,
+    })
+}
+
+/// Stage 1: the host environment, or the `pass` variables alone.
+fn initial_values(policy: &Policy, host: &Values) -> Values {
+    match policy.env_mode {
         EnvMode::Inherit => host.clone(),
         EnvMode::Clear => policy
             .env_pass
@@ -81,20 +102,27 @@ pub fn assemble_environment(
                     .map(|value| (name.to_os_string(), value.clone()))
             })
             .collect(),
-    };
-    // 2. `unset`, with wildcards.
+    }
+}
+
+/// Stage 2: `unset`, with wildcards.
+fn unset(values: &mut Values, patterns: &[String]) {
     values.retain(|name, _| {
-        !policy
-            .env_unset
+        !patterns
             .iter()
             .any(|pattern| matches(pattern, name.as_bytes()))
     });
-    // 3. `set`, literally: no expansion in these values.
-    for (name, value) in &policy.env_set {
-        values.insert(OsString::from(name), OsString::from(value));
-    }
-    // 4. The secrets, by name.
+}
+
+/// Stage 4: each secret by name, removed whatever its origin and then set from its file
+/// when there is one (specification section 9). Returns the names set and the warnings.
+fn apply_secrets(
+    values: &mut Values,
+    policy: &Policy,
+    secrets: &BTreeMap<String, SecretFile>,
+) -> Result<(BTreeSet<OsString>, Vec<Warning>), Diagnostic> {
     let mut secret_names = BTreeSet::new();
+    let mut warnings = Vec::new();
     for (name, path) in &policy.secrets {
         let variable = OsString::from(name);
         values.remove(&variable);
@@ -116,61 +144,67 @@ pub fn assemble_environment(
             }
         }
     }
-    // 5. The git rewrite, numbered after the pairs already there.
-    if !policy.instead_of.is_empty() {
-        let count = match values.get(OsStr::new("GIT_CONFIG_COUNT")) {
-            None => 0,
-            Some(count) => count
-                .to_str()
-                .filter(|text| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
-                .and_then(|text| text.parse::<usize>().ok())
-                .ok_or_else(|| {
-                    Diagnostic::env(format!(
-                        "GIT_CONFIG_COUNT is not a number: {}",
-                        count.to_string_lossy()
-                    ))
-                })?,
-        };
-        for (index, (original, replacement)) in policy.instead_of.iter().enumerate() {
-            let number = count + index;
-            values.insert(
-                OsString::from(format!("GIT_CONFIG_KEY_{number}")),
-                OsString::from(format!("url.{replacement}.insteadof")),
-            );
-            values.insert(
-                OsString::from(format!("GIT_CONFIG_VALUE_{number}")),
-                OsString::from(original),
-            );
-        }
+    Ok((secret_names, warnings))
+}
+
+/// Stage 5: the git rewrite as `GIT_CONFIG_*` pairs numbered after the pairs already
+/// there (specification section 10). Nothing is touched without entries.
+fn apply_instead_of(
+    values: &mut Values,
+    instead_of: &BTreeMap<String, String>,
+) -> Result<(), Diagnostic> {
+    if instead_of.is_empty() {
+        return Ok(());
+    }
+    let count = match values.get(OsStr::new("GIT_CONFIG_COUNT")) {
+        None => 0,
+        Some(count) => count
+            .to_str()
+            .filter(|text| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|text| text.parse::<usize>().ok())
+            .ok_or_else(|| {
+                Diagnostic::env(format!(
+                    "GIT_CONFIG_COUNT is not a number: {}",
+                    count.to_string_lossy()
+                ))
+            })?,
+    };
+    for (index, (original, replacement)) in instead_of.iter().enumerate() {
+        let number = count + index;
         values.insert(
-            OsString::from("GIT_CONFIG_COUNT"),
-            OsString::from((count + policy.instead_of.len()).to_string()),
+            OsString::from(format!("GIT_CONFIG_KEY_{number}")),
+            OsString::from(format!("url.{replacement}.insteadof")),
+        );
+        values.insert(
+            OsString::from(format!("GIT_CONFIG_VALUE_{number}")),
+            OsString::from(original),
         );
     }
-    // 6. `path-prepend` in front of `PATH`.
-    if !path_prepend.is_empty() {
-        let mut path = OsString::new();
-        for (index, entry) in path_prepend.iter().enumerate() {
-            if index > 0 {
-                path.push(":");
-            }
-            path.push(entry.as_ref());
-        }
-        if let Some(existing) = values.get(OsStr::new("PATH")) {
-            path.push(":");
-            path.push(existing);
-        }
-        values.insert(OsString::from("PATH"), path);
+    values.insert(
+        OsString::from("GIT_CONFIG_COUNT"),
+        OsString::from((count + instead_of.len()).to_string()),
+    );
+    Ok(())
+}
+
+/// Stage 6: `path-prepend` in front of `PATH`; with no `PATH` it becomes `PATH`, and with
+/// nothing to prepend an absent `PATH` stays absent.
+fn prepend_path(values: &mut Values, path_prepend: &[impl AsRef<Path>]) {
+    if path_prepend.is_empty() {
+        return;
     }
-    // 7. The nesting marker.
-    values.insert(OsString::from("PROCESS_WRAP"), OsString::from("1"));
-    Ok(Assembled {
-        environment: Environment {
-            values,
-            secret_names,
-        },
-        warnings,
-    })
+    let mut path = OsString::new();
+    for (index, entry) in path_prepend.iter().enumerate() {
+        if index > 0 {
+            path.push(":");
+        }
+        path.push(entry.as_ref());
+    }
+    if let Some(existing) = values.get(OsStr::new("PATH")) {
+        path.push(":");
+        path.push(existing);
+    }
+    values.insert(OsString::from("PATH"), path);
 }
 
 /// The value of a secret: the file's content without one trailing newline. The value
