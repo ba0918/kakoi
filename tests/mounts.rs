@@ -646,3 +646,137 @@ fn generated_items_replace_written_items() {
     );
     assert_eq!(resolved.items[0].origin, ItemOrigin::Scan);
 }
+
+#[test]
+fn a_hidden_ancestor_does_not_hide_an_rw_worktree() {
+    let variables = Variables {
+        workspace: PathBuf::from("/mnt/c/proj"),
+        worktree: PathBuf::from("/mnt/c/proj"),
+        git_common_dir: Some(PathBuf::from("/mnt/c/proj/.git")),
+        ..variables()
+    };
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\"]\nhide = [\"/mnt/c\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables,
+        Facts::new().dir("/mnt/c").dir("/mnt/c/proj"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Hide, Path::new("/mnt/c")),
+            (Directive::Rw, Path::new("/mnt/c/proj")),
+        ]
+    );
+}
+
+#[test]
+fn an_ro_file_inside_an_rw_directory_stays_read_only() {
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nrw = [\"~/.codex\"]\nro = [\"~/.codex/AGENTS.md\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new()
+            .dir("/home/u/.codex")
+            .file("/home/u/.codex/AGENTS.md"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Rw, Path::new("/home/u/.codex")),
+            (Directive::Ro, Path::new("/home/u/.codex/AGENTS.md")),
+        ]
+    );
+}
+
+#[test]
+fn a_scanned_env_file_inside_an_rw_worktree_is_hidden() {
+    let resolved = resolve_with(
+        &layers(
+            &format!("[mounts]\nrw = [\"${{worktree}}\"]\n{SCAN_ENV}"),
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        MountFacts {
+            paths: Facts::new().dir("/home/u/proj").file("/home/u/proj/.env").0,
+            scan_hits: vec![hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Rw, Path::new("/home/u/proj")),
+            (Directive::Hide, Path::new("/home/u/proj/.env")),
+        ]
+    );
+}
+
+#[test]
+fn an_rw_subdirectory_shows_through_a_hidden_tmp() {
+    let resolved = resolve(
+        &layers(
+            "[mounts]\nrw = [\"/tmp/process-wrap\"]\nhide = [\"/tmp\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        Facts::new().dir("/tmp").dir("/tmp/process-wrap"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Hide, Path::new("/tmp")),
+            (Directive::Rw, Path::new("/tmp/process-wrap")),
+        ]
+    );
+}
+
+#[test]
+fn a_scanned_env_file_under_an_rw_cache_is_hidden() {
+    let resolved = resolve_with(
+        &layers(
+            "[mounts]\nrw = [\"~/.cache\"]\n[[mounts.scan]]\nroot = \"~/.cache\"\nnames = [\".env\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        MountFacts {
+            paths: Facts::new()
+                .dir("/home/u/.cache")
+                .file("/home/u/.cache/x/.env")
+                .0,
+            scan_hits: vec![hit("/home/u/.cache/x/.env", file_at("/home/u/.cache/x/.env"))],
+            mounts: Vec::new(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [
+            (Directive::Rw, Path::new("/home/u/.cache")),
+            (Directive::Hide, Path::new("/home/u/.cache/x/.env")),
+        ]
+    );
+}
