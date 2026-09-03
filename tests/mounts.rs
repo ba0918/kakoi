@@ -506,3 +506,39 @@ fn hide_mounts_hides_each_matching_mount_target() {
     );
     assert_eq!(resolved.items[0].origin, ItemOrigin::HideMounts);
 }
+
+#[test]
+fn hide_mounts_leaves_the_workspace_worktree_and_common_dir_alone() {
+    let variables = Variables {
+        workspace: PathBuf::from("/mnt/c/proj/sub"),
+        worktree: PathBuf::from("/mnt/c/proj"),
+        git_common_dir: Some(PathBuf::from("/mnt/c/main/.git")),
+        ..variables()
+    };
+    let resolved = resolve_with(
+        &layers(HIDE_MNT, None, &[], &[]),
+        &variables,
+        MountFacts {
+            paths: Facts::new()
+                .dir("/mnt")
+                .dir("/mnt/c/proj/sub")
+                .dir("/mnt/c/proj")
+                .dir("/mnt/c/main/.git")
+                .dir("/mnt/c/other")
+                .0,
+            scan_hits: Vec::new(),
+            mounts: vec![
+                mount("/mnt/c/proj/sub", "drvfs"),
+                mount("/mnt/c/proj", "drvfs"),
+                mount("/mnt/c/main/.git", "drvfs"),
+                mount("/mnt/c/other", "drvfs"),
+            ],
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(Directive::Hide, Path::new("/mnt/c/other"))]
+    );
+}

@@ -199,7 +199,7 @@ pub struct ResolvedMounts {
 pub fn resolve_mounts(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
-    _variables: &Variables,
+    variables: &Variables,
     facts: &MountFacts,
 ) -> Result<ResolvedMounts, Diagnostic> {
     let mut resolved = ResolvedMounts::default();
@@ -249,7 +249,7 @@ pub fn resolve_mounts(
             None => merged.push(candidate),
         }
     }
-    for generated in generated_items(expanded, layers, facts) {
+    for generated in generated_items(expanded, layers, variables, facts) {
         match merged
             .iter_mut()
             .find(|existing| existing.key == generated.key)
@@ -307,9 +307,16 @@ pub fn loaded_policy_files(layers: &[Layer], facts: &MountFacts) -> Vec<PathBuf>
 fn generated_items(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
+    variables: &Variables,
     facts: &MountFacts,
 ) -> Vec<Candidate> {
     let policy_files = loaded_policy_files(layers, facts);
+    // The places the user chose to work in are never hidden by their mount type.
+    let work_places = [
+        Some(variables.workspace.as_path()),
+        Some(variables.worktree.as_path()),
+        variables.git_common_dir.as_deref(),
+    ];
     let mut generated = Vec::new();
     for hide_mounts in &expanded.hide_mounts {
         let Expansion::Path(under) = &hide_mounts.under else {
@@ -319,7 +326,10 @@ fn generated_items(
             continue;
         };
         for mount in &facts.mounts {
-            if !mount.target.starts_with(&under) || !hide_mounts.fstype.contains(&mount.fstype) {
+            if !mount.target.starts_with(&under)
+                || !hide_mounts.fstype.contains(&mount.fstype)
+                || work_places.contains(&Some(mount.target.as_path()))
+            {
                 continue;
             }
             let entry = facts.entry(&mount.target);
