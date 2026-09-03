@@ -51,6 +51,14 @@ impl Diagnostic {
         Self::new(Kind::Policy, description)
     }
 
+    pub fn path(description: impl Into<String>) -> Self {
+        Self::new(Kind::Path, description)
+    }
+
+    pub fn env(description: impl Into<String>) -> Self {
+        Self::new(Kind::Env, description)
+    }
+
     pub fn kind(&self) -> Kind {
         self.kind
     }

@@ -6,4 +6,6 @@ compile_error!("process-wrap supports only x86_64 (specification section 3)");
 
 pub mod cli;
 pub mod diagnostic;
+pub mod environment;
+pub mod layers;
 pub mod policy;
