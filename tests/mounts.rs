@@ -203,6 +203,23 @@ fn conflicting_directives_on_the_command_line_are_a_usage_diagnostic() {
 }
 
 #[test]
+fn the_first_conflict_in_mount_order_is_reported_whatever_layer_wrote_it() {
+    let diagnostic = resolve(
+        &layers(
+            "[mounts]\nrw = [\"/home/u/b\"]\nhide = [\"/home/u/b\"]",
+            None,
+            &["/home/u/a"],
+            &["/home/u/a"],
+        ),
+        &variables(),
+        Facts::new().dir("/home/u/a").dir("/home/u/b"),
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Usage, "{diagnostic}");
+}
+
+#[test]
 fn an_upper_layer_directive_replaces_the_same_real_path() {
     let resolved = resolve(
         &layers(

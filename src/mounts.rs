@@ -298,6 +298,9 @@ pub fn resolve_mounts(
 ) -> Result<ResolvedMounts, Diagnostic> {
     let mut resolved = ResolvedMounts::default();
     let mut merged: Vec<Candidate> = Vec::new();
+    // Conflicts are gathered rather than returned at once: the one reported is the first
+    // in the order of section 6.4 (specification section 13), not the first written.
+    let mut conflicts: Vec<(PathBuf, Diagnostic)> = Vec::new();
     for item in &expanded.mounts {
         let path = match &item.path {
             Expansion::Valueless(variable) => {
@@ -334,14 +337,21 @@ pub fn resolve_mounts(
                     candidate.written,
                     candidate.key.display()
                 );
-                return Err(match item.origin {
+                let diagnostic = match item.origin {
                     LayerOrigin::CommandLine => Diagnostic::usage(description),
                     _ => Diagnostic::policy(description),
-                });
+                };
+                conflicts.push((candidate.key, diagnostic));
             }
             Some(_) => {}
             None => merged.push(candidate),
         }
+    }
+    if let Some((_, diagnostic)) = conflicts
+        .into_iter()
+        .min_by(|(a, _), (b, _)| byte_order(a, b))
+    {
+        return Err(diagnostic);
     }
     for generated in generated_items(expanded, layers, variables, facts) {
         match merged
