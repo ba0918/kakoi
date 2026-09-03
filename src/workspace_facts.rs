@@ -89,10 +89,15 @@ fn read_links(worktree: &Path) -> GitFileLinks {
     let back_link = fs::read_to_string(gitdir.join("gitdir"))
         .ok()
         .and_then(|text| resolve_from(&gitdir, text.trim_end()));
-    let core_worktree = fs::read_to_string(gitdir.join("config"))
-        .ok()
-        .and_then(|text| core_worktree(&text))
-        .and_then(|value| resolve_from(&gitdir, &value));
+    // Only a submodule's config is read (specification section 14); a linked worktree is
+    // recognised by its commondir and needs no config.
+    let core_worktree = match commondir {
+        Reference::Absent => fs::read_to_string(gitdir.join("config"))
+            .ok()
+            .and_then(|text| core_worktree(&text))
+            .and_then(|value| resolve_from(&gitdir, &value)),
+        _ => None,
+    };
     GitFileLinks {
         gitdir: Some(gitdir),
         commondir,
