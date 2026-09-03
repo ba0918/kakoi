@@ -203,3 +203,44 @@ fn an_oversized_secret_value_is_a_secret_diagnostic() {
     let diagnostic = assemble(SECRET, &host(&[]), &secret_bytes(&[("S", &over)]), &[]).unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
+
+#[test]
+fn a_missing_secret_file_is_a_warning_without_the_variable() {
+    let assembled = assemble(
+        SECRET,
+        &host(&[("S", "host")]),
+        &[("S".to_string(), SecretFile::Absent)]
+            .into_iter()
+            .collect(),
+        &[],
+    )
+    .unwrap();
+
+    assert!(!names(&assembled).contains(&"S"));
+    assert_eq!(assembled.warnings.len(), 1, "{:?}", assembled.warnings);
+    assert!(
+        assembled.warnings[0]
+            .to_string()
+            .starts_with("process-wrap: warning: "),
+        "{:?}",
+        assembled.warnings
+    );
+}
+
+#[test]
+fn an_unusable_secret_file_is_a_secret_diagnostic() {
+    let diagnostic = assemble(
+        SECRET,
+        &host(&[]),
+        &[(
+            "S".to_string(),
+            SecretFile::Unreadable("is not a regular file".to_string()),
+        )]
+        .into_iter()
+        .collect(),
+        &[],
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
+}

@@ -56,7 +56,7 @@ pub fn assemble_environment(
     secrets: &BTreeMap<String, SecretFile>,
     path_prepend: &[impl AsRef<Path>],
 ) -> Result<Assembled, Diagnostic> {
-    let warnings = Vec::new();
+    let mut warnings = Vec::new();
     // 1. Start from the host, or from the `pass` variables alone.
     let mut values: BTreeMap<OsString, OsString> = match policy.env_mode {
         EnvMode::Inherit => host.clone(),
@@ -83,15 +83,25 @@ pub fn assemble_environment(
     }
     // 4. The secrets, by name.
     let mut secret_names = BTreeSet::new();
-    for name in policy.secrets.keys() {
+    for (name, path) in &policy.secrets {
         let variable = OsString::from(name);
         values.remove(&variable);
-        if let Some(SecretFile::Bytes(bytes)) = secrets.get(name) {
-            values.insert(
-                variable.clone(),
-                OsString::from_vec(secret_value(name, bytes)?),
-            );
-            secret_names.insert(variable);
+        match secrets.get(name).unwrap_or(&SecretFile::Absent) {
+            SecretFile::Bytes(bytes) => {
+                values.insert(
+                    variable.clone(),
+                    OsString::from_vec(secret_value(name, bytes)?),
+                );
+                secret_names.insert(variable);
+            }
+            SecretFile::Absent => warnings.push(Warning::new(format!(
+                "the file of secret `{name}` ({path}) does not exist; the variable is not set"
+            ))),
+            SecretFile::Unreadable(reason) => {
+                return Err(Diagnostic::secret(format!(
+                    "the file of secret `{name}` ({path}) {reason}"
+                )));
+            }
         }
     }
     // 5. The git rewrite, numbered after the pairs already there.
