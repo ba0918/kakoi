@@ -284,7 +284,7 @@ fn an_explicit_default_profile_equals_the_omitted_form() {
 
     let explicit = load_layers(&invocation("default", None), &config).unwrap();
     let omitted = load_layers(
-        &process_wrap::cli::interpret(["--", "true"].map(OsString::from), Path::new("/cwd"))
+        &process_wrap::cli::interpret(["--", "true"].map(OsString::from))
             .map(|parsed| match parsed {
                 process_wrap::cli::Parsed::Invocation(mut invocation) => {
                     invocation.rw = vec![PathBuf::from("/cli/rw")];

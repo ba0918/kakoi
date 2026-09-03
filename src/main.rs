@@ -14,7 +14,10 @@ fn main() -> ExitCode {
             return ExitCode::from(125);
         }
     };
-    match cli::interpret(std::env::args_os().skip(1), &current_dir) {
+    match cli::interpret(std::env::args_os().skip(1)).map(|parsed| match parsed {
+        Parsed::Invocation(invocation) => Parsed::Invocation(invocation.anchored(&current_dir)),
+        other => other,
+    }) {
         Ok(Parsed::Help(text)) | Ok(Parsed::Version(text)) => {
             let _ = std::io::stdout().write_all(text.as_bytes());
             ExitCode::SUCCESS

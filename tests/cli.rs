@@ -4,10 +4,17 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::{assert_diagnostic, output_report, run, TempDir};
-use process_wrap::cli::{interpret, Parsed};
+use process_wrap::cli::{interpret, Invocation, Parsed};
 
-fn interpret_ok(arguments: &[&str], current_dir: &Path) -> Parsed {
-    interpret(arguments.iter().map(OsString::from), current_dir).unwrap()
+fn interpret_ok(arguments: &[&str]) -> Parsed {
+    interpret(arguments.iter().map(OsString::from)).unwrap()
+}
+
+fn invocation_anchored_at(arguments: &[&str], current_dir: &Path) -> Invocation {
+    let Parsed::Invocation(invocation) = interpret_ok(arguments) else {
+        panic!("not an invocation");
+    };
+    invocation.anchored(current_dir)
 }
 
 #[test]
@@ -96,7 +103,7 @@ fn version_prints_the_cargo_version_and_exits_zero() {
 
 #[test]
 fn print_plan_form_parses_without_a_command() {
-    let Parsed::Invocation(invocation) = interpret_ok(&["--print-plan"], Path::new("/cwd")) else {
+    let Parsed::Invocation(invocation) = interpret_ok(&["--print-plan"]) else {
         panic!("not an invocation");
     };
 
@@ -106,7 +113,7 @@ fn print_plan_form_parses_without_a_command() {
 
 #[test]
 fn relative_option_paths_are_resolved_against_the_current_directory() {
-    let Parsed::Invocation(invocation) = interpret_ok(
+    let invocation = invocation_anchored_at(
         &[
             "--policy-file",
             "policy.toml",
@@ -122,9 +129,7 @@ fn relative_option_paths_are_resolved_against_the_current_directory() {
             "true",
         ],
         Path::new("/cwd"),
-    ) else {
-        panic!("not an invocation");
-    };
+    );
 
     assert_eq!(
         invocation.policy_file,
@@ -140,12 +145,10 @@ fn relative_option_paths_are_resolved_against_the_current_directory() {
 
 #[test]
 fn command_is_passed_through_unresolved() {
-    let Parsed::Invocation(invocation) = interpret_ok(
+    let invocation = invocation_anchored_at(
         &["--", "rel/cmd", "--rw", "x", "~/y", "--help"],
         Path::new("/cwd"),
-    ) else {
-        panic!("not an invocation");
-    };
+    );
 
     assert_eq!(
         invocation.command,
@@ -221,10 +224,8 @@ fn a_repeated_single_use_option_is_a_usage_diagnostic() {
         assert_diagnostic(&output, 125, "usage");
     }
 
-    let Parsed::Invocation(invocation) = interpret_ok(
-        &["--rw", "/a", "--rw", "/b", "--", "true"],
-        Path::new("/cwd"),
-    ) else {
+    let Parsed::Invocation(invocation) = interpret_ok(&["--rw", "/a", "--rw", "/b", "--", "true"])
+    else {
         panic!("not an invocation");
     };
     assert_eq!(invocation.rw, [PathBuf::from("/a"), PathBuf::from("/b")]);
@@ -232,40 +233,34 @@ fn a_repeated_single_use_option_is_a_usage_diagnostic() {
 
 #[test]
 fn the_equals_form_means_the_same_as_the_separated_form() {
-    let separated = interpret_ok(
-        &[
-            "--profile",
-            "p",
-            "--policy-file",
-            "f.toml",
-            "--workspace",
-            "w",
-            "--rw",
-            "a",
-            "--hide",
-            "b",
-            "--",
-            "true",
-        ],
-        Path::new("/cwd"),
-    );
-    let equals = interpret_ok(
-        &[
-            "--profile=p",
-            "--policy-file=f.toml",
-            "--workspace=w",
-            "--rw=a",
-            "--hide=b",
-            "--",
-            "true",
-        ],
-        Path::new("/cwd"),
-    );
+    let separated = interpret_ok(&[
+        "--profile",
+        "p",
+        "--policy-file",
+        "f.toml",
+        "--workspace",
+        "w",
+        "--rw",
+        "a",
+        "--hide",
+        "b",
+        "--",
+        "true",
+    ]);
+    let equals = interpret_ok(&[
+        "--profile=p",
+        "--policy-file=f.toml",
+        "--workspace=w",
+        "--rw=a",
+        "--hide=b",
+        "--",
+        "true",
+    ]);
 
     assert_eq!(separated, equals);
     let Parsed::Invocation(invocation) = equals else {
         panic!("not an invocation");
     };
     assert_eq!(invocation.profile, "p");
-    assert_eq!(invocation.workspace, Some(PathBuf::from("/cwd/w")));
+    assert_eq!(invocation.workspace, Some(PathBuf::from("w")));
 }

@@ -7,8 +7,8 @@ use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser};
 
 use crate::diagnostic::Diagnostic;
 
-/// The interpreted command line, with option paths made absolute against the current
-/// directory. `command` is passed through untouched.
+/// The interpreted command line. Option paths are as written until `anchored` joins the
+/// relative ones to the current directory; `command` is passed through untouched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invocation {
     pub profile: String,
@@ -71,9 +71,24 @@ struct Arguments {
     command: Vec<OsString>,
 }
 
-/// Interprets `arguments` (without the program name). Relative option paths are joined to
-/// `current_dir`; `~` and variables are left as written.
-pub fn interpret<I>(arguments: I, current_dir: &Path) -> Result<Parsed, Diagnostic>
+impl Invocation {
+    /// Joins the relative option paths to `current_dir`. `~` and variables are left as
+    /// written (specification section 4.1).
+    pub fn anchored(self, current_dir: &Path) -> Self {
+        Self {
+            policy_file: self.policy_file.map(|path| current_dir.join(path)),
+            workspace: self.workspace.map(|path| current_dir.join(path)),
+            rw: anchor_all(self.rw, current_dir),
+            hide: anchor_all(self.hide, current_dir),
+            ..self
+        }
+    }
+}
+
+/// Interprets `arguments` (without the program name). Needs nothing from the host, so the
+/// grammar is checked before the current directory is looked up (specification
+/// section 13, stages 1 and 2).
+pub fn interpret<I>(arguments: I) -> Result<Parsed, Diagnostic>
 where
     I: IntoIterator<Item = OsString>,
 {
@@ -127,10 +142,10 @@ where
     }
     Ok(Parsed::Invocation(Invocation {
         profile: parsed.profile,
-        policy_file: parsed.policy_file.map(|path| current_dir.join(path)),
-        workspace: parsed.workspace.map(|path| current_dir.join(path)),
-        rw: resolve_all(parsed.rw, current_dir),
-        hide: resolve_all(parsed.hide, current_dir),
+        policy_file: parsed.policy_file,
+        workspace: parsed.workspace,
+        rw: parsed.rw,
+        hide: parsed.hide,
         print_plan: parsed.print_plan,
         command: parsed.command,
     }))
@@ -188,7 +203,7 @@ fn is_single_path_component(name: &str) -> bool {
     !name.is_empty() && !name.contains('/') && name != "." && name != ".."
 }
 
-fn resolve_all(paths: Vec<PathBuf>, current_dir: &Path) -> Vec<PathBuf> {
+fn anchor_all(paths: Vec<PathBuf>, current_dir: &Path) -> Vec<PathBuf> {
     paths
         .into_iter()
         .map(|path| current_dir.join(path))
