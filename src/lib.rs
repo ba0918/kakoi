@@ -10,5 +10,6 @@ pub mod environment;
 pub mod layers;
 pub mod policy;
 pub mod regular_file;
+pub mod startup;
 pub mod variables;
 pub mod workspace_facts;

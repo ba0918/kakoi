@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
-use common::{assert_diagnostic, output_report, run, TempDir};
+use common::{assert_diagnostic, binary, output_report, run, run_from_deleted_dir, TempDir};
 use process_wrap::cli::{interpret, Invocation, Parsed};
 
 fn interpret_ok(arguments: &[&str]) -> Parsed {
@@ -263,4 +263,70 @@ fn the_equals_form_means_the_same_as_the_separated_form() {
     };
     assert_eq!(invocation.profile, "p");
     assert_eq!(invocation.workspace, Some(PathBuf::from("w")));
+}
+
+#[test]
+fn help_from_a_deleted_current_directory_exits_zero() {
+    let home = TempDir::new();
+
+    let output = run_from_deleted_dir(home.path(), ["--help"]);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+    assert!(!output.stdout.is_empty(), "{report}");
+}
+
+#[test]
+fn an_unknown_option_from_a_deleted_current_directory_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    let output = run_from_deleted_dir(home.path(), ["--bogus", "--", "true"]);
+
+    assert_diagnostic(&output, 125, "usage");
+}
+
+#[test]
+fn a_deleted_current_directory_is_a_path_diagnostic() {
+    let home = TempDir::new();
+    home.write(".config/process-wrap/profile/default.toml", "");
+
+    let output = run_from_deleted_dir(home.path(), ["--", "true"]);
+
+    assert_diagnostic(&output, 125, "path");
+}
+
+#[test]
+fn a_bad_home_beside_a_broken_profile_is_an_env_diagnostic() {
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts\nbroken",
+    );
+    let file = home.write("home-file", "");
+
+    let output = binary(home.path())
+        .env("HOME", &file)
+        .args(["--", "true"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "env");
+}
+
+#[test]
+fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts\nbroken",
+    );
+    let missing = home.path().join("missing");
+
+    let output = run(
+        home.path(),
+        ["--workspace", missing.to_str().unwrap(), "--", "true"],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
 }

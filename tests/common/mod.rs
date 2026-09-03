@@ -29,6 +29,35 @@ where
     binary(home).args(arguments).output().unwrap()
 }
 
+/// Runs the built binary with `arguments` from a directory that no longer exists: a child
+/// shell enters a fresh directory under `home`, removes it, and then executes the binary.
+/// `Command::current_dir` cannot do this (the spawn fails), and changing the test process's
+/// own directory would race with the other tests.
+pub fn run_from_deleted_dir<I, S>(home: &Path, arguments: I) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let doomed = home.join("doomed");
+    fs::create_dir(&doomed).unwrap();
+    let command = binary(home);
+    let program = command.get_program().to_os_string();
+    Command::new("sh")
+        .arg("-c")
+        .arg("doomed=\"$1\"; shift; cd \"$doomed\" && rmdir \"$doomed\" && exec \"$0\" \"$@\"")
+        .arg(program)
+        .arg(&doomed)
+        .args(arguments)
+        .envs(
+            command
+                .get_envs()
+                .filter_map(|(key, value)| value.map(|value| (key, value))),
+        )
+        .env_remove("PROCESS_WRAP")
+        .output()
+        .unwrap()
+}
+
 /// Everything the binary left behind, for the message of a failed assertion.
 pub fn output_report(output: &Output) -> String {
     format!(
