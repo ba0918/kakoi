@@ -1,0 +1,19 @@
+[package]
+name = "process-wrap"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Run a command inside a bubblewrap mount namespace shaped by a layered policy."
+include = [
+    "/src/**",
+    "/examples/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CHANGELOG.md",
+]
+
+[dependencies]
+clap = { version = "=4.6.6", features = ["derive"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.5"
