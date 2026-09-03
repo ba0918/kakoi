@@ -162,12 +162,9 @@ fn apply_instead_of(
             .to_str()
             .filter(|text| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit()))
             .and_then(|text| text.parse::<usize>().ok())
-            .ok_or_else(|| {
-                Diagnostic::env(format!(
-                    "GIT_CONFIG_COUNT is not a number: {}",
-                    count.to_string_lossy()
-                ))
-            })?,
+            // The value may be a secret (specification section 9), so only the name is
+            // reported.
+            .ok_or_else(|| Diagnostic::env("GIT_CONFIG_COUNT is not a number"))?,
     };
     for (index, (original, replacement)) in instead_of.iter().enumerate() {
         let number = count + index;

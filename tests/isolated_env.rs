@@ -315,6 +315,21 @@ fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
 }
 
 #[test]
+fn a_secret_git_config_count_that_is_not_a_number_is_reported_without_its_value() {
+    let diagnostic = assemble(
+        "[secrets]\nGIT_CONFIG_COUNT = \"/home/u/tokens/c\"\n\
+         [git.instead-of]\n\"git@x:\" = \"https://x/\"",
+        &host(&[]),
+        &secret_bytes(&[("GIT_CONFIG_COUNT", b"hunter2\n")]),
+        &[],
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Env, "{diagnostic}");
+    assert!(!diagnostic.to_string().contains("hunter2"), "{diagnostic}");
+}
+
+#[test]
 fn secret_values_never_appear_in_the_plan_or_its_warnings() {
     let assembled = assemble(
         "[secrets]\nS = \"/home/u/tokens/s\"\nT = \"/home/u/tokens/t\"",
