@@ -69,7 +69,13 @@ where
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
     let host: BTreeMap<OsString, OsString> = std::env::vars_os().collect();
     let expanded = expand_policy(&policy, &variables, &home);
-    let wanted = candidates(&expanded, &layers, &variables, &config_dir);
+    let wanted = candidates(
+        &expanded,
+        &layers,
+        &variables,
+        &config_dir,
+        invocation.workspace.as_deref(),
+    );
     let facts = IsolationFacts {
         mounts: collect_mount_facts(&wanted),
         secrets: read_secret_files(&expanded.secrets),

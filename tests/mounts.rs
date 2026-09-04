@@ -854,7 +854,13 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
     );
     let expanded = expand_policy(&merged(&layers), &variables(), &home());
 
-    let candidates = candidates(&expanded, &layers, &variables(), Path::new(CONFIG_DIR));
+    let candidates = candidates(
+        &expanded,
+        &layers,
+        &variables(),
+        Path::new(CONFIG_DIR),
+        Some(Path::new("/home/u/given/ws")),
+    );
 
     for expected in [
         "/home/u/.cache",
@@ -890,6 +896,21 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
         [Path::new("/home/u/proj")]
     );
     assert_eq!(candidates.hide_mounts_under, [PathBuf::from("/mnt")]);
+    // The written items and the given workspace are walked too, so that the check on
+    // where they resolve to sees what their resolution passed through.
+    for expected in [
+        "/home/u/.cache",
+        "/cli/rw",
+        "/home/u/given/ws",
+        PROFILE,
+        "/home/u/tokens/t",
+    ] {
+        assert!(
+            candidates.traversals.contains(&PathBuf::from(expected)),
+            "{expected} missing from {:?}",
+            candidates.traversals
+        );
+    }
 }
 
 #[test]

@@ -143,9 +143,9 @@ pub struct ScanRequest {
 
 /// What the outer layer must look up for the mount resolution: the paths whose existence,
 /// kind, and real path are needed, the paths whose resolution must report the symbolic
-/// links and directories it passes through (the ones specification section 5.6 protects),
-/// the scans to walk, and the `under` of each `hide-mounts` (the mount list is read only
-/// when there is one).
+/// links and directories it passes through (the ones specification section 5.6 protects,
+/// the written mount items, and the given `--workspace`), the scans to walk, and the
+/// `under` of each `hide-mounts` (the mount list is read only when there is one).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Candidates {
     pub paths: Vec<PathBuf>,
@@ -157,12 +157,15 @@ pub struct Candidates {
 /// The candidate paths of `expanded`: every expanded path, plus every prefix (each
 /// ancestor and the path itself) of the paths specification section 5.6 protects — the
 /// policy files read, the configuration directory, the secret files, and the
-/// `path-prepend` entries — and the configuration directory's `secrets/`.
+/// `path-prepend` entries — and the configuration directory's `secrets/`. The traversals
+/// are those protected paths, the written mount items, and `workspace`, the `--workspace`
+/// path as given.
 pub fn candidates(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
     variables: &Variables,
     config_dir: &Path,
+    workspace: Option<&Path>,
 ) -> Candidates {
     let mut paths = Vec::new();
     let expanded_paths = expanded
@@ -191,6 +194,14 @@ pub fn candidates(
     for path in &traversals {
         paths.extend(path.ancestors().map(Path::to_path_buf));
     }
+    traversals.extend(
+        expanded
+            .mounts
+            .iter()
+            .filter_map(|item| item.path.path())
+            .chain(workspace)
+            .map(Path::to_path_buf),
+    );
     paths.push(variables.config_dir.join("secrets"));
     paths.sort();
     paths.dedup();

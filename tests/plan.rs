@@ -459,6 +459,98 @@ fn a_link_stepping_back_through_a_directory_outside_writable_areas_is_accepted()
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
+/// A home with the profile `profile`, the directory `target` under it, and `cache/pip/http`
+/// as a process inside the isolation could leave it: `cache/pip` a link to `cache/evil`,
+/// and `cache/evil/http` a link to `target`. The next start resolves `~/cache/pip/http`
+/// to `target` through `cache`.
+fn home_with_a_rewired_cache(profile: &str, target: &str) -> TempDir {
+    let (home, _) = home_with_workspace();
+    home.write(".config/process-wrap/profile/default.toml", profile);
+    std::fs::create_dir_all(home.path().join(target)).unwrap();
+    std::fs::create_dir_all(home.path().join("cache/evil")).unwrap();
+    std::os::unix::fs::symlink("evil", home.path().join("cache/pip")).unwrap();
+    std::os::unix::fs::symlink(
+        home.path().join(target),
+        home.path().join("cache/evil/http"),
+    )
+    .unwrap();
+    home
+}
+
+/// Runs the binary from `home` with `--workspace workspace` and the command `true`.
+fn run_with_workspace(home: &TempDir, workspace: &Path) -> std::process::Output {
+    binary(home.path())
+        .args(["--workspace", workspace.to_str().unwrap(), "--", "true"])
+        .output()
+        .unwrap()
+}
+
+const NESTED_RW: &str = "[mounts]\nrw = [\"~/cache\", \"~/cache/pip/http\"]";
+
+#[test]
+fn a_nested_item_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
+    let home = home_with_a_rewired_cache(NESTED_RW, "victim");
+    let workspace = home.path().join("ws");
+
+    let output = run_with_workspace(&home, &workspace);
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    let real_home = home.path().canonicalize().unwrap();
+    for element in [real_home.join("cache/pip/http"), real_home.join("cache")] {
+        assert!(
+            diagnostic.contains(element.to_str().unwrap()),
+            "{diagnostic} does not mention {}",
+            element.display()
+        );
+    }
+}
+
+#[test]
+fn a_nested_item_that_is_a_real_directory_is_accepted() {
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/process-wrap/profile/default.toml", NESTED_RW);
+    std::fs::create_dir_all(home.path().join("cache/pip/http")).unwrap();
+
+    let output = run_with_workspace(&home, &workspace);
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+#[test]
+fn a_nested_item_rewired_into_another_writable_item_is_accepted() {
+    let home = home_with_a_rewired_cache(
+        "[mounts]\nrw = [\"~/cache\", \"~/cache/pip/http\", \"~/other\"]",
+        "other/http",
+    );
+    let workspace = home.path().join("ws");
+
+    let output = run_with_workspace(&home, &workspace);
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+#[test]
+fn a_workspace_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
+    let (home, _) = home_with_workspace();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"~/cache\"]",
+    );
+    let victim = home.path().join("victim");
+    std::fs::create_dir(&victim).unwrap();
+    std::fs::create_dir(home.path().join("cache")).unwrap();
+    std::os::unix::fs::symlink(&victim, home.path().join("cache/ws")).unwrap();
+
+    let output = run_with_workspace(&home, &home.path().join("cache/ws"));
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    let real_home = home.path().canonicalize().unwrap();
+    assert!(
+        diagnostic.contains(real_home.join("cache").to_str().unwrap()),
+        "{diagnostic} does not mention the writable area passed through"
+    );
+}
+
 #[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     let (home, _) = home_with_workspace();
