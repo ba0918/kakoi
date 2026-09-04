@@ -191,15 +191,10 @@ fn check_landing(
     writable: &[&ResolvedItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
-    let consulted = facts
-        .traversed_links(given)
-        .iter()
-        .chain(facts.visited_directories(given))
-        .find_map(|place| writable.iter().find(|item| place.starts_with(&item.real)));
-    let Some(consulted) = consulted else {
+    let Some(consulted) = consulted_writable(given, writable, facts) else {
         return Ok(());
     };
-    if lands_in_writable(given, real, written, writable, facts) {
+    if lands_in_writable(real, written, writable, facts) {
         return Ok(());
     }
     Err(Diagnostic::path(format!(
@@ -211,12 +206,27 @@ fn check_landing(
     )))
 }
 
-/// Whether `real`, what `given` resolved to, is inside a writable item (the same or a
-/// descendant). A writable item at `real` itself counts only when another written writable
-/// item, at a different given path, resolves there too: the one at `given` is the item
-/// under check, and landing on its own resolved place proves nothing.
-fn lands_in_writable(
+/// The first writable item that resolving `given` consulted: one holding a link the
+/// resolution followed or a directory it passed through.
+fn consulted_writable<'a>(
     given: &Path,
+    writable: &'a [&'a ResolvedItem],
+    facts: &MountFacts,
+) -> Option<&'a ResolvedItem> {
+    facts
+        .traversed_links(given)
+        .iter()
+        .chain(facts.visited_directories(given))
+        .find_map(|place| writable.iter().find(|item| place.starts_with(&item.real)))
+        .copied()
+}
+
+/// Whether `real`, what a path under check resolved to, is inside a writable item (the
+/// same or a descendant). A writable item at `real` itself counts only when a written
+/// writable item whose own resolution consulted nothing writable resolves there: the
+/// path under check landed there through something replaceable, so its own item at `real`
+/// proves nothing, and neither does another item that was redirected there the same way.
+fn lands_in_writable(
     real: &Path,
     written: &WrittenPaths,
     writable: &[&ResolvedItem],
@@ -225,13 +235,13 @@ fn lands_in_writable(
     let inside_another = writable
         .iter()
         .any(|item| item.real != real && real.starts_with(&item.real));
-    let same_as_another = writable.iter().any(|item| item.real == real)
+    let same_as_an_honest_one = writable.iter().any(|item| item.real == real)
         && written.items.iter().any(|other| {
             matches!(other.directive, Directive::Rw | Directive::RwFile)
-                && other.path != given
                 && facts.entry(&other.path).path() == Some(real)
+                && consulted_writable(&other.path, writable, facts).is_none()
         });
-    inside_another || same_as_another
+    inside_another || same_as_an_honest_one
 }
 
 /// Making the whole home writable is refused from every layer (specification

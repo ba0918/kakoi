@@ -348,6 +348,38 @@ fn a_workspace_resolving_through_a_writable_item_to_outside_every_writable_item_
 }
 
 #[test]
+fn two_nested_items_redirected_to_the_same_outside_place_do_not_vouch_for_each_other() {
+    let facts = rewired_through_cache(host().dir("/home/u/victim"), "/home/u/victim", true)
+        .link_to_dir("/home/u/cache/npm/x", "/home/u/victim")
+        .links_traversed("/home/u/cache/npm/x", &["/home/u/cache/npm/x"])
+        .directories_visited(
+            "/home/u/cache/npm/x",
+            &[
+                "/",
+                "/home",
+                "/home/u",
+                "/home/u/cache",
+                "/home/u/cache/npm",
+            ],
+        );
+
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/cache\", \"~/cache/pip/http\", \"~/cache/npm/x\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        facts,
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/cache"]);
+}
+
+#[test]
 fn a_nested_item_resolving_inside_the_writable_item_it_passes_through_is_accepted() {
     let warnings = check(
         &layers(
