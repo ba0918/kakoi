@@ -436,6 +436,72 @@ fn an_explicit_workspace_at_the_current_directory_is_exempt_and_hands_down_no_re
 }
 
 #[test]
+fn a_workspace_reached_through_a_link_must_land_in_a_root_not_derived_from_itself() {
+    // `rw = ["${worktree}"]` after `~/proj/sub` was replaced by a link to `~/victim`:
+    // `--workspace ~/proj/sub` from elsewhere derives the worktree as `~/victim`, so
+    // `~/proj` is writable no more and the workspace's resolution referenced nothing,
+    // yet the only root is the item derived from the redirected workspace itself.
+    let given = "/home/u/proj/sub";
+    let redirected = Variables {
+        workspace: PathBuf::from("/home/u/victim"),
+        worktree: PathBuf::from("/home/u/victim"),
+        git_common_dir: None,
+        ..variables()
+    };
+
+    let diagnostic = check_at(
+        &layers("[mounts]\nrw = [\"${worktree}\"]", None, &[], &[]),
+        &redirected,
+        host()
+            .dir("/home/u/victim")
+            .link_to_dir(given, "/home/u/victim")
+            .links_traversed(given, &[given])
+            .directories_visited(given, &["/", "/home", "/home/u", "/home/u/proj"])
+            .directories_visited("/home/u/victim", &["/", "/home", "/home/u"]),
+        "/home/u/elsewhere",
+        CONFIG_DIR,
+        Some(given),
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[given]);
+}
+
+#[test]
+fn a_workspace_reached_through_a_link_landing_in_a_root_written_by_path_is_accepted() {
+    // `rw = ["~/work"]` with `~/work` itself a link to `~/data/work`: `--workspace
+    // ~/work/proj` follows that link, and lands inside an item whose written form does not
+    // depend on the workspace.
+    let given = "/home/u/work/proj";
+    let behind_the_link = Variables {
+        workspace: PathBuf::from("/home/u/data/work/proj"),
+        worktree: PathBuf::from("/home/u/data/work/proj"),
+        git_common_dir: None,
+        ..variables()
+    };
+
+    let warnings = check_at(
+        &layers("[mounts]\nrw = [\"~/work\"]", None, &[], &[]),
+        &behind_the_link,
+        host()
+            .dir_with_ancestors("/home/u/data/work/proj")
+            .link_to_dir("/home/u/work", "/home/u/data/work")
+            .link_to_dir(given, "/home/u/data/work/proj")
+            .links_traversed(given, &["/home/u/work"])
+            .directories_visited(
+                given,
+                &["/", "/home", "/home/u", "/home/u/data", "/home/u/data/work"],
+            ),
+        "/home/u/elsewhere",
+        CONFIG_DIR,
+        Some(given),
+    )
+    .unwrap();
+
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
 fn two_nested_items_redirected_to_the_same_outside_place_do_not_vouch_for_each_other() {
     let facts = rewired_through_cache(host().dir("/home/u/victim"), "/home/u/victim", true)
         .link_to_dir("/home/u/cache/npm/x", "/home/u/victim")

@@ -200,8 +200,43 @@ fn check_written_paths(
         let role = format!("the workspace {}", workspace.display());
         let reference = consulted_writable(workspace, writable, facts).map(Reference::own);
         check_landing(&role, reference, &variables.workspace, &roots)?;
+        check_workspace_links(workspace, &variables.workspace, &roots, written, facts)?;
     }
     Ok(())
+}
+
+/// The further rule of specification section 5.6 for a `--workspace` under check whose
+/// resolution followed a symbolic link: its real path must lie inside a root item with a
+/// written form not expanded from the workspace itself. The writable set is derived from
+/// the workspace, so a redirected workspace makes the place that was writable before the
+/// redirection (the worktree of `rw = ["${worktree}"]`) invisible to the other rules, and
+/// a link is the only means of redirection out of a writable item. The first link followed
+/// is the one named.
+fn check_workspace_links(
+    workspace: &Path,
+    real: &Path,
+    roots: &[&ResolvedItem],
+    written: &WrittenPaths,
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    let Some(link) = facts.traversed_links(workspace).first() else {
+        return Ok(());
+    };
+    let anchored = roots.iter().any(|root| {
+        real.starts_with(&root.real)
+            && writable_forms_of(root, written, facts).any(|form| !form.inherits_from_workspace())
+    });
+    if anchored {
+        return Ok(());
+    }
+    Err(Diagnostic::path(format!(
+        "the workspace {} resolves to {} through the symbolic link {} but outside every `rw` \
+         and `rw-file` item not expanded from the workspace itself, so it could be redirected \
+         from inside the isolation",
+        workspace.display(),
+        real.display(),
+        link.display()
+    )))
 }
 
 /// The root items of specification section 2: the writable items none of whose written
@@ -216,17 +251,24 @@ fn root_items<'a>(
     writable
         .iter()
         .filter(|item| {
-            written
-                .items
-                .iter()
-                .filter(|form| {
-                    matches!(form.directive, Directive::Rw | Directive::RwFile)
-                        && facts.entry(&form.path).path() == Some(item.real.as_path())
-                })
+            writable_forms_of(item, written, facts)
                 .all(|form| referenced_writable(form, workspace, writable, facts).is_none())
         })
         .copied()
         .collect()
+}
+
+/// The written writable forms (`rw` or `rw-file`, specification section 5.4) that resolve
+/// to `item`.
+fn writable_forms_of<'a>(
+    item: &'a ResolvedItem,
+    written: &'a WrittenPaths,
+    facts: &'a MountFacts,
+) -> impl Iterator<Item = &'a WrittenItem> {
+    written.items.iter().filter(move |form| {
+        matches!(form.directive, Directive::Rw | Directive::RwFile)
+            && facts.entry(&form.path).path() == Some(item.real.as_path())
+    })
 }
 
 /// A writable item the resolution of a path under check referenced.
