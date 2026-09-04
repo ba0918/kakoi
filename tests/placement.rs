@@ -128,6 +128,37 @@ fn a_symlink_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
 }
 
 #[test]
+fn a_directory_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
+    // `/home/u/policies` points at `/home/u/cache/x/../../real/pol` with `/home/u/cache/x`
+    // a real directory: every prefix of the policy file resolves outside `~/cache` and the
+    // only link sits in the home, but the walk passes through a directory inside it.
+    let chain = |profile: &str, policy_file: &str| {
+        check(
+            &layers(profile, Some(policy_file), &[], &[]),
+            &variables(),
+            host()
+                .dir("/home/u/cache")
+                .dir_with_ancestors("/home/u/real/pol")
+                .link_to_dir("/home/u/policies", "/home/u/real/pol")
+                .link_to_file(POLICY_FILE, "/home/u/real/pol/p.toml")
+                .links_traversed(POLICY_FILE, &["/home/u/policies"])
+                .directories_visited(POLICY_FILE, &["/home/u/cache/x"]),
+            WORKTREE,
+        )
+    };
+    let rw_cache = "[mounts]\nrw = [\"~/cache\"]";
+
+    for (name, diagnostic) in [
+        ("rw in the profile", chain(rw_cache, "")),
+        ("rw in the policy file itself", chain("", rw_cache)),
+    ] {
+        let diagnostic = diagnostic.unwrap_err();
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert_path_diagnostic(&diagnostic, &["/home/u/cache/x", "/home/u/cache"]);
+    }
+}
+
+#[test]
 fn the_config_dir_inside_a_writable_area_is_rejected() {
     let diagnostic = check(
         &layers("[mounts]\nrw = [\"~/.config\"]", None, &[], &[]),

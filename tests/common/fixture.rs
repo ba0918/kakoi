@@ -79,12 +79,13 @@ pub fn merged(layers: &[Layer]) -> Policy {
     merge(layers).unwrap()
 }
 
-/// Facts about paths: what exists behind each, and the symbolic links a resolution passes
-/// through. A path not listed is missing and passes through no link.
+/// Facts about paths: what exists behind each, and the symbolic links and directories a
+/// resolution passes through. A path not listed is missing and passes through nothing.
 #[derive(Debug, Default, Clone)]
 pub struct Facts {
     pub paths: BTreeMap<PathBuf, RealEntry>,
     pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
+    pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
 }
 
 impl Facts {
@@ -97,6 +98,7 @@ impl Facts {
         MountFacts {
             paths: self.paths,
             links: self.links,
+            directories: self.directories,
             ..MountFacts::default()
         }
     }
@@ -142,6 +144,15 @@ impl Facts {
         self.links.insert(
             PathBuf::from(path),
             links.iter().map(PathBuf::from).collect(),
+        );
+        self
+    }
+
+    /// The directories, each by its real path, that resolving `path` passes through.
+    pub fn directories_visited(mut self, path: &str, directories: &[&str]) -> Self {
+        self.directories.insert(
+            PathBuf::from(path),
+            directories.iter().map(PathBuf::from).collect(),
         );
         self
     }

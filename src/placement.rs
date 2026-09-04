@@ -171,10 +171,13 @@ fn work_place_warning(items: &[ResolvedItem], variables: &Variables) -> Option<W
     })
 }
 
-/// Every prefix of `path` (itself and each ancestor) that exists must not have its real
-/// path inside a writable item, and no symbolic link the resolution passes through may
-/// itself sit inside one: either could be re-pointed from inside the isolation. The
-/// links are not all prefixes of `path`: a link's target may pass through further links.
+/// Resolving `path` must consult nothing inside a writable item (specification section
+/// 5.6): every prefix of `path` (itself and each ancestor) that exists must not have its
+/// real path inside one, no symbolic link the resolution passes through may itself sit
+/// inside one, and no directory the resolution passes through may be inside one. Any of
+/// them could be re-pointed or replaced from inside the isolation. The links and
+/// directories are not all prefixes of `path`: a link's target may pass through further
+/// links, or through a directory it leaves again with `..`.
 fn check_prefixes(
     path: &Path,
     role: &str,
@@ -201,6 +204,21 @@ fn check_prefixes(
                 "the symbolic link {} on the way to {role} {} is inside the `{}` item {} and \
                  could be re-pointed from inside the isolation",
                 link.display(),
+                path.display(),
+                directive_name(item.directive),
+                item.real.display()
+            )));
+        }
+    }
+    for directory in facts.visited_directories(path) {
+        if let Some(item) = writable
+            .iter()
+            .find(|item| directory.starts_with(&item.real))
+        {
+            return Err(Diagnostic::path(format!(
+                "the directory {} on the way to {role} {} is inside the `{}` item {} and its \
+                 entries could be replaced from inside the isolation",
+                directory.display(),
                 path.display(),
                 directive_name(item.directive),
                 item.real.display()

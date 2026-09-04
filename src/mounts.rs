@@ -243,6 +243,10 @@ pub struct MountFacts {
     /// section 5.6 protects, keyed by the given path. Each link is named by its own place:
     /// its parent's real path and its name.
     pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
+    /// The directories, each by its real path, whose entries were consulted while
+    /// resolving each path specification section 5.6 protects, keyed by the given path:
+    /// the ones a link target enters and leaves again through `..` included.
+    pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub scan_hits: Vec<ScanHit>,
     pub mounts: Vec<Mount>,
 }
@@ -257,6 +261,12 @@ impl MountFacts {
     /// layer did not walk.
     pub fn traversed_links(&self, path: &Path) -> &[PathBuf] {
         self.links.get(path).map_or(&[], Vec::as_slice)
+    }
+
+    /// The directories resolving `path` passes through; none for a path the outer layer
+    /// did not walk.
+    pub fn visited_directories(&self, path: &Path) -> &[PathBuf] {
+        self.directories.get(path).map_or(&[], Vec::as_slice)
     }
 }
 
