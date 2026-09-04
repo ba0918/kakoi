@@ -143,9 +143,9 @@ pub struct ScanRequest {
 
 /// What the outer layer must look up for the mount resolution: the paths whose existence,
 /// kind, and real path are needed, the paths whose resolution must report the symbolic
-/// links it passes through (the ones specification section 5.6 protects), the scans to
-/// walk, and the `under` of each `hide-mounts` (the mount list is read only when there is
-/// one).
+/// links and directories it passes through (the ones specification section 5.6 protects),
+/// the scans to walk, and the `under` of each `hide-mounts` (the mount list is read only
+/// when there is one).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Candidates {
     pub paths: Vec<PathBuf>,

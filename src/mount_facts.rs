@@ -1,5 +1,6 @@
 //! Collects `mounts::MountFacts` from the file system: what is behind each candidate path,
-//! the scan hits, and the mount list (specification section 14). Runs no command.
+//! what the resolution of each protected path passes through, the scan hits, and the mount
+//! list (specification section 14). Runs no command.
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -15,7 +16,7 @@ use crate::workspace_facts::real_entry;
 /// allows a path lookup.
 const LINK_LIMIT: usize = 40;
 
-/// Looks up every candidate path, walks the resolution of every path whose links are
+/// Looks up every candidate path, walks the resolution of every path whose traversal is
 /// asked for, walks every scan from its real root, and, when a `hide-mounts` asks for it,
 /// reads the mount list and looks up each mount target under its `under`.
 pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
@@ -24,7 +25,11 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
         facts.paths.insert(path.clone(), real_entry(path));
     }
     for path in &candidates.traversals {
-        facts.links.insert(path.clone(), traversed_links(path));
+        let traversal = traverse(path);
+        facts.links.insert(path.clone(), traversal.links);
+        facts
+            .directories
+            .insert(path.clone(), traversal.directories);
     }
     for request in &candidates.scans {
         if let Some(root) = facts.entry(&request.root).path() {
@@ -51,22 +56,35 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
     facts
 }
 
-/// The symbolic links resolving the absolute `path` passes through, each by its own place
-/// (its parent's real path and its name), in the order they are followed. The walk is the
-/// kernel's: component by component, a link's target spliced in where the link was and
-/// `..` taken against the directory resolved so far. It stops where nothing exists, at a
-/// link that cannot be read, or after `LINK_LIMIT` links, and still reports the links
-/// followed up to there: the existing part of a missing secret file's path is checked
-/// too (specification section 5.6). A relative path is not walked.
-pub fn traversed_links(path: &Path) -> Vec<PathBuf> {
-    let mut links = Vec::new();
+/// What resolving one path passed through: the symbolic links, each by its own place (its
+/// parent's real path and its name), in the order they are followed, and the directories,
+/// each by its real path, whose entries the walk looked up, each once.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Traversal {
+    pub links: Vec<PathBuf>,
+    pub directories: Vec<PathBuf>,
+}
+
+/// Walks the resolution of the absolute `path` as the kernel does: component by
+/// component, a link's target spliced in where the link was and `..` taken against the
+/// directory resolved so far, so a directory a target enters and leaves again is passed
+/// through like any other. It stops where nothing exists, at a link that cannot be read,
+/// or after `LINK_LIMIT` links, and still reports what was passed through up to there:
+/// the existing part of a missing secret file's path is checked too (specification
+/// section 5.6). A relative path is not walked.
+pub fn traverse(path: &Path) -> Traversal {
+    let mut traversal = Traversal::default();
     if !path.is_absolute() {
-        return links;
+        return traversal;
     }
     let mut resolved = PathBuf::from("/");
     let mut remaining = names_of(path);
     let mut followed = 0;
     while let Some(name) = remaining.pop_front() {
+        // `name` (`..` included) is looked up in `resolved`, so `resolved` is consulted.
+        if !traversal.directories.contains(&resolved) {
+            traversal.directories.push(resolved.clone());
+        }
         if name == ".." {
             resolved.pop();
             continue;
@@ -86,7 +104,7 @@ pub fn traversed_links(path: &Path) -> Vec<PathBuf> {
         let Ok(target) = fs::read_link(&candidate) else {
             break;
         };
-        links.push(candidate);
+        traversal.links.push(candidate);
         if target.is_absolute() {
             resolved = PathBuf::from("/");
         }
@@ -94,7 +112,7 @@ pub fn traversed_links(path: &Path) -> Vec<PathBuf> {
             remaining.push_front(name);
         }
     }
-    links
+    traversal
 }
 
 /// The names of `path` in order, `..` included and `.` and the root left out.

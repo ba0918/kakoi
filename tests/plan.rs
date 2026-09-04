@@ -376,6 +376,88 @@ fn a_policy_file_behind_a_link_inside_a_writable_area_is_a_path_diagnostic() {
     }
 }
 
+/// A policy file at `real/pol/p.toml` reached through `policies -> <through>/../../real/pol`,
+/// with `<through>` a real directory two levels under the home and `cache` a directory an
+/// `rw` can name: every prefix of the given path resolves outside `cache` and the only
+/// link sits in the home, but the walk passes through `<through>` before stepping back.
+fn home_with_a_policy_file_behind_a_link_stepping_back_through(
+    through: &str,
+    profile: &str,
+    policy_file: &str,
+) -> TempDir {
+    let (home, _) = home_with_workspace();
+    home.write(".config/process-wrap/profile/default.toml", profile);
+    home.write("real/pol/p.toml", policy_file);
+    std::fs::create_dir_all(home.path().join("cache")).unwrap();
+    std::fs::create_dir_all(home.path().join(through)).unwrap();
+    std::os::unix::fs::symlink(
+        home.path().join(through).join("../../real/pol"),
+        home.path().join("policies"),
+    )
+    .unwrap();
+    home
+}
+
+#[test]
+fn a_policy_file_behind_a_link_stepping_back_through_a_writable_area_is_a_path_diagnostic() {
+    let rw_cache = "[mounts]\nrw = [\"~/cache\"]";
+
+    for (name, profile, policy_file) in [
+        ("rw in the profile", rw_cache, ""),
+        ("rw in the policy file itself", "", rw_cache),
+    ] {
+        let home = home_with_a_policy_file_behind_a_link_stepping_back_through(
+            "cache/x",
+            profile,
+            policy_file,
+        );
+        let workspace = home.path().join("ws");
+
+        let output = binary(home.path())
+            .args([
+                "--policy-file",
+                home.path().join("policies/p.toml").to_str().unwrap(),
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--",
+                "true",
+            ])
+            .output()
+            .unwrap();
+
+        let diagnostic = assert_diagnostic(&output, 125, "path");
+        let real_home = home.path().canonicalize().unwrap();
+        assert!(
+            diagnostic.contains(real_home.join("cache").to_str().unwrap()),
+            "{name}: {diagnostic} does not mention the writable area passed through"
+        );
+    }
+}
+
+#[test]
+fn a_link_stepping_back_through_a_directory_outside_writable_areas_is_accepted() {
+    let home = home_with_a_policy_file_behind_a_link_stepping_back_through(
+        "other/x",
+        "[mounts]\nrw = [\"~/cache\"]",
+        "",
+    );
+    let workspace = home.path().join("ws");
+
+    let output = binary(home.path())
+        .args([
+            "--policy-file",
+            home.path().join("policies/p.toml").to_str().unwrap(),
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "true",
+        ])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
 #[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     let (home, _) = home_with_workspace();

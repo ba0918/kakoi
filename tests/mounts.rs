@@ -920,6 +920,38 @@ fn the_links_a_resolution_passes_through_are_reported_by_their_place() {
 }
 
 #[test]
+fn the_directories_a_resolution_passes_through_are_reported_by_their_real_path() {
+    let tree = TempDir::new();
+    let root = tree.path().canonicalize().unwrap();
+    tree.write("real/pol/p.toml", "");
+    std::fs::create_dir_all(root.join("cache/x")).unwrap();
+    // The target enters `cache/x` and leaves it again through `..`.
+    std::os::unix::fs::symlink(root.join("cache/x/../../real/pol"), root.join("policies")).unwrap();
+
+    let facts = collect_mount_facts(&Candidates {
+        traversals: vec![root.join("policies/p.toml"), root.join("missing/x")],
+        ..Candidates::default()
+    });
+
+    let visited = facts.visited_directories(&root.join("policies/p.toml"));
+    for expected in [
+        root.join("cache"),
+        root.join("cache/x"),
+        root.join("real/pol"),
+    ] {
+        assert!(
+            visited.contains(&expected),
+            "{} missing from {visited:?}",
+            expected.display()
+        );
+    }
+    // The existing part of a missing path is walked too.
+    assert!(facts
+        .visited_directories(&root.join("missing/x"))
+        .contains(&root));
+}
+
+#[test]
 fn mount_facts_are_collected_from_the_file_system() {
     let tree = TempDir::new();
     let root = tree.path().canonicalize().unwrap();
