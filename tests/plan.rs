@@ -622,6 +622,68 @@ fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
 }
 
 #[test]
+fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_naming_the_link() {
+    // After `proj/sub` is replaced by a link to `victim`, `--workspace proj/sub` from
+    // elsewhere derives the worktree as `victim`, so `proj` is writable no more and the
+    // resolution referenced nothing writable; only the link it followed gives it away.
+    for (name, with_git) in [("with .git", true), ("without .git", false)] {
+        let home = TempDir::new();
+        home.write(
+            ".config/process-wrap/profile/default.toml",
+            "[mounts]\nrw = [\"${worktree}\"]",
+        );
+        std::fs::create_dir_all(home.path().join("proj/sub")).unwrap();
+        if with_git {
+            std::fs::create_dir(home.path().join("proj/.git")).unwrap();
+        }
+        std::fs::create_dir(home.path().join("elsewhere")).unwrap();
+        std::fs::create_dir(home.path().join("victim")).unwrap();
+        std::fs::remove_dir(home.path().join("proj/sub")).unwrap();
+        std::os::unix::fs::symlink(home.path().join("victim"), home.path().join("proj/sub"))
+            .unwrap();
+        let real_home = home.path().canonicalize().unwrap();
+        let sub = real_home.join("proj/sub");
+
+        let output = binary(home.path())
+            .current_dir(home.path().join("elsewhere"))
+            .args(["--workspace", sub.to_str().unwrap(), "--", "true"])
+            .output()
+            .unwrap();
+
+        let diagnostic = assert_diagnostic(&output, 125, "path");
+        assert!(
+            diagnostic.contains(sub.to_str().unwrap()),
+            "{name}: {diagnostic} does not mention the link followed"
+        );
+    }
+}
+
+#[test]
+fn a_workspace_behind_a_link_landing_in_an_rw_item_written_by_path_is_accepted() {
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"~/work\"]",
+    );
+    std::fs::create_dir_all(home.path().join("data/work/proj")).unwrap();
+    std::fs::create_dir(home.path().join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("data/work"), home.path().join("work")).unwrap();
+
+    let output = binary(home.path())
+        .current_dir(home.path().join("elsewhere"))
+        .args([
+            "--workspace",
+            home.path().join("work/proj").to_str().unwrap(),
+            "--",
+            "true",
+        ])
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+#[test]
 fn an_item_reached_through_a_link_between_two_rw_items_is_accepted_until_the_link_moves() {
     // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a` and lands
     // in `b`; re-pointing `l` at a third place lands it outside every root.
