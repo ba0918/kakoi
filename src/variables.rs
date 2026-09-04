@@ -6,9 +6,10 @@ use std::path::{Path, PathBuf};
 use crate::diagnostic::Diagnostic;
 use crate::environment::RealEntry;
 
-/// What the `.git` entry of a directory is, looked at without following symbolic links.
+/// What an entry git creates (a directory's `.git`, the `HEAD` of a common dir) is, looked
+/// at without following symbolic links.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DotGit {
+pub enum GitEntry {
     Absent,
     Directory,
     File,
@@ -20,7 +21,7 @@ pub enum DotGit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ancestor {
     pub path: PathBuf,
-    pub dot_git: DotGit,
+    pub dot_git: GitEntry,
 }
 
 /// A file git wrote that names a path: absent, present but unusable (naming nothing that
@@ -47,7 +48,7 @@ pub struct GitFileLinks {
     pub core_worktree: Option<PathBuf>,
     /// What `C/HEAD` is, looked at without following symbolic links; `Absent` when there
     /// is no resolved C.
-    pub common_head: DotGit,
+    pub common_head: GitEntry,
 }
 
 /// The facts about the workspace and its git metadata that the variables are derived from.
@@ -74,7 +75,7 @@ pub struct Variables {
 pub fn worktree_marker(ancestors: &[Ancestor]) -> Option<&Ancestor> {
     ancestors
         .iter()
-        .find(|ancestor| matches!(ancestor.dot_git, DotGit::Directory | DotGit::File))
+        .find(|ancestor| matches!(ancestor.dot_git, GitEntry::Directory | GitEntry::File))
 }
 
 /// The value of `core.worktree` in the text of a git configuration file: the `worktree` key
@@ -130,7 +131,7 @@ pub fn derive_variables(
     let worktree = marker.map_or(workspace.clone(), |marker| marker.path.clone());
     let git_common_dir = match marker.map(|marker| marker.dot_git) {
         None => None,
-        Some(DotGit::Directory) => Some(worktree.join(".git")),
+        Some(GitEntry::Directory) => Some(worktree.join(".git")),
         Some(_) => Some(verified_common_dir(&worktree, facts.links.as_ref())?),
     };
     Ok(Variables {
@@ -165,7 +166,7 @@ fn verified_common_dir(
                     "is not a linked worktree that its gitdir links back to",
                 ));
             }
-            if links.common_head != DotGit::File {
+            if links.common_head != GitEntry::File {
                 return Err(reject("names a common dir without a regular HEAD file"));
             }
             Ok(common.clone())

@@ -7,7 +7,7 @@ use common::TempDir;
 use process_wrap::diagnostic::Kind;
 use process_wrap::environment::{HomeDirectory, HostEnvironment, RealEntry};
 use process_wrap::variables::{
-    derive_variables, Ancestor, DotGit, GitFileLinks, Reference, WorkspaceFacts,
+    derive_variables, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
 use process_wrap::workspace_facts::{collect_workspace_facts, real_entry};
 
@@ -26,7 +26,7 @@ fn config_dir() -> RealEntry {
     RealEntry::Directory(PathBuf::from("/home/u/.config/process-wrap"))
 }
 
-fn ancestor(path: &str, dot_git: DotGit) -> Ancestor {
+fn ancestor(path: &str, dot_git: GitEntry) -> Ancestor {
     Ancestor {
         path: PathBuf::from(path),
         dot_git,
@@ -35,7 +35,7 @@ fn ancestor(path: &str, dot_git: DotGit) -> Ancestor {
 
 /// Facts for a workspace at `/home/u/proj/sub` whose `.git` entries are given per level,
 /// from the workspace upward.
-fn facts(dot_gits: [DotGit; 4], links: Option<GitFileLinks>) -> WorkspaceFacts {
+fn facts(dot_gits: [GitEntry; 4], links: Option<GitFileLinks>) -> WorkspaceFacts {
     WorkspaceFacts {
         workspace: RealEntry::Directory(PathBuf::from("/home/u/proj/sub")),
         ancestors: vec![
@@ -43,7 +43,7 @@ fn facts(dot_gits: [DotGit; 4], links: Option<GitFileLinks>) -> WorkspaceFacts {
             ancestor("/home/u/proj", dot_gits[1]),
             ancestor("/home/u", dot_gits[2]),
             ancestor("/home", dot_gits[3]),
-            ancestor("/", DotGit::Absent),
+            ancestor("/", GitEntry::Absent),
         ],
         links,
     }
@@ -55,7 +55,7 @@ fn linked_worktree_links() -> GitFileLinks {
         commondir: Reference::Resolved(PathBuf::from("/home/u/main/.git")),
         back_link: Some(PathBuf::from("/home/u/proj/.git")),
         core_worktree: None,
-        common_head: DotGit::File,
+        common_head: GitEntry::File,
     }
 }
 
@@ -65,10 +65,10 @@ fn a_git_directory_is_the_common_dir() {
         &config_dir(),
         &facts(
             [
-                DotGit::Absent,
-                DotGit::Directory,
-                DotGit::Absent,
-                DotGit::Absent,
+                GitEntry::Absent,
+                GitEntry::Directory,
+                GitEntry::Absent,
+                GitEntry::Absent,
             ],
             None,
         ),
@@ -88,7 +88,12 @@ fn a_linked_worktree_with_a_back_link_yields_the_common_dir() {
     let variables = derive_variables(
         &config_dir(),
         &facts(
-            [DotGit::Absent, DotGit::File, DotGit::Absent, DotGit::Absent],
+            [
+                GitEntry::Absent,
+                GitEntry::File,
+                GitEntry::Absent,
+                GitEntry::Absent,
+            ],
             Some(linked_worktree_links()),
         ),
     )
@@ -120,7 +125,12 @@ fn a_linked_worktree_whose_back_link_points_elsewhere_is_a_path_diagnostic() {
         let diagnostic = derive_variables(
             &config_dir(),
             &facts(
-                [DotGit::Absent, DotGit::File, DotGit::Absent, DotGit::Absent],
+                [
+                    GitEntry::Absent,
+                    GitEntry::File,
+                    GitEntry::Absent,
+                    GitEntry::Absent,
+                ],
                 Some(links.clone()),
             ),
         )
@@ -135,10 +145,10 @@ fn a_linked_worktree_whose_common_dir_lacks_a_regular_head_file_is_a_path_diagno
     // git creates `HEAD` in every repository it makes; a `worktrees/` layout without one
     // was assembled by hand, from a place that can be written.
     for common_head in [
-        DotGit::Absent,
-        DotGit::Symlink,
-        DotGit::Directory,
-        DotGit::Other,
+        GitEntry::Absent,
+        GitEntry::Symlink,
+        GitEntry::Directory,
+        GitEntry::Other,
     ] {
         let links = GitFileLinks {
             common_head,
@@ -148,7 +158,12 @@ fn a_linked_worktree_whose_common_dir_lacks_a_regular_head_file_is_a_path_diagno
         let diagnostic = derive_variables(
             &config_dir(),
             &facts(
-                [DotGit::Absent, DotGit::File, DotGit::Absent, DotGit::Absent],
+                [
+                    GitEntry::Absent,
+                    GitEntry::File,
+                    GitEntry::Absent,
+                    GitEntry::Absent,
+                ],
                 Some(links),
             ),
         )
@@ -164,17 +179,17 @@ fn a_submodule_with_core_worktree_pointing_back_yields_its_gitdir() {
         &config_dir(),
         &facts(
             [
-                DotGit::File,
-                DotGit::Directory,
-                DotGit::Absent,
-                DotGit::Absent,
+                GitEntry::File,
+                GitEntry::Directory,
+                GitEntry::Absent,
+                GitEntry::Absent,
             ],
             Some(GitFileLinks {
                 gitdir: Some(PathBuf::from("/home/u/proj/.git/modules/sub")),
                 commondir: Reference::Absent,
                 back_link: None,
                 core_worktree: Some(PathBuf::from("/home/u/proj/sub")),
-                common_head: DotGit::Absent,
+                common_head: GitEntry::Absent,
             }),
         ),
     )
@@ -194,7 +209,7 @@ fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
         commondir: Reference::Absent,
         back_link: None,
         core_worktree: None,
-        common_head: DotGit::Absent,
+        common_head: GitEntry::Absent,
     };
     let wrong_core_worktree = GitFileLinks {
         core_worktree: Some(PathBuf::from("/home/u/proj/other")),
@@ -220,10 +235,10 @@ fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
             &config_dir(),
             &facts(
                 [
-                    DotGit::File,
-                    DotGit::Directory,
-                    DotGit::Absent,
-                    DotGit::Absent,
+                    GitEntry::File,
+                    GitEntry::Directory,
+                    GitEntry::Absent,
+                    GitEntry::Absent,
                 ],
                 Some(links.clone()),
             ),
@@ -240,10 +255,10 @@ fn a_symlinked_dot_git_is_not_a_worktree_marker() {
         &config_dir(),
         &facts(
             [
-                DotGit::Symlink,
-                DotGit::Directory,
-                DotGit::Absent,
-                DotGit::Absent,
+                GitEntry::Symlink,
+                GitEntry::Directory,
+                GitEntry::Absent,
+                GitEntry::Absent,
             ],
             None,
         ),
@@ -259,10 +274,10 @@ fn a_symlinked_dot_git_is_not_a_worktree_marker() {
         &config_dir(),
         &facts(
             [
-                DotGit::Symlink,
-                DotGit::Other,
-                DotGit::Absent,
-                DotGit::Absent,
+                GitEntry::Symlink,
+                GitEntry::Other,
+                GitEntry::Absent,
+                GitEntry::Absent,
             ],
             None,
         ),
@@ -380,10 +395,10 @@ fn a_config_dir_without_a_real_path_is_a_path_diagnostic() {
         &RealEntry::Missing,
         &facts(
             [
-                DotGit::Absent,
-                DotGit::Directory,
-                DotGit::Absent,
-                DotGit::Absent,
+                GitEntry::Absent,
+                GitEntry::Directory,
+                GitEntry::Absent,
+                GitEntry::Absent,
             ],
             None,
         ),
@@ -411,10 +426,10 @@ fn the_config_dir_follows_xdg_config_home() {
 
     let repository = facts(
         [
-            DotGit::Absent,
-            DotGit::Directory,
-            DotGit::Absent,
-            DotGit::Absent,
+            GitEntry::Absent,
+            GitEntry::Directory,
+            GitEntry::Absent,
+            GitEntry::Absent,
         ],
         None,
     );
@@ -474,11 +489,11 @@ fn raw_git_facts_are_read_from_a_real_linked_worktree() {
         [
             Ancestor {
                 path: inside.clone(),
-                dot_git: DotGit::Absent
+                dot_git: GitEntry::Absent
             },
             Ancestor {
                 path: worktree.clone(),
-                dot_git: DotGit::File
+                dot_git: GitEntry::File
             },
         ]
     );
@@ -490,7 +505,7 @@ fn raw_git_facts_are_read_from_a_real_linked_worktree() {
             commondir: Reference::Resolved(main.join(".git")),
             back_link: Some(worktree.join(".git")),
             core_worktree: None,
-            common_head: DotGit::File,
+            common_head: GitEntry::File,
         })
     );
     let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();
@@ -515,8 +530,8 @@ fn raw_git_facts_are_read_from_a_real_submodule() {
 
     let facts = collect_workspace_facts(&submodule);
 
-    assert_eq!(facts.ancestors[0].dot_git, DotGit::File);
-    assert_eq!(facts.ancestors[1].dot_git, DotGit::Directory);
+    assert_eq!(facts.ancestors[0].dot_git, GitEntry::File);
+    assert_eq!(facts.ancestors[1].dot_git, GitEntry::Directory);
     assert_eq!(
         facts.links,
         Some(GitFileLinks {
@@ -524,7 +539,7 @@ fn raw_git_facts_are_read_from_a_real_submodule() {
             commondir: Reference::Absent,
             back_link: None,
             core_worktree: Some(submodule.clone()),
-            common_head: DotGit::Absent,
+            common_head: GitEntry::Absent,
         })
     );
     let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();

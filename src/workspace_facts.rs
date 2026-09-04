@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::environment::RealEntry;
 use crate::regular_file::{read_regular_file, Links, ReadError};
 use crate::variables::{
-    core_worktree, worktree_marker, Ancestor, DotGit, GitFileLinks, Reference, WorkspaceFacts,
+    core_worktree, worktree_marker, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
 
 /// What exists behind `path`, following symbolic links.
@@ -38,11 +38,11 @@ pub fn collect_workspace_facts(workspace: &Path) -> WorkspaceFacts {
         .ancestors()
         .map(|path| Ancestor {
             path: path.to_path_buf(),
-            dot_git: dot_git_kind(&path.join(".git")),
+            dot_git: git_entry_kind(&path.join(".git")),
         })
         .collect();
     let links = worktree_marker(&ancestors)
-        .filter(|marker| marker.dot_git == DotGit::File)
+        .filter(|marker| marker.dot_git == GitEntry::File)
         .map(|marker| read_links(&marker.path));
     WorkspaceFacts {
         workspace: RealEntry::Directory(workspace.clone()),
@@ -52,19 +52,19 @@ pub fn collect_workspace_facts(workspace: &Path) -> WorkspaceFacts {
 }
 
 /// What is at `path`, looked at without following a symbolic link there.
-fn dot_git_kind(path: &Path) -> DotGit {
+fn git_entry_kind(path: &Path) -> GitEntry {
     match fs::symlink_metadata(path) {
-        Err(_) => DotGit::Absent,
+        Err(_) => GitEntry::Absent,
         Ok(metadata) => {
             let kind = metadata.file_type();
             if kind.is_symlink() {
-                DotGit::Symlink
+                GitEntry::Symlink
             } else if kind.is_dir() {
-                DotGit::Directory
+                GitEntry::Directory
             } else if kind.is_file() {
-                DotGit::File
+                GitEntry::File
             } else {
-                DotGit::Other
+                GitEntry::Other
             }
         }
     }
@@ -86,7 +86,7 @@ fn read_links(worktree: &Path) -> GitFileLinks {
             commondir: Reference::Absent,
             back_link: None,
             core_worktree: None,
-            common_head: DotGit::Absent,
+            common_head: GitEntry::Absent,
         };
     };
     // A `commondir` that exists but cannot be used is not "no commondir" (specification
@@ -112,8 +112,8 @@ fn read_links(worktree: &Path) -> GitFileLinks {
         _ => None,
     };
     let common_head = match &commondir {
-        Reference::Resolved(common) => dot_git_kind(&common.join("HEAD")),
-        _ => DotGit::Absent,
+        Reference::Resolved(common) => git_entry_kind(&common.join("HEAD")),
+        _ => GitEntry::Absent,
     };
     GitFileLinks {
         gitdir: Some(gitdir),
