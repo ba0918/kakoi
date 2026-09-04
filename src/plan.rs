@@ -14,7 +14,7 @@ use crate::mounts::{
     loaded_policy_files, resolve_mounts, EntryKind, ExpandedPolicy, MountFacts, ResolvedItem,
     ResolvedMounts,
 };
-use crate::placement::{check_placement, protected_paths};
+use crate::placement::{check_placement, protected_paths, written_paths};
 use crate::policy::NetworkMode;
 use crate::variables::Variables;
 
@@ -29,6 +29,9 @@ pub struct Inputs<'a> {
     pub home: &'a HomeDirectory,
     /// The configuration directory as derived, before realisation.
     pub config_dir: &'a Path,
+    /// The `--workspace` path as given (made absolute), before resolution; none when it
+    /// was omitted.
+    pub workspace: Option<&'a Path>,
     pub current_dir: &'a Path,
     pub host: &'a BTreeMap<OsString, OsString>,
 }
@@ -61,9 +64,11 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         &facts.mounts,
     )?;
     let protected = protected_paths(inputs.expanded, inputs.layers, inputs.config_dir);
+    let written = written_paths(inputs.expanded, inputs.workspace);
     let mut warnings = check_placement(
         &mounts,
         &protected,
+        &written,
         inputs.variables,
         inputs.home,
         inputs.current_dir,

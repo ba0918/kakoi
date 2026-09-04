@@ -11,28 +11,31 @@ use common::fixture::{
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
 use process_wrap::layers::{Layer, LayerOrigin};
 use process_wrap::mounts::{expand_policy, resolve_mounts};
-use process_wrap::placement::{check_placement, protected_paths};
+use process_wrap::placement::{check_placement, protected_paths, written_paths};
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
 /// Resolves the mounts of the written layers against `facts` and checks their placement
-/// with the current directory at `current_dir` and the configuration directory at
-/// `config_dir`.
+/// with the current directory at `current_dir`, the configuration directory at
+/// `config_dir`, and `--workspace` given as `workspace`.
 fn check_at(
     layers: &[Layer],
     variables: &Variables,
     facts: Facts,
     current_dir: &str,
     config_dir: &str,
+    workspace: Option<&str>,
 ) -> Result<Vec<Warning>, Diagnostic> {
     let policy = merged(layers);
     let expanded = expand_policy(&policy, variables, &home());
     let facts = facts.mount_facts();
     let resolved = resolve_mounts(&expanded, layers, variables, &facts)?;
     let protected = protected_paths(&expanded, layers, Path::new(config_dir));
+    let written = written_paths(&expanded, workspace.map(Path::new));
     check_placement(
         &resolved,
         &protected,
+        &written,
         variables,
         &home(),
         Path::new(current_dir),
@@ -40,14 +43,14 @@ fn check_at(
     )
 }
 
-/// `check_at` with the configuration directory under the home.
+/// `check_at` with the configuration directory under the home and `--workspace` omitted.
 fn check(
     layers: &[Layer],
     variables: &Variables,
     facts: Facts,
     current_dir: &str,
 ) -> Result<Vec<Warning>, Diagnostic> {
-    check_at(layers, variables, facts, current_dir, CONFIG_DIR)
+    check_at(layers, variables, facts, current_dir, CONFIG_DIR, None)
 }
 
 /// Facts for the fixture host: the home, the worktree, the profile, and the configuration
@@ -247,6 +250,163 @@ fn path_prepend_inside_a_writable_area_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/proj/bin", WORKTREE]);
 }
 
+/// The facts of `~/cache/pip/http` rewired from inside the isolation: `cache/pip` became a
+/// link to `cache/evil`, and `cache/evil/http` a link to `target`. The given path resolves
+/// to `target` after passing through `cache` and `cache/evil` and following two links
+/// that sit inside `cache`.
+fn rewired_through_cache(facts: Facts, target: &str, target_is_dir: bool) -> Facts {
+    let given = "/home/u/cache/pip/http";
+    let facts = facts.dir("/home/u/cache").dir("/home/u/cache/evil");
+    let facts = if target_is_dir {
+        facts.link_to_dir(given, target)
+    } else {
+        facts.link_to_file(given, target)
+    };
+    facts
+        .links_traversed(given, &["/home/u/cache/pip", "/home/u/cache/evil/http"])
+        .directories_visited(
+            given,
+            &[
+                "/",
+                "/home",
+                "/home/u",
+                "/home/u/cache",
+                "/home/u/cache/evil",
+            ],
+        )
+}
+
+#[test]
+fn a_written_item_resolving_through_a_writable_item_to_outside_every_writable_item_is_rejected() {
+    for (name, profile, policy_file, facts) in [
+        (
+            "rw nested under rw, redirected to a directory",
+            "[mounts]\nrw = [\"~/cache\", \"~/cache/pip/http\"]",
+            None,
+            rewired_through_cache(host().dir("/home/u/victim"), "/home/u/victim", true),
+        ),
+        (
+            "ro in the upper layer, redirected onto a hidden directory",
+            "[mounts]\nrw = [\"~/cache\"]\nhide = [\"/home/u/secret\"]",
+            Some("[mounts]\nro = [\"~/cache/pip/http\"]"),
+            rewired_through_cache(host().dir("/home/u/secret"), "/home/u/secret", true),
+        ),
+        (
+            "rw-file nested under rw, redirected to a file",
+            "[mounts]\nrw = [\"~/cache\"]\nrw-file = [\"~/cache/pip/http\"]",
+            None,
+            rewired_through_cache(
+                host().file("/home/u/victim.txt"),
+                "/home/u/victim.txt",
+                false,
+            ),
+        ),
+    ] {
+        let diagnostic = check(
+            &layers(profile, policy_file, &[], &[]),
+            &variables(),
+            facts,
+            WORKTREE,
+        )
+        .unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert_path_diagnostic(&diagnostic, &["/home/u/cache/pip/http", "/home/u/cache"]);
+    }
+}
+
+#[test]
+fn a_workspace_resolving_through_a_writable_item_to_outside_every_writable_item_is_rejected() {
+    // `--workspace ~/cache/ws` with `cache/ws` a link to `~/victim`: the workspace's real
+    // path is `~/victim`, reached through a link that sits inside `~/cache`.
+    let redirected = Variables {
+        workspace: PathBuf::from("/home/u/victim"),
+        worktree: PathBuf::from("/home/u/victim"),
+        git_common_dir: None,
+        ..variables()
+    };
+
+    let diagnostic = check_at(
+        &layers("[mounts]\nrw = [\"~/cache\"]", None, &[], &[]),
+        &redirected,
+        host()
+            .dir("/home/u/cache")
+            .dir("/home/u/victim")
+            .link_to_dir("/home/u/cache/ws", "/home/u/victim")
+            .links_traversed("/home/u/cache/ws", &["/home/u/cache/ws"])
+            .directories_visited(
+                "/home/u/cache/ws",
+                &["/", "/home", "/home/u", "/home/u/cache"],
+            ),
+        "/home/u/victim",
+        CONFIG_DIR,
+        Some("/home/u/cache/ws"),
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/cache/ws", "/home/u/cache"]);
+}
+
+#[test]
+fn a_nested_item_resolving_inside_the_writable_item_it_passes_through_is_accepted() {
+    let warnings = check(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\", \"~/cache\", \"~/cache/pip/http\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir_with_ancestors("/home/u/cache/pip/http")
+            .directories_visited(
+                "/home/u/cache/pip/http",
+                &[
+                    "/",
+                    "/home",
+                    "/home/u",
+                    "/home/u/cache",
+                    "/home/u/cache/pip",
+                ],
+            ),
+        WORKTREE,
+    )
+    .unwrap();
+
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn a_written_item_redirected_into_another_writable_item_is_accepted() {
+    for (name, target, facts) in [
+        (
+            "under another rw item",
+            "/home/u/other/http",
+            host().dir_with_ancestors("/home/u/other/http"),
+        ),
+        (
+            "onto another rw item itself",
+            "/home/u/other",
+            host().dir("/home/u/other"),
+        ),
+    ] {
+        let warnings = check(
+            &layers(
+                "[mounts]\nrw = [\"${worktree}\", \"~/cache\", \"~/cache/pip/http\", \"~/other\"]",
+                None,
+                &[],
+                &[],
+            ),
+            &variables(),
+            rewired_through_cache(facts, target, true),
+            WORKTREE,
+        )
+        .unwrap();
+
+        assert!(warnings.is_empty(), "{name}: {warnings:?}");
+    }
+}
+
 #[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
@@ -282,6 +442,7 @@ fn rw_on_home_is_rejected_from_any_layer() {
             facts.clone(),
             WORKTREE,
             XDG_CONFIG_DIR,
+            None,
         )
         .unwrap_err();
 
@@ -300,6 +461,7 @@ fn rw_on_home_is_rejected_from_any_layer() {
         facts,
         WORKTREE,
         XDG_CONFIG_DIR,
+        None,
     )
     .unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Path, "--rw /: {diagnostic}");

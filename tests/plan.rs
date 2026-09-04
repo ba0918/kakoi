@@ -192,6 +192,7 @@ fn isolation(
         variables: &variables,
         home: &home,
         config_dir: Path::new(CONFIG_DIR),
+        workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
     };

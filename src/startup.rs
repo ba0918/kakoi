@@ -81,6 +81,7 @@ where
         variables: &variables,
         home: &home,
         config_dir: &config_dir,
+        workspace: invocation.workspace.as_deref(),
         current_dir: &current_dir,
         host: &host,
     };

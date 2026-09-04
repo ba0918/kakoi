@@ -557,6 +557,6 @@ fn check_kinds(items: &[ResolvedItem]) -> Result<(), Diagnostic> {
 /// descendants' bytes, so the byte order of the real path already puts ancestors first and
 /// unrelated paths in byte order. `Path`'s own order compares by component and would put
 /// `/a/b` before `/a-x`.
-fn byte_order(a: &Path, b: &Path) -> std::cmp::Ordering {
+pub(crate) fn byte_order(a: &Path, b: &Path) -> std::cmp::Ordering {
     a.as_os_str().as_bytes().cmp(b.as_os_str().as_bytes())
 }

@@ -1,13 +1,14 @@
 //! The checks on where things are placed, made on the resolved mount items: the places a
-//! policy could be rewritten from inside the isolation (specification section 5.6) and the
-//! rules about the work place and the current directory (section 6.5). Pure.
+//! policy could be rewritten from inside the isolation and the mount items that could be
+//! redirected from there (specification section 5.6), and the rules about the work place
+//! and the current directory (section 6.5). Pure.
 
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
 use crate::layers::{Directive, Layer, LayerOrigin};
-use crate::mounts::{ExpandedPolicy, MountFacts, ResolvedItem, ResolvedMounts};
+use crate::mounts::{byte_order, ExpandedPolicy, MountFacts, ResolvedItem, ResolvedMounts};
 use crate::variables::Variables;
 
 /// The paths specification section 5.6 protects, in the order section 13 reports them:
@@ -48,11 +49,47 @@ pub fn protected_paths(
     }
 }
 
+/// One written mount item by its expanded path, with the form it was written in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenItem {
+    pub directive: Directive,
+    pub written: String,
+    pub path: PathBuf,
+}
+
+/// The paths the rule of specification section 5.6 on written mount items applies to:
+/// every written item that expanded to a path (any layer, the command line included), and
+/// the `--workspace` path as given. The generated items of section 6.3 are not written,
+/// and the current directory standing in for an omitted `--workspace` is not given.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WrittenPaths {
+    pub items: Vec<WrittenItem>,
+    pub workspace: Option<PathBuf>,
+}
+
+pub fn written_paths(expanded: &ExpandedPolicy, workspace: Option<&Path>) -> WrittenPaths {
+    WrittenPaths {
+        items: expanded
+            .mounts
+            .iter()
+            .filter_map(|item| {
+                Some(WrittenItem {
+                    directive: item.directive,
+                    written: item.written.to_string(),
+                    path: item.path.path()?.to_path_buf(),
+                })
+            })
+            .collect(),
+        workspace: workspace.map(Path::to_path_buf),
+    }
+}
+
 /// Runs the checks in the order of specification section 13 and returns the warnings of
 /// a run that may go on.
 pub fn check_placement(
     resolved: &ResolvedMounts,
     protected: &ProtectedPaths,
+    written: &WrittenPaths,
     variables: &Variables,
     home: &HomeDirectory,
     current_dir: &Path,
@@ -64,6 +101,7 @@ pub fn check_placement(
         .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
         .collect();
     check_protected_paths(protected, &writable, facts)?;
+    check_written_paths(written, &writable, variables, facts)?;
     check_width(&writable, home)?;
     check_work_place(variables, home)?;
     check_current_dir(&resolved.items, current_dir)?;
@@ -102,6 +140,98 @@ fn check_protected_paths(
         check_prefixes(path, "the `path-prepend` entry", writable, facts)?;
     }
     Ok(())
+}
+
+/// A written item or the `--workspace` whose resolution consulted something inside a
+/// writable item must itself resolve inside a writable item (specification section 5.6):
+/// what it consulted could be re-pointed from inside the isolation, and the next start
+/// would apply the directive to any host path. The items are taken in the order of
+/// section 6.4, then the workspace. An item that resolves to nothing has nothing to bind.
+fn check_written_paths(
+    written: &WrittenPaths,
+    writable: &[&ResolvedItem],
+    variables: &Variables,
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    let mut items: Vec<(&WrittenItem, PathBuf)> = written
+        .items
+        .iter()
+        .filter_map(|item| Some((item, facts.entry(&item.path).path()?.to_path_buf())))
+        .collect();
+    items.sort_by(|(_, a), (_, b)| byte_order(a, b));
+    for (item, real) in items {
+        let role = format!(
+            "the `{}` item `{}` at {}",
+            directive_name(item.directive),
+            item.written,
+            item.path.display()
+        );
+        check_landing(&role, &item.path, &real, written, writable, facts)?;
+    }
+    if let Some(workspace) = &written.workspace {
+        let role = format!("the workspace {}", workspace.display());
+        check_landing(
+            &role,
+            workspace,
+            &variables.workspace,
+            written,
+            writable,
+            facts,
+        )?;
+    }
+    Ok(())
+}
+
+/// The rule of `check_written_paths` for one path: `given` resolved to `real`.
+fn check_landing(
+    role: &str,
+    given: &Path,
+    real: &Path,
+    written: &WrittenPaths,
+    writable: &[&ResolvedItem],
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    let consulted = facts
+        .traversed_links(given)
+        .iter()
+        .chain(facts.visited_directories(given))
+        .find_map(|place| writable.iter().find(|item| place.starts_with(&item.real)));
+    let Some(consulted) = consulted else {
+        return Ok(());
+    };
+    if lands_in_writable(given, real, written, writable, facts) {
+        return Ok(());
+    }
+    Err(Diagnostic::path(format!(
+        "{role} resolves to {} through the `{}` item {} but outside every `rw` and \
+         `rw-file` item, so it could be redirected from inside the isolation",
+        real.display(),
+        directive_name(consulted.directive),
+        consulted.real.display()
+    )))
+}
+
+/// Whether `real`, what `given` resolved to, is inside a writable item (the same or a
+/// descendant). A writable item at `real` itself counts only when another written writable
+/// item, at a different given path, resolves there too: the one at `given` is the item
+/// under check, and landing on its own resolved place proves nothing.
+fn lands_in_writable(
+    given: &Path,
+    real: &Path,
+    written: &WrittenPaths,
+    writable: &[&ResolvedItem],
+    facts: &MountFacts,
+) -> bool {
+    let inside_another = writable
+        .iter()
+        .any(|item| item.real != real && real.starts_with(&item.real));
+    let same_as_another = writable.iter().any(|item| item.real == real)
+        && written.items.iter().any(|other| {
+            matches!(other.directive, Directive::Rw | Directive::RwFile)
+                && other.path != given
+                && facts.entry(&other.path).path() == Some(real)
+        });
+    inside_another || same_as_another
 }
 
 /// Making the whole home writable is refused from every layer (specification
