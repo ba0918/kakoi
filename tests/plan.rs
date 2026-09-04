@@ -622,6 +622,78 @@ fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
 }
 
 #[test]
+fn an_item_reached_through_a_link_between_two_rw_items_is_accepted_until_the_link_moves() {
+    // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a` and lands
+    // in `b`; re-pointing `l` at a third place lands it outside every root.
+    let (home, workspace) = home_with_workspace();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/a/l/y\"]",
+    );
+    std::fs::create_dir_all(home.path().join("a")).unwrap();
+    std::fs::create_dir_all(home.path().join("b/x/y")).unwrap();
+    std::fs::create_dir_all(home.path().join("elsewhere/x/y")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("b/x"), home.path().join("a/l")).unwrap();
+
+    let honest = run_with_workspace(&home, &workspace);
+    assert_eq!(honest.status.code(), Some(0), "{}", output_report(&honest));
+
+    std::fs::remove_file(home.path().join("a/l")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("elsewhere/x"), home.path().join("a/l")).unwrap();
+    let moved = run_with_workspace(&home, &workspace);
+    let diagnostic = assert_diagnostic(&moved, 125, "path");
+    let real_home = home.path().canonicalize().unwrap();
+    assert!(
+        diagnostic.contains(real_home.join("a").to_str().unwrap()),
+        "{diagnostic} does not mention the writable area passed through"
+    );
+}
+
+#[test]
+fn a_workspace_resolved_only_through_places_that_are_no_item_is_accepted() {
+    let home = home_with_a_project_under_the_cache("[mounts]\nrw = [\"${worktree}\"]");
+
+    let output = run_with_workspace(&home, &home.path().join("cache/proj"));
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+#[test]
+fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
+    for (name, directive) in [("hide", "hide"), ("rw-file", "rw-file")] {
+        let (home, workspace) = home_with_workspace();
+        home.write(
+            ".config/process-wrap/profile/default.toml",
+            format!("[mounts]\nrw = [\"~/cache\"]\n{directive} = [\"~/cache/x/state\"]"),
+        );
+        home.write("cache/x/state", "");
+        home.write("elsewhere/state", "");
+
+        let honest = run_with_workspace(&home, &workspace);
+        assert_eq!(
+            honest.status.code(),
+            Some(0),
+            "{name}: {}",
+            output_report(&honest)
+        );
+
+        std::fs::remove_dir_all(home.path().join("cache/x")).unwrap();
+        std::os::unix::fs::symlink(home.path().join("elsewhere"), home.path().join("cache/x"))
+            .unwrap();
+        let rewired = run_with_workspace(&home, &workspace);
+        let diagnostic = assert_diagnostic(&rewired, 125, "path");
+        let real_home = home.path().canonicalize().unwrap();
+        for element in [real_home.join("cache/x/state"), real_home.join("cache")] {
+            assert!(
+                diagnostic.contains(element.to_str().unwrap()),
+                "{name}: {diagnostic} does not mention {}",
+                element.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     let (home, _) = home_with_workspace();
     let collision = home.path().join("x");
