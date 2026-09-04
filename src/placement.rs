@@ -284,18 +284,20 @@ fn check_landing(
     if roots.iter().any(|root| real.starts_with(&root.real)) {
         return Ok(());
     }
-    let how = if reference.inherited {
-        "was given as a workspace resolved through"
-    } else {
-        "resolves through"
-    };
-    Err(Diagnostic::path(format!(
-        "{role} resolves to {} and {how} the `{}` item {} but lands outside every `rw` and \
-         `rw-file` item that could not itself be redirected, so it could be redirected from \
-         inside the isolation",
-        real.display(),
+    let through = format!(
+        "through the `{}` item {}",
         directive_name(reference.item.directive),
         reference.item.real.display()
+    );
+    let how = if reference.inherited {
+        format!("and the workspace it was expanded from resolved {through},")
+    } else {
+        through
+    };
+    Err(Diagnostic::path(format!(
+        "{role} resolves to {} {how} but outside every `rw` and `rw-file` item that could \
+         not itself be redirected, so it could be redirected from inside the isolation",
+        real.display()
     )))
 }
 
