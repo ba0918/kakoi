@@ -338,13 +338,101 @@ fn a_workspace_resolving_through_a_writable_item_to_outside_every_writable_item_
                 "/home/u/cache/ws",
                 &["/", "/home", "/home/u", "/home/u/cache"],
             ),
-        "/home/u/victim",
+        "/home/u/elsewhere",
         CONFIG_DIR,
         Some("/home/u/cache/ws"),
     )
     .unwrap_err();
 
     assert_path_diagnostic(&diagnostic, &["/home/u/cache/ws", "/home/u/cache"]);
+}
+
+/// The facts of `--workspace /home/u/cache/proj` after `cache/proj` was replaced from
+/// inside the isolation by a link to `/home/u/victim`, and the variables of that redirected
+/// workspace (no `.git` anywhere: the worktree is the workspace).
+fn workspace_rewired_through_cache() -> (Variables, Facts) {
+    let given = "/home/u/cache/proj";
+    let redirected = Variables {
+        workspace: PathBuf::from("/home/u/victim"),
+        worktree: PathBuf::from("/home/u/victim"),
+        git_common_dir: None,
+        ..variables()
+    };
+    let facts = host()
+        .dir("/home/u/cache")
+        .dir("/home/u/victim")
+        .link_to_dir(given, "/home/u/victim")
+        .links_traversed(given, &[given])
+        .directories_visited(given, &["/", "/home", "/home/u", "/home/u/cache"])
+        .directories_visited("/home/u/victim", &["/", "/home", "/home/u"]);
+    (redirected, facts)
+}
+
+#[test]
+fn an_item_expanded_from_a_workspace_variable_inherits_what_the_workspace_referenced() {
+    // `rw ${worktree}` expands to the real path `/home/u/victim`, which on its own
+    // references nothing writable; the workspace it came from was reached through
+    // `~/cache`, so the item is not a root and cannot carry the workspace.
+    let (redirected, facts) = workspace_rewired_through_cache();
+
+    let diagnostic = check_at(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\", \"~/cache\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &redirected,
+        facts,
+        "/home/u/elsewhere",
+        CONFIG_DIR,
+        Some("/home/u/cache/proj"),
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/victim", "/home/u/cache"]);
+}
+
+#[test]
+fn an_explicit_workspace_at_the_current_directory_is_exempt_and_hands_down_no_reference() {
+    // `--workspace ~/proj/sub` under `rw ${worktree}` resolves through the worktree itself.
+    // Started from `sub`, the process already sits there and nothing can move it; started
+    // from elsewhere, the worktree item inherits that reference and no root remains.
+    let under_worktree = Variables {
+        workspace: PathBuf::from("/home/u/proj/sub"),
+        ..variables()
+    };
+    let facts = || {
+        host()
+            .dir("/home/u/proj/sub")
+            .directories_visited(
+                "/home/u/proj/sub",
+                &["/", "/home", "/home/u", "/home/u/proj"],
+            )
+            .directories_visited(WORKTREE, &["/", "/home", "/home/u"])
+    };
+    let rw_worktree = layers("[mounts]\nrw = [\"${worktree}\"]", None, &[], &[]);
+
+    let from_the_workspace = check_at(
+        &rw_worktree,
+        &under_worktree,
+        facts(),
+        "/home/u/proj/sub",
+        CONFIG_DIR,
+        Some("/home/u/proj/sub"),
+    );
+    assert!(from_the_workspace.is_ok(), "{from_the_workspace:?}");
+
+    let from_elsewhere = check_at(
+        &rw_worktree,
+        &under_worktree,
+        facts(),
+        "/home/u/elsewhere",
+        CONFIG_DIR,
+        Some("/home/u/proj/sub"),
+    )
+    .unwrap_err();
+    assert_path_diagnostic(&from_elsewhere, &[WORKTREE]);
 }
 
 #[test]

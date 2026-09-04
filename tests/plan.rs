@@ -551,6 +551,76 @@ fn a_workspace_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
     );
 }
 
+const RW_WORKTREE_AND_CACHE: &str = "[mounts]\nrw = [\"${worktree}\", \"~/cache\"]";
+
+/// A home with `cache/proj` as a workspace under an `rw` cache, and `victim` beside it.
+fn home_with_a_project_under_the_cache(profile: &str) -> TempDir {
+    let home = TempDir::new();
+    home.write(".config/process-wrap/profile/default.toml", profile);
+    std::fs::create_dir_all(home.path().join("cache/proj")).unwrap();
+    std::fs::create_dir(home.path().join("victim")).unwrap();
+    home
+}
+
+/// `cache/proj` as a process inside the isolation could leave it: a link to `victim`.
+fn rewire_the_project_to_the_victim(home: &TempDir) {
+    std::fs::remove_dir(home.path().join("cache/proj")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("victim"), home.path().join("cache/proj")).unwrap();
+}
+
+#[test]
+fn a_workspace_under_an_rw_cache_given_from_elsewhere_is_accepted_until_rewired() {
+    let home = home_with_a_project_under_the_cache(RW_WORKTREE_AND_CACHE);
+    let workspace = home.path().join("cache/proj");
+
+    let honest = run_with_workspace(&home, &workspace);
+    assert_eq!(honest.status.code(), Some(0), "{}", output_report(&honest));
+
+    rewire_the_project_to_the_victim(&home);
+    let rewired = run_with_workspace(&home, &workspace);
+    let diagnostic = assert_diagnostic(&rewired, 125, "path");
+    let real_home = home.path().canonicalize().unwrap();
+    for element in [real_home.join("victim"), real_home.join("cache")] {
+        assert!(
+            diagnostic.contains(element.to_str().unwrap()),
+            "{diagnostic} does not mention {}",
+            element.display()
+        );
+    }
+}
+
+#[test]
+fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"${worktree}\"]",
+    );
+    std::fs::create_dir_all(home.path().join("proj/.git")).unwrap();
+    std::fs::create_dir_all(home.path().join("proj/sub")).unwrap();
+    std::fs::create_dir(home.path().join("elsewhere")).unwrap();
+    let sub = home.path().join("proj/sub").canonicalize().unwrap();
+
+    let from_inside = binary(home.path())
+        .current_dir(&sub)
+        .args(["--workspace", sub.to_str().unwrap(), "--", "true"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        from_inside.status.code(),
+        Some(0),
+        "{}",
+        output_report(&from_inside)
+    );
+
+    let from_elsewhere = binary(home.path())
+        .current_dir(home.path().join("elsewhere"))
+        .args(["--workspace", sub.to_str().unwrap(), "--", "true"])
+        .output()
+        .unwrap();
+    assert_diagnostic(&from_elsewhere, 125, "path");
+}
+
 #[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     let (home, _) = home_with_workspace();

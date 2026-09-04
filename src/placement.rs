@@ -9,6 +9,7 @@ use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
 use crate::layers::{Directive, Layer, LayerOrigin};
 use crate::mounts::{byte_order, ExpandedPolicy, MountFacts, ResolvedItem, ResolvedMounts};
+use crate::policy::{PolicyPath, Variable};
 use crate::variables::Variables;
 
 /// The paths specification section 5.6 protects, in the order section 13 reports them:
@@ -49,12 +50,26 @@ pub fn protected_paths(
     }
 }
 
-/// One written mount item by its expanded path, with the form it was written in.
+/// One written mount item by its expanded path, with the form it was written in and the
+/// variable that form starts with, if any.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrittenItem {
     pub directive: Directive,
     pub written: String,
+    pub variable: Option<Variable>,
     pub path: PathBuf,
+}
+
+impl WrittenItem {
+    /// Whether the item was expanded from a variable derived from the workspace, so that
+    /// its resolution inherits what the workspace's resolution referenced (specification
+    /// section 5.6).
+    fn inherits_from_workspace(&self) -> bool {
+        matches!(
+            self.variable,
+            Some(Variable::Workspace | Variable::Worktree | Variable::GitCommonDir)
+        )
+    }
 }
 
 /// The paths the rule of specification section 5.6 on written mount items applies to:
@@ -76,6 +91,10 @@ pub fn written_paths(expanded: &ExpandedPolicy, workspace: Option<&Path>) -> Wri
                 Some(WrittenItem {
                     directive: item.directive,
                     written: item.written.to_string(),
+                    variable: match item.written {
+                        PolicyPath::Variable(variable, _) => Some(variable),
+                        PolicyPath::Absolute(_) | PolicyPath::Home(_) => None,
+                    },
                     path: item.path.path()?.to_path_buf(),
                 })
             })
@@ -101,7 +120,7 @@ pub fn check_placement(
         .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
         .collect();
     check_protected_paths(protected, &writable, facts)?;
-    check_written_paths(written, &writable, variables, facts)?;
+    check_written_paths(written, &writable, variables, current_dir, facts)?;
     check_width(&writable, home)?;
     check_work_place(variables, home)?;
     check_current_dir(&resolved.items, current_dir)?;
@@ -147,12 +166,19 @@ fn check_protected_paths(
 /// what it consulted could be re-pointed from inside the isolation, and the next start
 /// would apply the directive to any host path. The items are taken in the order of
 /// section 6.4, then the workspace. An item that resolves to nothing has nothing to bind.
+/// A `--workspace` whose real path is the current directory is exempt and hands nothing
+/// down: the process already sits there, so no redirection can move it.
 fn check_written_paths(
     written: &WrittenPaths,
     writable: &[&ResolvedItem],
     variables: &Variables,
+    current_dir: &Path,
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
+    let workspace = written
+        .workspace
+        .as_deref()
+        .filter(|_| variables.workspace != current_dir);
     let mut items: Vec<(&WrittenItem, PathBuf)> = written
         .items
         .iter()
@@ -166,15 +192,24 @@ fn check_written_paths(
             item.written,
             item.path.display()
         );
-        check_landing(&role, &item.path, &real, written, writable, facts)?;
+        check_landing(
+            &role,
+            referenced_writable(item, workspace, writable, facts),
+            &real,
+            written,
+            workspace,
+            writable,
+            facts,
+        )?;
     }
-    if let Some(workspace) = &written.workspace {
+    if let Some(workspace) = workspace {
         let role = format!("the workspace {}", workspace.display());
         check_landing(
             &role,
-            workspace,
+            consulted_writable(workspace, writable, facts),
             &variables.workspace,
             written,
+            Some(workspace),
             writable,
             facts,
         )?;
@@ -182,19 +217,38 @@ fn check_written_paths(
     Ok(())
 }
 
-/// The rule of `check_written_paths` for one path: `given` resolved to `real`.
+/// The first writable item that resolving `item` referenced: what its own resolution
+/// consulted, or, for an item expanded from a workspace variable, what the resolution of
+/// `workspace` (the `--workspace` under check, if any) consulted (specification
+/// section 5.6).
+fn referenced_writable<'a>(
+    item: &WrittenItem,
+    workspace: Option<&Path>,
+    writable: &'a [&'a ResolvedItem],
+    facts: &MountFacts,
+) -> Option<&'a ResolvedItem> {
+    consulted_writable(&item.path, writable, facts).or_else(|| {
+        workspace
+            .filter(|_| item.inherits_from_workspace())
+            .and_then(|workspace| consulted_writable(workspace, writable, facts))
+    })
+}
+
+/// The rule of `check_written_paths` for one path that resolved to `real` and referenced
+/// `consulted`, if anything writable.
 fn check_landing(
     role: &str,
-    given: &Path,
+    consulted: Option<&ResolvedItem>,
     real: &Path,
     written: &WrittenPaths,
+    workspace: Option<&Path>,
     writable: &[&ResolvedItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
-    let Some(consulted) = consulted_writable(given, writable, facts) else {
+    let Some(consulted) = consulted else {
         return Ok(());
     };
-    if lands_in_writable(real, written, writable, facts) {
+    if lands_in_writable(real, written, workspace, writable, facts) {
         return Ok(());
     }
     Err(Diagnostic::path(format!(
@@ -229,6 +283,7 @@ fn consulted_writable<'a>(
 fn lands_in_writable(
     real: &Path,
     written: &WrittenPaths,
+    workspace: Option<&Path>,
     writable: &[&ResolvedItem],
     facts: &MountFacts,
 ) -> bool {
@@ -239,7 +294,7 @@ fn lands_in_writable(
         && written.items.iter().any(|other| {
             matches!(other.directive, Directive::Rw | Directive::RwFile)
                 && facts.entry(&other.path).path() == Some(real)
-                && consulted_writable(&other.path, writable, facts).is_none()
+                && referenced_writable(other, workspace, writable, facts).is_none()
         });
     inside_another || same_as_an_honest_one
 }
