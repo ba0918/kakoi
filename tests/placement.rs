@@ -496,35 +496,84 @@ fn a_nested_item_resolving_inside_the_writable_item_it_passes_through_is_accepte
     assert!(warnings.is_empty(), "{warnings:?}");
 }
 
-#[test]
-fn a_written_item_redirected_into_another_writable_item_is_accepted() {
-    for (name, target, facts) in [
-        (
-            "under another rw item",
-            "/home/u/other/http",
-            host().dir_with_ancestors("/home/u/other/http"),
-        ),
-        (
-            "onto another rw item itself",
-            "/home/u/other",
-            host().dir("/home/u/other"),
-        ),
-    ] {
-        let warnings = check(
-            &layers(
-                "[mounts]\nrw = [\"${worktree}\", \"~/cache\", \"~/cache/pip/http\", \"~/other\"]",
-                None,
-                &[],
-                &[],
-            ),
-            &variables(),
-            rewired_through_cache(facts, target, true),
-            WORKTREE,
-        )
-        .unwrap();
+const RW_WITH_A_NESTED_ITEM_AND_ANOTHER: &str =
+    "[mounts]\nrw = [\"${worktree}\", \"~/cache\", \"~/cache/pip/http\", \"~/other\"]";
 
-        assert!(warnings.is_empty(), "{name}: {warnings:?}");
-    }
+#[test]
+fn a_writable_item_whose_own_resolution_passes_through_its_inside_is_not_a_root() {
+    // `~/cache/sub/..` resolves to `~/cache` by looking `..` up in `cache/sub`, a directory
+    // inside the item itself: replacing `sub` from inside the isolation moves the item.
+    // The honest nested `~/cache/pip/http` then has no root to lie in.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/cache/sub/..\", \"~/cache/pip/http\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir_with_ancestors("/home/u/cache/pip/http")
+            .dir("/home/u/cache/sub")
+            .link_to_dir("/home/u/cache/sub/..", "/home/u/cache")
+            .directories_visited(
+                "/home/u/cache/sub/..",
+                &[
+                    "/",
+                    "/home",
+                    "/home/u",
+                    "/home/u/cache",
+                    "/home/u/cache/sub",
+                ],
+            )
+            .directories_visited(
+                "/home/u/cache/pip/http",
+                &[
+                    "/",
+                    "/home",
+                    "/home/u",
+                    "/home/u/cache",
+                    "/home/u/cache/pip",
+                ],
+            ),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/cache"]);
+}
+
+#[test]
+fn a_written_item_redirected_under_another_root_item_is_accepted() {
+    let warnings = check(
+        &layers(RW_WITH_A_NESTED_ITEM_AND_ANOTHER, None, &[], &[]),
+        &variables(),
+        rewired_through_cache(
+            host().dir_with_ancestors("/home/u/other/http"),
+            "/home/u/other/http",
+            true,
+        ),
+        WORKTREE,
+    )
+    .unwrap();
+
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+#[test]
+fn a_writable_item_one_of_whose_written_forms_was_redirected_onto_it_is_not_a_root() {
+    // `~/other` is written honestly, but `~/cache/pip/http` now resolves to the same real
+    // path through `~/cache`: the two forms merge into one item, and one of them
+    // references something writable, so the item vouches for nothing, itself included.
+    let diagnostic = check(
+        &layers(RW_WITH_A_NESTED_ITEM_AND_ANOTHER, None, &[], &[]),
+        &variables(),
+        rewired_through_cache(host().dir("/home/u/other"), "/home/u/other", true),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/cache/pip/http", "/home/u/cache"]);
 }
 
 #[test]

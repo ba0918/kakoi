@@ -161,13 +161,13 @@ fn check_protected_paths(
     Ok(())
 }
 
-/// A written item or the `--workspace` whose resolution consulted something inside a
-/// writable item must itself resolve inside a writable item (specification section 5.6):
-/// what it consulted could be re-pointed from inside the isolation, and the next start
-/// would apply the directive to any host path. The items are taken in the order of
-/// section 6.4, then the workspace. An item that resolves to nothing has nothing to bind.
-/// A `--workspace` whose real path is the current directory is exempt and hands nothing
-/// down: the process already sits there, so no redirection can move it.
+/// The root-item check of specification section 5.6: a written item or the `--workspace`
+/// whose resolution referenced something inside a writable item must itself resolve inside
+/// a root item, since what it referenced could be re-pointed from inside the isolation and
+/// the next start would apply the directive to any host path. The items are taken in the
+/// order of section 6.4, then the workspace. An item that resolves to nothing has nothing
+/// to bind. A `--workspace` whose real path is the current directory is exempt and hands
+/// nothing down: the process already sits there, so no redirection can move it.
 fn check_written_paths(
     written: &WrittenPaths,
     writable: &[&ResolvedItem],
@@ -179,6 +179,7 @@ fn check_written_paths(
         .workspace
         .as_deref()
         .filter(|_| variables.workspace != current_dir);
+    let roots = root_items(written, workspace, writable, facts);
     let mut items: Vec<(&WrittenItem, PathBuf)> = written
         .items
         .iter()
@@ -192,29 +193,58 @@ fn check_written_paths(
             item.written,
             item.path.display()
         );
-        check_landing(
-            &role,
-            referenced_writable(item, workspace, writable, facts),
-            &real,
-            written,
-            workspace,
-            writable,
-            facts,
-        )?;
+        let reference = referenced_writable(item, workspace, writable, facts);
+        check_landing(&role, reference, &real, &roots)?;
     }
     if let Some(workspace) = workspace {
         let role = format!("the workspace {}", workspace.display());
-        check_landing(
-            &role,
-            consulted_writable(workspace, writable, facts),
-            &variables.workspace,
-            written,
-            Some(workspace),
-            writable,
-            facts,
-        )?;
+        let reference = consulted_writable(workspace, writable, facts).map(Reference::own);
+        check_landing(&role, reference, &variables.workspace, &roots)?;
     }
     Ok(())
+}
+
+/// The root items of specification section 2: the writable items none of whose written
+/// forms (the written writable items resolving to the same real path, section 5.4)
+/// referenced anything inside a writable item, the item itself included.
+fn root_items<'a>(
+    written: &WrittenPaths,
+    workspace: Option<&Path>,
+    writable: &'a [&'a ResolvedItem],
+    facts: &MountFacts,
+) -> Vec<&'a ResolvedItem> {
+    writable
+        .iter()
+        .filter(|item| {
+            written
+                .items
+                .iter()
+                .filter(|form| {
+                    matches!(form.directive, Directive::Rw | Directive::RwFile)
+                        && facts.entry(&form.path).path() == Some(item.real.as_path())
+                })
+                .all(|form| referenced_writable(form, workspace, writable, facts).is_none())
+        })
+        .copied()
+        .collect()
+}
+
+/// A writable item the resolution of a path under check referenced.
+#[derive(Debug, Clone, Copy)]
+struct Reference<'a> {
+    item: &'a ResolvedItem,
+    /// Whether it was inherited from the `--workspace` rather than referenced by the
+    /// path's own resolution.
+    inherited: bool,
+}
+
+impl<'a> Reference<'a> {
+    fn own(item: &'a ResolvedItem) -> Self {
+        Self {
+            item,
+            inherited: false,
+        }
+    }
 }
 
 /// The first writable item that resolving `item` referenced: what its own resolution
@@ -226,37 +256,46 @@ fn referenced_writable<'a>(
     workspace: Option<&Path>,
     writable: &'a [&'a ResolvedItem],
     facts: &MountFacts,
-) -> Option<&'a ResolvedItem> {
-    consulted_writable(&item.path, writable, facts).or_else(|| {
-        workspace
-            .filter(|_| item.inherits_from_workspace())
-            .and_then(|workspace| consulted_writable(workspace, writable, facts))
-    })
+) -> Option<Reference<'a>> {
+    consulted_writable(&item.path, writable, facts)
+        .map(Reference::own)
+        .or_else(|| {
+            workspace
+                .filter(|_| item.inherits_from_workspace())
+                .and_then(|workspace| consulted_writable(workspace, writable, facts))
+                .map(|item| Reference {
+                    item,
+                    inherited: true,
+                })
+        })
 }
 
 /// The rule of `check_written_paths` for one path that resolved to `real` and referenced
-/// `consulted`, if anything writable.
+/// `reference`, if anything writable: `real` must be a root item or inside one.
 fn check_landing(
     role: &str,
-    consulted: Option<&ResolvedItem>,
+    reference: Option<Reference>,
     real: &Path,
-    written: &WrittenPaths,
-    workspace: Option<&Path>,
-    writable: &[&ResolvedItem],
-    facts: &MountFacts,
+    roots: &[&ResolvedItem],
 ) -> Result<(), Diagnostic> {
-    let Some(consulted) = consulted else {
+    let Some(reference) = reference else {
         return Ok(());
     };
-    if lands_in_writable(real, written, workspace, writable, facts) {
+    if roots.iter().any(|root| real.starts_with(&root.real)) {
         return Ok(());
     }
+    let how = if reference.inherited {
+        "was given as a workspace resolved through"
+    } else {
+        "resolves through"
+    };
     Err(Diagnostic::path(format!(
-        "{role} resolves to {} through the `{}` item {} but outside every `rw` and \
-         `rw-file` item, so it could be redirected from inside the isolation",
+        "{role} resolves to {} and {how} the `{}` item {} but lands outside every `rw` and \
+         `rw-file` item that could not itself be redirected, so it could be redirected from \
+         inside the isolation",
         real.display(),
-        directive_name(consulted.directive),
-        consulted.real.display()
+        directive_name(reference.item.directive),
+        reference.item.real.display()
     )))
 }
 
@@ -273,30 +312,6 @@ fn consulted_writable<'a>(
         .chain(facts.visited_directories(given))
         .find_map(|place| writable.iter().find(|item| place.starts_with(&item.real)))
         .copied()
-}
-
-/// Whether `real`, what a path under check resolved to, is inside a writable item (the
-/// same or a descendant). A writable item at `real` itself counts only when a written
-/// writable item whose own resolution consulted nothing writable resolves there: the
-/// path under check landed there through something replaceable, so its own item at `real`
-/// proves nothing, and neither does another item that was redirected there the same way.
-fn lands_in_writable(
-    real: &Path,
-    written: &WrittenPaths,
-    workspace: Option<&Path>,
-    writable: &[&ResolvedItem],
-    facts: &MountFacts,
-) -> bool {
-    let inside_another = writable
-        .iter()
-        .any(|item| item.real != real && real.starts_with(&item.real));
-    let same_as_an_honest_one = writable.iter().any(|item| item.real == real)
-        && written.items.iter().any(|other| {
-            matches!(other.directive, Directive::Rw | Directive::RwFile)
-                && facts.entry(&other.path).path() == Some(real)
-                && referenced_writable(other, workspace, writable, facts).is_none()
-        });
-    inside_another || same_as_an_honest_one
 }
 
 /// Making the whole home writable is refused from every layer (specification
