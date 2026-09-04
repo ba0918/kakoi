@@ -55,6 +55,7 @@ fn linked_worktree_links() -> GitFileLinks {
         commondir: Reference::Resolved(PathBuf::from("/home/u/main/.git")),
         back_link: Some(PathBuf::from("/home/u/proj/.git")),
         core_worktree: None,
+        common_head: DotGit::File,
     }
 }
 
@@ -130,6 +131,34 @@ fn a_linked_worktree_whose_back_link_points_elsewhere_is_a_path_diagnostic() {
 }
 
 #[test]
+fn a_linked_worktree_whose_common_dir_lacks_a_regular_head_file_is_a_path_diagnostic() {
+    // git creates `HEAD` in every repository it makes; a `worktrees/` layout without one
+    // was assembled by hand, from a place that can be written.
+    for common_head in [
+        DotGit::Absent,
+        DotGit::Symlink,
+        DotGit::Directory,
+        DotGit::Other,
+    ] {
+        let links = GitFileLinks {
+            common_head,
+            ..linked_worktree_links()
+        };
+
+        let diagnostic = derive_variables(
+            &config_dir(),
+            &facts(
+                [DotGit::Absent, DotGit::File, DotGit::Absent, DotGit::Absent],
+                Some(links),
+            ),
+        )
+        .expect_err(&format!("{common_head:?}"));
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{common_head:?}");
+    }
+}
+
+#[test]
 fn a_submodule_with_core_worktree_pointing_back_yields_its_gitdir() {
     let variables = derive_variables(
         &config_dir(),
@@ -145,6 +174,7 @@ fn a_submodule_with_core_worktree_pointing_back_yields_its_gitdir() {
                 commondir: Reference::Absent,
                 back_link: None,
                 core_worktree: Some(PathBuf::from("/home/u/proj/sub")),
+                common_head: DotGit::Absent,
             }),
         ),
     )
@@ -164,6 +194,7 @@ fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
         commondir: Reference::Absent,
         back_link: None,
         core_worktree: None,
+        common_head: DotGit::Absent,
     };
     let wrong_core_worktree = GitFileLinks {
         core_worktree: Some(PathBuf::from("/home/u/proj/other")),
@@ -459,6 +490,7 @@ fn raw_git_facts_are_read_from_a_real_linked_worktree() {
             commondir: Reference::Resolved(main.join(".git")),
             back_link: Some(worktree.join(".git")),
             core_worktree: None,
+            common_head: DotGit::File,
         })
     );
     let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();
@@ -492,6 +524,7 @@ fn raw_git_facts_are_read_from_a_real_submodule() {
             commondir: Reference::Absent,
             back_link: None,
             core_worktree: Some(submodule.clone()),
+            common_head: DotGit::Absent,
         })
     );
     let variables = derive_variables(&real_config_dir(&home), &facts).unwrap();
@@ -571,6 +604,31 @@ fn a_symlinked_commondir_is_a_path_diagnostic() {
     let diagnostic = derive_variables(&real_config_dir(&home), &facts).unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Path);
+}
+
+#[test]
+fn a_real_linked_worktree_whose_common_dir_lost_its_head_file_is_a_path_diagnostic() {
+    for (name, replace_head) in [("deleted", None), ("a link to a copy", Some("HEAD-copy"))] {
+        let home = TempDir::new();
+        let real_home = home.path().canonicalize().unwrap();
+        let main = real_home.join("main");
+        std::fs::create_dir(&main).unwrap();
+        git(&main, &["init", "-q"]);
+        git(&main, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        git(&main, &["worktree", "add", "-q", "../wt", "-b", "wt"]);
+        let head = main.join(".git/HEAD");
+        let content = std::fs::read(&head).unwrap();
+        std::fs::remove_file(&head).unwrap();
+        if let Some(copy) = replace_head {
+            let copy = home.write(copy, content);
+            std::os::unix::fs::symlink(&copy, &head).unwrap();
+        }
+
+        let facts = collect_workspace_facts(&real_home.join("wt"));
+        let diagnostic = derive_variables(&real_config_dir(&home), &facts).unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+    }
 }
 
 #[test]

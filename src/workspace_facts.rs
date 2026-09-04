@@ -1,7 +1,7 @@
 //! Collects the facts of `variables::WorkspaceFacts` from the file system. Reads only the
 //! workspace's ancestors' `.git` entries and, for a `.git` file, `gitdir:`, `commondir`,
-//! `gitdir`, and `config` under the directory it names (specification section 14). Runs no
-//! command.
+//! `gitdir`, and `config` under the directory it names, and the kind of `HEAD` under the
+//! common dir (specification section 14). Runs no command.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -51,6 +51,7 @@ pub fn collect_workspace_facts(workspace: &Path) -> WorkspaceFacts {
     }
 }
 
+/// What is at `path`, looked at without following a symbolic link there.
 fn dot_git_kind(path: &Path) -> DotGit {
     match fs::symlink_metadata(path) {
         Err(_) => DotGit::Absent,
@@ -85,6 +86,7 @@ fn read_links(worktree: &Path) -> GitFileLinks {
             commondir: Reference::Absent,
             back_link: None,
             core_worktree: None,
+            common_head: DotGit::Absent,
         };
     };
     // A `commondir` that exists but cannot be used is not "no commondir" (specification
@@ -102,18 +104,23 @@ fn read_links(worktree: &Path) -> GitFileLinks {
         .and_then(|text| resolve_from(&gitdir, text.trim_end()));
     // Only a submodule's config is read (specification section 14); a linked worktree is
     // recognised by its commondir and needs no config.
-    let core_worktree = match commondir {
+    let core_worktree = match &commondir {
         Reference::Absent => read_git_file(&gitdir.join("config"))
             .text()
             .and_then(|text| core_worktree(&text))
             .and_then(|value| resolve_from(&gitdir, &value)),
         _ => None,
     };
+    let common_head = match &commondir {
+        Reference::Resolved(common) => dot_git_kind(&common.join("HEAD")),
+        _ => DotGit::Absent,
+    };
     GitFileLinks {
         gitdir: Some(gitdir),
         commondir,
         back_link,
         core_worktree,
+        common_head,
     }
 }
 

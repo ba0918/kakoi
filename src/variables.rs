@@ -45,6 +45,9 @@ pub struct GitFileLinks {
     /// `core.worktree` of `G/config`, resolved relative to G; `None` when absent or naming
     /// nothing that exists.
     pub core_worktree: Option<PathBuf>,
+    /// What `C/HEAD` is, looked at without following symbolic links; `Absent` when there
+    /// is no resolved C.
+    pub common_head: DotGit,
 }
 
 /// The facts about the workspace and its git metadata that the variables are derived from.
@@ -139,7 +142,8 @@ pub fn derive_variables(
 }
 
 /// The shared `.git` a `.git` file points to, accepted only when git's own back link agrees
-/// (specification section 5.2).
+/// and C carries the `HEAD` git creates (specification section 5.2): a `worktrees/` layout
+/// without one was assembled by hand, from a place that can be written.
 fn verified_common_dir(
     worktree: &Path,
     links: Option<&GitFileLinks>,
@@ -156,12 +160,15 @@ fn verified_common_dir(
         Reference::Resolved(common) => {
             let under_worktrees = gitdir.parent() == Some(common.join("worktrees").as_path());
             let links_back = links.back_link.as_deref() == Some(worktree.join(".git").as_path());
-            if under_worktrees && links_back {
-                return Ok(common.clone());
+            if !(under_worktrees && links_back) {
+                return Err(reject(
+                    "is not a linked worktree that its gitdir links back to",
+                ));
             }
-            Err(reject(
-                "is not a linked worktree that its gitdir links back to",
-            ))
+            if links.common_head != DotGit::File {
+                return Err(reject("names a common dir without a regular HEAD file"));
+            }
+            Ok(common.clone())
         }
         Reference::Absent => {
             if links.core_worktree.as_deref() == Some(worktree) {
