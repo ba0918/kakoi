@@ -748,7 +748,7 @@ fn a_lower_layer_rw_written_as_the_real_path_shields_the_hide_it_replaced() {
     // inside; it already exposes the place, so the link exposes nothing new.
     let result = check(
         &layers(
-            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\"]",
+            "[mounts]\nrw = [\"~/a\"]\nhide = [\"~/b/creds\"]",
             Some("[mounts]\nrw = [\"~/b/creds\"]"),
             &["/home/u/a/link"],
             &[],
