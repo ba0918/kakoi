@@ -11,8 +11,8 @@ use crate::environment::HomeDirectory;
 use crate::isolated_env::{assemble_environment, Environment, SecretFile};
 use crate::layers::{Directive, Layer, Policy};
 use crate::mounts::{
-    generate, loaded_policy_files, resolve_written, EntryKind, ExpandedPolicy, MountFacts,
-    ResolvedItem, ResolvedMounts,
+    generate, loaded_policy_files, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
+    MountFacts, ResolvedItem, ResolvedMounts, SkippedPath,
 };
 use crate::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
@@ -45,11 +45,13 @@ pub struct IsolationFacts {
     pub secrets: BTreeMap<String, SecretFile>,
 }
 
-/// The isolation as resolved: the mount items, the environment, the warnings so far, and
-/// the real paths of the policy files read.
+/// The isolation as resolved: the mount items, the scan roots, `hide-mounts` `under`s,
+/// and `path-prepend` entries skipped, the environment, the warnings so far, and the real
+/// paths of the policy files read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Isolation {
     pub mounts: ResolvedMounts,
+    pub skipped_paths: Vec<SkippedPath>,
     pub environment: Environment,
     pub warnings: Vec<Warning>,
     pub policy_files: Vec<PathBuf>,
@@ -96,12 +98,12 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         &facts.mounts,
     )?;
     // A `path-prepend` entry enters `PATH` as its real path; one that names nothing is
-    // skipped like a mount item would be (specification section 5.2).
+    // skipped like a mount item would be, and reported (specification section 5.2).
     let path_prepend: Vec<PathBuf> = inputs
         .expanded
         .path_prepend
         .iter()
-        .filter_map(|entry| entry.path())
+        .filter_map(|entry| entry.path.path())
         .filter_map(|entry| facts.mounts.entry(entry).path().map(Path::to_path_buf))
         .collect();
     let assembled =
@@ -109,6 +111,7 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     warnings.extend(assembled.warnings);
     Ok(Isolation {
         mounts,
+        skipped_paths: skipped_paths(inputs.expanded, &facts.mounts),
         environment: assembled.environment,
         warnings,
         policy_files: loaded_policy_files(inputs.layers, &facts.mounts),
@@ -127,6 +130,7 @@ pub struct Plan {
     pub policy_files: Vec<PathBuf>,
     pub variables: Variables,
     pub mounts: ResolvedMounts,
+    pub skipped_paths: Vec<SkippedPath>,
     pub environment: Environment,
     pub warnings: Vec<Warning>,
     pub bwrap: PathBuf,
@@ -153,6 +157,7 @@ pub fn plan(
         policy_files: isolation.policy_files,
         variables: inputs.variables.clone(),
         mounts: isolation.mounts,
+        skipped_paths: isolation.skipped_paths,
         environment: isolation.environment,
         warnings: isolation.warnings,
         bwrap,

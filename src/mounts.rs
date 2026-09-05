@@ -38,6 +38,14 @@ pub struct ExpandedItem {
     pub path: Expansion,
 }
 
+/// One path-taking value that is neither a mount item nor a scan or `hide-mounts` entry
+/// (an `env.path-prepend` entry), with its path expanded and as written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpandedPath {
+    pub written: PolicyPath,
+    pub path: Expansion,
+}
+
 /// One `mounts.scan` entry with its root expanded; `written` is the root as written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpandedScan {
@@ -64,7 +72,7 @@ pub struct ExpandedPolicy {
     pub scans: Vec<ExpandedScan>,
     pub hide_mounts: Vec<ExpandedHideMounts>,
     pub secrets: BTreeMap<String, Expansion>,
-    pub path_prepend: Vec<Expansion>,
+    pub path_prepend: Vec<ExpandedPath>,
 }
 
 /// Expands `~` to the home directory and the variables to their values.
@@ -133,7 +141,14 @@ pub fn expand_policy(
             .iter()
             .map(|(name, path)| (name.clone(), expand(path)))
             .collect(),
-        path_prepend: policy.path_prepend.iter().map(expand).collect(),
+        path_prepend: policy
+            .path_prepend
+            .iter()
+            .map(|entry| ExpandedPath {
+                written: entry.clone(),
+                path: expand(entry),
+            })
+            .collect(),
     }
 }
 
@@ -180,7 +195,7 @@ pub fn candidates(
         .map(|item| &item.path)
         .chain(expanded.scans.iter().map(|scan| &scan.root))
         .chain(expanded.hide_mounts.iter().map(|hide| &hide.under))
-        .chain(expanded.path_prepend.iter());
+        .chain(expanded.path_prepend.iter().map(|entry| &entry.path));
     paths.extend(
         expanded_paths
             .filter_map(Expansion::path)
@@ -194,7 +209,12 @@ pub fn candidates(
         })
         .chain(std::iter::once(config_dir))
         .chain(expanded.secrets.values().filter_map(Expansion::path))
-        .chain(expanded.path_prepend.iter().filter_map(Expansion::path))
+        .chain(
+            expanded
+                .path_prepend
+                .iter()
+                .filter_map(|entry| entry.path.path()),
+        )
         .map(Path::to_path_buf)
         .collect();
     for path in &traversals {
@@ -345,6 +365,64 @@ pub struct SkippedItem {
 pub struct LeftVisible {
     pub link: PathBuf,
     pub reason: String,
+}
+
+/// Which path-taking value a skipped path came from: a scan `root`, a `hide-mounts`
+/// `under`, or an `env.path-prepend` entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkippedRole {
+    ScanRoot,
+    HideMountsUnder,
+    PathPrepend,
+}
+
+/// A path-taking value that is not a mount item and was skipped, with the reason
+/// (specification section 5.2): a variable without a value, or nothing at the path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedPath {
+    pub role: SkippedRole,
+    pub written: String,
+    pub reason: String,
+}
+
+/// The scan roots, `hide-mounts` `under`s, and `path-prepend` entries of `expanded` that
+/// are skipped (specification section 5.2): a variable without a value, or nothing at the
+/// expanded path. Each is reported in the plan with its reason, as a mount item would be.
+pub fn skipped_paths(expanded: &ExpandedPolicy, facts: &MountFacts) -> Vec<SkippedPath> {
+    let values = expanded
+        .scans
+        .iter()
+        .map(|scan| (SkippedRole::ScanRoot, &scan.written, &scan.root))
+        .chain(
+            expanded
+                .hide_mounts
+                .iter()
+                .map(|hide| (SkippedRole::HideMountsUnder, &hide.written, &hide.under)),
+        )
+        .chain(
+            expanded
+                .path_prepend
+                .iter()
+                .map(|entry| (SkippedRole::PathPrepend, &entry.written, &entry.path)),
+        );
+    values
+        .filter_map(|(role, written, expansion)| {
+            let reason = match expansion {
+                Expansion::Valueless(variable) => {
+                    format!("`${{{}}}` has no value", variable.name())
+                }
+                Expansion::Path(path) if facts.entry(path) == RealEntry::Missing => {
+                    "does not exist".to_string()
+                }
+                Expansion::Path(_) => return None,
+            };
+            Some(SkippedPath {
+                role,
+                written: written.to_string(),
+                reason,
+            })
+        })
+        .collect()
 }
 
 /// The mount items after resolution: the ones that apply, in the order of specification

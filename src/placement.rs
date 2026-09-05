@@ -45,7 +45,7 @@ pub fn protected_paths(
         path_prepend: expanded
             .path_prepend
             .iter()
-            .filter_map(|path| Some(path.path()?.to_path_buf()))
+            .filter_map(|entry| Some(entry.path.path()?.to_path_buf()))
             .collect(),
     }
 }

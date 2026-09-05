@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::fixture::{
-    home, layers, merged, variables, Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
+    home, layers, merged, variables, variables_without_git, Facts, CONFIG_DIR, POLICY_FILE,
+    PROFILE, WORKTREE,
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
 use process_wrap::command::{command_candidates, resolve_command};
@@ -14,7 +15,9 @@ use process_wrap::diagnostic::{Diagnostic, Kind};
 use process_wrap::executables::first_executable;
 use process_wrap::isolated_env::SecretFile;
 use process_wrap::layers::{Directive, LayerOrigin};
-use process_wrap::mounts::{expand_policy, EntryKind, ItemOrigin, ResolvedItem};
+use process_wrap::mounts::{
+    candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole,
+};
 use process_wrap::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
 };
@@ -181,9 +184,19 @@ fn isolation(
     facts: Facts,
     secrets: &[(&str, SecretFile)],
 ) -> Result<Isolation, Diagnostic> {
+    isolation_with(profile, &variables(), facts, secrets)
+}
+
+/// `isolation` with the variables given.
+fn isolation_with(
+    profile: &str,
+    variables: &process_wrap::variables::Variables,
+    facts: Facts,
+    secrets: &[(&str, SecretFile)],
+) -> Result<Isolation, Diagnostic> {
     let layers = layers(profile, Some(""), &[], &[]);
     let policy = merged(&layers);
-    let variables = variables();
+    let variables = variables.clone();
     let home = home();
     let expanded = expand_policy(&policy, &variables, &home);
     let inputs = Inputs {
@@ -307,6 +320,79 @@ fn the_first_offending_scan_link_in_byte_order_is_named() {
     assert!(
         !diagnostic.description().contains("/home/u/proj/.env.b"),
         "{diagnostic}"
+    );
+}
+
+/// The written forms of the skipped paths with `role`.
+fn skipped_written(isolation: &Isolation, role: SkippedRole) -> Vec<&str> {
+    isolation
+        .skipped_paths
+        .iter()
+        .filter(|skipped| skipped.role == role)
+        .inspect(|skipped| assert!(!skipped.reason.is_empty(), "{skipped:?}"))
+        .map(|skipped| skipped.written.as_str())
+        .collect()
+}
+
+#[test]
+fn a_missing_path_prepend_entry_is_skipped_and_reported() {
+    let isolation = isolation(
+        "[mounts]\nrw = [\"${worktree}\"]\n[env]\npath-prepend = [\"/opt/bin\", \"/opt/missing\"]",
+        Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .dir_with_ancestors("/opt/bin")
+            .file_with_ancestors(PROFILE)
+            .file_with_ancestors(POLICY_FILE),
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(
+        isolation.environment.values()[&OsString::from("PATH")],
+        OsString::from("/opt/bin")
+    );
+    assert_eq!(
+        skipped_written(&isolation, SkippedRole::PathPrepend),
+        ["/opt/missing"]
+    );
+}
+
+#[test]
+fn a_scan_root_or_hide_mounts_under_with_a_valueless_variable_is_skipped_and_reported() {
+    // In a worktree without `.git`, `${git_common_dir}` has no value: neither the scan nor
+    // the `hide-mounts` is asked of the outer layer, and the plan says both were skipped.
+    let profile = "[mounts]\nrw = [\"${worktree}\"]\n\
+                   [[mounts.scan]]\nroot = \"${git_common_dir}/x\"\nnames = [\".env\"]\n\
+                   [[mounts.hide-mounts]]\nunder = \"${git_common_dir}/m\"\nfstype = [\"9p\"]";
+    let variables = variables_without_git();
+    let layers = layers(profile, Some(""), &[], &[]);
+    let expanded = expand_policy(&merged(&layers), &variables, &home());
+
+    let wanted = candidates(&expanded, &layers, &variables, Path::new(CONFIG_DIR), None);
+    assert!(wanted.scans.is_empty(), "{:?}", wanted.scans);
+    assert!(
+        wanted.hide_mounts_under.is_empty(),
+        "{:?}",
+        wanted.hide_mounts_under
+    );
+
+    let isolation = isolation_with(
+        profile,
+        &variables,
+        Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .file_with_ancestors(PROFILE)
+            .file_with_ancestors(POLICY_FILE),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        skipped_written(&isolation, SkippedRole::ScanRoot),
+        ["${git_common_dir}/x"]
+    );
+    assert_eq!(
+        skipped_written(&isolation, SkippedRole::HideMountsUnder),
+        ["${git_common_dir}/m"]
     );
 }
 

@@ -113,7 +113,7 @@ fn variables_expand_only_in_path_values() {
     );
     assert_eq!(expanded.scans[0].root, path("/home/u/proj"));
     assert_eq!(expanded.hide_mounts[0].under, path("/home/u/proj/mnt"));
-    assert_eq!(expanded.path_prepend, [path("/home/u/proj/.git/bin")]);
+    assert_eq!(expanded.path_prepend[0].path, path("/home/u/proj/.git/bin"));
     assert_eq!(
         expanded.secrets["T"],
         path("/home/u/.config/process-wrap/secrets/t")

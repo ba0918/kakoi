@@ -1,6 +1,7 @@
 //! The plan as `--print-plan` shows it (specification section 13): the merged policy, the
 //! real paths of the policy files read, the four variables, each mount item applied or
-//! skipped with the reason and each scan hit left visible with the reason, the final
+//! skipped with the reason, each scan hit left visible with the reason, each scan root,
+//! `hide-mounts` `under`, and `path-prepend` entry skipped with the reason, the final
 //! environment with the secret values masked, the
 //! resolved command, and the bwrap argument list with the descriptors as symbols. The
 //! layout is not a contract; the values embedded are escaped so that no control character
@@ -11,7 +12,7 @@ use std::fmt::Write;
 
 use crate::diagnostic::escape_control;
 use crate::layers::{Directive, LayerOrigin, Policy};
-use crate::mounts::ItemOrigin;
+use crate::mounts::{ItemOrigin, SkippedRole};
 use crate::plan::{Argument, Plan};
 use crate::policy::{EnvMode, NetworkMode, PolicyPath};
 
@@ -65,6 +66,19 @@ pub fn render(plan: &Plan) -> String {
             "  not hidden {} (from the scan): {}",
             shown(&left.link),
             escape_control(&left.reason)
+        );
+    }
+    for skipped in &plan.skipped_paths {
+        let role = match skipped.role {
+            SkippedRole::ScanRoot => "mounts.scan root",
+            SkippedRole::HideMountsUnder => "mounts.hide-mounts under",
+            SkippedRole::PathPrepend => "env.path-prepend entry",
+        };
+        let _ = writeln!(
+            text,
+            "  skipped {role} `{}`: {}",
+            escape_control(&skipped.written),
+            escape_control(&skipped.reason)
         );
     }
     text.push_str("environment:\n");
