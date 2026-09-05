@@ -438,13 +438,16 @@ fn an_explicit_workspace_at_the_current_directory_is_exempt_and_hands_down_no_re
 #[test]
 fn a_workspace_reached_through_a_link_must_land_in_a_root_not_derived_from_itself() {
     // `rw = ["${worktree}"]` after `~/proj/sub` was replaced by a link to `~/victim`:
-    // `--workspace ~/proj/sub` from elsewhere derives the worktree as `~/victim`, so
-    // `~/proj` is writable no more and the workspace's resolution referenced nothing,
-    // yet the only root is the item derived from the redirected workspace itself.
-    let given = "/home/u/proj/sub";
+    // `--workspace ~/proj/sub/inner` from elsewhere derives the worktree as
+    // `~/victim/inner`, so `~/proj` is writable no more and the workspace's resolution
+    // referenced nothing, yet the only root is the item derived from the redirected
+    // workspace itself. The diagnostic names the link followed, apart from the workspace.
+    let given = "/home/u/proj/sub/inner";
+    let link = "/home/u/proj/sub";
+    let real = "/home/u/victim/inner";
     let redirected = Variables {
-        workspace: PathBuf::from("/home/u/victim"),
-        worktree: PathBuf::from("/home/u/victim"),
+        workspace: PathBuf::from(real),
+        worktree: PathBuf::from(real),
         git_common_dir: None,
         ..variables()
     };
@@ -453,11 +456,15 @@ fn a_workspace_reached_through_a_link_must_land_in_a_root_not_derived_from_itsel
         &layers("[mounts]\nrw = [\"${worktree}\"]", None, &[], &[]),
         &redirected,
         host()
-            .dir("/home/u/victim")
-            .link_to_dir(given, "/home/u/victim")
-            .links_traversed(given, &[given])
-            .directories_visited(given, &["/", "/home", "/home/u", "/home/u/proj"])
-            .directories_visited("/home/u/victim", &["/", "/home", "/home/u"]),
+            .dir_with_ancestors(real)
+            .link_to_dir(link, "/home/u/victim")
+            .link_to_dir(given, real)
+            .links_traversed(given, &[link])
+            .directories_visited(
+                given,
+                &["/", "/home", "/home/u", "/home/u/proj", "/home/u/victim"],
+            )
+            .directories_visited(real, &["/", "/home", "/home/u", "/home/u/victim"]),
         "/home/u/elsewhere",
         CONFIG_DIR,
         Some(given),
@@ -465,6 +472,11 @@ fn a_workspace_reached_through_a_link_must_land_in_a_root_not_derived_from_itsel
     .unwrap_err();
 
     assert_path_diagnostic(&diagnostic, &[given]);
+    let apart_from_the_workspace = diagnostic.description().replace(given, "");
+    assert!(
+        apart_from_the_workspace.contains(link),
+        "{diagnostic} does not mention the link followed apart from the workspace"
+    );
 }
 
 #[test]

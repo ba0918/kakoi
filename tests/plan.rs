@@ -623,9 +623,10 @@ fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
 
 #[test]
 fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_naming_the_link() {
-    // After `proj/sub` is replaced by a link to `victim`, `--workspace proj/sub` from
-    // elsewhere derives the worktree as `victim`, so `proj` is writable no more and the
-    // resolution referenced nothing writable; only the link it followed gives it away.
+    // After `proj/sub` is replaced by a link to `victim`, `--workspace proj/sub/inner` from
+    // elsewhere derives the worktree as `victim/inner`, so `proj` is writable no more and
+    // the resolution referenced nothing writable; only the link it followed gives it away,
+    // and the diagnostic names that link apart from the workspace.
     for (name, with_git) in [("with .git", true), ("without .git", false)] {
         let home = TempDir::new();
         home.write(
@@ -637,23 +638,29 @@ fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_na
             std::fs::create_dir(home.path().join("proj/.git")).unwrap();
         }
         std::fs::create_dir(home.path().join("elsewhere")).unwrap();
-        std::fs::create_dir(home.path().join("victim")).unwrap();
+        std::fs::create_dir_all(home.path().join("victim/inner")).unwrap();
         std::fs::remove_dir(home.path().join("proj/sub")).unwrap();
         std::os::unix::fs::symlink(home.path().join("victim"), home.path().join("proj/sub"))
             .unwrap();
         let real_home = home.path().canonicalize().unwrap();
-        let sub = real_home.join("proj/sub");
+        let link = real_home.join("proj/sub");
+        let inner = link.join("inner");
 
         let output = binary(home.path())
             .current_dir(home.path().join("elsewhere"))
-            .args(["--workspace", sub.to_str().unwrap(), "--", "true"])
+            .args(["--workspace", inner.to_str().unwrap(), "--", "true"])
             .output()
             .unwrap();
 
         let diagnostic = assert_diagnostic(&output, 125, "path");
         assert!(
-            diagnostic.contains(sub.to_str().unwrap()),
-            "{name}: {diagnostic} does not mention the link followed"
+            diagnostic.contains(inner.to_str().unwrap()),
+            "{name}: {diagnostic} does not mention the workspace"
+        );
+        let apart_from_the_workspace = diagnostic.replace(inner.to_str().unwrap(), "");
+        assert!(
+            apart_from_the_workspace.contains(link.to_str().unwrap()),
+            "{name}: {diagnostic} does not mention the link followed apart from the workspace"
         );
     }
 }
