@@ -252,15 +252,17 @@ Three rules refine this:
   nothing.
 
 In short: the path of a link you placed inside an `rw` area stops the launch when written as
-`rw`, `rw-file`, or `hide`; write the link's real target instead. The same link written as `ro`
-passes, but what that `ro` protects is only as much as known gap 15 below says.
+`hide` wherever it lands, and when written as `rw` or `rw-file` unless the link's target lies inside
+an item that cannot be redirected from inside; write the link's real target instead. The same link
+written as `ro` passes, but what that `ro` protects is only as much as known gap 15 below says.
 
 Landing inside something hidden is refused too, whatever the item was written as: an `rw`,
 `rw-file`, or `ro` item whose path passes through a writable item and lands on or inside a
-`hide` (or an `rw` landing on an `ro`), including the `hide` items `process-wrap` generates for
-`secrets/` and for hidden mounts, would be mounted after the wider item and show what it hid. And
-no item may land on `/`, `/dev`, or `/proc` or inside the latter two: the isolation mounts those
-itself, and an item there would cover its view (an `ro` over `/proc` shows the host's processes).
+`hide` (or, for `rw` and `rw-file`, on or inside an `ro`), including the `hide` items
+`process-wrap` generates for `secrets/` and for hidden mounts, would be mounted after the wider
+item and show what it hid. And no item may land on `/`, `/dev`, or `/proc` or inside the latter
+two: the isolation mounts those itself, and an item there would cover its view (an `ro` over
+`/proc` shows the host's processes).
 
 The case that meets this most often is dotfiles: the configuration directory's real location is
 inside the dotfiles worktree, so `rw = ["${worktree}"]` would put the profile inside a writable
