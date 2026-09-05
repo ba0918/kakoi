@@ -10,14 +10,16 @@ use common::fixture::{
 };
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
 use process_wrap::layers::{Layer, LayerOrigin};
-use process_wrap::mounts::{expand_policy, resolve_mounts};
-use process_wrap::placement::{check_placement, protected_paths, written_paths};
+use process_wrap::mounts::{expand_policy, generate, resolve_written};
+use process_wrap::placement::{check_origins, check_placement, protected_paths, written_paths};
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
 /// Resolves the mounts of the written layers against `facts` and checks their placement
 /// with the current directory at `current_dir`, the configuration directory at
-/// `config_dir`, and `--workspace` given as `workspace`.
+/// `config_dir`, and `--workspace` given as `workspace`, in the order of stage 7 of
+/// specification section 13: the scan roots and the `hide-mounts` `under`s against the
+/// written items before generation, then the rest against the generated set.
 fn check_at(
     layers: &[Layer],
     variables: &Variables,
@@ -29,9 +31,18 @@ fn check_at(
     let policy = merged(layers);
     let expanded = expand_policy(&policy, variables, &home());
     let facts = facts.mount_facts();
-    let resolved = resolve_mounts(&expanded, layers, variables, &facts)?;
-    let protected = protected_paths(&expanded, layers, Path::new(config_dir));
     let written = written_paths(&expanded, workspace.map(Path::new));
+    let before_generation = resolve_written(&expanded, &facts)?;
+    check_origins(
+        &expanded,
+        &before_generation,
+        &written,
+        variables,
+        Path::new(current_dir),
+        &facts,
+    )?;
+    let resolved = generate(before_generation, &expanded, layers, variables, &facts)?;
+    let protected = protected_paths(&expanded, layers, Path::new(config_dir));
     check_placement(
         &resolved,
         &protected,
@@ -1251,6 +1262,69 @@ fn an_item_under_root_but_outside_dev_and_proc_is_accepted() {
     );
 
     assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point() {
+    // A scan root is not mounted, so a root below an `rw` item (or behind a link inside
+    // one) can be renamed or re-pointed from inside the isolation, and the next start
+    // walks an empty tree and hides no `.env`. The mount point of an `rw` item itself
+    // cannot be renamed, and a root that referenced nothing writable is not at issue. The
+    // diagnostic names the root and the `rw` item it resolved through.
+    let through_b = &["/", "/home", "/home/u", "/home/u/b"];
+    for (name, profile, facts, mentions) in [
+        (
+            "a link inside rw pointed at a place that is no item",
+            "[mounts]\nrw = [\"~/a\"]\n[[mounts.scan]]\nroot = \"~/a/link\"\nnames = [\".env\"]",
+            host()
+                .dir("/home/u/a")
+                .link_to_dir("/home/u/a/link", WORKTREE)
+                .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+                .directories_visited("/home/u/a/link", &["/", "/home", "/home/u", "/home/u/a"]),
+            Some(&["/home/u/a/link", "/home/u/a"][..]),
+        ),
+        (
+            "a real directory below rw",
+            "[mounts]\nrw = [\"~/b\"]\n[[mounts.scan]]\nroot = \"~/b/tree\"\nnames = [\".env\"]",
+            host()
+                .dir("/home/u/b")
+                .dir("/home/u/b/tree")
+                .directories_visited("/home/u/b/tree", through_b),
+            Some(&["/home/u/b/tree", "/home/u/b"][..]),
+        ),
+        (
+            "the mount point of rw itself",
+            "[mounts]\nrw = [\"~/b\"]\n[[mounts.scan]]\nroot = \"~/b\"\nnames = [\".env\"]",
+            host()
+                .dir("/home/u/b")
+                .directories_visited("/home/u/b", &["/", "/home", "/home/u"]),
+            None,
+        ),
+        (
+            "the worktree, referencing nothing writable",
+            "[mounts]\nrw = [\"~/b\"]\n[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env\"]",
+            host()
+                .dir("/home/u/b")
+                .directories_visited(WORKTREE, &["/", "/home", "/home/u"]),
+            None,
+        ),
+    ] {
+        let result = check(
+            &layers(profile, None, &[], &[]),
+            &variables(),
+            facts,
+            WORKTREE,
+        );
+
+        match mentions {
+            Some(mentions) => {
+                let diagnostic = result.expect_err(name);
+                assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+                assert_path_diagnostic(&diagnostic, mentions);
+            }
+            None => assert!(result.is_ok(), "{name}: {result:?}"),
+        }
+    }
 }
 
 #[test]

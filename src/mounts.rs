@@ -38,18 +38,21 @@ pub struct ExpandedItem {
     pub path: Expansion,
 }
 
-/// One `mounts.scan` entry with its root expanded.
+/// One `mounts.scan` entry with its root expanded; `written` is the root as written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpandedScan {
+    pub written: PolicyPath,
     pub root: Expansion,
     pub names: Vec<String>,
     pub exclude: Vec<String>,
     pub prune: Vec<String>,
 }
 
-/// One `mounts.hide-mounts` entry with its `under` expanded.
+/// One `mounts.hide-mounts` entry with its `under` expanded; `written` is the `under` as
+/// written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpandedHideMounts {
+    pub written: PolicyPath,
     pub under: Expansion,
     pub fstype: Vec<String>,
 }
@@ -109,6 +112,7 @@ pub fn expand_policy(
             .scan
             .iter()
             .map(|scan| ExpandedScan {
+                written: scan.root.clone(),
                 root: expand(&scan.root),
                 names: scan.names.clone(),
                 exclude: scan.exclude.clone(),
@@ -119,6 +123,7 @@ pub fn expand_policy(
             .hide_mounts
             .iter()
             .map(|hide_mounts| ExpandedHideMounts {
+                written: hide_mounts.under.clone(),
                 under: expand(&hide_mounts.under),
                 fstype: hide_mounts.fstype.clone(),
             })
@@ -144,8 +149,9 @@ pub struct ScanRequest {
 /// What the outer layer must look up for the mount resolution: the paths whose existence,
 /// kind, and real path are needed, the paths whose resolution must report the symbolic
 /// links and directories it passes through (the ones specification section 5.6 protects,
-/// the written mount items, and the given `--workspace`), the scans to walk, and the
-/// `under` of each `hide-mounts` (the mount list is read only when there is one).
+/// the written mount items, the scan roots, the `hide-mounts` `under`s, and the given
+/// `--workspace`), the scans to walk, and the `under` of each `hide-mounts` (the mount
+/// list is read only when there is one).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Candidates {
     pub paths: Vec<PathBuf>,
@@ -158,8 +164,8 @@ pub struct Candidates {
 /// ancestor and the path itself) of the paths specification section 5.6 protects — the
 /// policy files read, the configuration directory, the secret files, and the
 /// `path-prepend` entries — and the configuration directory's `secrets/`. The traversals
-/// are those protected paths, the written mount items, and `workspace`, the `--workspace`
-/// path as given.
+/// are those protected paths, the written mount items, the scan roots, the `hide-mounts`
+/// `under`s, and `workspace`, the `--workspace` path as given.
 pub fn candidates(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
@@ -199,6 +205,13 @@ pub fn candidates(
             .mounts
             .iter()
             .filter_map(|item| item.path.path())
+            .chain(expanded.scans.iter().filter_map(|scan| scan.root.path()))
+            .chain(
+                expanded
+                    .hide_mounts
+                    .iter()
+                    .filter_map(|hide| hide.under.path()),
+            )
             .chain(workspace)
             .map(Path::to_path_buf),
     );

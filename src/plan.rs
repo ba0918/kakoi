@@ -11,10 +11,10 @@ use crate::environment::HomeDirectory;
 use crate::isolated_env::{assemble_environment, Environment, SecretFile};
 use crate::layers::{Directive, Layer, Policy};
 use crate::mounts::{
-    loaded_policy_files, resolve_mounts, EntryKind, ExpandedPolicy, MountFacts, ResolvedItem,
-    ResolvedMounts,
+    generate, loaded_policy_files, resolve_written, EntryKind, ExpandedPolicy, MountFacts,
+    ResolvedItem, ResolvedMounts,
 };
-use crate::placement::{check_placement, protected_paths, written_paths};
+use crate::placement::{check_origins, check_placement, protected_paths, written_paths};
 use crate::policy::NetworkMode;
 use crate::variables::Variables;
 
@@ -53,18 +53,29 @@ pub struct Isolation {
     pub policy_files: Vec<PathBuf>,
 }
 
-/// Stage 7 of specification section 13, in its order: the identity and the kinds of the
-/// mount items, the placement rules, then the secrets and the git count while assembling
-/// the environment. The first diagnostic ends it.
+/// Stage 7 of specification section 13, in its order: the identity of the written mount
+/// items, the scan roots and the `hide-mounts` `under`s against the written items before
+/// generation, the generation and the kinds, the placement rules, then the secrets and the
+/// git count while assembling the environment. The first diagnostic ends it.
 pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isolation, Diagnostic> {
-    let mounts = resolve_mounts(
+    let written = written_paths(inputs.expanded, inputs.workspace);
+    let before_generation = resolve_written(inputs.expanded, &facts.mounts)?;
+    check_origins(
+        inputs.expanded,
+        &before_generation,
+        &written,
+        inputs.variables,
+        inputs.current_dir,
+        &facts.mounts,
+    )?;
+    let mounts = generate(
+        before_generation,
         inputs.expanded,
         inputs.layers,
         inputs.variables,
         &facts.mounts,
     )?;
     let protected = protected_paths(inputs.expanded, inputs.layers, inputs.config_dir);
-    let written = written_paths(inputs.expanded, inputs.workspace);
     let mut warnings = check_placement(
         &mounts,
         &protected,

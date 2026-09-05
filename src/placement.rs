@@ -66,10 +66,25 @@ impl WrittenItem {
     /// its resolution inherits what the workspace's resolution referenced (specification
     /// section 5.6).
     fn inherits_from_workspace(&self) -> bool {
-        matches!(
-            self.variable,
-            Some(Variable::Workspace | Variable::Worktree | Variable::GitCommonDir)
-        )
+        derived_from_workspace(self.variable)
+    }
+}
+
+/// Whether a path starting with `variable` is derived from the workspace (`${workspace}`,
+/// `${worktree}`, `${git_common_dir}`), so that its resolution inherits what the
+/// workspace's resolution referenced (specification section 5.6).
+fn derived_from_workspace(variable: Option<Variable>) -> bool {
+    matches!(
+        variable,
+        Some(Variable::Workspace | Variable::Worktree | Variable::GitCommonDir)
+    )
+}
+
+/// The variable a policy path starts with, if any.
+fn variable_of(path: &PolicyPath) -> Option<Variable> {
+    match path {
+        PolicyPath::Variable(variable, _) => Some(*variable),
+        PolicyPath::Absolute(_) | PolicyPath::Home(_) => None,
     }
 }
 
@@ -93,16 +108,96 @@ pub fn written_paths(expanded: &ExpandedPolicy, workspace: Option<&Path>) -> Wri
                     directive: item.directive,
                     origin: item.origin.clone(),
                     written: item.written.to_string(),
-                    variable: match item.written {
-                        PolicyPath::Variable(variable, _) => Some(variable),
-                        PolicyPath::Absolute(_) | PolicyPath::Home(_) => None,
-                    },
+                    variable: variable_of(&item.written),
                     path: item.path.path()?.to_path_buf(),
                 })
             })
             .collect(),
         workspace: workspace.map(Path::to_path_buf),
     }
+}
+
+/// The root-item check of specification section 5.6 on the scan `root`s and the
+/// `hide-mounts` `under`s (the roots first, then the `under`s, each in merged order), made
+/// before generation against `before_generation`, the written items with the replacement
+/// of section 5.4 applied to the written layers alone. An origin whose resolution
+/// referenced something inside a writable item must be the mount point of a writable item
+/// that lies in a root item: the origin itself is not mounted, so anything below a mount
+/// point could be renamed or re-pointed from inside the isolation, and the next start
+/// would walk an empty tree and hide no `.env` or mount. One expanded from a workspace
+/// variable inherits what the `--workspace` under check referenced. An origin that
+/// resolves to nothing is skipped and not at issue.
+pub fn check_origins(
+    expanded: &ExpandedPolicy,
+    before_generation: &ResolvedMounts,
+    written: &WrittenPaths,
+    variables: &Variables,
+    current_dir: &Path,
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    let writable = writable_items(&before_generation.items);
+    let workspace = workspace_under_check(written, variables, current_dir);
+    let roots = root_items(written, workspace, &writable, facts);
+    let origins = expanded
+        .scans
+        .iter()
+        .map(|scan| ("the scan root", &scan.written, &scan.root))
+        .chain(
+            expanded
+                .hide_mounts
+                .iter()
+                .map(|hide| ("the `hide-mounts` `under`", &hide.written, &hide.under)),
+        );
+    for (role, form, expansion) in origins {
+        let Some(path) = expansion.path() else {
+            continue;
+        };
+        let Some(real) = facts.entry(path).path().map(Path::to_path_buf) else {
+            continue;
+        };
+        let inherits = derived_from_workspace(variable_of(form));
+        let Some(reference) = referenced_writable(path, inherits, workspace, &writable, facts)
+        else {
+            continue;
+        };
+        let anchored = roots.iter().any(|root| real.starts_with(&root.real))
+            && writable.iter().any(|item| item.real == real);
+        if anchored {
+            continue;
+        }
+        return Err(Diagnostic::path(format!(
+            "{role} `{form}` at {} resolves to {} {} but is not the mount point of an `rw` \
+             or `rw-file` item that could not itself be redirected; the origin is not \
+             mounted, so it could be renamed or re-pointed from inside the isolation and \
+             the next start would walk an empty tree",
+            path.display(),
+            real.display(),
+            reference.how()
+        )));
+    }
+    Ok(())
+}
+
+/// The writable items (`rw` and `rw-file`) among `items`.
+fn writable_items(items: &[ResolvedItem]) -> Vec<&ResolvedItem> {
+    items
+        .iter()
+        .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
+        .collect()
+}
+
+/// The `--workspace` under check, if any: the one given, unless its real path is the
+/// current directory, where the process already sits and no redirection can move it
+/// (specification section 5.6).
+fn workspace_under_check<'a>(
+    written: &'a WrittenPaths,
+    variables: &Variables,
+    current_dir: &Path,
+) -> Option<&'a Path> {
+    written
+        .workspace
+        .as_deref()
+        .filter(|_| variables.workspace != current_dir)
 }
 
 /// Runs the checks in the order of specification section 13 and returns the warnings of
@@ -116,11 +211,7 @@ pub fn check_placement(
     current_dir: &Path,
     facts: &MountFacts,
 ) -> Result<Vec<Warning>, Diagnostic> {
-    let writable: Vec<&ResolvedItem> = resolved
-        .items
-        .iter()
-        .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
-        .collect();
+    let writable = writable_items(&resolved.items);
     check_protected_paths(protected, &writable, facts)?;
     check_written_paths(written, &resolved.items, variables, current_dir, facts)?;
     check_fixed_targets(&resolved.items)?;
@@ -184,15 +275,9 @@ fn check_written_paths(
     current_dir: &Path,
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
-    let writable: Vec<&ResolvedItem> = in_force
-        .iter()
-        .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
-        .collect();
+    let writable = writable_items(in_force);
     let writable = writable.as_slice();
-    let workspace = written
-        .workspace
-        .as_deref()
-        .filter(|_| variables.workspace != current_dir);
+    let workspace = workspace_under_check(written, variables, current_dir);
     let roots = root_items(written, workspace, writable, facts);
     let mut items: Vec<(usize, &WrittenItem, PathBuf)> = written
         .items
@@ -210,7 +295,13 @@ fn check_written_paths(
             item.written,
             item.path.display()
         );
-        let reference = referenced_writable(item, workspace, writable, facts);
+        let reference = referenced_writable(
+            &item.path,
+            item.inherits_from_workspace(),
+            workspace,
+            writable,
+            facts,
+        );
         if item.directive == Directive::Hide {
             check_hide_links(&role, item, writable, facts)?;
         }
@@ -390,8 +481,16 @@ fn root_items<'a>(
     writable
         .iter()
         .filter(|item| {
-            writable_forms_of(item, written, facts)
-                .all(|form| referenced_writable(form, workspace, writable, facts).is_none())
+            writable_forms_of(item, written, facts).all(|form| {
+                referenced_writable(
+                    &form.path,
+                    form.inherits_from_workspace(),
+                    workspace,
+                    writable,
+                    facts,
+                )
+                .is_none()
+            })
         })
         .copied()
         .collect()
@@ -426,23 +525,38 @@ impl<'a> Reference<'a> {
             inherited: false,
         }
     }
+
+    /// How the path came to reference the item, for a diagnostic.
+    fn how(&self) -> String {
+        let through = format!(
+            "through the `{}` item {}",
+            directive_name(self.item.directive),
+            self.item.real.display()
+        );
+        if self.inherited {
+            format!("and the workspace it was expanded from resolved {through},")
+        } else {
+            through
+        }
+    }
 }
 
-/// The first writable item that resolving `item` referenced: what its own resolution
-/// consulted, or, for an item expanded from a workspace variable, what the resolution of
-/// `workspace` (the `--workspace` under check, if any) consulted (specification
-/// section 5.6).
+/// The first writable item that resolving `path` referenced: what its own resolution
+/// consulted, or, when `inherits` (the path was expanded from a workspace variable), what
+/// the resolution of `workspace` (the `--workspace` under check, if any) consulted
+/// (specification section 5.6).
 fn referenced_writable<'a>(
-    item: &WrittenItem,
+    path: &Path,
+    inherits: bool,
     workspace: Option<&Path>,
     writable: &'a [&'a ResolvedItem],
     facts: &MountFacts,
 ) -> Option<Reference<'a>> {
-    consulted_writable(&item.path, writable, facts)
+    consulted_writable(path, writable, facts)
         .map(Reference::own)
         .or_else(|| {
             workspace
-                .filter(|_| item.inherits_from_workspace())
+                .filter(|_| inherits)
                 .and_then(|workspace| consulted_writable(workspace, writable, facts))
                 .map(|item| Reference {
                     item,
@@ -465,20 +579,11 @@ fn check_landing(
     if roots.iter().any(|root| real.starts_with(&root.real)) {
         return Ok(());
     }
-    let through = format!(
-        "through the `{}` item {}",
-        directive_name(reference.item.directive),
-        reference.item.real.display()
-    );
-    let how = if reference.inherited {
-        format!("and the workspace it was expanded from resolved {through},")
-    } else {
-        through
-    };
     Err(Diagnostic::path(format!(
-        "{role} resolves to {} {how} but outside every `rw` and `rw-file` item that could \
+        "{role} resolves to {} {} but outside every `rw` and `rw-file` item that could \
          not itself be redirected, so it could be redirected from inside the isolation",
-        real.display()
+        real.display(),
+        reference.how()
     )))
 }
 

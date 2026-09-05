@@ -896,11 +896,14 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
         [Path::new("/home/u/proj")]
     );
     assert_eq!(candidates.hide_mounts_under, [PathBuf::from("/mnt")]);
-    // The written items and the given workspace are walked too, so that the check on
-    // where they resolve to sees what their resolution passed through.
+    // The written items, the scan roots, the `hide-mounts` `under`s, and the given
+    // workspace are walked too, so that the check on where they resolve to sees what
+    // their resolution passed through.
     for expected in [
         "/home/u/.cache",
         "/cli/rw",
+        "/home/u/proj",
+        "/mnt",
         "/home/u/given/ws",
         PROFILE,
         "/home/u/tokens/t",
