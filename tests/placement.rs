@@ -1328,6 +1328,158 @@ fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point(
 }
 
 #[test]
+fn a_hide_mounts_under_resolving_through_a_writable_item_must_be_a_writable_mount_point() {
+    // The same rule for the `under` of `hide-mounts`: below `rw ~/b` it could be renamed
+    // from inside and the next start would hide no mount; the mount point itself passes.
+    let through_b = &["/", "/home", "/home/u", "/home/u/b"];
+    let profile = |under: &str| {
+        format!("[mounts]\nrw = [\"~/b\"]\n[[mounts.hide-mounts]]\nunder = \"{under}\"\nfstype = [\"9p\"]")
+    };
+
+    let below = check(
+        &layers(&profile("~/b/mnt"), None, &[], &[]),
+        &variables(),
+        host()
+            .dir("/home/u/b")
+            .dir("/home/u/b/mnt")
+            .directories_visited("/home/u/b/mnt", through_b),
+        WORKTREE,
+    )
+    .unwrap_err();
+    assert_path_diagnostic(&below, &["/home/u/b/mnt", "/home/u/b"]);
+
+    let at_the_mount_point = check(
+        &layers(&profile("~/b"), None, &[], &[]),
+        &variables(),
+        host()
+            .dir("/home/u/b")
+            .directories_visited("/home/u/b", &["/", "/home", "/home/u"]),
+        WORKTREE,
+    );
+    assert!(at_the_mount_point.is_ok(), "{at_the_mount_point:?}");
+}
+
+#[test]
+fn a_scan_root_is_judged_against_the_writable_items_before_generation() {
+    // `hide-mounts` hides `~/b`, a 9p mount, and that generated `hide` replaces `rw ~/b`
+    // (section 6.3): after generation nothing is writable and `root = "~/b/tree"` would
+    // pass. The origins are judged before generation, where `~/b` is still writable, so
+    // the root below it is refused.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/b\"]\n\
+             [[mounts.scan]]\nroot = \"~/b/tree\"\nnames = [\".env\"]\n\
+             [[mounts.hide-mounts]]\nunder = \"/home/u\"\nfstype = [\"9p\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .mount("/home/u/b", "9p")
+            .dir("/home/u/b/tree")
+            .directories_visited("/home/u/b/tree", &["/", "/home", "/home/u", "/home/u/b"])
+            .directories_visited("/home/u", &["/", "/home"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/b/tree", "/home/u/b"]);
+}
+
+#[test]
+fn a_scan_root_diagnostic_precedes_a_written_item_diagnostic() {
+    // `rw ~/cache/pip/http` rewired to outside every writable item and `root = "~/b/tree"`
+    // below `rw ~/b` are both refused; the root is judged first (specification
+    // section 13, stage 7), so its diagnostic is the one shown.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/b\", \"~/cache\", \"~/cache/pip/http\"]\n\
+             [[mounts.scan]]\nroot = \"~/b/tree\"\nnames = [\".env\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        rewired_through_cache(host().dir("/home/u/victim"), "/home/u/victim", true)
+            .dir("/home/u/b")
+            .dir("/home/u/b/tree")
+            .directories_visited("/home/u/b/tree", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/b/tree"]);
+    assert!(
+        !diagnostic.description().contains("/home/u/cache"),
+        "{diagnostic} is about the written item, not the scan root"
+    );
+}
+
+#[test]
+fn a_scan_root_diagnostic_precedes_a_hide_mounts_under_diagnostic() {
+    // Both origins lie below `rw ~/b`; the roots come before the `under`s.
+    let through_b = &["/", "/home", "/home/u", "/home/u/b"];
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/b\"]\n\
+             [[mounts.hide-mounts]]\nunder = \"~/b/mnt\"\nfstype = [\"9p\"]\n\
+             [[mounts.scan]]\nroot = \"~/b/tree\"\nnames = [\".env\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/b")
+            .dir("/home/u/b/tree")
+            .dir("/home/u/b/mnt")
+            .directories_visited("/home/u/b/tree", through_b)
+            .directories_visited("/home/u/b/mnt", through_b),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/b/tree"]);
+    assert!(
+        !diagnostic.description().contains("/home/u/b/mnt"),
+        "{diagnostic} is about the `under`, not the scan root"
+    );
+}
+
+#[test]
+fn a_scan_root_written_with_a_workspace_variable_inherits_the_workspace_references() {
+    // `rw = ["~/cache"]` with `root = "${worktree}"` and `--workspace ~/cache/proj` given
+    // from elsewhere after `proj` became a link to `~/victim`. The root expands to the
+    // real path `~/victim` and its own resolution references nothing writable, but the
+    // workspace it came from was reached through `~/cache`, so the root inherits that
+    // reference and is refused as no mount point of a writable item. The diagnostic names
+    // the scan root, not the `--workspace` path.
+    let (redirected, facts) = workspace_rewired_through_cache();
+
+    let diagnostic = check_at(
+        &layers(
+            "[mounts]\nrw = [\"~/cache\"]\n[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &redirected,
+        facts,
+        "/home/u/elsewhere",
+        CONFIG_DIR,
+        Some("/home/u/cache/proj"),
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/victim", "/home/u/cache"]);
+    assert!(
+        !diagnostic.description().contains("/home/u/cache/proj"),
+        "{diagnostic} is about the workspace, not the scan root"
+    );
+}
+
+#[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
     // as a prefix, so only the rule about the width of `rw` can stop these.
