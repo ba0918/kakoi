@@ -123,6 +123,7 @@ pub fn check_placement(
         .collect();
     check_protected_paths(protected, &writable, facts)?;
     check_written_paths(written, &resolved.items, variables, current_dir, facts)?;
+    check_fixed_targets(&resolved.items)?;
     check_width(&writable, home)?;
     check_work_place(variables, home)?;
     check_current_dir(&resolved.items, current_dir)?;
@@ -494,6 +495,31 @@ fn consulted_writable<'a>(
         .chain(facts.visited_directories(given))
         .find_map(|place| writable.iter().find(|item| place.starts_with(&item.real)))
         .copied()
+}
+
+/// No item may land where the fixed part of the bwrap arguments mounts (specification
+/// sections 5.6 and 14): `/` itself, or `/dev` or `/proc` and anything under them. An
+/// `ro` over `/proc` covers the isolation's `/proc` with the host's and shows the host's
+/// processes; over `/dev` or `/` the ground of the isolation is gone. Whatever the
+/// directive, and whether or not the item referenced anything. The items are in the order
+/// of section 6.4, so the first found is the first reported.
+fn check_fixed_targets(items: &[ResolvedItem]) -> Result<(), Diagnostic> {
+    let fixed = items.iter().find(|item| {
+        item.real == Path::new("/")
+            || item.real.starts_with("/dev")
+            || item.real.starts_with("/proc")
+    });
+    match fixed {
+        Some(item) => Err(Diagnostic::path(format!(
+            "the `{}` item `{}` resolves to {}, which is `/`, `/dev`, or `/proc` or lies \
+             inside them; the isolation mounts those itself and an item there would cover \
+             or break its own view",
+            directive_name(item.directive),
+            item.written,
+            item.real.display()
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// Making the whole home writable is refused from every layer (specification

@@ -1192,6 +1192,68 @@ fn an_item_landing_inside_a_generated_hide_is_rejected_as_an_exposing_pair() {
 }
 
 #[test]
+fn an_item_landing_on_the_fixed_mount_targets_is_rejected() {
+    // The fixed part of the bwrap arguments mounts `/`, `/dev`, and `/proc` itself
+    // (section 14). An item over `/proc` covers the isolation's `/proc` with the host's and
+    // shows the host's processes; over `/dev` or `/` the ground of the isolation is gone.
+    // The directive and whether the item referenced anything make no difference. The
+    // diagnostic names the item as written and where it lands.
+    for (name, profile, facts, mentions) in [
+        (
+            "hide identical to /",
+            "[mounts]\nhide = [\"/\"]",
+            host(),
+            &["/"][..],
+        ),
+        (
+            "hide inside /dev",
+            "[mounts]\nhide = [\"/dev/shm\"]",
+            host().dir("/dev").dir("/dev/shm"),
+            &["/dev/shm"],
+        ),
+        (
+            "ro identical to /proc",
+            "[mounts]\nro = [\"/proc\"]",
+            host().dir("/proc"),
+            &["/proc"],
+        ),
+        (
+            "ro through a link pointed at /proc",
+            "[mounts]\nrw = [\"~/a\"]\nro = [\"~/a/link\"]",
+            host()
+                .dir("/home/u/a")
+                .dir("/proc")
+                .link_to_dir("/home/u/a/link", "/proc")
+                .links_traversed("/home/u/a/link", &["/home/u/a/link"]),
+            &["~/a/link", "/proc"],
+        ),
+    ] {
+        let diagnostic = check(
+            &layers(profile, None, &[], &[]),
+            &variables(),
+            facts,
+            WORKTREE,
+        )
+        .unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert_path_diagnostic(&diagnostic, mentions);
+    }
+}
+
+#[test]
+fn an_item_under_root_but_outside_dev_and_proc_is_accepted() {
+    let result = check(
+        &layers("[mounts]\nro = [\"/etc/hosts\"]", None, &[], &[]),
+        &variables(),
+        host().file_with_ancestors("/etc/hosts"),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
     // as a prefix, so only the rule about the width of `rw` can stop these.
