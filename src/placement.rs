@@ -168,10 +168,10 @@ fn check_protected_paths(
 /// a root item, since what it referenced could be re-pointed from inside the isolation and
 /// the next start would apply the directive to any host path. The items are taken in the
 /// order of section 6.4, then the workspace. An item that resolves to nothing has nothing
-/// to bind. An item that landed is then checked against the lower layers' `hide` and `ro`
-/// items (`check_replacement`). A `--workspace` whose real path is the current directory
-/// is exempt and hands nothing down: the process already sits there, so no redirection
-/// can move it.
+/// to bind. An item that landed is then checked against the written `hide` and `ro` items
+/// it would invalidate (`check_replacement`). A `--workspace` whose real path is the
+/// current directory is exempt and hands nothing down: the process already sits there, so
+/// no redirection can move it.
 fn check_written_paths(
     written: &WrittenPaths,
     writable: &[&ResolvedItem],
@@ -202,14 +202,7 @@ fn check_written_paths(
         );
         let reference = referenced_writable(item, workspace, writable, facts);
         check_landing(&role, reference, &real, &roots)?;
-        check_replacement(
-            &role,
-            item,
-            reference,
-            &real,
-            &written.items[..index],
-            facts,
-        )?;
+        check_replacement(&role, item, reference, &real, index, &written.items, facts)?;
     }
     if let Some(workspace) = workspace {
         let role = format!("the workspace {}", workspace.display());
@@ -221,43 +214,69 @@ fn check_written_paths(
 }
 
 /// The further rule of specification section 5.6 for a written item that referenced
-/// something writable: its real path must not be, or lie inside, a `hide` or `ro` item
-/// written in a lower layer. Landing inside another root item exposes nothing new for an
-/// `rw`, unless the lower layer hid or read-only-mounted that place: replacing it by the
-/// identity of section 5.4, or mounting inside it in the order of section 6.4, would then
-/// make it writable. The lower item is the one in force over the real path just before
-/// this item's layer: at each prefix of the real path, innermost first, the last earlier
-/// item of another layer with that identity (the earlier items are in layer order, so it
-/// is what the replacement of section 5.4 leaves there). A form of the item's own layer
-/// merges with it instead (section 5.4) and replaces nothing. A lower `rw` in force there
-/// already exposes the place, so it shields whatever it replaced.
+/// something writable: it must not form an exposing pair with a written `hide` or `ro`
+/// item it would invalidate. Landing inside another root item exposes nothing new by
+/// itself, but the item invalidates what is at its real path or over it: an identical
+/// item of a lower layer by the identity of section 5.4, and one over a proper ancestor
+/// by the order of section 6.4, which mounts the narrower item after the wider one
+/// whatever their layers. The lower item is the last one of a lower layer with that
+/// identity (the items are in layer order, so it is what the replacement of section 5.4
+/// leaves there just before this item's layer). The item in force over an ancestor is the
+/// last one of any layer with that identity, taken at the innermost ancestor that has one;
+/// an `rw` there already exposes the place, so it shields whatever it replaced. A form of
+/// the item's own layer at the same identity merges with it (section 5.4) and replaces
+/// nothing, so only the lower layers are candidates for the identical item.
 fn check_replacement(
     role: &str,
     item: &WrittenItem,
     reference: Option<Reference>,
     real: &Path,
-    earlier_items: &[WrittenItem],
+    index: usize,
+    written: &[WrittenItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
     if reference.is_none() {
         return Ok(());
     }
-    let in_force = real.ancestors().find_map(|prefix| {
-        earlier_items.iter().rev().find(|lower| {
-            lower.origin != item.origin
-                && facts.entry(&lower.path).path().unwrap_or(&lower.path) == prefix
-        })
+    let resolves_to = |other: &WrittenItem, place: &Path| {
+        facts.entry(&other.path).path().unwrap_or(&other.path) == place
+    };
+    let identical = written[..index]
+        .iter()
+        .rev()
+        .find(|lower| lower.origin != item.origin && resolves_to(lower, real));
+    let over = real.ancestors().skip(1).find_map(|ancestor| {
+        written
+            .iter()
+            .rev()
+            .find(|other| resolves_to(other, ancestor))
     });
-    match in_force.filter(|lower| matches!(lower.directive, Directive::Hide | Directive::Ro)) {
-        Some(lower) => Err(Diagnostic::path(format!(
-            "{role} resolves to {}, which is or lies inside the `{}` item `{}` at {} of a \
-             lower layer, so it could be redirected from inside the isolation",
+    match identical
+        .into_iter()
+        .chain(over)
+        .find(|partner| exposes(item.directive, partner.directive))
+    {
+        Some(partner) => Err(Diagnostic::path(format!(
+            "{role} resolves to {}, which is or lies inside the `{}` item `{}` at {}, so it \
+             could be redirected from inside the isolation",
             real.display(),
-            directive_name(lower.directive),
-            lower.written,
-            lower.path.display()
+            directive_name(partner.directive),
+            partner.written,
+            partner.path.display()
         ))),
         None => Ok(()),
+    }
+}
+
+/// The exposing pairs of specification section 5.6: a written item with `item` as its
+/// directive invalidating a `hide` or `ro` item with `partner` as its directive makes
+/// something newly readable or writable. A `hide` exposes nothing, and `ro` over `ro`
+/// shows nothing new.
+fn exposes(item: Directive, partner: Directive) -> bool {
+    match item {
+        Directive::Rw | Directive::RwFile => matches!(partner, Directive::Hide | Directive::Ro),
+        Directive::Ro => partner == Directive::Hide,
+        Directive::Hide => false,
     }
 }
 

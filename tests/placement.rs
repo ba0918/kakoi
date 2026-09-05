@@ -793,6 +793,141 @@ fn a_referenced_item_merging_with_a_hide_of_its_own_layer_is_accepted() {
 }
 
 #[test]
+fn a_referenced_lower_layer_rw_landing_inside_an_upper_layer_hide_is_rejected() {
+    // The profile's `rw ~/a/link` resolves through `~/a` and lands in `~/b/creds/sub`;
+    // `--hide ~/b/creds` sits above it in the layers, but section 6.4 still mounts the
+    // narrower `rw` after the `hide`, so the link exposes what the command line hid.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\", \"~/a/link\"]",
+            None,
+            &[],
+            &["/home/u/b/creds"],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .dir("/home/u/b/creds/sub")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds/sub")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
+fn a_referenced_rw_landing_inside_a_hide_of_its_own_layer_is_rejected() {
+    // The same shape with the `hide` written in the profile itself: the layer makes no
+    // difference to the order of section 6.4.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\", \"~/a/link\"]\nhide = [\"~/b/creds\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .dir("/home/u/b/creds/sub")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds/sub")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
+fn a_referenced_hide_restating_or_narrowing_a_lower_layer_hide_is_accepted() {
+    // `~/b/creds` and `~/b/creds/sub` resolve through the profile's `rw ~/b`, so a `--hide`
+    // on either is a referenced item, but a `hide` exposes nothing whatever it lands on.
+    let through_b = &["/", "/home", "/home/u", "/home/u/b"];
+    for hide in ["/home/u/b/creds", "/home/u/b/creds/sub"] {
+        let result = check(
+            &layers(
+                "[mounts]\nrw = [\"~/b\"]\nhide = [\"~/b/creds\"]",
+                None,
+                &[],
+                &[hide],
+            ),
+            &variables(),
+            host()
+                .dir("/home/u/b")
+                .dir("/home/u/b/creds")
+                .dir("/home/u/b/creds/sub")
+                .directories_visited("/home/u/b/creds", through_b)
+                .directories_visited("/home/u/b/creds/sub", through_b),
+            WORKTREE,
+        );
+
+        assert!(result.is_ok(), "{hide}: {result:?}");
+    }
+}
+
+#[test]
+fn a_referenced_ro_replacing_a_lower_layer_ro_is_accepted() {
+    // The policy file's `ro ~/a/link`, re-pointed at `~/b/creds`, replaces the profile's
+    // `ro` there by the identity of section 5.4, but `ro` over `ro` exposes nothing.
+    let result = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/b/creds\"]",
+            Some("[mounts]\nro = [\"~/a/link\"]"),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn a_referenced_ro_landing_inside_a_lower_layer_hide_is_rejected() {
+    // Re-pointed at `~/b/creds/sub`, the policy file's `ro ~/a/link` lands inside the
+    // profile's `hide`, and section 6.4 mounts it after the `hide`: what was hidden
+    // becomes readable.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\"]",
+            Some("[mounts]\nro = [\"~/a/link\"]"),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .dir("/home/u/b/creds/sub")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds/sub")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
     // as a prefix, so only the rule about the width of `rw` can stop these.
