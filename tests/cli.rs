@@ -617,3 +617,41 @@ fn secret_values_never_reach_stdout_or_stderr() {
         assert!(!stderr.contains(value), "{report}");
     }
 }
+
+#[test]
+fn print_plan_is_identical_across_two_runs() {
+    let (home, workspace) = home_with_workspace();
+    home.write("ws/.env", "SECRET=x\n");
+    home.write("ws/sub/.env.local", "SECRET=y\n");
+    home.write("ws/sub/keep.txt", "");
+    home.write("cache/.keep", "");
+    home.write("notes/a.md", "");
+    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN\n");
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\n\
+         rw = [\"${workspace}\", \"~/cache\", \"${git_common_dir}\"]\n\
+         ro = [\"~/notes\"]\n\
+         hide = [\"~/missing\", \"~/notes/a.md\"]\n\
+         [[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env\", \".env.*\"]\n\
+         [env]\nunset = [\"*_TOKEN\"]\nset = { B = \"2\", A = \"1\" }\n\
+         [secrets]\nTOKEN = \"${config_dir}/secrets/token\"\n\
+         [git.instead-of]\n\"git@example.com:\" = \"https://example.com/\"\n",
+    );
+    let arguments = [
+        "--workspace",
+        workspace.to_str().unwrap(),
+        "--print-plan",
+        "--",
+        "/bin/true",
+    ];
+
+    let first = run(home.path(), arguments);
+    let second = run(home.path(), arguments);
+
+    let report = format!("{}\n{}", output_report(&first), output_report(&second));
+    assert_eq!(first.status.code(), Some(0), "{report}");
+    assert_eq!(second.status.code(), Some(0), "{report}");
+    assert!(!first.stdout.is_empty(), "{report}");
+    assert_eq!(first.stdout, second.stdout, "{report}");
+}
