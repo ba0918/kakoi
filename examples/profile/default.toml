@@ -1,0 +1,119 @@
+# The bundled profile for WSL2 (specification section 16). Install it as
+# $XDG_CONFIG_HOME/process-wrap/profile/default.toml (or ~/.config/process-wrap/profile/
+# default.toml) and adjust it to the tools you run.
+#
+# Paths are absolute, start with `~` (the real path of HOME), or start with one of the
+# four variables: ${workspace}, ${worktree}, ${git_common_dir}, ${config_dir}. An item
+# whose path does not exist is skipped and shown as skipped in `--print-plan`.
+
+[mounts]
+# The work place: the workspace, the worktree it is in, and the shared .git of a linked
+# worktree or a submodule (skipped when the worktree is not under git). /tmp is hidden
+# below; /tmp/process-wrap is the one directory shared with the host, created by you or
+# by your shim (process-wrap never creates it; without it the item is skipped and /tmp
+# stays empty).
+rw = [
+    "${workspace}",
+    "${worktree}",
+    "${git_common_dir}",
+    "/tmp/process-wrap",
+    # package caches
+    "~/.cache",
+    "~/.cargo/registry",
+    "~/.cargo/git",
+    "~/.npm",
+    "~/.bun/install/cache",
+    # codex: config.toml stays writable through this bind; codex persists it via
+    # tmp + rename, which an rw-file bind of its own would break
+    "~/.codex",
+    "~/.codex/rules",
+    # opencode (spawned as a model backend)
+    "~/.local/share/opencode",
+    "~/.local/state/opencode",
+    # claude code (same role)
+    "~/.claude",
+]
+
+# Lives directly under HOME, which is never rw. Claude Code writes it in place, so the
+# rw-file limitation (a tmp + rename replace fails) does not bite.
+rw-file = ["~/.claude.json"]
+
+# The instructions and settings the agent CLIs run under are read-only; their runtime
+# state above is rw.
+ro = [
+    "~/.codex/AGENTS.md",
+    "~/.codex/hooks.json",
+    "~/.codex/hooks",
+    "~/.codex/skills",
+    "~/.codex/prompts",
+    "~/.config/opencode",
+    "~/.claude/CLAUDE.md",
+    "~/.claude/settings.json",
+    "~/.claude/hooks",
+    "~/.claude/rules",
+    "~/.claude/output-styles",
+    "~/.claude/agents",
+    "~/.claude/commands",
+    "~/.claude/skills",
+]
+
+hide = [
+    # /tmp holds the host's X11 and ssh-agent sockets under random names, so it cannot
+    # be hidden by name: it is replaced by an empty directory, and /tmp/process-wrap
+    # above is the shared place. /run/user holds the session's sockets (D-Bus, gpg-agent,
+    # Wayland) the same way.
+    "/tmp",
+    "/run/user",
+    # credentials
+    "~/.ssh",
+    "~/.aws",
+    "~/.gnupg",
+    "~/.config/gh",
+    "~/.config/gcloud",
+    "~/.docker",
+    "~/.kube",
+    # WSL interop: binfmt_misc hands every MZ file to /init, which launches it as a
+    # Windows process through the socket in /run/WSL, outside every hide above, with the
+    # whole distro readable via \\wsl$. Hiding the drives below only removes the obvious
+    # binaries; an .exe copied or downloaded into the isolation would still escape.
+    "/run/WSL",
+]
+
+# Environment files anywhere in the worktree read as empty inside the isolation.
+[[mounts.scan]]
+root    = "${worktree}"
+names   = [".env", ".env.*"]
+exclude = ["*.example", "*.sample", "*.dist", "*.template"]
+prune   = [".git", "node_modules"]
+
+# The Windows drives mounted under /mnt are hidden, except the one the work place is on.
+[[mounts.hide-mounts]]
+under  = "/mnt"
+fstype = ["9p", "drvfs"]
+
+[network]
+mode = "host"
+
+[env]
+mode = "inherit"
+# Sockets that carry authentication or input are hidden above; these variables are the
+# other half of that path. Credentials in the host environment are dropped by name.
+unset = [
+    "SSH_AUTH_SOCK",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "*_TOKEN",
+    "*_API_KEY",
+    "*_SECRET*",
+    "*_PASSWORD",
+    "AWS_*",
+    "GH_*",
+    "GITHUB_*",
+]
+
+# Secrets are read from files under the configuration directory's secrets/, which is
+# always hidden inside the isolation. A missing file only warns; add a line per secret
+# you want injected.
+[secrets]
+GH_TOKEN = "${config_dir}/secrets/gh-token"
