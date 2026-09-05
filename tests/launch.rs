@@ -292,7 +292,14 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
         ])
         .output()
         .unwrap();
-    let bwrap_alone = Command::new("bwrap")
+    // The same environment as `binary()` gives the product, so that the two exec-failure
+    // lines are compared under the same locale.
+    let mut bwrap_alone = Command::new("bwrap");
+    bwrap_alone.env_clear();
+    if let Some(path) = std::env::var_os("PATH") {
+        bwrap_alone.env("PATH", path);
+    }
+    let bwrap_alone = bwrap_alone
         .args(["--ro-bind", "/", "/", "--tmpfs"])
         .arg(&hidden)
         .arg("--")
