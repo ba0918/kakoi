@@ -89,6 +89,7 @@ pub struct Facts {
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub mounts: Vec<Mount>,
     pub scan_hits: Vec<ScanHit>,
+    pub mount_list_unreadable: bool,
 }
 
 impl Facts {
@@ -104,7 +105,14 @@ impl Facts {
             directories: self.directories,
             mounts: self.mounts,
             scan_hits: self.scan_hits,
+            mount_list_unreadable: self.mount_list_unreadable,
         }
+    }
+
+    /// The mount list could not be read.
+    pub fn mount_list_unreadable(mut self) -> Self {
+        self.mount_list_unreadable = true;
+        self
     }
 
     /// A scan found the symbolic link `found_at`, pointing at the non-directory `target`.

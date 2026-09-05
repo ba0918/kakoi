@@ -586,6 +586,35 @@ fn hide_mounts_leaves_the_workspace_worktree_and_common_dir_alone() {
 }
 
 #[test]
+fn an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic() {
+    // A mount to hide might be there unseen (a `/proc` restricted by another sandbox), so
+    // the run does not start without the list.
+    let diagnostic = resolve(
+        &layers(HIDE_MNT, None, &[], &[]),
+        &variables(),
+        Facts::new().dir("/mnt").mount_list_unreadable(),
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+}
+
+#[test]
+fn an_unreadable_mount_list_without_hide_mounts_is_ignored() {
+    let resolved = resolve(
+        &layers("[mounts]\nrw = [\"~/proj\"]", None, &[], &[]),
+        &variables(),
+        Facts::new().dir("/home/u/proj").mount_list_unreadable(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        order(&resolved),
+        [(Directive::Rw, Path::new("/home/u/proj"))]
+    );
+}
+
+#[test]
 fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
     let copy = TempDir::new();
     let path = copy.write(
@@ -597,7 +626,7 @@ fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
          91 82 0:51 / /mnt/with\\040space rw - 9p tag rw\n",
     );
 
-    let mounts = read_mount_list(&path);
+    let mounts = read_mount_list(&path).unwrap();
 
     assert_eq!(
         mounts,
@@ -609,6 +638,8 @@ fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
             mount("/mnt/with space", "9p"),
         ]
     );
+    // A list that cannot be read is told apart from an empty one.
+    assert_eq!(read_mount_list(&copy.path().join("missing")), None);
 }
 
 #[test]
@@ -618,7 +649,7 @@ fn a_mount_point_with_a_byte_that_is_not_utf8_does_not_empty_the_mount_list() {
     text.extend_from_slice(b"92 82 0:52 / /mnt/\xff rw - 9p tag rw\n");
     let path = copy.write("mountinfo", text);
 
-    let mounts = read_mount_list(&path);
+    let mounts = read_mount_list(&path).unwrap();
 
     assert_eq!(
         mounts,

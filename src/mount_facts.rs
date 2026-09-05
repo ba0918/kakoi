@@ -1,6 +1,6 @@
 //! Collects `mounts::MountFacts` from the file system: what is behind each candidate path,
 //! what the resolution of each protected path passes through, the scan hits, and the mount
-//! list (specification section 14). Runs no command.
+//! list or the fact that it could not be read (specification section 14). Runs no command.
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -39,7 +39,10 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
         }
     }
     if !candidates.hide_mounts_under.is_empty() {
-        facts.mounts = read_mount_list(Path::new(MOUNTINFO));
+        match read_mount_list(Path::new(MOUNTINFO)) {
+            Some(mounts) => facts.mounts = mounts,
+            None => facts.mount_list_unreadable = true,
+        }
         let unders: Vec<_> = candidates
             .hide_mounts_under
             .iter()

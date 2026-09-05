@@ -12,11 +12,9 @@ use crate::mounts::Mount;
 
 pub const MOUNTINFO: &str = "/proc/self/mountinfo";
 
-/// Reads the mounts listed in the file at `path`. A file that cannot be read lists nothing.
-pub fn read_mount_list(path: &Path) -> Vec<Mount> {
-    fs::read(path)
-        .map(|bytes| parse_mount_list(&bytes))
-        .unwrap_or_default()
+/// Reads the mounts listed in the file at `path`; none when the file cannot be read.
+pub fn read_mount_list(path: &Path) -> Option<Vec<Mount>> {
+    fs::read(path).ok().map(|bytes| parse_mount_list(&bytes))
 }
 
 /// The mount target and file system type of each well-formed line. The file is handled as

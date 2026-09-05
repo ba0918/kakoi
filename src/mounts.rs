@@ -275,6 +275,9 @@ pub struct MountFacts {
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub scan_hits: Vec<ScanHit>,
     pub mounts: Vec<Mount>,
+    /// Whether the mount list was asked for and could not be read (specification
+    /// section 6.3): `mounts` is then empty for the wrong reason.
+    pub mount_list_unreadable: bool,
 }
 
 impl MountFacts {
@@ -470,7 +473,7 @@ pub fn generate(
     let generated = scanned
         .hidden
         .into_iter()
-        .chain(hide_mounts_items(expanded, variables, facts))
+        .chain(hide_mounts_items(expanded, variables, facts)?)
         .chain(secret_items(expanded, variables, facts));
     for item in generated {
         match resolved
@@ -574,11 +577,19 @@ fn scan_items(
 
 /// The `hide` items of `hide-mounts` (specification section 6.3): each mount under an
 /// `under` whose file system type is listed, except the places the user chose to work in.
+/// With a `hide-mounts` written and no mount list to read, a mount to hide might be there
+/// unseen (a `/proc` restricted by another sandbox), so the run does not start.
 fn hide_mounts_items(
     expanded: &ExpandedPolicy,
     variables: &Variables,
     facts: &MountFacts,
-) -> Vec<ResolvedItem> {
+) -> Result<Vec<ResolvedItem>, Diagnostic> {
+    if facts.mount_list_unreadable && !expanded.hide_mounts.is_empty() {
+        return Err(Diagnostic::path(
+            "`mounts.hide-mounts` is written but the mount list could not be read, so a \
+             mount to hide might be missed",
+        ));
+    }
     // The places the user chose to work in are never hidden by their mount type.
     let work_places = [
         Some(variables.workspace.as_path()),
@@ -607,7 +618,7 @@ fn hide_mounts_items(
             ));
         }
     }
-    generated
+    Ok(generated)
 }
 
 /// The `hide` items of the secrets (specification sections 6.3 and 9): each secret file
