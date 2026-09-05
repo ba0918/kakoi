@@ -5,7 +5,8 @@
 1. `docs/plans/implement-0.1-a-policy.md` — ステップ 1〜5（ブランチ `implement-0.1-a-policy`）。済み
 2. `docs/plans/implement-0.1-a2-followup.md` — ステップ 5.1〜5.5（ブランチ `implement-0.1-a2-followup`）。A のマージ後。仕様の改訂（コミット 1142262）への追従
 3. `docs/plans/implement-0.1-b-mounts.md` — ステップ 6〜10（ブランチ `implement-0.1-b-mounts`）。A2 のマージ後
-4. `docs/plans/implement-0.1-c-launch.md` — ステップ 11〜16（ブランチ `implement-0.1-c-launch`）。B のマージ後
+4. `docs/plans/implement-0.1-c-launch.md` — ステップ 11〜16（ブランチ `implement-0.1-c-launch`）。B のマージ後。済み
+5. `docs/plans/implement-0.1-d-revision.md` — ステップ 17〜25（ブランチ `implement-0.1-d-revision`）。C のマージ後。仕様の改訂（コミット 98a9d5f）への追従。改訂で変わった節の割り当ては D の表が本文書の表に優先する
 
 ## Goal
 
