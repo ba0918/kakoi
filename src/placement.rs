@@ -166,8 +166,10 @@ fn check_protected_paths(
 /// a root item, since what it referenced could be re-pointed from inside the isolation and
 /// the next start would apply the directive to any host path. The items are taken in the
 /// order of section 6.4, then the workspace. An item that resolves to nothing has nothing
-/// to bind. A `--workspace` whose real path is the current directory is exempt and hands
-/// nothing down: the process already sits there, so no redirection can move it.
+/// to bind. An item that landed is then checked against the lower layers' `hide` and `ro`
+/// items (`check_replacement`). A `--workspace` whose real path is the current directory
+/// is exempt and hands nothing down: the process already sits there, so no redirection
+/// can move it.
 fn check_written_paths(
     written: &WrittenPaths,
     writable: &[&ResolvedItem],
@@ -180,13 +182,16 @@ fn check_written_paths(
         .as_deref()
         .filter(|_| variables.workspace != current_dir);
     let roots = root_items(written, workspace, writable, facts);
-    let mut items: Vec<(&WrittenItem, PathBuf)> = written
+    let mut items: Vec<(usize, &WrittenItem, PathBuf)> = written
         .items
         .iter()
-        .filter_map(|item| Some((item, facts.entry(&item.path).path()?.to_path_buf())))
+        .enumerate()
+        .filter_map(|(index, item)| {
+            Some((index, item, facts.entry(&item.path).path()?.to_path_buf()))
+        })
         .collect();
-    items.sort_by(|(_, a), (_, b)| byte_order(a, b));
-    for (item, real) in items {
+    items.sort_by(|(_, _, a), (_, _, b)| byte_order(a, b));
+    for (index, item, real) in items {
         let role = format!(
             "the `{}` item `{}` at {}",
             directive_name(item.directive),
@@ -195,6 +200,7 @@ fn check_written_paths(
         );
         let reference = referenced_writable(item, workspace, writable, facts);
         check_landing(&role, reference, &real, &roots)?;
+        check_replacement(&role, reference, &real, &written.items[..index], facts)?;
     }
     if let Some(workspace) = workspace {
         let role = format!("the workspace {}", workspace.display());
@@ -203,6 +209,39 @@ fn check_written_paths(
         check_workspace_links(workspace, &variables.workspace, &roots, written, facts)?;
     }
     Ok(())
+}
+
+/// The further rule of specification section 5.6 for a written item that referenced
+/// something writable: it must not replace, by the identity of section 5.4, a `hide` or
+/// `ro` item written in a lower layer. Landing inside another root item exposes nothing
+/// new for an `rw`, unless the lower layer hid or read-only-mounted that very place: the
+/// replacement would then make it writable. The lower items are in layer order, so the
+/// last one with the same identity before the item is the one it replaces.
+fn check_replacement(
+    role: &str,
+    reference: Option<Reference>,
+    real: &Path,
+    lower_items: &[WrittenItem],
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    if reference.is_none() {
+        return Ok(());
+    }
+    let replaced = lower_items
+        .iter()
+        .rev()
+        .find(|lower| facts.entry(&lower.path).path().unwrap_or(&lower.path) == real);
+    match replaced.filter(|lower| matches!(lower.directive, Directive::Hide | Directive::Ro)) {
+        Some(lower) => Err(Diagnostic::path(format!(
+            "{role} resolves to {} and would replace the `{}` item `{}` at {} of a lower \
+             layer, so it could be redirected from inside the isolation",
+            real.display(),
+            directive_name(lower.directive),
+            lower.written,
+            lower.path.display()
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// The further rule of specification section 5.6 for a `--workspace` under check whose

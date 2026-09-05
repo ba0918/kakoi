@@ -655,6 +655,41 @@ fn a_writable_item_one_of_whose_written_forms_was_redirected_onto_it_is_not_a_ro
 }
 
 #[test]
+fn a_referenced_item_replacing_a_lower_layer_hide_is_rejected() {
+    // `--rw ~/a/link` resolves through `~/a`, a root item. Pointing at `~/a/real` it lands
+    // in that root and replaces nothing. Re-pointed at `~/b/creds`, it still lands in a
+    // root (`~/b`), but by the identity of section 5.4 it would replace the profile's
+    // `hide` there and expose what the lower layer hid.
+    let profile = "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\"]";
+    let facts = || {
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+    };
+
+    let honest = check(
+        &layers(profile, None, &["/home/u/a/link"], &[]),
+        &variables(),
+        facts()
+            .dir("/home/u/a/real")
+            .link_to_dir("/home/u/a/link", "/home/u/a/real"),
+        WORKTREE,
+    );
+    assert!(honest.is_ok(), "{honest:?}");
+
+    let diagnostic = check(
+        &layers(profile, None, &["/home/u/a/link"], &[]),
+        &variables(),
+        facts().link_to_dir("/home/u/a/link", "/home/u/b/creds"),
+        WORKTREE,
+    )
+    .unwrap_err();
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
     // as a prefix, so only the rule about the width of `rw` can stop these.
