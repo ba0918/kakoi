@@ -152,6 +152,21 @@ fn a_missing_real_path_is_skipped_with_a_reason() {
 }
 
 #[test]
+fn a_missing_path_written_two_ways_merges_by_its_expanded_text() {
+    // Nothing exists at `~/x`, so there is no real path to merge on; the two forms merge
+    // on the expanded text `/home/u/x` (specification section 5.4) and are skipped once.
+    let resolved = resolve(
+        &layers("[mounts]\nrw = [\"~/x\", \"/home/u/x\"]", None, &[], &[]),
+        &variables(),
+        Facts::new(),
+    )
+    .unwrap();
+
+    assert!(resolved.items.is_empty(), "{resolved:?}");
+    assert_eq!(resolved.skipped.len(), 1, "{resolved:?}");
+}
+
+#[test]
 fn the_same_directive_twice_in_one_layer_collapses() {
     let resolved = resolve(
         &layers(
@@ -476,6 +491,28 @@ fn scan_walks_a_real_tree_with_prune_and_exclude() {
             ),
         ]
     );
+}
+
+#[test]
+fn a_star_matches_a_leading_dot_and_brackets_are_literal() {
+    // The wildcard meaning of specification section 5.3: `*` covers a name's leading `.`
+    // (no shell-style dotfile exception), and `[abc]` is four literal characters, not a
+    // character class.
+    let tree = TempDir::new();
+    let root = tree.path().canonicalize().unwrap();
+    tree.write(".env", "");
+
+    let found = scan(&root, &["*".to_string()], &[], &[]);
+
+    assert_eq!(
+        hits(found),
+        [(
+            root.join(".env"),
+            file_at(root.join(".env").to_str().unwrap())
+        )]
+    );
+    assert!(matches("[abc]", b"[abc]"));
+    assert!(!matches("[abc]", b"a"));
 }
 
 #[test]

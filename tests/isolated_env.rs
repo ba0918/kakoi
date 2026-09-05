@@ -102,6 +102,19 @@ fn unset_accepts_wildcards() {
 }
 
 #[test]
+fn unset_with_brackets_removes_only_the_literal_name() {
+    let assembled = assemble(
+        "[env]\nunset = [\"[abc]\"]",
+        &host(&[("[abc]", "1"), ("a", "1")]),
+        &BTreeMap::new(),
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(names(&assembled), ["PROCESS_WRAP", "a"]);
+}
+
+#[test]
 fn clear_without_path_leaves_path_absent() {
     let without_prepend = assemble(
         "[env]\nmode = \"clear\"\npass = [\"KEEP\"]",
@@ -311,6 +324,22 @@ fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
     assert_eq!(
         without_entries.environment.values()[&OsString::from("GIT_CONFIG_COUNT")],
         OsString::from("abc")
+    );
+}
+
+#[test]
+fn an_empty_git_config_count_is_an_env_diagnostic_with_entries() {
+    // git itself reads an empty count as 0, but the host handing over a broken value is
+    // the situation to stop on (specification section 10); without entries it is not read.
+    let empty = host(&[("GIT_CONFIG_COUNT", "")]);
+
+    let diagnostic = assemble(INSTEAD_OF, &empty, &BTreeMap::new(), &[]).unwrap_err();
+    assert_eq!(diagnostic.kind(), Kind::Env, "{diagnostic}");
+
+    let without_entries = assemble("", &empty, &BTreeMap::new(), &[]).unwrap();
+    assert_eq!(
+        without_entries.environment.values()[&OsString::from("GIT_CONFIG_COUNT")],
+        OsString::from("")
     );
 }
 
