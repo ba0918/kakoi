@@ -659,6 +659,32 @@ fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_na
 }
 
 #[test]
+fn a_rewired_workspace_is_not_vouched_for_by_a_literal_form_merging_into_the_same_item() {
+    // `rw = ["${worktree}", "~/proj/sub"]` after `proj/sub` was replaced by a link to
+    // `victim`: the redirected `${worktree}` form and the literal form resolve to the same
+    // item at `victim`, and that item is still derived from the redirected workspace.
+    let home = TempDir::new();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"${worktree}\", \"~/proj/sub\"]",
+    );
+    std::fs::create_dir_all(home.path().join("proj/sub")).unwrap();
+    std::fs::create_dir(home.path().join("elsewhere")).unwrap();
+    std::fs::create_dir(home.path().join("victim")).unwrap();
+    std::fs::remove_dir(home.path().join("proj/sub")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("victim"), home.path().join("proj/sub")).unwrap();
+    let sub = home.path().canonicalize().unwrap().join("proj/sub");
+
+    let output = binary(home.path())
+        .current_dir(home.path().join("elsewhere"))
+        .args(["--workspace", sub.to_str().unwrap(), "--", "true"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "path");
+}
+
+#[test]
 fn a_workspace_behind_a_link_landing_in_an_rw_item_written_by_path_is_accepted() {
     let home = TempDir::new();
     home.write(

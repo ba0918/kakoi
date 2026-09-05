@@ -206,12 +206,13 @@ fn check_written_paths(
 }
 
 /// The further rule of specification section 5.6 for a `--workspace` under check whose
-/// resolution followed a symbolic link: its real path must lie inside a root item with a
-/// written form not expanded from the workspace itself. The writable set is derived from
-/// the workspace, so a redirected workspace makes the place that was writable before the
-/// redirection (the worktree of `rw = ["${worktree}"]`) invisible to the other rules, and
-/// a link is the only means of redirection out of a writable item. The first link followed
-/// is the one named.
+/// resolution followed a symbolic link: its real path must lie inside a root item none of
+/// whose written forms was expanded from the workspace itself. The writable set is derived
+/// from the workspace, so a redirected workspace makes the place that was writable before
+/// the redirection (the worktree of `rw = ["${worktree}"]`) invisible to the other rules,
+/// and a link is the only means of redirection out of a writable item. A literal form
+/// merging into the same item as a redirected one does not vouch for it: the item is still
+/// the redirected workspace. The first link followed is the one named.
 fn check_workspace_links(
     workspace: &Path,
     real: &Path,
@@ -224,15 +225,15 @@ fn check_workspace_links(
     };
     let anchored = roots.iter().any(|root| {
         real.starts_with(&root.real)
-            && writable_forms_of(root, written, facts).any(|form| !form.inherits_from_workspace())
+            && writable_forms_of(root, written, facts).all(|form| !form.inherits_from_workspace())
     });
     if anchored {
         return Ok(());
     }
     Err(Diagnostic::path(format!(
         "the workspace {} resolves to {} through the symbolic link {} but outside every `rw` \
-         and `rw-file` item not expanded from the workspace itself, so it could be redirected \
-         from inside the isolation",
+         and `rw-file` item with no form expanded from the workspace itself, so it could be \
+         redirected from inside the isolation",
         workspace.display(),
         real.display(),
         link.display()
