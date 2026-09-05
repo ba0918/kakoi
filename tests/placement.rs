@@ -690,6 +690,31 @@ fn a_referenced_item_replacing_a_lower_layer_hide_is_rejected() {
 }
 
 #[test]
+fn a_referenced_item_merging_with_a_hide_of_its_own_layer_is_accepted() {
+    // Two `hide` forms of one layer that resolve to the same place merge into one item
+    // (section 5.4); neither replaces the other, so the rule on lower layers does not
+    // apply even though the second form resolves through `~/a`.
+    let result = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\", \"~/a/link\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"]),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
     // as a prefix, so only the rule about the width of `rw` can stop these.

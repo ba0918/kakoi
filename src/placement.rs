@@ -55,6 +55,7 @@ pub fn protected_paths(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrittenItem {
     pub directive: Directive,
+    pub origin: LayerOrigin,
     pub written: String,
     pub variable: Option<Variable>,
     pub path: PathBuf,
@@ -90,6 +91,7 @@ pub fn written_paths(expanded: &ExpandedPolicy, workspace: Option<&Path>) -> Wri
             .filter_map(|item| {
                 Some(WrittenItem {
                     directive: item.directive,
+                    origin: item.origin.clone(),
                     written: item.written.to_string(),
                     variable: match item.written {
                         PolicyPath::Variable(variable, _) => Some(variable),
@@ -200,7 +202,14 @@ fn check_written_paths(
         );
         let reference = referenced_writable(item, workspace, writable, facts);
         check_landing(&role, reference, &real, &roots)?;
-        check_replacement(&role, reference, &real, &written.items[..index], facts)?;
+        check_replacement(
+            &role,
+            item,
+            reference,
+            &real,
+            &written.items[..index],
+            facts,
+        )?;
     }
     if let Some(workspace) = workspace {
         let role = format!("the workspace {}", workspace.display());
@@ -215,22 +224,24 @@ fn check_written_paths(
 /// something writable: it must not replace, by the identity of section 5.4, a `hide` or
 /// `ro` item written in a lower layer. Landing inside another root item exposes nothing
 /// new for an `rw`, unless the lower layer hid or read-only-mounted that very place: the
-/// replacement would then make it writable. The lower items are in layer order, so the
-/// last one with the same identity before the item is the one it replaces.
+/// replacement would then make it writable. The earlier items are in layer order, so the
+/// last one of another layer with the same identity is the one it replaces; a form of the
+/// item's own layer merges with it instead (section 5.4) and replaces nothing.
 fn check_replacement(
     role: &str,
+    item: &WrittenItem,
     reference: Option<Reference>,
     real: &Path,
-    lower_items: &[WrittenItem],
+    earlier_items: &[WrittenItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
     if reference.is_none() {
         return Ok(());
     }
-    let replaced = lower_items
-        .iter()
-        .rev()
-        .find(|lower| facts.entry(&lower.path).path().unwrap_or(&lower.path) == real);
+    let replaced = earlier_items.iter().rev().find(|lower| {
+        lower.origin != item.origin
+            && facts.entry(&lower.path).path().unwrap_or(&lower.path) == real
+    });
     match replaced.filter(|lower| matches!(lower.directive, Directive::Hide | Directive::Ro)) {
         Some(lower) => Err(Diagnostic::path(format!(
             "{role} resolves to {} and would replace the `{}` item `{}` at {} of a lower \
