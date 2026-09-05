@@ -115,12 +115,18 @@ pub fn home_with_workspace() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
-/// A directory under the system temporary directory, removed when dropped.
+/// A fresh directory, removed when dropped.
 pub struct TempDir(PathBuf);
 
 impl TempDir {
+    /// A directory under the system temporary directory (`TMPDIR` when set).
     pub fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
+        Self::under(&std::env::temp_dir())
+    }
+
+    /// A directory directly under `parent`, for a test whose scene names the parent.
+    pub fn under(parent: &Path) -> Self {
+        let path = parent.join(format!(
             "process-wrap-{}-{}",
             std::process::id(),
             SEQUENCE.fetch_add(1, Ordering::Relaxed)

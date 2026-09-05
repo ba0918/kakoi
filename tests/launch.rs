@@ -522,25 +522,17 @@ fn a_scanned_env_file_reads_empty() {
 
 #[test]
 fn the_shared_tmp_subdirectory_is_visible_inside_an_empty_tmp() {
-    // Scene 4: `/tmp` hidden, one directory under it rw. The temporary home is itself
-    // under `/tmp`, so the workspace stands in for `/tmp/process-wrap`: nothing on the
-    // host outside the temporary directories is touched.
-    let (home, workspace) = home_with_workspace();
-    assert!(
-        home.path().starts_with("/tmp"),
-        "the temporary directory is not under /tmp: {}",
-        home.path().display()
-    );
-    home.write("marker", "");
+    // Scene 4: `/tmp` hidden, one directory under it rw. The scene names `/tmp`, and
+    // `TempDir::new` follows `TMPDIR`, which may point elsewhere: so the workspace that
+    // stands in for `/tmp/process-wrap` is placed under `/tmp` explicitly, beside a
+    // marker that only the hiding of `/tmp` can make invisible (the root is `ro` bound).
+    // Nothing on the host outside the temporary directories is touched.
+    let home = TempDir::new();
+    let shared = TempDir::under(Path::new("/tmp"));
+    let marker = shared.write("marker", "");
+    let workspace = shared.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
     profile(&home, &format!("{RW_WORKSPACE}hide = [\"/tmp\"]\n"));
-    let marker = home.path().join("marker");
-    let ancestor = home
-        .path()
-        .strip_prefix("/tmp")
-        .unwrap()
-        .components()
-        .next()
-        .unwrap();
 
     let output = run_script(
         &home,
@@ -553,7 +545,7 @@ fn the_shared_tmp_subdirectory_is_visible_inside_an_empty_tmp() {
 
     assert_eq!(
         assert_ran_clean(&output),
-        format!("{}\n", ancestor.as_os_str().to_str().unwrap())
+        format!("{}\n", shared.path().file_name().unwrap().to_str().unwrap())
     );
     assert_eq!(
         std::fs::read_to_string(workspace.join("shared.txt")).unwrap(),
