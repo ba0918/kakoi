@@ -122,7 +122,7 @@ pub fn check_placement(
         .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
         .collect();
     check_protected_paths(protected, &writable, facts)?;
-    check_written_paths(written, &writable, variables, current_dir, facts)?;
+    check_written_paths(written, &resolved.items, variables, current_dir, facts)?;
     check_width(&writable, home)?;
     check_work_place(variables, home)?;
     check_current_dir(&resolved.items, current_dir)?;
@@ -178,11 +178,16 @@ fn check_protected_paths(
 /// down: the process already sits there, so no redirection can move it.
 fn check_written_paths(
     written: &WrittenPaths,
-    writable: &[&ResolvedItem],
+    in_force: &[ResolvedItem],
     variables: &Variables,
     current_dir: &Path,
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
+    let writable: Vec<&ResolvedItem> = in_force
+        .iter()
+        .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
+        .collect();
+    let writable = writable.as_slice();
     let workspace = written
         .workspace
         .as_deref()
@@ -211,7 +216,8 @@ fn check_written_paths(
         if item.directive != Directive::Ro {
             check_landing(&role, reference, &real, &roots)?;
         }
-        check_replacement(&role, item, reference, &real, index, &written.items, facts)?;
+        let lower = &written.items[..index];
+        check_replacement(&role, item, reference, &real, lower, in_force, facts)?;
     }
     if let Some(workspace) = workspace {
         let role = format!("the workspace {}", workspace.display());
@@ -263,47 +269,62 @@ fn check_hide_links(
 /// whatever their layers. The lower item is the last one of a lower layer with that
 /// identity (the items are in layer order, so it is what the replacement of section 5.4
 /// leaves there just before this item's layer). The item in force over an ancestor is the
-/// last one of any layer with that identity, taken at the innermost ancestor that has one;
-/// an `rw` there already exposes the place, so it shields whatever it replaced. A form of
-/// the item's own layer at the same identity merges with it (section 5.4) and replaces
-/// nothing, so only the lower layers are candidates for the identical item.
+/// one the replacement of every layer, the generated one included, leaves there
+/// (`in_force` holds one item per real path), taken at the innermost ancestor that has
+/// one; an `rw` there already exposes the place, so it shields whatever it replaced, and a
+/// generated `hide` there (the `secrets/` directory, a hidden mount) counts like a written
+/// one. A form of the item's own layer at the same identity merges with it (section 5.4)
+/// and replaces nothing, so only the lower layers are candidates for the identical item;
+/// `lower` holds the written items before this one.
 fn check_replacement(
     role: &str,
     item: &WrittenItem,
     reference: Option<Reference>,
     real: &Path,
-    index: usize,
-    written: &[WrittenItem],
+    lower: &[WrittenItem],
+    in_force: &[ResolvedItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
     if reference.is_none() {
         return Ok(());
     }
-    let resolves_to = |other: &WrittenItem, place: &Path| {
-        facts.entry(&other.path).path().unwrap_or(&other.path) == place
-    };
-    let identical = written[..index]
+    let identical = lower
         .iter()
         .rev()
-        .find(|lower| lower.origin != item.origin && resolves_to(lower, real));
-    let over = real.ancestors().skip(1).find_map(|ancestor| {
-        written
-            .iter()
-            .rev()
-            .find(|other| resolves_to(other, ancestor))
-    });
+        .find(|lower| {
+            lower.origin != item.origin
+                && facts.entry(&lower.path).path().unwrap_or(&lower.path) == real
+        })
+        .map(|lower| {
+            (
+                lower.directive,
+                lower.written.as_str(),
+                lower.path.as_path(),
+            )
+        });
+    let over = real
+        .ancestors()
+        .skip(1)
+        .find_map(|ancestor| in_force.iter().find(|other| other.real == ancestor))
+        .map(|other| {
+            (
+                other.directive,
+                other.written.as_str(),
+                other.real.as_path(),
+            )
+        });
     match identical
         .into_iter()
         .chain(over)
-        .find(|partner| exposes(item.directive, partner.directive))
+        .find(|(directive, _, _)| exposes(item.directive, *directive))
     {
-        Some(partner) => Err(Diagnostic::path(format!(
+        Some((directive, partner_written, partner_path)) => Err(Diagnostic::path(format!(
             "{role} resolves to {}, which is or lies inside the `{}` item `{}` at {}, so it \
              could be redirected from inside the isolation",
             real.display(),
-            directive_name(partner.directive),
-            partner.written,
-            partner.path.display()
+            directive_name(directive),
+            partner_written,
+            partner_path.display()
         ))),
         None => Ok(()),
     }

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use process_wrap::cli::Invocation;
 use process_wrap::environment::{HomeDirectory, HostEnvironment, RealEntry};
 use process_wrap::layers::{merge, Layer, LayerOrigin, Policy};
-use process_wrap::mounts::MountFacts;
+use process_wrap::mounts::{Mount, MountFacts};
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
@@ -79,13 +79,15 @@ pub fn merged(layers: &[Layer]) -> Policy {
     merge(layers).unwrap()
 }
 
-/// Facts about paths: what exists behind each, and the symbolic links and directories a
-/// resolution passes through. A path not listed is missing and passes through nothing.
+/// Facts about paths: what exists behind each, the symbolic links and directories a
+/// resolution passes through, and the mounts of the host. A path not listed is missing and
+/// passes through nothing.
 #[derive(Debug, Default, Clone)]
 pub struct Facts {
     pub paths: BTreeMap<PathBuf, RealEntry>,
     pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
+    pub mounts: Vec<Mount>,
 }
 
 impl Facts {
@@ -93,14 +95,25 @@ impl Facts {
         Self::default()
     }
 
-    /// The facts as the mount resolution takes them: no scan hits and no mount list.
+    /// The facts as the mount resolution takes them: no scan hits.
     pub fn mount_facts(self) -> MountFacts {
         MountFacts {
             paths: self.paths,
             links: self.links,
             directories: self.directories,
+            mounts: self.mounts,
             ..MountFacts::default()
         }
+    }
+
+    /// A mount of the host at `target` with the file system type `fstype`; the mount point
+    /// itself is a directory whose real path is itself.
+    pub fn mount(mut self, target: &str, fstype: &str) -> Self {
+        self.mounts.push(Mount {
+            target: PathBuf::from(target),
+            fstype: fstype.to_string(),
+        });
+        self.dir(target)
     }
 
     /// A directory whose real path is itself.

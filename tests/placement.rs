@@ -1145,6 +1145,53 @@ fn a_hide_written_with_a_workspace_variable_does_not_count_inherited_references(
 }
 
 #[test]
+fn an_item_landing_inside_a_generated_hide_is_rejected_as_an_exposing_pair() {
+    // `ro ~/a/link` resolves through `rw ~/a` and lands inside a `hide` the generation
+    // step made: the configuration directory's `secrets/` (a file `secrets` does not name),
+    // or a mount `hide-mounts` hides. The narrower `ro` would mount after the generated
+    // `hide` (section 6.4) and show what it hid, so the generated `hide` counts as a
+    // partner of the exposing pair; the diagnostic names it.
+    let secrets_dir = format!("{CONFIG_DIR}/secrets");
+    let other_secret = format!("{secrets_dir}/other");
+    for (name, profile, facts, partner) in [
+        (
+            "into the configuration directory's secrets/",
+            "[mounts]\nrw = [\"~/a\"]\nro = [\"~/a/link\"]".to_string(),
+            host()
+                .dir(&secrets_dir)
+                .file(&other_secret)
+                .link_to_file("/home/u/a/link", &other_secret),
+            secrets_dir.as_str(),
+        ),
+        (
+            "into a mount hidden by hide-mounts",
+            "[mounts]\nrw = [\"~/a\"]\nro = [\"~/a/link\"]\n\
+             [[mounts.hide-mounts]]\nunder = \"/mnt\"\nfstype = [\"9p\"]"
+                .to_string(),
+            host()
+                .dir("/mnt")
+                .mount("/mnt/c", "9p")
+                .dir("/mnt/c/x")
+                .link_to_dir("/home/u/a/link", "/mnt/c/x"),
+            "/mnt/c",
+        ),
+    ] {
+        let diagnostic = check(
+            &layers(&profile, None, &[], &[]),
+            &variables(),
+            facts
+                .dir("/home/u/a")
+                .links_traversed("/home/u/a/link", &["/home/u/a/link"]),
+            WORKTREE,
+        )
+        .unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert_path_diagnostic(&diagnostic, &["/home/u/a/link", partner]);
+    }
+}
+
+#[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
     // as a prefix, so only the rule about the width of `rw` can stop these.
