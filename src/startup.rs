@@ -34,12 +34,14 @@ pub enum Outcome {
 }
 
 /// A nested run (specification section 12.1): the warning to print first, then the
-/// command resolved on the host's `PATH` or the `command not found` diagnostic, and the
-/// arguments as given. The environment is left as it is.
+/// command resolved on the host's `PATH` or the `command not found` diagnostic, the
+/// `COMMAND` string as given (the process's argv[0]), and the arguments as given. The
+/// environment is left as it is.
 #[derive(Debug)]
 pub struct Nested {
     pub warning: Warning,
     pub command: Result<PathBuf, Diagnostic>,
+    pub given: OsString,
     pub arguments: Vec<OsString>,
 }
 
@@ -69,6 +71,7 @@ where
         return Ok(Outcome::Nested(Nested {
             warning: nested_warning(),
             command: locate_command(&invocation.command[0], &host),
+            given: invocation.command[0].clone(),
             arguments: invocation.command[1..].to_vec(),
         }));
     }

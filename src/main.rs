@@ -19,10 +19,16 @@ fn main() -> ExitCode {
                 Ok(command) => command,
                 Err(diagnostic) => return exit_with(diagnostic),
             };
-            // Only reached when the exec fails; the command was found a moment ago.
-            let error = Command::new(&command).args(&nested.arguments).exec();
+            // The process sees `COMMAND` as given as its argv[0]; the resolved path is only
+            // what is executed (specification section 4.2). Only reached when the exec
+            // fails; the command was found a moment ago, so this is `command not
+            // executable`, exit code 126 (section 12.1).
+            let error = Command::new(&command)
+                .arg0(&nested.given)
+                .args(&nested.arguments)
+                .exec();
             exit_with(Diagnostic::new(
-                Kind::CommandNotFound,
+                Kind::CommandNotExecutable,
                 format!("{}: {error}", command.display()),
             ))
         }

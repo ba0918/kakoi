@@ -13,6 +13,7 @@ pub enum Kind {
     Env,
     Bwrap,
     CommandNotFound,
+    CommandNotExecutable,
 }
 
 impl Kind {
@@ -25,6 +26,7 @@ impl Kind {
             Kind::Env => "env",
             Kind::Bwrap => "bwrap",
             Kind::CommandNotFound => "command not found",
+            Kind::CommandNotExecutable => "command not executable",
         }
     }
 }
@@ -97,10 +99,12 @@ impl Diagnostic {
         &self.description
     }
 
-    /// 127 for `command not found`, 125 for every other kind.
+    /// 127 for `command not found`, 126 for `command not executable`, 125 for every other
+    /// kind.
     pub fn exit_code(&self) -> i32 {
         match self.kind {
             Kind::CommandNotFound => 127,
+            Kind::CommandNotExecutable => 126,
             _ => 125,
         }
     }

@@ -526,6 +526,52 @@ fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_miss
 }
 
 #[test]
+fn a_nested_launch_passes_the_given_name_as_argv0() {
+    // Specification sections 1 and 12.1: the nested run execs the command found on the
+    // host's `PATH` with `COMMAND` as argv[0]. `sh` is a copy in a temporary directory, so
+    // argv[0] `sh` and the resolved path are told apart.
+    let home = TempDir::new();
+    let bin = TempDir::new();
+    std::fs::copy("/bin/sh", bin.path().join("sh")).unwrap();
+
+    let output = nested(&home, bin.path())
+        .args(["--", "sh", "-c", "echo \"$0\""])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"sh\n", "{report}");
+}
+
+#[test]
+fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
+    // The command is found, but its exec fails (specification sections 4.2 and 12.1): one
+    // warning line, then `command not executable`, exit code 126.
+    let home = TempDir::new();
+    let script = home.write("tool", "#!/nonexistent/interpreter\n");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let output = nested(&home, Path::new("/nonexistent"))
+        .arg("--")
+        .arg(&script)
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    let lines: Vec<&str> = stderr.lines().collect();
+    assert_eq!(lines.len(), 2, "{report}");
+    assert!(lines[0].starts_with("process-wrap: warning: "), "{report}");
+    assert!(
+        lines[1].starts_with("process-wrap: command not executable: "),
+        "{report}"
+    );
+}
+
+#[test]
 fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     let home = TempDir::new();
     let workspace = home.path().join("ws");
