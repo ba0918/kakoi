@@ -718,9 +718,10 @@ fn a_workspace_behind_a_link_landing_in_an_rw_item_written_by_path_is_accepted()
 }
 
 #[test]
-fn an_item_reached_through_a_link_between_two_rw_items_is_accepted_until_the_link_moves() {
+fn an_ro_reached_through_a_link_between_two_rw_items_stays_accepted_when_the_link_moves() {
     // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a` and lands
-    // in `b`; re-pointing `l` at a third place lands it outside every root.
+    // in `b`; re-pointing `l` at a place that is no item makes nothing newly visible, so an
+    // `ro` is not held to the root items (specification section 5.6).
     let (home, workspace) = home_with_workspace();
     home.write(
         ".config/process-wrap/profile/default.toml",
@@ -737,12 +738,7 @@ fn an_item_reached_through_a_link_between_two_rw_items_is_accepted_until_the_lin
     std::fs::remove_file(home.path().join("a/l")).unwrap();
     std::os::unix::fs::symlink(home.path().join("elsewhere/x"), home.path().join("a/l")).unwrap();
     let moved = run_with_workspace(&home, &workspace);
-    let diagnostic = assert_diagnostic(&moved, 125, "path");
-    let real_home = home.path().canonicalize().unwrap();
-    assert!(
-        diagnostic.contains(real_home.join("a").to_str().unwrap()),
-        "{diagnostic} does not mention the writable area passed through"
-    );
+    assert_eq!(moved.status.code(), Some(0), "{}", output_report(&moved));
 }
 
 #[test]

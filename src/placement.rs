@@ -163,15 +163,17 @@ fn check_protected_paths(
     Ok(())
 }
 
-/// The root-item check of specification section 5.6: a written item or the `--workspace`
-/// whose resolution referenced something inside a writable item must itself resolve inside
-/// a root item, since what it referenced could be re-pointed from inside the isolation and
-/// the next start would apply the directive to any host path. The items are taken in the
-/// order of section 6.4, then the workspace. An item that resolves to nothing has nothing
-/// to bind. An item that landed is then checked against the written `hide` and `ro` items
-/// it would invalidate (`check_replacement`). A `--workspace` whose real path is the
-/// current directory is exempt and hands nothing down: the process already sits there, so
-/// no redirection can move it.
+/// The root-item check of specification section 5.6: a written `rw`, `rw-file`, or `hide`
+/// item or the `--workspace` whose resolution referenced something inside a writable item
+/// must itself resolve inside a root item, since what it referenced could be re-pointed
+/// from inside the isolation and the next start would apply the directive to any host
+/// path. A written `ro` is exempt: re-pointing or removing it only moves or lifts a
+/// read-only place, and what it could newly show is caught by the exposing pairs alone.
+/// The items are taken in the order of section 6.4, then the workspace. An item that
+/// resolves to nothing has nothing to bind. An item that landed is then checked against
+/// the written `hide` and `ro` items it would invalidate (`check_replacement`). A
+/// `--workspace` whose real path is the current directory is exempt and hands nothing
+/// down: the process already sits there, so no redirection can move it.
 fn check_written_paths(
     written: &WrittenPaths,
     writable: &[&ResolvedItem],
@@ -201,7 +203,9 @@ fn check_written_paths(
             item.path.display()
         );
         let reference = referenced_writable(item, workspace, writable, facts);
-        check_landing(&role, reference, &real, &roots)?;
+        if item.directive != Directive::Ro {
+            check_landing(&role, reference, &real, &roots)?;
+        }
         check_replacement(&role, item, reference, &real, index, &written.items, facts)?;
     }
     if let Some(workspace) = workspace {

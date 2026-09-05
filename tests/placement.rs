@@ -278,18 +278,23 @@ fn rewired_through_cache(facts: Facts, target: &str, target_is_dir: bool) -> Fac
 
 #[test]
 fn a_written_item_resolving_through_a_writable_item_to_outside_every_writable_item_is_rejected() {
-    for (name, profile, policy_file, facts) in [
+    // The `rw` and `rw-file` rows are held to the root items and the diagnostic names the
+    // writable item passed through; the `ro` row is not (an `ro` exposes nothing new by
+    // landing outside), and is refused as an exposing pair naming the `hide` it lands on.
+    for (name, profile, policy_file, facts, partner) in [
         (
             "rw nested under rw, redirected to a directory",
             "[mounts]\nrw = [\"~/cache\", \"~/cache/pip/http\"]",
             None,
             rewired_through_cache(host().dir("/home/u/victim"), "/home/u/victim", true),
+            "/home/u/cache",
         ),
         (
             "ro in the upper layer, redirected onto a hidden directory",
             "[mounts]\nrw = [\"~/cache\"]\nhide = [\"/home/u/secret\"]",
             Some("[mounts]\nro = [\"~/cache/pip/http\"]"),
             rewired_through_cache(host().dir("/home/u/secret"), "/home/u/secret", true),
+            "/home/u/secret",
         ),
         (
             "rw-file nested under rw, redirected to a file",
@@ -300,6 +305,7 @@ fn a_written_item_resolving_through_a_writable_item_to_outside_every_writable_it
                 "/home/u/victim.txt",
                 false,
             ),
+            "/home/u/cache",
         ),
     ] {
         let diagnostic = check(
@@ -311,7 +317,7 @@ fn a_written_item_resolving_through_a_writable_item_to_outside_every_writable_it
         .unwrap_err();
 
         assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
-        assert_path_diagnostic(&diagnostic, &["/home/u/cache/pip/http", "/home/u/cache"]);
+        assert_path_diagnostic(&diagnostic, &["/home/u/cache/pip/http", partner]);
     }
 }
 
@@ -925,6 +931,63 @@ fn a_referenced_ro_landing_inside_a_lower_layer_hide_is_rejected() {
     .unwrap_err();
 
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+/// The facts of `~/a/l/y` with `~/a/l` a link to the directory `target`, which holds `y`:
+/// the resolution passes through `a` and follows a link that sits inside it.
+fn a_l_pointing_at(facts: Facts, target: &str) -> Facts {
+    let given = "/home/u/a/l/y";
+    let real = format!("{target}/y");
+    facts
+        .dir("/home/u/a")
+        .dir("/home/u/b")
+        .dir_with_ancestors(&real)
+        .link_to_dir(given, &real)
+        .links_traversed(given, &["/home/u/a/l"])
+        .directories_visited(given, &["/", "/home", "/home/u", "/home/u/a", target])
+}
+
+#[test]
+fn an_ro_written_through_a_writable_link_is_accepted_wherever_it_lands_outside_hide_and_ro() {
+    // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a`. Wherever
+    // the link is pointed, an `ro` makes nothing newly visible unless it lands on a `hide`
+    // or an `ro`, so it is not held to the root items: landing in `b` and landing in a
+    // place that is no item at all are both accepted.
+    let profile = "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/a/l/y\"]";
+
+    for (name, target) in [
+        ("into another rw", "/home/u/b/x"),
+        ("into no item", "/home/u/elsewhere/x"),
+    ] {
+        let result = check(
+            &layers(profile, None, &[], &[]),
+            &variables(),
+            a_l_pointing_at(host(), target),
+            WORKTREE,
+        );
+
+        assert!(result.is_ok(), "{name}: {result:?}");
+    }
+}
+
+#[test]
+fn an_ro_written_through_a_writable_link_landing_inside_a_hide_is_rejected() {
+    // The same `ro ~/a/l/y` with `l` pointed into the profile's `hide ~/b/creds`: the
+    // narrower `ro` mounts after the `hide` (section 6.4) and shows what it hid.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/a/l/y\"]\nhide = [\"~/b/creds\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        a_l_pointing_at(host(), "/home/u/b/creds"),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/l/y", "/home/u/b/creds"]);
 }
 
 #[test]
