@@ -1,6 +1,7 @@
 //! The plan as `--print-plan` shows it (specification section 13): the merged policy, the
 //! real paths of the policy files read, the four variables, each mount item applied or
-//! skipped with the reason, the final environment with the secret values masked, the
+//! skipped with the reason and each scan hit left visible with the reason, the final
+//! environment with the secret values masked, the
 //! resolved command, and the bwrap argument list with the descriptors as symbols. The
 //! layout is not a contract; the values embedded are escaped so that no control character
 //! reaches the terminal. Pure.
@@ -56,6 +57,14 @@ pub fn render(plan: &Plan) -> String {
             escape_control(&item.written),
             layer(&item.origin),
             escape_control(&item.reason)
+        );
+    }
+    for left in &plan.mounts.left_visible {
+        let _ = writeln!(
+            text,
+            "  not hidden {} (from the scan): {}",
+            shown(&left.link),
+            escape_control(&left.reason)
         );
     }
     text.push_str("environment:\n");
