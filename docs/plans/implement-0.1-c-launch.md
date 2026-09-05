@@ -121,12 +121,12 @@ Purpose: 仕様#16 が定める README（英語）と、0.1.0 の CHANGELOG の�
 Specification: 仕様#16 公開ドキュメント、仕様#17 版とリリース、仕様#18 0.1 で作らないもの。
 Prerequisites: ステップ 13（README のコマンド例とプロファイルが実物と合うように）。
 May change: `README.md`、`CHANGELOG.md`。
-Done when: README に目的・インストール・ポリシーの書き方・CLI・既知の隙間 13 件・第 5.6 節の
+Done when: README に目的・インストール・ポリシーの書き方・CLI・既知の隙間 14 件・第 5.6 節の
 理由と dotfiles の書き方・秘密の置き場・`/tmp/process-wrap` の作成（利用者かシムが作る。無ければ
 その項目が飛ばされて `/tmp` が空のままになる）・`/tmp` を `hide` にする理由と `/tmp/process-wrap` が
 共有場所であること・`examples/profile/default.toml` への参照が載り、`CHANGELOG.md` に 0.1.0 の
 項目がある。
-Shown by: check — 仕様#16 の箇条書きと既知の隙間 13 件を 1 項目ずつ README の見出しまたは段落と
+Shown by: check — 仕様#16 の箇条書きと既知の隙間 14 件を 1 項目ずつ README の見出しまたは段落と
 突き合わせ、対応の無い項目が 0 であることをレビューで確認する。`rg -n '0.1.0' CHANGELOG.md`（1 行以上）。
 Left to the implementer: README の構成と英語の文言。
 Stop and hand back if: なし。
