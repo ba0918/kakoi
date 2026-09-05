@@ -75,6 +75,12 @@ The plan shows the merged policy, the policy files read, the four variables, eve
 (applied, or skipped with the reason), the final environment with secret values masked, the
 resolved command, and the `bwrap` argument list.
 
+Only the values of the variables the policy names under `secrets` are masked. Every other
+variable of the final environment is printed with its value as it is, and with
+`env.mode = "inherit"` that includes any host credential whose name matches none of the `unset`
+patterns (known gap 6 below). Treat the output of `--print-plan` as sensitive; see
+[Environment, secrets, git](#environment-secrets-git) for what is masked.
+
 ### Exit codes and diagnostics
 
 A failure of `process-wrap` itself is one line on standard error of the form
