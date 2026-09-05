@@ -68,9 +68,10 @@ pub struct Traversal {
 /// Walks the resolution of the absolute `path` as the kernel does: component by
 /// component, a link's target spliced in where the link was and `..` taken against the
 /// directory resolved so far, so a directory a target enters and leaves again is passed
-/// through like any other. It stops where nothing exists, at a link that cannot be read,
-/// or after `LINK_LIMIT` links, and still reports what was passed through up to there:
-/// the existing part of a missing secret file's path is checked too (specification
+/// through like any other. It stops where nothing exists, at a link that cannot be read
+/// (whose own place is still reported: it was consulted, and could be re-pointed), or
+/// after `LINK_LIMIT` links, and still reports what was passed through up to there: the
+/// existing part of a missing secret file's path is checked too (specification
 /// section 5.6). A relative path is not walked.
 pub fn traverse(path: &Path) -> Traversal {
     let mut traversal = Traversal::default();
@@ -101,10 +102,11 @@ pub fn traverse(path: &Path) -> Traversal {
         if followed > LINK_LIMIT {
             break;
         }
-        let Ok(target) = fs::read_link(&candidate) else {
+        let target = fs::read_link(&candidate);
+        traversal.links.push(candidate);
+        let Ok(target) = target else {
             break;
         };
-        traversal.links.push(candidate);
         if target.is_absolute() {
             resolved = PathBuf::from("/");
         }
