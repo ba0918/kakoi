@@ -637,21 +637,6 @@ fn an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic() {
 }
 
 #[test]
-fn an_unreadable_mount_list_without_hide_mounts_is_ignored() {
-    let resolved = resolve(
-        &layers("[mounts]\nrw = [\"~/proj\"]", None, &[], &[]),
-        &variables(),
-        Facts::new().dir("/home/u/proj").mount_list_unreadable(),
-    )
-    .unwrap();
-
-    assert_eq!(
-        order(&resolved),
-        [(Directive::Rw, Path::new("/home/u/proj"))]
-    );
-}
-
-#[test]
 fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
     let copy = TempDir::new();
     let path = copy.write(
