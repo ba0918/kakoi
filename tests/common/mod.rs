@@ -11,14 +11,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// The built binary, for tests that also set arguments piecewise, the environment, or the
-/// working directory. `HOME` and `XDG_CONFIG_HOME` point into `home` so that no test reads
-/// the developer's real configuration directory.
+/// working directory. The environment is emptied except for the test process's `PATH`, so
+/// nothing of the developer's environment reaches the binary, the isolation, or the message
+/// of a failed assertion (which quotes the plan in full). `HOME` and `XDG_CONFIG_HOME` point
+/// into `home` so that no test reads the developer's real configuration directory.
 pub fn binary(home: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_process-wrap"));
+    command.env_clear();
+    if let Some(path) = std::env::var_os("PATH") {
+        command.env("PATH", path);
+    }
     command
         .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join(".config"))
-        .env_remove("PROCESS_WRAP");
+        .env("XDG_CONFIG_HOME", home.join(".config"));
     command
 }
 
@@ -59,12 +64,12 @@ where
         .arg(program)
         .arg(&doomed)
         .args(arguments)
+        .env_clear()
         .envs(
             command
                 .get_envs()
                 .filter_map(|(key, value)| value.map(|value| (key, value))),
         )
-        .env_remove("PROCESS_WRAP")
         .output()
         .unwrap()
 }
