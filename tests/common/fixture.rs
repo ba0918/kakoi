@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use process_wrap::cli::Invocation;
 use process_wrap::environment::{HomeDirectory, HostEnvironment, RealEntry};
 use process_wrap::layers::{merge, Layer, LayerOrigin, Policy};
-use process_wrap::mounts::{Mount, MountFacts};
+use process_wrap::mounts::{Mount, MountFacts, ScanHit};
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
@@ -80,14 +80,15 @@ pub fn merged(layers: &[Layer]) -> Policy {
 }
 
 /// Facts about paths: what exists behind each, the symbolic links and directories a
-/// resolution passes through, and the mounts of the host. A path not listed is missing and
-/// passes through nothing.
+/// resolution passes through, the mounts of the host, and what the scans found. A path
+/// not listed is missing and passes through nothing.
 #[derive(Debug, Default, Clone)]
 pub struct Facts {
     pub paths: BTreeMap<PathBuf, RealEntry>,
     pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub mounts: Vec<Mount>,
+    pub scan_hits: Vec<ScanHit>,
 }
 
 impl Facts {
@@ -95,15 +96,25 @@ impl Facts {
         Self::default()
     }
 
-    /// The facts as the mount resolution takes them: no scan hits.
+    /// The facts as the mount resolution takes them.
     pub fn mount_facts(self) -> MountFacts {
         MountFacts {
             paths: self.paths,
             links: self.links,
             directories: self.directories,
             mounts: self.mounts,
-            ..MountFacts::default()
+            scan_hits: self.scan_hits,
         }
+    }
+
+    /// A scan found the symbolic link `found_at`, pointing at the non-directory `target`.
+    pub fn scan_link_to_file(mut self, found_at: &str, target: &str) -> Self {
+        self.scan_hits.push(ScanHit {
+            found_at: PathBuf::from(found_at),
+            target: RealEntry::NotDirectory(PathBuf::from(target)),
+            is_link: true,
+        });
+        self
     }
 
     /// A mount of the host at `target` with the file system type `fstype`; the mount point

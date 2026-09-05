@@ -11,7 +11,9 @@ use common::fixture::{
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
 use process_wrap::layers::{Layer, LayerOrigin};
 use process_wrap::mounts::{expand_policy, generate, resolve_written};
-use process_wrap::placement::{check_origins, check_placement, protected_paths, written_paths};
+use process_wrap::placement::{
+    check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
+};
 use process_wrap::policy::parse_policy;
 use process_wrap::variables::Variables;
 
@@ -41,7 +43,21 @@ fn check_at(
         Path::new(current_dir),
         &facts,
     )?;
-    let resolved = generate(before_generation, &expanded, layers, variables, &facts)?;
+    let swappable_ro = swappable_ro_items(
+        &before_generation,
+        &written,
+        variables,
+        Path::new(current_dir),
+        &facts,
+    );
+    let resolved = generate(
+        before_generation,
+        &expanded,
+        layers,
+        variables,
+        &facts,
+        &swappable_ro,
+    )?;
     let protected = protected_paths(&expanded, layers, Path::new(config_dir));
     check_placement(
         &resolved,

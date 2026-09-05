@@ -14,14 +14,16 @@ use process_wrap::layers::{Directive, Layer, LayerOrigin};
 use process_wrap::mount_facts::collect_mount_facts;
 use process_wrap::mount_list::read_mount_list;
 use process_wrap::mounts::{
-    candidates, expand_policy, resolve_mounts, Candidates, Expansion, ItemOrigin, Mount,
+    candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
     MountFacts, ResolvedMounts, ScanHit, ScanRequest,
 };
 use process_wrap::scan::scan;
 use process_wrap::variables::Variables;
 use process_wrap::wildcard::matches;
 
-/// Resolves the mount items of the written layers against `facts`.
+/// Resolves the mount items of the written layers against `facts` and applies the
+/// generated items, with no `ro` item held to be swappable (the placement rules that
+/// decide that are not under test here).
 fn resolve_with(
     layers: &[Layer],
     variables: &Variables,
@@ -29,7 +31,8 @@ fn resolve_with(
 ) -> Result<ResolvedMounts, Diagnostic> {
     let policy = merged(layers);
     let expanded = expand_policy(&policy, variables, &home());
-    resolve_mounts(&expanded, layers, variables, &facts)
+    let written = resolve_written(&expanded, &facts)?;
+    generate(written, &expanded, layers, variables, &facts, &[])
 }
 
 /// Resolves with path facts only: no scan hits and no mount list.
@@ -41,8 +44,13 @@ fn resolve(
     resolve_with(layers, variables, facts.mount_facts())
 }
 
+/// A scan hit at `found_at` with `target` behind it; the entry is a link when the target's
+/// real path is somewhere else.
 fn hit(found_at: &str, target: RealEntry) -> ScanHit {
     ScanHit {
+        is_link: target
+            .path()
+            .is_some_and(|real| real != Path::new(found_at)),
         found_at: PathBuf::from(found_at),
         target,
     }
@@ -385,6 +393,8 @@ fn scan_skips_loaded_policy_files() {
 
 #[test]
 fn scan_hides_the_target_of_a_matching_symlink() {
+    // The link points outside every `ro` item; a link into an `ro` item is another matter
+    // (specification section 6.3).
     let resolved = resolve_with(
         &layers(SCAN_ENV, None, &[], &[]),
         &variables(),

@@ -14,7 +14,9 @@ use crate::mounts::{
     generate, loaded_policy_files, resolve_written, EntryKind, ExpandedPolicy, MountFacts,
     ResolvedItem, ResolvedMounts,
 };
-use crate::placement::{check_origins, check_placement, protected_paths, written_paths};
+use crate::placement::{
+    check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
+};
 use crate::policy::NetworkMode;
 use crate::variables::Variables;
 
@@ -68,12 +70,20 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     )?;
+    let swappable_ro = swappable_ro_items(
+        &before_generation,
+        &written,
+        inputs.variables,
+        inputs.current_dir,
+        &facts.mounts,
+    );
     let mounts = generate(
         before_generation,
         inputs.expanded,
         inputs.layers,
         inputs.variables,
         &facts.mounts,
+        &swappable_ro,
     )?;
     let protected = protected_paths(inputs.expanded, inputs.layers, inputs.config_dir);
     let mut warnings = check_placement(

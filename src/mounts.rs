@@ -244,11 +244,13 @@ pub fn candidates(
     }
 }
 
-/// One entry the scan found by name: where it was found and what is behind it.
+/// One entry the scan found by name: where it was found, what is behind it, and whether
+/// the entry itself is a symbolic link (so that `target` is somewhere else).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanHit {
     pub found_at: PathBuf,
     pub target: RealEntry,
+    pub is_link: bool,
 }
 
 /// One mount of the host: its mount point and its file system type.
@@ -333,25 +335,22 @@ pub struct SkippedItem {
     pub reason: String,
 }
 
+/// A scan hit the generation step left visible on purpose, with the reason (specification
+/// section 6.3): the link found at `link` points into an `ro` item that cannot be swapped
+/// from inside the isolation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftVisible {
+    pub link: PathBuf,
+    pub reason: String,
+}
+
 /// The mount items after resolution: the ones that apply, in the order of specification
-/// section 6.4, and the ones skipped.
+/// section 6.4, the ones skipped, and the scan hits left visible.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResolvedMounts {
     pub items: Vec<ResolvedItem>,
     pub skipped: Vec<SkippedItem>,
-}
-
-/// Resolves the expanded mount items to real paths: the written layers with the identity
-/// of specification section 5.4 (`resolve_written`), then the generated items of
-/// section 6.3 and the kinds of section 6.1 (`generate`).
-pub fn resolve_mounts(
-    expanded: &ExpandedPolicy,
-    layers: &[Layer],
-    variables: &Variables,
-    facts: &MountFacts,
-) -> Result<ResolvedMounts, Diagnostic> {
-    let written = resolve_written(expanded, facts)?;
-    generate(written, expanded, layers, variables, facts)
+    pub left_visible: Vec<LeftVisible>,
 }
 
 /// The written mount items resolved to real paths, before the generated items of
@@ -449,26 +448,38 @@ pub fn resolve_written(
     Ok(resolved)
 }
 
-/// Applies the generated `hide` items of specification section 6.3 to the written items:
-/// a generated item replaces the written item at the same real path (they are all `hide`,
-/// so two of them on one path collapse), the order of section 6.4 is restored, and the
-/// kinds of section 6.1 are checked.
+/// Applies the generated `hide` items of specification section 6.3 to the written items,
+/// in the order the section gives: the scan, `hide-mounts`, the secret files, the
+/// configuration directory's `secrets/`. A generated item replaces the written item at the
+/// same real path (they are all `hide`, so two of them on one path collapse), the order
+/// of section 6.4 is restored, and the kinds of section 6.1 are checked. `swappable_ro`
+/// names, by real path, the written `ro` items whose resolution referenced something
+/// inside a writable item, which the placement rules decided; the scan needs it for a link
+/// pointing into an `ro` item.
 pub fn generate(
     written: ResolvedMounts,
     expanded: &ExpandedPolicy,
     layers: &[Layer],
     variables: &Variables,
     facts: &MountFacts,
+    swappable_ro: &[PathBuf],
 ) -> Result<ResolvedMounts, Diagnostic> {
     let mut resolved = written;
-    for generated in generated_items(expanded, layers, variables, facts) {
+    let scanned = scan_items(&resolved.items, layers, facts, swappable_ro)?;
+    resolved.left_visible = scanned.left_visible;
+    let generated = scanned
+        .hidden
+        .into_iter()
+        .chain(hide_mounts_items(expanded, variables, facts))
+        .chain(secret_items(expanded, variables, facts));
+    for item in generated {
         match resolved
             .items
             .iter_mut()
-            .find(|existing| existing.real == generated.real)
+            .find(|existing| existing.real == item.real)
         {
-            Some(existing) => *existing = generated,
-            None => resolved.items.push(generated),
+            Some(existing) => *existing = item,
+            None => resolved.items.push(item),
         }
     }
     resolved.items.sort_by(|a, b| byte_order(&a.real, &b.real));
@@ -489,14 +500,85 @@ pub fn loaded_policy_files(layers: &[Layer], facts: &MountFacts) -> Vec<PathBuf>
         .collect()
 }
 
-/// The `hide` items of specification section 6.3, from the facts.
-fn generated_items(
-    expanded: &ExpandedPolicy,
+/// What the scan of specification section 6.3 makes of its hits.
+struct Scanned {
+    hidden: Vec<ResolvedItem>,
+    left_visible: Vec<LeftVisible>,
+}
+
+/// The `hide` items of the scan (specification section 6.3): each hit that is not a
+/// directory nor a link to one, nor a policy file that was read. A hit that is a link
+/// pointing at or into a written `ro` item is not hidden: hiding it would empty the user's
+/// own read-only file. When that `ro` item could be swapped from inside the isolation
+/// (`swappable_ro`), the scan could be made to empty something else next time, so the run
+/// stops, naming the first such link in byte order whatever order the walk found them in;
+/// otherwise the link is left visible with the reason.
+fn scan_items(
+    written: &[ResolvedItem],
     layers: &[Layer],
+    facts: &MountFacts,
+    swappable_ro: &[PathBuf],
+) -> Result<Scanned, Diagnostic> {
+    let policy_files = loaded_policy_files(layers, facts);
+    let mut hits: Vec<&ScanHit> = facts.scan_hits.iter().collect();
+    hits.sort_by(|a, b| byte_order(&a.found_at, &b.found_at));
+    let mut scanned = Scanned {
+        hidden: Vec::new(),
+        left_visible: Vec::new(),
+    };
+    for hit in hits {
+        // A directory, or a link whose target is a directory, is not hidden; a link to
+        // nothing names nothing to hide.
+        let RealEntry::NotDirectory(real) = &hit.target else {
+            continue;
+        };
+        if policy_files.contains(real) {
+            continue;
+        }
+        let into_ro = written
+            .iter()
+            .filter(|item| item.directive == Directive::Ro)
+            .find(|item| hit.is_link && real.starts_with(&item.real));
+        match into_ro {
+            Some(ro) if swappable_ro.contains(&ro.real) => {
+                return Err(Diagnostic::path(format!(
+                    "the scan found the symbolic link {} pointing at {}, inside the `ro` item \
+                     `{}` at {}, whose resolution passes through a writable item, so the link \
+                     and the item could be re-pointed from inside the isolation and the next \
+                     start made to empty another file",
+                    hit.found_at.display(),
+                    real.display(),
+                    ro.written,
+                    ro.real.display()
+                )));
+            }
+            Some(ro) => scanned.left_visible.push(LeftVisible {
+                link: hit.found_at.clone(),
+                reason: format!(
+                    "points at {}, inside the `ro` item `{}` at {}, which cannot be swapped \
+                     from inside the isolation; hiding it would empty the read-only file",
+                    real.display(),
+                    ro.written,
+                    ro.real.display()
+                ),
+            }),
+            None => {
+                scanned
+                    .hidden
+                    .extend(hidden(&hit.found_at, ItemOrigin::Scan, hit.target.clone()))
+            }
+        }
+    }
+    Ok(scanned)
+}
+
+/// The `hide` items of `hide-mounts` (specification section 6.3): each mount under an
+/// `under` whose file system type is listed, except the places the user chose to work in.
+fn hide_mounts_items(
+    expanded: &ExpandedPolicy,
     variables: &Variables,
     facts: &MountFacts,
 ) -> Vec<ResolvedItem> {
-    let policy_files = loaded_policy_files(layers, facts);
     // The places the user chose to work in are never hidden by their mount type.
     let work_places = [
         Some(variables.workspace.as_path()),
@@ -504,23 +586,6 @@ fn generated_items(
         variables.git_common_dir.as_deref(),
     ];
     let mut generated = Vec::new();
-    // Hidden so that a secret file the policy does not name cannot be read from inside.
-    let config_secrets = variables.config_dir.join("secrets");
-    generated.extend(hidden(
-        &config_secrets,
-        ItemOrigin::ConfigSecrets,
-        facts.entry(&config_secrets),
-    ));
-    // A secret file that does not exist is the warning of section 9, not a hide.
-    for (name, path) in &expanded.secrets {
-        if let Some(path) = path.path() {
-            generated.extend(hidden(
-                path,
-                ItemOrigin::SecretFile(name.clone()),
-                facts.entry(path),
-            ));
-        }
-    }
     for hide_mounts in &expanded.hide_mounts {
         let Some(under) = hide_mounts.under.path() else {
             continue;
@@ -542,16 +607,34 @@ fn generated_items(
             ));
         }
     }
-    for hit in &facts.scan_hits {
-        // A directory, or a link whose target is a directory, is not hidden; a link to
-        // nothing names nothing to hide.
-        if let RealEntry::NotDirectory(real) = &hit.target {
-            if policy_files.contains(real) {
-                continue;
-            }
-            generated.extend(hidden(&hit.found_at, ItemOrigin::Scan, hit.target.clone()));
+    generated
+}
+
+/// The `hide` items of the secrets (specification sections 6.3 and 9): each secret file
+/// that exists, then the configuration directory's `secrets/`, hidden so that a secret
+/// file the policy does not name cannot be read from inside.
+fn secret_items(
+    expanded: &ExpandedPolicy,
+    variables: &Variables,
+    facts: &MountFacts,
+) -> Vec<ResolvedItem> {
+    let mut generated = Vec::new();
+    // A secret file that does not exist is the warning of section 9, not a hide.
+    for (name, path) in &expanded.secrets {
+        if let Some(path) = path.path() {
+            generated.extend(hidden(
+                path,
+                ItemOrigin::SecretFile(name.clone()),
+                facts.entry(path),
+            ));
         }
     }
+    let config_secrets = variables.config_dir.join("secrets");
+    generated.extend(hidden(
+        &config_secrets,
+        ItemOrigin::ConfigSecrets,
+        facts.entry(&config_secrets),
+    ));
     generated
 }
 

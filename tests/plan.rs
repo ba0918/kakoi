@@ -207,6 +207,109 @@ fn isolation(
     resolve_isolation(&inputs, &facts)
 }
 
+const SCAN_ENV: &str = "[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env*\"]\n";
+
+#[test]
+fn a_scan_link_into_an_unswappable_ro_item_is_left_visible_with_a_reason() {
+    // `.env` in the worktree is a link to a file under `ro ~/.config/opencode`, which
+    // resolves through nothing writable: hiding the target would empty the user's own
+    // read-only settings, and the link cannot be re-pointed to anything the isolation
+    // could not read anyway, so the target is left visible and the plan says why.
+    let target = "/home/u/.config/opencode/x";
+    let isolation = isolation(
+        &format!("[mounts]\nrw = [\"${{worktree}}\"]\nro = [\"{target}\"]\n{SCAN_ENV}"),
+        Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .file_with_ancestors(target)
+            .file_with_ancestors(PROFILE)
+            .file_with_ancestors(POLICY_FILE)
+            .scan_link_to_file("/home/u/proj/.env", target),
+        &[],
+    )
+    .unwrap();
+
+    let hidden: Vec<&Path> = isolation
+        .mounts
+        .items
+        .iter()
+        .filter(|item| item.directive == Directive::Hide)
+        .map(|item| item.real.as_path())
+        .collect();
+    assert!(hidden.is_empty(), "{hidden:?}");
+    assert_eq!(
+        isolation.mounts.left_visible.len(),
+        1,
+        "{:?}",
+        isolation.mounts
+    );
+    assert_eq!(
+        isolation.mounts.left_visible[0].link,
+        Path::new("/home/u/proj/.env")
+    );
+    assert!(!isolation.mounts.left_visible[0].reason.is_empty());
+}
+
+/// The facts of a worktree whose `.env` (and any further name given) is a link to
+/// `~/.claude/settings.json`, an `ro` item inside `rw ~/.claude`.
+fn env_links_into_claude_settings(links: &[&str]) -> Facts {
+    let target = "/home/u/.claude/settings.json";
+    let mut facts = Facts::new()
+        .dir_with_ancestors(WORKTREE)
+        .file_with_ancestors(target)
+        .file_with_ancestors(PROFILE)
+        .file_with_ancestors(POLICY_FILE)
+        .directories_visited(target, &["/", "/home", "/home/u", "/home/u/.claude"]);
+    for link in links {
+        facts = facts.scan_link_to_file(link, target);
+    }
+    facts
+}
+
+const RW_CLAUDE_RO_SETTINGS: &str =
+    "[mounts]\nrw = [\"${worktree}\", \"~/.claude\"]\nro = [\"~/.claude/settings.json\"]\n";
+
+#[test]
+fn a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic() {
+    // The `ro` item resolves through `rw ~/.claude`, so from inside the isolation it could
+    // be re-pointed and the scan made to empty something else: the run stops, naming the
+    // link and the `ro` item.
+    let diagnostic = isolation(
+        &format!("{RW_CLAUDE_RO_SETTINGS}{SCAN_ENV}"),
+        env_links_into_claude_settings(&["/home/u/proj/.env"]),
+        &[],
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+    for mention in ["/home/u/proj/.env", "/home/u/.claude/settings.json"] {
+        assert!(
+            diagnostic.description().contains(mention),
+            "{diagnostic} does not mention {mention}"
+        );
+    }
+}
+
+#[test]
+fn the_first_offending_scan_link_in_byte_order_is_named() {
+    // Two such links, found in the order `.env.b` then `.env.a`: the one first in byte
+    // order is named, whatever order the walk found them in.
+    let diagnostic = isolation(
+        &format!("{RW_CLAUDE_RO_SETTINGS}{SCAN_ENV}"),
+        env_links_into_claude_settings(&["/home/u/proj/.env.b", "/home/u/proj/.env.a"]),
+        &[],
+    )
+    .unwrap_err();
+
+    assert!(
+        diagnostic.description().contains("/home/u/proj/.env.a"),
+        "{diagnostic}"
+    );
+    assert!(
+        !diagnostic.description().contains("/home/u/proj/.env.b"),
+        "{diagnostic}"
+    );
+}
+
 #[test]
 fn stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order() {
     let host = Facts::new()

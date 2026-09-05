@@ -36,15 +36,17 @@ fn walk(
         let name = entry.file_name();
         let name = name.as_bytes();
         let path = entry.path();
+        let file_type = entry.file_type().ok();
         if names.iter().any(|pattern| matches(pattern, name))
             && !exclude.iter().any(|pattern| matches(pattern, name))
         {
             found.push(ScanHit {
                 target: real_entry(&path),
                 found_at: path.clone(),
+                is_link: file_type.is_some_and(|kind| kind.is_symlink()),
             });
         }
-        let is_directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
+        let is_directory = file_type.is_some_and(|kind| kind.is_dir());
         if is_directory && !prune.iter().any(|pattern| matches(pattern, name)) {
             walk(&path, names, exclude, prune, found);
         }

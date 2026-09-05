@@ -178,6 +178,45 @@ pub fn check_origins(
     Ok(())
 }
 
+/// The written `ro` items, by real path, that could be swapped from inside the isolation:
+/// any of whose written forms resolved through something inside a writable item of
+/// `before_generation` (the written set), the reference a workspace variable inherits
+/// included. The scan of specification section 6.3 stops on a link pointing into one of
+/// them, and leaves a link into any other `ro` item visible.
+pub fn swappable_ro_items(
+    before_generation: &ResolvedMounts,
+    written: &WrittenPaths,
+    variables: &Variables,
+    current_dir: &Path,
+    facts: &MountFacts,
+) -> Vec<PathBuf> {
+    let writable = writable_items(&before_generation.items);
+    let workspace = workspace_under_check(written, variables, current_dir);
+    before_generation
+        .items
+        .iter()
+        .filter(|item| item.directive == Directive::Ro)
+        .filter(|item| {
+            written
+                .items
+                .iter()
+                .filter(|form| form.directive == Directive::Ro)
+                .filter(|form| facts.entry(&form.path).path() == Some(item.real.as_path()))
+                .any(|form| {
+                    referenced_writable(
+                        &form.path,
+                        form.inherits_from_workspace(),
+                        workspace,
+                        &writable,
+                        facts,
+                    )
+                    .is_some()
+                })
+        })
+        .map(|item| item.real.clone())
+        .collect()
+}
+
 /// The writable items (`rw` and `rw-file`) among `items`.
 fn writable_items(items: &[ResolvedItem]) -> Vec<&ResolvedItem> {
     items
