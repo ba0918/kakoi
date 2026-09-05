@@ -20,6 +20,7 @@ use process_wrap::mounts::{
 };
 use process_wrap::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
+    ResolvedCommand,
 };
 use process_wrap::policy::NetworkMode;
 
@@ -96,8 +97,20 @@ fn literal(text: &str) -> Argument {
     Argument::Literal(OsString::from(text))
 }
 
+/// `sh -c echo`, with `sh` found at `/usr/bin/sh`.
+fn sh_dash_c_echo() -> ResolvedCommand {
+    ResolvedCommand {
+        command: OsString::from("sh"),
+        arguments: vec![OsString::from("-c"), OsString::from("echo")],
+        path: PathBuf::from("/usr/bin/sh"),
+    }
+}
+
 #[test]
-fn fixed_arguments_come_first_in_the_specified_order() {
+fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
+    // Specification section 14: the fixed part ends with `--argv0 <COMMAND as given>`, the
+    // mount items follow, then one `--`, then the resolved path and `ARGS`. The process
+    // sees the name it was called by, not where it was found.
     let items = [
         item(Directive::Hide, "/tmp", EntryKind::Directory),
         item(Directive::Rw, "/tmp/process-wrap", EntryKind::Directory),
@@ -118,7 +131,12 @@ fn fixed_arguments_come_first_in_the_specified_order() {
         ),
     ];
 
-    let arguments = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &items);
+    let arguments = bwrap_arguments(
+        NetworkMode::Host,
+        Path::new("/home/u/proj"),
+        &items,
+        Some(&sh_dash_c_echo()),
+    );
 
     assert_eq!(
         arguments,
@@ -137,6 +155,8 @@ fn fixed_arguments_come_first_in_the_specified_order() {
             literal("/home/u/proj"),
             literal("--seccomp"),
             Argument::Seccomp,
+            literal("--argv0"),
+            literal("sh"),
             literal("--tmpfs"),
             literal("/tmp"),
             literal("--bind"),
@@ -152,14 +172,34 @@ fn fixed_arguments_come_first_in_the_specified_order() {
             Argument::EmptyFile,
             literal("/home/u/proj/.env"),
             literal("--"),
+            literal("/usr/bin/sh"),
+            literal("-c"),
+            literal("echo"),
         ]
     );
 }
 
 #[test]
+fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
+    // `--print-plan` without a `COMMAND` resolves nothing; the plan's argument list then
+    // carries neither `--argv0` nor the trailing `--` (specification section 14).
+    let items = [item(Directive::Rw, "/home/u/proj", EntryKind::Directory)];
+
+    let arguments = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &items, None);
+
+    for absent in ["--argv0", "--"] {
+        assert!(
+            !arguments.contains(&literal(absent)),
+            "{absent}: {arguments:?}"
+        );
+    }
+    assert_eq!(arguments.last(), Some(&literal("/home/u/proj")));
+}
+
+#[test]
 fn share_net_is_present_only_for_host_mode() {
-    let host = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &[]);
-    let none = bwrap_arguments(NetworkMode::None, Path::new("/home/u/proj"), &[]);
+    let host = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &[], None);
+    let none = bwrap_arguments(NetworkMode::None, Path::new("/home/u/proj"), &[], None);
 
     assert!(host.contains(&literal("--share-net")));
     assert!(!none.contains(&literal("--share-net")));
@@ -170,7 +210,12 @@ fn share_net_is_present_only_for_host_mode() {
 fn the_argument_list_carries_no_environment_flags() {
     let items = [item(Directive::Rw, "/home/u/proj", EntryKind::Directory)];
 
-    let arguments = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &items);
+    let arguments = bwrap_arguments(
+        NetworkMode::Host,
+        Path::new("/home/u/proj"),
+        &items,
+        Some(&sh_dash_c_echo()),
+    );
 
     for flag in ["--setenv", "--unsetenv", "--clearenv"] {
         assert!(!arguments.contains(&literal(flag)), "{flag}");

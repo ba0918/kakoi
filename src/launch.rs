@@ -1,7 +1,8 @@
 //! The start of bwrap (specification section 14): the empty file each `hide` of a file is
 //! bound from and the seccomp filter are handed over as file descriptors, the symbols of
 //! the plan are replaced by their numbers, and `bwrap` is executed in place with the
-//! assembled environment. The outer layer; nothing here decides what the plan contains.
+//! plan's arguments (the command and its arguments included) and the assembled
+//! environment. The outer layer; nothing here decides what the plan contains.
 
 use std::ffi::{CString, OsString};
 use std::io;
@@ -26,14 +27,8 @@ pub fn launch(prepared: &Prepared) -> Diagnostic {
             ))
         }
     };
-    let command = plan
-        .command
-        .as_deref()
-        .expect("a launch has a resolved command");
     let error = Command::new(&plan.bwrap)
         .args(arguments)
-        .arg(command)
-        .args(&prepared.invocation.command[1..])
         .env_clear()
         .envs(plan.environment.values())
         .exec();

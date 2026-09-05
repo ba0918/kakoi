@@ -134,22 +134,23 @@ pub struct Plan {
     pub environment: Environment,
     pub warnings: Vec<Warning>,
     pub bwrap: PathBuf,
-    /// The resolved command; none when `--print-plan` was given without one.
-    pub command: Option<PathBuf>,
+    /// The command as given and resolved; none when `--print-plan` was given without one.
+    pub command: Option<ResolvedCommand>,
     pub arguments: Vec<Argument>,
 }
 
-/// The plan of `isolation` with `bwrap` at `bwrap` and the command resolved to `command`.
+/// The plan of `isolation` with `bwrap` at `bwrap` and the command as given and resolved.
 pub fn plan(
     inputs: &Inputs,
     isolation: Isolation,
     bwrap: PathBuf,
-    command: Option<PathBuf>,
+    command: Option<ResolvedCommand>,
 ) -> Plan {
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
         inputs.current_dir,
         &isolation.mounts.items,
+        command.as_ref(),
     );
     Plan {
         nested: is_nested(inputs.host),
@@ -172,6 +173,16 @@ pub fn is_nested(host: &BTreeMap<OsString, OsString>) -> bool {
         .is_some_and(|value| value == "1")
 }
 
+/// The command as given on the command line (`COMMAND` and `ARGS`) and where `COMMAND`
+/// resolved to (specification section 4.2). The process sees `command` as its argv[0]
+/// and `path` is only what is executed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedCommand {
+    pub command: OsString,
+    pub arguments: Vec<OsString>,
+    pub path: PathBuf,
+}
+
 /// One bwrap argument. The descriptors are symbols: their numbers are assigned right
 /// before the start.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,15 +200,18 @@ impl Argument {
     }
 }
 
-/// The bwrap arguments: the fixed part in the order of specification section 14, then the
-/// mount items in the order they were resolved, then `--` so that the command placed after
-/// them is never read as an option of bwrap (specification section 4.2: a `COMMAND` with
-/// `/` is used as that path, and such a path can start with `-`). No argument sets an
-/// environment variable.
+/// The bwrap arguments: the fixed part in the order of specification section 14, ending
+/// with `--argv0 <COMMAND as given>` so that the process sees the name it was called by;
+/// then the mount items in the order they were resolved; then `--`, the resolved path, and
+/// `ARGS`. The `--` keeps the path from being read as an option of bwrap (specification
+/// section 4.2: a `COMMAND` with `/` is used as that path, and such a path can start with
+/// `-`). Without a command (`--print-plan` alone) neither `--argv0` nor `--` appears. No
+/// argument sets an environment variable.
 pub fn bwrap_arguments(
     network_mode: NetworkMode,
     current_dir: &Path,
     items: &[ResolvedItem],
+    command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
     let mut arguments = vec![
         Argument::text("--ro-bind"),
@@ -219,6 +233,12 @@ pub fn bwrap_arguments(
         Argument::text("--seccomp"),
         Argument::Seccomp,
     ]);
+    if let Some(command) = command {
+        arguments.extend([
+            Argument::text("--argv0"),
+            Argument::text(command.command.as_os_str()),
+        ]);
+    }
     for item in items {
         let real = Argument::text(item.real.as_os_str());
         match (item.directive, item.kind) {
@@ -236,6 +256,10 @@ pub fn bwrap_arguments(
             }
         }
     }
-    arguments.push(Argument::text("--"));
+    if let Some(command) = command {
+        arguments.push(Argument::text("--"));
+        arguments.push(Argument::text(command.path.as_os_str()));
+        arguments.extend(command.arguments.iter().map(Argument::text));
+    }
     arguments
 }

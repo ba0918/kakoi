@@ -273,6 +273,56 @@ fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
 }
 
 #[test]
+fn the_command_sees_the_given_name_as_argv0() {
+    // Specification sections 1 and 4.2: argv[0] is the `COMMAND` string as given, not the
+    // resolved path. `sh` is found on `PATH` and prints `$0`; `-x/tool` is a relative path
+    // starting with `-`, a copy of `cat` that shows its own command line (a script would
+    // show the path the kernel hands its interpreter, not argv[0]).
+    let (home, workspace) = home_with_workspace();
+    let tool = workspace.join("-x/tool");
+    std::fs::create_dir(tool.parent().unwrap()).unwrap();
+    std::fs::copy("/bin/cat", &tool).unwrap();
+
+    let by_name = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "sh",
+            "-c",
+            "echo \"$0\"",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        assert_ran_clean(&by_name),
+        "sh\n",
+        "{}",
+        output_report(&by_name)
+    );
+
+    let by_dash_path = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "-x/tool",
+            "/proc/self/cmdline",
+        ])
+        .output()
+        .unwrap();
+    let cmdline = assert_ran_clean(&by_dash_path);
+    assert_eq!(
+        cmdline.split('\0').next(),
+        Some("-x/tool"),
+        "{}",
+        output_report(&by_dash_path)
+    );
+}
+
+#[test]
 fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
     let tool = home.write("hidden/tool", "#!/bin/sh\necho ran\n");

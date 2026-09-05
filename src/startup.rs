@@ -17,7 +17,9 @@ use crate::executables::first_executable;
 use crate::layers::{load_layers, merge};
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy};
-use crate::plan::{self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan};
+use crate::plan::{
+    self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand,
+};
 use crate::secret_facts::read_secret_files;
 use crate::variables::derive_variables;
 use crate::workspace_facts::{collect_workspace_facts, real_entry};
@@ -120,9 +122,13 @@ where
     } else {
         isolation.environment.values()
     };
-    let command = match invocation.command.first() {
+    let command = match invocation.command.split_first() {
         None => None,
-        Some(command) => Some(locate_command(command, search_in)?),
+        Some((command, arguments)) => Some(ResolvedCommand {
+            command: command.clone(),
+            arguments: arguments.to_vec(),
+            path: locate_command(command, search_in)?,
+        }),
     };
     let plan = plan::plan(&inputs, isolation, bwrap, command);
     Ok(Outcome::Prepared(Box::new(Prepared {

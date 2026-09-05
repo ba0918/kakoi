@@ -96,8 +96,8 @@ pub fn render(plan: &Plan) -> String {
         text,
         "command: {}",
         plan.command
-            .as_deref()
-            .map_or_else(|| "(none)".to_string(), shown)
+            .as_ref()
+            .map_or_else(|| "(none)".to_string(), |command| shown(&command.path))
     );
     let _ = writeln!(text, "bwrap: {}", shown(&plan.bwrap));
     text.push_str("bwrap arguments:\n");
