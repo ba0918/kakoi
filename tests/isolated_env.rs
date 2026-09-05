@@ -168,12 +168,15 @@ fn a_secret_removes_the_host_value_before_injecting() {
 }
 
 #[test]
-fn a_secret_strips_one_trailing_newline() {
+fn a_secret_strips_one_trailing_lf_or_crlf() {
+    // One trailing newline is removed, whether LF or CR LF (a file saved by a Windows
+    // editor); a lone CR is not a newline and stays (specification section 9).
     for (bytes, expected) in [
         (&b"v\n\n"[..], "v\n"),
         (b"v\n", "v"),
         (b"v", "v"),
-        (b"v\r\n", "v\r"),
+        (b"v\r\n", "v"),
+        (b"v\r", "v\r"),
     ] {
         let assembled = assemble(SECRET, &host(&[]), &secret_bytes(&[("S", bytes)]), &[]).unwrap();
         assert_eq!(

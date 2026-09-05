@@ -220,10 +220,14 @@ fn prepend_path(values: &mut Values, path_prepend: &[impl AsRef<Path>]) {
     values.insert(OsString::from("PATH"), path);
 }
 
-/// The value of a secret: the file's content without one trailing newline. The value
-/// itself never enters the diagnostic.
+/// The value of a secret: the file's content without one trailing newline, LF or CR LF (a
+/// file saved by a Windows editor must not keep its CR in the value; a lone CR is no
+/// newline). The value itself never enters the diagnostic.
 fn secret_value(name: &str, bytes: &[u8]) -> Result<Vec<u8>, Diagnostic> {
-    let value = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let value = bytes
+        .strip_suffix(b"\r\n")
+        .or_else(|| bytes.strip_suffix(b"\n"))
+        .unwrap_or(bytes);
     if value.is_empty() {
         return Err(Diagnostic::secret(format!(
             "the file of secret `{name}` is empty"
