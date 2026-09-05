@@ -11,23 +11,34 @@ use std::path::PathBuf;
 
 use crate::cli::{self, Invocation, Parsed};
 use crate::command::{command_candidates, resolve_command};
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::first_executable;
 use crate::layers::{load_layers, merge};
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy};
-use crate::plan::{self, resolve_isolation, Inputs, IsolationFacts, Plan};
+use crate::plan::{self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan};
 use crate::secret_facts::read_secret_files;
 use crate::variables::derive_variables;
 use crate::workspace_facts::{collect_workspace_facts, real_entry};
 
-/// What the start-up ends with: text to print (the usage or the version), or everything
-/// the start needs.
+/// What the start-up ends with: text to print (the usage or the version), a nested run
+/// that goes straight to the command, or everything the start needs.
 #[derive(Debug)]
 pub enum Outcome {
     Text(String),
+    Nested(Nested),
     Prepared(Box<Prepared>),
+}
+
+/// A nested run (specification section 12.1): the warning to print first, then the
+/// command resolved on the host's `PATH` or the `command not found` diagnostic, and the
+/// arguments as given. The environment is left as it is.
+#[derive(Debug)]
+pub struct Nested {
+    pub warning: Warning,
+    pub command: Result<PathBuf, Diagnostic>,
+    pub arguments: Vec<OsString>,
 }
 
 /// The results of stages 3 to 9.
@@ -48,7 +59,17 @@ where
         Parsed::Help(text) | Parsed::Version(text) => return Ok(Outcome::Text(text)),
         Parsed::Invocation(invocation) => invocation,
     };
-    // The nested branch of specification section 12.1 goes here, before stage 3.
+    let host: BTreeMap<OsString, OsString> = std::env::vars_os().collect();
+    // Stage 2, nested without `--print-plan`: stages 3 to 8 are skipped, nothing is read
+    // and nothing changed, and the command is resolved on the host's `PATH`
+    // (specification sections 12.1 and 13).
+    if is_nested(&host) && !invocation.print_plan {
+        return Ok(Outcome::Nested(Nested {
+            warning: nested_warning(),
+            command: locate_command(&invocation.command[0], &host),
+            arguments: invocation.command[1..].to_vec(),
+        }));
+    }
     let current_dir = std::env::current_dir().map_err(|error| {
         Diagnostic::path(format!(
             "the current directory cannot be determined: {error}"
@@ -67,7 +88,6 @@ where
     let facts = collect_workspace_facts(&workspace);
     let variables = derive_variables(&real_entry(&config_dir), &facts)?;
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
-    let host: BTreeMap<OsString, OsString> = std::env::vars_os().collect();
     let expanded = expand_policy(&policy, &variables, &home);
     let wanted = candidates(
         &expanded,
@@ -93,9 +113,16 @@ where
     };
     let isolation = resolve_isolation(&inputs, &facts)?;
     let bwrap = locate_bwrap(&host)?;
+    // A nested run resolves on the host's `PATH` rather than the isolation's
+    // (specification section 4.2).
+    let search_in = if is_nested(&host) {
+        &host
+    } else {
+        isolation.environment.values()
+    };
     let command = match invocation.command.first() {
         None => None,
-        Some(command) => Some(locate_command(command, isolation.environment.values())?),
+        Some(command) => Some(locate_command(command, search_in)?),
     };
     let plan = plan::plan(&inputs, isolation, bwrap, command);
     Ok(Outcome::Prepared(Box::new(Prepared {
@@ -103,6 +130,14 @@ where
         current_dir,
         plan,
     })))
+}
+
+/// The one line a nested run prints (specification section 12.1).
+fn nested_warning() -> Warning {
+    Warning::new(
+        "PROCESS_WRAP=1: already inside an isolation, so the policy is not applied and the \
+         command runs under the outer boundary",
+    )
 }
 
 /// Stage 8: `bwrap` on the host's `PATH` (specification section 14).

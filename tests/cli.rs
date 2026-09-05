@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 mod common;
@@ -436,4 +437,135 @@ fn a_control_character_in_a_warning_is_escaped() {
     assert!(stderr.starts_with("process-wrap: warning: "), "{report}");
     assert!(!output.stderr.contains(&0x1b), "{report}");
     assert!(!output.stdout.contains(&0x1b), "{report}");
+}
+
+/// The built binary started as a nested run: `PROCESS_WRAP=1` in its environment. No
+/// profile exists under `home` and `PATH` is `path`, so anything but the nested branch
+/// ends in a diagnostic.
+fn nested(home: &TempDir, path: &Path) -> std::process::Command {
+    let mut command = binary(home.path());
+    command.env("PROCESS_WRAP", "1").env("PATH", path);
+    command
+}
+
+#[test]
+fn a_nested_launch_warns_and_runs_the_command_without_bwrap() {
+    let home = TempDir::new();
+    let empty_path = TempDir::new();
+
+    let output = nested(&home, empty_path.path())
+        .args(["--", "/bin/sh", "-c", "echo out; echo err >&2; exit 3"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(3), "{report}");
+    assert_eq!(output.stdout, b"out\n", "{report}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    let mut lines = stderr.lines();
+    assert!(
+        lines.next().unwrap().starts_with("process-wrap: warning: "),
+        "{report}"
+    );
+    assert_eq!(lines.collect::<Vec<_>>(), ["err"], "{report}");
+}
+
+#[test]
+fn a_nested_launch_leaves_the_environment_unchanged() {
+    let home = TempDir::new();
+    let mut command = nested(&home, Path::new("/nonexistent"));
+    command
+        .env_clear()
+        .env("HOME", home.path())
+        .env("XDG_CONFIG_HOME", home.path().join(".config"))
+        .env("PROCESS_WRAP", "1")
+        .env("PATH", "/nonexistent")
+        .env("MARKER", "kept as is");
+    let expected: std::collections::BTreeSet<String> = command
+        .get_envs()
+        .map(|(name, value)| {
+            format!(
+                "{}={}",
+                name.to_str().unwrap(),
+                value.unwrap().to_str().unwrap()
+            )
+        })
+        .collect();
+
+    let output = command.args(["--", "/usr/bin/env"]).output().unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let inside: std::collections::BTreeSet<String> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(inside, expected, "{report}");
+}
+
+#[test]
+fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_missing() {
+    let home = TempDir::new();
+    let bin = TempDir::new();
+    let tool = bin.write("tool", "#!/bin/sh\nexit 7\n");
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let empty_path = TempDir::new();
+
+    let found = nested(&home, bin.path())
+        .args(["--", "tool"])
+        .output()
+        .unwrap();
+    let report = output_report(&found);
+    assert_eq!(found.status.code(), Some(7), "{report}");
+
+    let missing = nested(&home, empty_path.path())
+        .args(["--", "tool"])
+        .output()
+        .unwrap();
+    let report = output_report(&missing);
+    assert_eq!(missing.status.code(), Some(127), "{report}");
+    assert!(missing.stdout.is_empty(), "{report}");
+    let stderr = String::from_utf8(missing.stderr).unwrap();
+    let lines: Vec<&str> = stderr.lines().collect();
+    assert_eq!(lines.len(), 2, "{report}");
+    assert!(lines[0].starts_with("process-wrap: warning: "), "{report}");
+    assert!(
+        lines[1].starts_with("process-wrap: command not found: "),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
+    let home = TempDir::new();
+    let workspace = home.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+    let arguments = ["--workspace", workspace.to_str().unwrap(), "--print-plan"];
+
+    // Without a profile the policy is read and found missing: a diagnostic, not a plan.
+    let without_a_profile = binary(home.path())
+        .env("PROCESS_WRAP", "1")
+        .args(arguments)
+        .output()
+        .unwrap();
+    assert_diagnostic(&without_a_profile, 125, "policy");
+
+    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    let plain = run(home.path(), arguments);
+    let nested = binary(home.path())
+        .env("PROCESS_WRAP", "1")
+        .args(arguments)
+        .output()
+        .unwrap();
+
+    let report = format!("{}\n{}", output_report(&plain), output_report(&nested));
+    assert_eq!(plain.status.code(), Some(0), "{report}");
+    assert_eq!(nested.status.code(), Some(0), "{report}");
+    // The nested plan is the plain plan with one line in front that marks it as nested.
+    let plain = String::from_utf8(plain.stdout).unwrap();
+    let nested = String::from_utf8(nested.stdout).unwrap();
+    let (first_line, rest) = nested.split_once('\n').unwrap();
+    assert_eq!(rest, plain, "{report}");
+    assert!(!plain.contains(first_line), "{report}");
 }
