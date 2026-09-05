@@ -690,6 +690,59 @@ fn a_referenced_item_replacing_a_lower_layer_hide_is_rejected() {
 }
 
 #[test]
+fn a_referenced_item_landing_inside_a_lower_layer_hide_is_rejected() {
+    // Re-pointed at `~/b/creds/sub`, `--rw ~/a/link` replaces nothing by the identity of
+    // section 5.4, but it lands inside the profile's `hide` and section 6.4 mounts the
+    // narrower item after it, exposing what the lower layer hid.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\"]",
+            None,
+            &["/home/u/a/link"],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .dir("/home/u/b/creds/sub")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds/sub")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
+fn a_lower_layer_rw_written_as_the_real_path_shields_the_hide_it_replaced() {
+    // The policy file's `rw ~/b/creds`, written as the real path, replaces the profile's
+    // `hide` there (section 5.4) and is what is left in force when `--rw ~/a/link` lands
+    // inside; it already exposes the place, so the link exposes nothing new.
+    let result = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\"]",
+            Some("[mounts]\nrw = [\"~/b/creds\"]"),
+            &["/home/u/a/link"],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .dir("/home/u/b/creds/sub")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds/sub")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"]),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
 fn a_referenced_item_merging_with_a_hide_of_its_own_layer_is_accepted() {
     // Two `hide` forms of one layer that resolve to the same place merge into one item
     // (section 5.4); neither replaces the other, so the rule on lower layers does not

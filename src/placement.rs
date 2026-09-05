@@ -221,12 +221,16 @@ fn check_written_paths(
 }
 
 /// The further rule of specification section 5.6 for a written item that referenced
-/// something writable: it must not replace, by the identity of section 5.4, a `hide` or
-/// `ro` item written in a lower layer. Landing inside another root item exposes nothing
-/// new for an `rw`, unless the lower layer hid or read-only-mounted that very place: the
-/// replacement would then make it writable. The earlier items are in layer order, so the
-/// last one of another layer with the same identity is the one it replaces; a form of the
-/// item's own layer merges with it instead (section 5.4) and replaces nothing.
+/// something writable: its real path must not be, or lie inside, a `hide` or `ro` item
+/// written in a lower layer. Landing inside another root item exposes nothing new for an
+/// `rw`, unless the lower layer hid or read-only-mounted that place: replacing it by the
+/// identity of section 5.4, or mounting inside it in the order of section 6.4, would then
+/// make it writable. The lower item is the one in force over the real path just before
+/// this item's layer: at each prefix of the real path, innermost first, the last earlier
+/// item of another layer with that identity (the earlier items are in layer order, so it
+/// is what the replacement of section 5.4 leaves there). A form of the item's own layer
+/// merges with it instead (section 5.4) and replaces nothing. A lower `rw` in force there
+/// already exposes the place, so it shields whatever it replaced.
 fn check_replacement(
     role: &str,
     item: &WrittenItem,
@@ -238,14 +242,16 @@ fn check_replacement(
     if reference.is_none() {
         return Ok(());
     }
-    let replaced = earlier_items.iter().rev().find(|lower| {
-        lower.origin != item.origin
-            && facts.entry(&lower.path).path().unwrap_or(&lower.path) == real
+    let in_force = real.ancestors().find_map(|prefix| {
+        earlier_items.iter().rev().find(|lower| {
+            lower.origin != item.origin
+                && facts.entry(&lower.path).path().unwrap_or(&lower.path) == prefix
+        })
     });
-    match replaced.filter(|lower| matches!(lower.directive, Directive::Hide | Directive::Ro)) {
+    match in_force.filter(|lower| matches!(lower.directive, Directive::Hide | Directive::Ro)) {
         Some(lower) => Err(Diagnostic::path(format!(
-            "{role} resolves to {} and would replace the `{}` item `{}` at {} of a lower \
-             layer, so it could be redirected from inside the isolation",
+            "{role} resolves to {}, which is or lies inside the `{}` item `{}` at {} of a \
+             lower layer, so it could be redirected from inside the isolation",
             real.display(),
             directive_name(lower.directive),
             lower.written,
