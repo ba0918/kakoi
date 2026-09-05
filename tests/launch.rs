@@ -9,7 +9,8 @@ mod common;
 
 use common::{
     assert_diagnostic, binary, home_with_workspace, output_report, run,
-    run_command_from_deleted_dir, run_from_deleted_dir, TempDir, RW_WORKSPACE,
+    run_command_from_deleted_dir, run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir,
+    RW_WORKSPACE,
 };
 
 #[test]
@@ -320,6 +321,65 @@ fn the_command_sees_the_given_name_as_argv0() {
         "{}",
         output_report(&by_dash_path)
     );
+}
+
+/// A home whose profile scans the workspace for `.env*`, and a workspace holding `count`
+/// such files.
+fn home_with_many_env_files(count: usize) -> (TempDir, PathBuf) {
+    let (home, workspace) = home_with_workspace();
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env*\"]\n"),
+    );
+    for index in 0..count {
+        home.write(format!("ws/.env.{index}"), "");
+    }
+    (home, workspace)
+}
+
+/// The built binary under a soft limit of 1024 open files, running `script` with
+/// `/bin/sh -c` inside the isolation of `home`'s profile.
+fn run_script_under_soft_limit_1024(home: &TempDir, workspace: &Path, script: &str) -> Output {
+    let mut command = binary(home.path());
+    command.current_dir(workspace);
+    run_command_with_soft_fd_limit(
+        command,
+        1024,
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            script,
+        ],
+    )
+}
+
+#[test]
+fn a_scan_of_more_hidden_files_than_the_soft_limit_still_launches() {
+    // Specification section 14: every hidden file needs a descriptor; with 1100 of them
+    // and a soft limit of 1024, the start raises the soft limit to the hard limit first.
+    let (home, workspace) = home_with_many_env_files(1100);
+
+    let output = run_script_under_soft_limit_1024(&home, &workspace, "test ! -s .env.0");
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+#[test]
+fn the_isolated_process_inherits_the_raised_soft_limit() {
+    // The limit is raised whether or not it is needed, so the same input gives the same
+    // result: inside, the soft limit equals the hard limit.
+    let (home, workspace) = home_with_workspace();
+
+    let output = run_script_under_soft_limit_1024(&home, &workspace, "ulimit -Sn; ulimit -Hn");
+
+    let stdout = assert_ran_clean(&output);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 2, "{}", output_report(&output));
+    assert_eq!(lines[0], lines[1], "{}", output_report(&output));
+    assert_ne!(lines[0], "1024", "{}", output_report(&output));
 }
 
 #[test]

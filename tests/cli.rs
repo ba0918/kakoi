@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, run, run_from_deleted_dir,
-    TempDir, RW_WORKSPACE,
+    assert_diagnostic, binary, home_with_workspace, output_report, run,
+    run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir, RW_WORKSPACE,
 };
 use process_wrap::cli::{interpret, Invocation, Parsed};
 
@@ -569,6 +569,23 @@ fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
         lines[1].starts_with("process-wrap: command not executable: "),
         "{report}"
     );
+}
+
+#[test]
+fn a_nested_launch_leaves_the_soft_limit_unchanged() {
+    // A nested run makes no descriptors, so it does not raise the limit (specification
+    // section 14): the command sees the 1024 the shell set.
+    let home = TempDir::new();
+
+    let output = run_command_with_soft_fd_limit(
+        nested(&home, Path::new("/nonexistent")),
+        1024,
+        ["--", "/bin/sh", "-c", "ulimit -Sn"],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"1024\n", "{report}");
 }
 
 #[test]

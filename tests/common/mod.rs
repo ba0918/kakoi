@@ -74,6 +74,35 @@ where
         .unwrap()
 }
 
+/// Runs `command` (the built binary, with its environment as set) with `arguments` from a
+/// child shell whose soft limit on open files is lowered to `limit` first. The test
+/// process's own limit is left alone: lowering it would race with the other tests.
+pub fn run_command_with_soft_fd_limit<I, S>(command: Command, limit: u32, arguments: I) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let program = command.get_program().to_os_string();
+    // By absolute path: the child's `PATH` is whatever the test gave the binary.
+    let mut shell = Command::new("/bin/sh");
+    shell
+        .arg("-c")
+        .arg("limit=\"$1\"; shift; ulimit -Sn \"$limit\" && exec \"$0\" \"$@\"")
+        .arg(program)
+        .arg(limit.to_string())
+        .args(arguments)
+        .env_clear()
+        .envs(
+            command
+                .get_envs()
+                .filter_map(|(key, value)| value.map(|value| (key, value))),
+        );
+    if let Some(dir) = command.get_current_dir() {
+        shell.current_dir(dir);
+    }
+    shell.output().unwrap()
+}
+
 /// Everything the binary left behind, for the message of a failed assertion.
 pub fn output_report(output: &Output) -> String {
     format!(

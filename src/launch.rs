@@ -18,6 +18,7 @@ use crate::startup::Prepared;
 /// Executes `bwrap` for `prepared`. Returns only when the exec itself fails.
 pub fn launch(prepared: &Prepared) -> Diagnostic {
     let plan = &prepared.plan;
+    raise_open_file_limit();
     let mut descriptors = Vec::new();
     let arguments = match numbered_arguments(&plan.arguments, &mut descriptors) {
         Ok(arguments) => arguments,
@@ -36,6 +37,27 @@ pub fn launch(prepared: &Prepared) -> Diagnostic {
         "{} could not be executed: {error}",
         plan.bwrap.display()
     ))
+}
+
+/// Raises the soft limit on open files to the hard limit before any descriptor is made
+/// (specification section 14): a monorepo with thousands of hidden files needs one
+/// descriptor each, and the usual soft limit of 1024 would stop the start. Always raised,
+/// so that the same input gives the same result, and inherited by the command. A failure
+/// here is not reported on its own: if the descriptors then cannot be made, that is the
+/// `bwrap` diagnostic.
+fn raise_open_file_limit() {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `getrlimit` writes the current limits into the struct given, which is valid
+    // for the call.
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
+        return;
+    }
+    limit.rlim_cur = limit.rlim_max;
+    // SAFETY: `setrlimit` reads the struct given, which is valid for the call.
+    unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limit) };
 }
 
 /// The arguments with each symbol replaced by the number of a descriptor made for it.
