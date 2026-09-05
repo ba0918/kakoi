@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
-use common::{assert_diagnostic, binary, output_report, run, run_from_deleted_dir, TempDir};
+use common::{
+    assert_diagnostic, binary, home_with_workspace, output_report, run, run_from_deleted_dir,
+    TempDir, RW_WORKSPACE,
+};
 use process_wrap::cli::{interpret, Invocation, Parsed};
 
 fn interpret_ok(arguments: &[&str]) -> Parsed {
@@ -338,20 +341,6 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     );
 
     assert_diagnostic(&output, 125, "policy");
-}
-
-/// The profile of a binary test that reaches the plan without a warning: the workspace
-/// is `rw` (specification section 6.5).
-const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
-
-/// A home for a binary test that reaches the plan: the `RW_WORKSPACE` profile and a
-/// workspace directory under it.
-fn home_with_workspace() -> (TempDir, PathBuf) {
-    let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
-    let workspace = home.path().join("ws");
-    std::fs::create_dir(&workspace).unwrap();
-    (home, workspace)
 }
 
 #[test]

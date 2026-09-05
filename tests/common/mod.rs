@@ -31,18 +31,27 @@ where
     binary(home).args(arguments).output().unwrap()
 }
 
-/// Runs the built binary with `arguments` from a directory that no longer exists: a child
-/// shell enters a fresh directory under `home`, removes it, and then executes the binary.
-/// `Command::current_dir` cannot do this (the spawn fails), and changing the test process's
-/// own directory would race with the other tests.
+/// Runs the built binary with `arguments` from a directory that no longer exists.
 pub fn run_from_deleted_dir<I, S>(home: &Path, arguments: I) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    run_command_from_deleted_dir(binary(home), home, arguments)
+}
+
+/// Runs `command` (the built binary, with its environment as set) with `arguments` from a
+/// directory that no longer exists: a child shell enters a fresh directory under `home`,
+/// removes it, and then executes the binary. `Command::current_dir` cannot do this (the
+/// spawn fails), and changing the test process's own directory would race with the other
+/// tests.
+pub fn run_command_from_deleted_dir<I, S>(command: Command, home: &Path, arguments: I) -> Output
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let doomed = home.join("doomed");
     fs::create_dir(&doomed).unwrap();
-    let command = binary(home);
     let program = command.get_program().to_os_string();
     Command::new("sh")
         .arg("-c")
@@ -85,6 +94,20 @@ pub fn assert_diagnostic(output: &Output, code: i32, kind: &str) -> String {
         "{report}"
     );
     diagnostic
+}
+
+/// The profile of a binary test that reaches the plan without a warning: the workspace is
+/// `rw` (specification section 6.5).
+pub const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
+
+/// A home for a binary test that reaches the plan: the `RW_WORKSPACE` profile and a
+/// workspace directory `ws` under it.
+pub fn home_with_workspace() -> (TempDir, PathBuf) {
+    let home = TempDir::new();
+    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    let workspace = home.path().join("ws");
+    fs::create_dir(&workspace).unwrap();
+    (home, workspace)
 }
 
 /// A directory under the system temporary directory, removed when dropped.

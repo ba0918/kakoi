@@ -1,23 +1,9 @@
 //! What the built binary does with the real bwrap (specification section 15.2): the rows
 //! of the tables of section 13, and what is seen from inside the isolation.
 
-use std::path::PathBuf;
-
 mod common;
 
-use common::{binary, output_report, TempDir};
-
-/// The profile of a launch that raises no warning: the workspace is `rw`.
-const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
-
-/// A home with the `RW_WORKSPACE` profile and a workspace directory under it.
-fn home_with_workspace() -> (TempDir, PathBuf) {
-    let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
-    let workspace = home.path().join("ws");
-    std::fs::create_dir(&workspace).unwrap();
-    (home, workspace)
-}
+use common::{binary, home_with_workspace, output_report};
 
 #[test]
 fn a_command_exit_code_passes_through() {
