@@ -328,11 +328,26 @@ pub struct ResolvedMounts {
     pub skipped: Vec<SkippedItem>,
 }
 
-/// Resolves the expanded mount items to real paths.
+/// Resolves the expanded mount items to real paths: the written layers with the identity
+/// of specification section 5.4 (`resolve_written`), then the generated items of
+/// section 6.3 and the kinds of section 6.1 (`generate`).
 pub fn resolve_mounts(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
     variables: &Variables,
+    facts: &MountFacts,
+) -> Result<ResolvedMounts, Diagnostic> {
+    let written = resolve_written(expanded, facts)?;
+    generate(written, expanded, layers, variables, facts)
+}
+
+/// The written mount items resolved to real paths, before the generated items of
+/// specification section 6.3 are applied: the identity of section 5.4 within and across
+/// the written layers, with the conflicts it finds, and the items that resolve to nothing
+/// skipped. The items are in the order of section 6.4. This is the set the checks made
+/// before generation (the scan `root` and the `hide-mounts` `under`, section 5.6) look at.
+pub fn resolve_written(
+    expanded: &ExpandedPolicy,
     facts: &MountFacts,
 ) -> Result<ResolvedMounts, Diagnostic> {
     let mut resolved = ResolvedMounts::default();
@@ -392,22 +407,11 @@ pub fn resolve_mounts(
     {
         return Err(diagnostic);
     }
-    for generated in generated_items(expanded, layers, variables, facts) {
-        match merged
-            .iter_mut()
-            .find(|existing| existing.key == generated.key)
-        {
-            // A generated item replaces a written one; generated items are all `hide`, so
-            // two of them on one path collapse.
-            Some(existing) => *existing = generated,
-            None => merged.push(generated),
-        }
-    }
     for candidate in merged {
         let (real, kind) = match candidate.entry {
             RealEntry::Missing => {
                 let ItemOrigin::Written(origin) = candidate.origin else {
-                    unreachable!("generated items come from things that exist");
+                    unreachable!("the written items are all written");
                 };
                 resolved.skipped.push(SkippedItem {
                     directive: candidate.directive,
@@ -427,6 +431,32 @@ pub fn resolve_mounts(
             origin: candidate.origin,
             written: candidate.written,
         });
+    }
+    resolved.items.sort_by(|a, b| byte_order(&a.real, &b.real));
+    Ok(resolved)
+}
+
+/// Applies the generated `hide` items of specification section 6.3 to the written items:
+/// a generated item replaces the written item at the same real path (they are all `hide`,
+/// so two of them on one path collapse), the order of section 6.4 is restored, and the
+/// kinds of section 6.1 are checked.
+pub fn generate(
+    written: ResolvedMounts,
+    expanded: &ExpandedPolicy,
+    layers: &[Layer],
+    variables: &Variables,
+    facts: &MountFacts,
+) -> Result<ResolvedMounts, Diagnostic> {
+    let mut resolved = written;
+    for generated in generated_items(expanded, layers, variables, facts) {
+        match resolved
+            .items
+            .iter_mut()
+            .find(|existing| existing.real == generated.real)
+        {
+            Some(existing) => *existing = generated,
+            None => resolved.items.push(generated),
+        }
     }
     resolved.items.sort_by(|a, b| byte_order(&a.real, &b.real));
     check_kinds(&resolved.items)?;
@@ -452,7 +482,7 @@ fn generated_items(
     layers: &[Layer],
     variables: &Variables,
     facts: &MountFacts,
-) -> Vec<Candidate> {
+) -> Vec<ResolvedItem> {
     let policy_files = loaded_policy_files(layers, facts);
     // The places the user chose to work in are never hidden by their mount type.
     let work_places = [
@@ -463,7 +493,7 @@ fn generated_items(
     let mut generated = Vec::new();
     // Hidden so that a secret file the policy does not name cannot be read from inside.
     let config_secrets = variables.config_dir.join("secrets");
-    generated.extend(Candidate::hidden(
+    generated.extend(hidden(
         &config_secrets,
         ItemOrigin::ConfigSecrets,
         facts.entry(&config_secrets),
@@ -471,7 +501,7 @@ fn generated_items(
     // A secret file that does not exist is the warning of section 9, not a hide.
     for (name, path) in &expanded.secrets {
         if let Some(path) = path.path() {
-            generated.extend(Candidate::hidden(
+            generated.extend(hidden(
                 path,
                 ItemOrigin::SecretFile(name.clone()),
                 facts.entry(path),
@@ -492,7 +522,7 @@ fn generated_items(
             {
                 continue;
             }
-            generated.extend(Candidate::hidden(
+            generated.extend(hidden(
                 &mount.target,
                 ItemOrigin::HideMounts,
                 facts.entry(&mount.target),
@@ -506,18 +536,14 @@ fn generated_items(
             if policy_files.contains(real) {
                 continue;
             }
-            generated.extend(Candidate::hidden(
-                &hit.found_at,
-                ItemOrigin::Scan,
-                hit.target.clone(),
-            ));
+            generated.extend(hidden(&hit.found_at, ItemOrigin::Scan, hit.target.clone()));
         }
     }
     generated
 }
 
-/// An item with its identity: the real path when something exists, else the expanded path
-/// as written (specification section 5.4).
+/// A written item with its identity: the real path when something exists, else the
+/// expanded path as written (specification section 5.4).
 struct Candidate {
     directive: Directive,
     written: String,
@@ -526,18 +552,20 @@ struct Candidate {
     entry: RealEntry,
 }
 
-impl Candidate {
-    /// A generated `hide` on what exists at `written`; nothing when nothing exists.
-    fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<Self> {
-        let key = entry.path()?.to_path_buf();
-        Some(Self {
-            directive: Directive::Hide,
-            written: written.display().to_string(),
-            origin,
-            key,
-            entry,
-        })
-    }
+/// A generated `hide` on what exists at `written`; nothing when nothing exists.
+fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<ResolvedItem> {
+    let (real, kind) = match entry {
+        RealEntry::Missing => return None,
+        RealEntry::Directory(real) => (real, EntryKind::Directory),
+        RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
+    };
+    Some(ResolvedItem {
+        directive: Directive::Hide,
+        real,
+        kind,
+        origin,
+        written: written.display().to_string(),
+    })
 }
 
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).
