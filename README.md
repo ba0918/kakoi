@@ -9,7 +9,8 @@ The isolation has four dimensions: the file system (what is visible and what is 
 network (shared with the host or cut), the environment (what is inherited, dropped, and added), and
 credentials (files hidden and secrets injected). The process ID, IPC, UTS, cgroup, and user
 namespaces are always unshared. The boundary is assembled once at start-up and does not change
-afterwards; `process-wrap` never rewrites the command's arguments.
+afterwards; `process-wrap` never rewrites the command's arguments, and the command sees the name
+it was given as its `argv[0]` (`sh`, not `/usr/bin/sh`), inside the isolation and when nested.
 
 The typical use is running an agent CLI (codex, opencode, Claude Code) against one repository
 without giving it the rest of the home directory, the host's credentials, or the sockets that
@@ -72,8 +73,9 @@ process-wrap --print-plan -- codex
 ```
 
 The plan shows the merged policy, the policy files read, the four variables, every mount item
-(applied, or skipped with the reason), the final environment with secret values masked, the
-resolved command, and the `bwrap` argument list.
+(applied, or skipped with the reason), every scan hit left visible and every scan root,
+`hide-mounts` `under`, or `path-prepend` entry skipped (each with the reason), the final
+environment with secret values masked, the resolved command, and the `bwrap` argument list.
 
 Only the values of the variables the policy names under `secrets` are masked. Every other
 variable of the final environment is printed with its value as it is, and with
@@ -85,14 +87,23 @@ patterns (known gap 6 below). Treat the output of `--print-plan` as sensitive; s
 
 A failure of `process-wrap` itself is one line on standard error of the form
 `process-wrap: <kind>: <description>`, and the exit code is 125, except that a command that cannot
-be found exits 127. The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, and
-`command not found`. Warnings are one line each starting with `process-wrap: warning: ` and do
-not stop the run.
+be found exits 127 and, in a nested run, a command that was found but cannot be executed (a script
+whose interpreter does not exist, a file of a format the kernel cannot run) exits 126. The kinds
+are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`, and
+`command not executable`. Warnings are one line each starting with `process-wrap: warning: ` and
+do not stop the run.
 
 When the command runs, its exit code is returned as it is; a command killed by signal `s` yields
 128 + `s`. `process-wrap` executes `bwrap` in place rather than waiting for it as a child, so a
 failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
-own output and exit code.
+own output and exit code. Only in a nested run, where `process-wrap` executes the command itself,
+does a failed `exec` become the `command not executable` diagnostic above.
+
+Before making the file descriptors it hands to `bwrap` (one per hidden file, plus the seccomp
+filter), `process-wrap` raises its soft limit on open files to the hard limit, always, so that a
+scan hiding thousands of files starts under the usual limit of 1024 and the same input gives the
+same result. The command inherits the raised limit. A nested run makes no descriptors and leaves
+the limit alone.
 
 ## Writing a policy
 
@@ -176,6 +187,11 @@ directives inside one layer, that is an error; across layers the upper layer rep
 On top of the written layers, `process-wrap` generates `hide` items: the files found by
 `mounts.scan`, the mounts under `hide-mounts.under` whose file system type matches (never the
 work place itself), each secret file that exists, and the configuration directory's `secrets/`.
+A scan hit that is a symbolic link is hidden at its target, except when the target lies inside an
+`ro` item you wrote: hiding it would empty your own read-only file, so the link is left visible
+and the plan says why; if that `ro` item could itself be re-pointed from inside (its path passes
+through a writable item), the launch stops with `path` instead. With a `hide-mounts` written, the
+mount list must be readable, or the launch stops with `path` rather than miss a mount.
 
 ### Environment, secrets, git
 
@@ -187,7 +203,7 @@ are wildcards); add `set`; add the secrets; add the git rewrite; put `path-prepe
 
 Each `secrets` entry names an environment variable and a file. The variable is removed from the
 environment whatever its origin, and set again from the file's content (without one trailing
-newline) when the file exists; the file is then hidden inside the isolation. A missing file only
+newline, LF or CR LF) when the file exists; the file is then hidden inside the isolation. A missing file only
 warns. An empty file, one that cannot be read, one containing a NUL byte, or a value over 64 KiB
 is a `secret` error. Keep secret files in the configuration directory's `secrets/`: that directory
 is always hidden, so a secret the policy does not name cannot be read from inside either. Secret
@@ -217,10 +233,34 @@ inside an `rw` or `rw-file` item, and resolving its path must not pass through a
 a directory inside one. This can look wrong at first: mounting the file read-only would seem to
 suffice. It does not. The file itself cannot be moved, but its ancestor directory can be renamed
 from inside the isolation, and a different file put at the same path is what the next launch
-reads (measured with `bwrap` 0.9.0). The same reasoning applies to written mount items and to an
-explicit `--workspace`: when their resolution passes through a writable item, the target must lie
-inside an item that cannot be redirected from inside, or the launch stops with a `path`
-diagnostic naming the path, the `rw` item it passed through, and the reason.
+reads (measured with `bwrap` 0.9.0). The same reasoning applies to written `rw`, `rw-file`, and
+`hide` items and to an explicit `--workspace`: when their resolution passes through a writable
+item, the target must lie inside an item that cannot be redirected from inside, or the launch
+stops with a `path` diagnostic naming the path, the `rw` item it passed through, and the reason.
+Three rules refine this:
+
+- A written `ro` item is not held to it. Re-pointing or deleting an `ro` link only moves a
+  read-only place or lifts it; the one thing it could newly show, landing on a `hide`, is caught
+  separately. So a dotfiles link written as `ro` passes.
+- A written `hide` whose path follows a symbolic link inside an `rw` item is refused wherever it
+  lands, from the first launch: deleting that link from inside makes the next launch skip the
+  item, and what it hid shows through. Write the link's target, the real path, instead; a `hide`
+  written as a real path inside an `rw` item is fine (the mount point cannot be renamed).
+- A scan `root` or a `hide-mounts` `under` whose path passes through a writable item must be the
+  mount point of an `rw` item itself, not a directory below it: the root is not mounted, so a
+  subdirectory can be renamed from inside and the next launch scans an empty tree and hides
+  nothing.
+
+In short: the path of a link you placed inside an `rw` area stops the launch when written as
+`rw`, `rw-file`, or `hide`; write the link's real target instead. The same link written as `ro`
+passes, but what that `ro` protects is only as much as known gap 15 below says.
+
+Landing inside something hidden is refused too, whatever the item was written as: an `rw`,
+`rw-file`, or `ro` item whose path passes through a writable item and lands on or inside a
+`hide` (or an `rw` landing on an `ro`), including the `hide` items `process-wrap` generates for
+`secrets/` and for hidden mounts, would be mounted after the wider item and show what it hid. And
+no item may land on `/`, `/dev`, or `/proc` or inside the latter two: the isolation mounts those
+itself, and an item there would cover its view (an `ro` over `/proc` shows the host's processes).
 
 The case that meets this most often is dotfiles: the configuration directory's real location is
 inside the dotfiles worktree, so `rw = ["${worktree}"]` would put the profile inside a writable
@@ -241,7 +281,12 @@ Two more rules follow from the same check. When you name a subdirectory of an `r
 `--workspace`, start `process-wrap` from that directory: a `--workspace` that is the current
 directory is exempt from the check, since a process already there cannot be moved by a link swap.
 And a `--workspace` whose path goes through a symbolic link, given from somewhere else, is refused;
-write the real path, or start from there.
+write the real path, or start from there. A harmless alias is caught too: with
+`rw = ["${worktree}"]` alone, `--workspace ~/proj` given from elsewhere while `~/proj` is a link to
+`~/data/proj` is refused, because the only writable item is derived from the workspace itself and
+cannot vouch for it. Give the real path, or start from inside it. (An alias landing inside an `rw`
+item written by its real path, such as `rw = ["~/work"]` with `~/work -> ~/data/work` and
+`--workspace ~/work/proj`, passes.)
 
 ## Known gaps
 
@@ -285,9 +330,22 @@ write the real path, or start from there.
 14. The check on redirected items is made against the writable items of the current launch. An
     item written literally below the worktree (`rw = ["${worktree}", "~/work/a/b"]`) can have
     `~/work/a` swapped for a link while the worktree is `~/work`, and a later launch with a
-    different worktree does not see that and applies `rw` to the link's target. Closing this
-    would need remembering the previous launch, which `process-wrap` does not do; write
-    subdirectories of the worktree with variables.
+    different worktree does not see that and applies `rw` to the link's target. The same holds
+    when the item's own path is swapped for a link (`~/work/a/b` replaced, then
+    `--workspace ~/work/a/b/inner` given from elsewhere on the next launch). Launched from the
+    same worktree, both stop. Closing this would need remembering the previous launch, which
+    `process-wrap` does not do; write subdirectories of the worktree with variables.
+15. `ro` and `hide` items inside an `rw` area protect less than they seem to. An `ro` written as
+    a link protects only the link's target: from inside, the link can be deleted and a regular
+    file of the same name put in its place, and whatever reads that path in the same launch sees
+    the new content (an editor that saves through a temporary file and `rename` replaces the link
+    too). When the target is outside every writable item, that place was read-only already and
+    the `ro` item added nothing. On the next launch, a re-pointed link makes some other place
+    read-only and a deleted one lifts the read-only elsewhere (anything newly visible is stopped
+    by the exposing-pair check; a `hide` written as a link is stopped from the first launch).
+    Even without links, renaming an ancestor directory and placing another file at the same path
+    changes what the next launch reads. What `ro` guarantees is that the content the agent reads
+    is not changed under it, not that the agent cannot be steered into reading something else.
 
 ## Not in 0.1
 
