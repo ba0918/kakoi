@@ -10,6 +10,7 @@ pub mod diagnostic;
 pub mod environment;
 pub mod executables;
 pub mod isolated_env;
+pub mod launch;
 pub mod layers;
 pub mod mount_facts;
 pub mod mount_list;

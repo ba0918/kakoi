@@ -569,3 +569,51 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     assert_eq!(rest, plain, "{report}");
     assert!(!plain.contains(first_line), "{report}");
 }
+
+#[test]
+fn secret_values_never_reach_stdout_or_stderr() {
+    let (home, workspace) = home_with_workspace();
+    let value = "FAKE-SECRET-VALUE-not-a-real-credential";
+    home.write(".config/process-wrap/secrets/token", format!("{value}\n"));
+    // `GIT_CONFIG_COUNT` as a secret with a non-numeric value: the `env` diagnostic of
+    // specification section 10 names the variable and must not show its value.
+    home.write(".config/process-wrap/secrets/count", format!("{value}\n"));
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
+    );
+    let with_diagnostic = home.write(
+        "count.toml",
+        "[secrets]\nGIT_CONFIG_COUNT = \"${config_dir}/secrets/count\"\n\
+         [git.instead-of]\n\"git@example.com:\" = \"https://example.com/\"\n",
+    );
+    let workspace = workspace.to_str().unwrap();
+
+    for (arguments, code) in [
+        (
+            vec!["--workspace", workspace, "--print-plan", "--", "/bin/true"],
+            0,
+        ),
+        (vec!["--workspace", workspace, "--", "/bin/true"], 0),
+        (
+            vec![
+                "--workspace",
+                workspace,
+                "--policy-file",
+                with_diagnostic.to_str().unwrap(),
+                "--",
+                "/bin/true",
+            ],
+            125,
+        ),
+    ] {
+        let output = run(home.path(), &arguments);
+
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(code), "{report}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stdout.contains(value), "{report}");
+        assert!(!stderr.contains(value), "{report}");
+    }
+}

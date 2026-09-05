@@ -3,6 +3,7 @@ use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
+use process_wrap::launch;
 use process_wrap::plan_text;
 use process_wrap::startup::{self, Outcome};
 
@@ -31,8 +32,8 @@ fn main() -> ExitCode {
                 let _ = std::io::stdout().write_all(plan_text::render(&prepared.plan).as_bytes());
                 return ExitCode::SUCCESS;
             }
-            // The launch itself is connected next; a prepared run stops here.
-            ExitCode::SUCCESS
+            // Returns only when bwrap could not be executed.
+            exit_with(launch::launch(&prepared))
         }
         Err(diagnostic) => exit_with(diagnostic),
     }
