@@ -148,6 +148,7 @@ fn fixed_arguments_come_first_in_the_specified_order() {
             literal("--ro-bind-data"),
             Argument::EmptyFile,
             literal("/home/u/proj/.env"),
+            literal("--"),
         ]
     );
 }

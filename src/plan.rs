@@ -164,7 +164,10 @@ impl Argument {
 }
 
 /// The bwrap arguments: the fixed part in the order of specification section 14, then the
-/// mount items in the order they were resolved. No argument sets an environment variable.
+/// mount items in the order they were resolved, then `--` so that the command placed after
+/// them is never read as an option of bwrap (specification section 4.2: a `COMMAND` with
+/// `/` is used as that path, and such a path can start with `-`). No argument sets an
+/// environment variable.
 pub fn bwrap_arguments(
     network_mode: NetworkMode,
     current_dir: &Path,
@@ -207,5 +210,6 @@ pub fn bwrap_arguments(
             }
         }
     }
+    arguments.push(Argument::text("--"));
     arguments
 }

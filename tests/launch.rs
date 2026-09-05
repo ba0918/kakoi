@@ -246,6 +246,33 @@ fn command_arguments_arrive_unchanged() {
 }
 
 #[test]
+fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
+    // Specification section 4.2: a COMMAND containing `/` is used as that path. A relative
+    // path can start with `-`; it must reach the command, not be read as an option of bwrap.
+    // The tool is a copy of `echo` rather than a script: the kernel hands a script's path
+    // to its interpreter as an argument, and `sh` would read `-x/tool` as options too.
+    let (home, workspace) = home_with_workspace();
+    let tool = workspace.join("-x/tool");
+    std::fs::create_dir(tool.parent().unwrap()).unwrap();
+    std::fs::copy("/bin/echo", &tool).unwrap();
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "-x/tool",
+            "ran",
+        ])
+        .output()
+        .unwrap();
+
+    let stdout = assert_ran_clean(&output);
+    assert_eq!(stdout, "ran\n", "{}", output_report(&output));
+}
+
+#[test]
 fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
     let tool = home.write("hidden/tool", "#!/bin/sh\necho ran\n");
