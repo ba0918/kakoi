@@ -338,3 +338,74 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
 
     assert_diagnostic(&output, 125, "policy");
 }
+
+/// A home for a binary test that reaches the plan: an empty profile and a workspace
+/// directory under it.
+fn home_with_workspace() -> (TempDir, PathBuf) {
+    let home = TempDir::new();
+    home.write(".config/process-wrap/profile/default.toml", "");
+    let workspace = home.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+    (home, workspace)
+}
+
+#[test]
+fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
+    let (home, workspace) = home_with_workspace();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"relative/path\"]\n",
+    );
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+#[test]
+fn print_plan_with_a_diagnostic_prints_no_plan() {
+    let (home, workspace) = home_with_workspace();
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        "[mounts]\nrw = [\"relative/path\"]\n",
+    );
+
+    let output = run(
+        home.path(),
+        ["--workspace", workspace.to_str().unwrap(), "--print-plan"],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+#[test]
+fn print_plan_exits_zero_and_prints_the_resolved_command() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan",
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+    let plan = String::from_utf8(output.stdout).unwrap();
+    assert!(plan.contains("/bin/true"), "{report}");
+    assert!(plan.contains(workspace.to_str().unwrap()), "{report}");
+    assert!(plan.contains("--ro-bind"), "{report}");
+}

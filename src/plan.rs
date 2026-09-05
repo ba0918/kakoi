@@ -3,7 +3,7 @@
 //! (section 14). Pure.
 
 use std::collections::BTreeMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::{Diagnostic, Warning};
@@ -98,6 +98,9 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
 /// sections 2 and 13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Plan {
+    /// Whether the run is nested (specification section 12.1): the plan is shown, not
+    /// applied.
+    pub nested: bool,
     pub policy: Policy,
     /// The real paths of the policy files read.
     pub policy_files: Vec<PathBuf>,
@@ -124,6 +127,7 @@ pub fn plan(
         &isolation.mounts.items,
     );
     Plan {
+        nested: is_nested(inputs.host),
         policy: inputs.policy.clone(),
         policy_files: isolation.policy_files,
         variables: inputs.variables.clone(),
@@ -134,6 +138,12 @@ pub fn plan(
         command,
         arguments,
     }
+}
+
+/// Whether `host` marks a nested run: `PROCESS_WRAP` is `1` (specification section 12.1).
+pub fn is_nested(host: &BTreeMap<OsString, OsString>) -> bool {
+    host.get(OsStr::new("PROCESS_WRAP"))
+        .is_some_and(|value| value == "1")
 }
 
 /// One bwrap argument. The descriptors are symbols: their numbers are assigned right
