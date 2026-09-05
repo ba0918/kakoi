@@ -339,11 +339,15 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     assert_diagnostic(&output, 125, "policy");
 }
 
-/// A home for a binary test that reaches the plan: an empty profile and a workspace
-/// directory under it.
+/// The profile of a binary test that reaches the plan without a warning: the workspace
+/// is `rw` (specification section 6.5).
+const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
+
+/// A home for a binary test that reaches the plan: the `RW_WORKSPACE` profile and a
+/// workspace directory under it.
 fn home_with_workspace() -> (TempDir, PathBuf) {
     let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
     let workspace = home.path().join("ws");
     std::fs::create_dir(&workspace).unwrap();
     (home, workspace)
@@ -408,4 +412,28 @@ fn print_plan_exits_zero_and_prints_the_resolved_command() {
     assert!(plan.contains("/bin/true"), "{report}");
     assert!(plan.contains(workspace.to_str().unwrap()), "{report}");
     assert!(plan.contains("--ro-bind"), "{report}");
+}
+
+#[test]
+fn a_control_character_in_a_warning_is_escaped() {
+    let (home, workspace) = home_with_workspace();
+    // A secret whose file does not exist raises the warning of specification section 9,
+    // which embeds the key name; the name carries an ESC.
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        format!("{RW_WORKSPACE}[secrets]\n\"A\\u001bB\" = \"~/no-such-file\"\n"),
+    );
+
+    let output = run(
+        home.path(),
+        ["--workspace", workspace.to_str().unwrap(), "--print-plan"],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let stderr = String::from_utf8(output.stderr.clone()).unwrap();
+    assert_eq!(stderr.matches('\n').count(), 1, "{report}");
+    assert!(stderr.starts_with("process-wrap: warning: "), "{report}");
+    assert!(!output.stderr.contains(&0x1b), "{report}");
+    assert!(!output.stdout.contains(&0x1b), "{report}");
 }
