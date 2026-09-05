@@ -690,6 +690,31 @@ fn a_referenced_item_replacing_a_lower_layer_hide_is_rejected() {
 }
 
 #[test]
+fn a_referenced_item_replacing_a_lower_layer_ro_is_rejected() {
+    // The same shape with `ro` in the lower layer: replacing it would make the read-only
+    // place writable.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/b/creds\"]",
+            None,
+            &["/home/u/a/link"],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
 fn a_referenced_item_landing_inside_a_lower_layer_hide_is_rejected() {
     // Re-pointed at `~/b/creds/sub`, `--rw ~/a/link` replaces nothing by the identity of
     // section 5.4, but it lands inside the profile's `hide` and section 6.4 mounts the
