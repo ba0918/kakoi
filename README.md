@@ -1,0 +1,297 @@
+# process-wrap
+
+`process-wrap` runs a command inside a [bubblewrap](https://github.com/containers/bubblewrap)
+(`bwrap`) mount namespace shaped by a layered policy, and returns the command's exit code
+unchanged. It is a command-line tool for Linux on x86_64, including WSL2, and needs `bwrap` 0.9.0
+or later.
+
+The isolation has four dimensions: the file system (what is visible and what is writable), the
+network (shared with the host or cut), the environment (what is inherited, dropped, and added), and
+credentials (files hidden and secrets injected). The process ID, IPC, UTS, cgroup, and user
+namespaces are always unshared. The boundary is assembled once at start-up and does not change
+afterwards; `process-wrap` never rewrites the command's arguments.
+
+The typical use is running an agent CLI (codex, opencode, Claude Code) against one repository
+without giving it the rest of the home directory, the host's credentials, or the sockets that
+carry them.
+
+## Install
+
+`process-wrap` is built from source with a Rust toolchain (1.85 or later):
+
+```sh
+cargo install --path .
+```
+
+Then put a profile in place. The bundled [`examples/profile/default.toml`](examples/profile/default.toml)
+is written for WSL2 and is a good starting point:
+
+```sh
+mkdir -p ~/.config/process-wrap/profile ~/.config/process-wrap/secrets
+cp examples/profile/default.toml ~/.config/process-wrap/profile/default.toml
+```
+
+`bwrap` must be on `PATH`; on Debian and Ubuntu it is the `bubblewrap` package.
+
+## Usage
+
+```
+process-wrap [OPTIONS] -- COMMAND [ARGS]...
+process-wrap [OPTIONS] --print-plan [-- COMMAND [ARGS]...]
+process-wrap --version
+process-wrap --help
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--profile NAME` | The profile for the global scope: `$XDG_CONFIG_HOME/process-wrap/profile/NAME.toml` (or `~/.config/process-wrap/profile/NAME.toml`). Defaults to `default`. |
+| `--policy-file PATH` | A policy file for the process scope, merged on top of the profile. |
+| `--workspace PATH` | The workspace. Defaults to the current directory. |
+| `--rw PATH` | An `rw` directive on the command-line layer. Repeatable. |
+| `--hide PATH` | A `hide` directive on the command-line layer. Repeatable. |
+| `--print-plan` | Print the plan and exit without running the command. |
+| `--version`, `--help` | Print the version or the usage. Each is used alone. |
+
+Everything after `--` is the command and its arguments, passed through unchanged. Relative paths
+given on the command line are taken from the current directory; `~` and variables are not
+expanded there. Options that take a value accept `--opt VALUE` and `--opt=VALUE`; an empty value,
+or a value starting with `-` in the separated form, is a usage error. Options other than `--rw`
+and `--hide` can be given once.
+
+A typical launch:
+
+```sh
+cd ~/work/project
+process-wrap -- codex
+```
+
+To see what would happen without running anything:
+
+```sh
+process-wrap --print-plan -- codex
+```
+
+The plan shows the merged policy, the policy files read, the four variables, every mount item
+(applied, or skipped with the reason), the final environment with secret values masked, the
+resolved command, and the `bwrap` argument list.
+
+### Exit codes and diagnostics
+
+A failure of `process-wrap` itself is one line on standard error of the form
+`process-wrap: <kind>: <description>`, and the exit code is 125, except that a command that cannot
+be found exits 127. The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, and
+`command not found`. Warnings are one line each starting with `process-wrap: warning: ` and do
+not stop the run.
+
+When the command runs, its exit code is returned as it is; a command killed by signal `s` yields
+128 + `s`. `process-wrap` executes `bwrap` in place rather than waiting for it as a child, so a
+failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
+own output and exit code.
+
+## Writing a policy
+
+A policy file is TOML. Every section is optional; an empty file is a valid policy. The bundled
+profile shows all of it in use. The fixed keys are the ones below; any other key is a `policy`
+error.
+
+```toml
+[mounts]
+rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/process-wrap", "~/.cache"]
+rw-file = ["~/.claude.json"]
+ro      = ["~/.codex/AGENTS.md"]
+hide    = ["/tmp", "/run/user", "~/.ssh", "~/.aws", "/run/WSL"]
+
+[[mounts.scan]]
+root    = "${worktree}"                # required
+names   = [".env", ".env.*"]           # required, not empty
+exclude = ["*.example", "*.sample"]    # optional
+prune   = [".git", "node_modules"]     # optional
+
+[[mounts.hide-mounts]]
+under  = "/mnt"                        # required
+fstype = ["9p", "drvfs"]               # required, not empty
+
+[network]
+mode = "host"            # "host" | "none"; default "host"
+
+[env]
+mode         = "inherit" # "inherit" | "clear"; default "inherit"
+pass         = []        # only meaningful when the merged mode is "clear"
+set          = { }
+unset        = ["SSH_AUTH_SOCK", "*_TOKEN"]
+path-prepend = []
+
+[secrets]
+GH_TOKEN = "${config_dir}/secrets/gh-token"
+
+[git.instead-of]
+"git@github.com:" = "https://github.com/"
+```
+
+### Paths and variables
+
+Every path in a policy file is absolute, `~` alone, `~/...`, or starts with a variable. Relative
+paths and `~user` are rejected. `~` is the real path of `HOME`. The variables are:
+
+| Variable | Value |
+| --- | --- |
+| `${workspace}` | The workspace's real path: `--workspace`, or the current directory. |
+| `${worktree}` | The first directory from the workspace upwards that has a `.git` (a directory or a regular file); the workspace itself when there is none. |
+| `${git_common_dir}` | The shared `.git` of the worktree, verified against git's own back links. Has no value when the worktree is not under git. |
+| `${config_dir}` | The configuration directory's real path. |
+
+An item whose variable has no value, or whose path does not exist, is skipped and shown as
+skipped in the plan. Nothing is mounted on a path that does not exist.
+
+### Directives
+
+| Directive | Target | Inside the isolation |
+| --- | --- | --- |
+| `rw` | a directory | readable and writable |
+| `rw-file` | a non-directory (regular file, socket, FIFO) | writable in place; a replace via temporary file and `rename` fails |
+| `ro` | a directory or a file | read-only |
+| `hide` | a directory or a file | a directory becomes an empty directory whose contents vanish at exit; a file reads as empty |
+
+Everything not named by the policy is visible read-only. `/dev` and `/proc` are the isolation's
+own. A host UNIX socket that is visible read-only can be connected to; use `hide` to stop that.
+All directives apply to the real path after resolving symbolic links, and items are mounted
+ancestors first, so the narrower item wins: `hide = ["/tmp"]` with `rw = ["/tmp/process-wrap"]`
+gives an empty `/tmp` with only `/tmp/process-wrap` shared with the host.
+
+### Layers
+
+Up to three written layers are merged, lowest first: the profile, the `--policy-file`, and the
+command line (`--rw`, `--hide`). Lists concatenate (`env.path-prepend` puts the upper layer
+first), scalars (`network.mode`, `env.mode`) take the upper layer, and tables (`env.set`,
+`secrets`, `git.instead-of`) merge by key with the upper layer winning. There is no way to remove
+a lower layer's item; make another profile instead. If the same path gets two different
+directives inside one layer, that is an error; across layers the upper layer replaces the lower.
+
+On top of the written layers, `process-wrap` generates `hide` items: the files found by
+`mounts.scan`, the mounts under `hide-mounts.under` whose file system type matches (never the
+work place itself), each secret file that exists, and the configuration directory's `secrets/`.
+
+### Environment, secrets, git
+
+The environment inside the isolation is assembled in this order and handed to `bwrap` as it is
+(no environment variable travels through `bwrap`'s arguments): start from the host environment
+(`inherit`) or from the `pass` variables alone (`clear`); drop the `unset` patterns (`*` and `?`
+are wildcards); add `set`; add the secrets; add the git rewrite; put `path-prepend` in front of
+`PATH`; set `PROCESS_WRAP=1`.
+
+Each `secrets` entry names an environment variable and a file. The variable is removed from the
+environment whatever its origin, and set again from the file's content (without one trailing
+newline) when the file exists; the file is then hidden inside the isolation. A missing file only
+warns. An empty file, one that cannot be read, one containing a NUL byte, or a value over 64 KiB
+is a `secret` error. Keep secret files in the configuration directory's `secrets/`: that directory
+is always hidden, so a secret the policy does not name cannot be read from inside either. Secret
+values never appear in the plan, in warnings, or in diagnostics.
+
+`git.instead-of` maps a URL prefix to its replacement and becomes `GIT_CONFIG_KEY_n` /
+`GIT_CONFIG_VALUE_n` / `GIT_CONFIG_COUNT` pairs numbered after the ones the environment already
+has, so `git config --list` inside shows `url.<replacement>.insteadof=<prefix>` next to the
+host's own entries.
+
+### The work place, `/tmp`, and `/tmp/process-wrap`
+
+If no `rw` covers the workspace or the worktree, a warning is printed and the run continues. A
+worktree or workspace at `/`, at the home directory, or at an ancestor of it is refused, and so is
+an `rw` or `rw-file` on any of those: nothing can make the whole home writable. Starting from a
+directory that ends up hidden is refused too, because `bwrap` could not change into it.
+
+`/tmp` is hidden by the bundled profile because the host's X11 and ssh-agent sockets live there
+under random names and cannot be hidden one by one. `/tmp/process-wrap` is the one directory
+shared with the host. You, or your shim, create it; `process-wrap` never does. When it does not
+exist the item is skipped and `/tmp` stays empty inside.
+
+### Why a policy file inside a writable area is refused
+
+A policy file, the configuration directory, a secret file, or a `path-prepend` entry must not be
+inside an `rw` or `rw-file` item, and resolving its path must not pass through a symbolic link or
+a directory inside one. This can look wrong at first: mounting the file read-only would seem to
+suffice. It does not. The file itself cannot be moved, but its ancestor directory can be renamed
+from inside the isolation, and a different file put at the same path is what the next launch
+reads (measured with `bwrap` 0.9.0). The same reasoning applies to written mount items and to an
+explicit `--workspace`: when their resolution passes through a writable item, the target must lie
+inside an item that cannot be redirected from inside, or the launch stops with a `path`
+diagnostic naming the path, the `rw` item it passed through, and the reason.
+
+The case that meets this most often is dotfiles: the configuration directory's real location is
+inside the dotfiles worktree, so `rw = ["${worktree}"]` would put the profile inside a writable
+area. Write the profile for that repository like this instead, and point `--workspace` at the
+subdirectory you actually work in:
+
+```toml
+[mounts]
+rw = ["${workspace}", "${git_common_dir}"]
+```
+
+```sh
+cd ~/dotfiles/ai
+process-wrap --workspace . -- codex
+```
+
+Two more rules follow from the same check. When you name a subdirectory of an `rw` worktree with
+`--workspace`, start `process-wrap` from that directory: a `--workspace` that is the current
+directory is exempt from the check, since a process already there cannot be moved by a link swap.
+And a `--workspace` whose path goes through a symbolic link, given from somewhere else, is refused;
+write the real path, or start from there.
+
+## Known gaps
+
+1. A command inside a hidden directory is still found by the `PATH` search, which runs on the
+   host file system; the launch then fails at `bwrap`'s `exec` with `bwrap`'s own output and
+   exit code.
+2. A file that appears after start-up is not hidden. `bwrap` would create a mount point for a
+   missing path and leave an empty file on the host, so nothing is mounted on a path that does
+   not exist.
+3. A file hidden by the scan that git tracks shows up inside as a change that emptied it.
+4. `hide` acts on the real path it names. A bind mount or a hard link that reaches the same
+   content by another path is not hidden.
+5. The paths of mount items and secret files are `bwrap` arguments and visible in the process
+   list; the secret values are in the isolated process's environment and readable from the host
+   through `/proc`. The host is the trusted side.
+6. With `env.mode = "inherit"`, a credential in the host environment whose name matches none of
+   the `unset` patterns enters the isolation.
+7. Only `TIOCSTI` is blocked by the seccomp filter. `TIOCLINUX`, injection through terminal
+   responses, and input synthesis through a display server's socket are not; the bundled profile
+   cuts the socket paths with `hide` and the variables with `unset`.
+8. Nesting is detected only through `PROCESS_WRAP=1`. Clearing the environment inside the
+   isolation and starting `process-wrap` again attempts a second isolation (no wider than the
+   first; a policy with secrets fails there because the outer isolation emptied the files).
+   Setting `PROCESS_WRAP=1` on the host runs the command without isolation, with the nesting
+   warning on standard error.
+9. `process-wrap` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `PATH`,
+   `PROCESS_WRAP`, and the current directory. That includes the current directory: `cd` into a
+   path that passes through an `rw` area, after a link there was swapped from inside, and the
+   link's new target becomes the work place.
+10. An `rw` area is a place for anything the user later runs on the host. `.git/hooks` and
+    `.git/config` are read by the user's own `git`; the isolation cannot prevent that, only a
+    look at the diff can.
+11. 32-bit and x32 binaries do not run inside: the seccomp filter ends any process that makes a
+    system call for another architecture or with the x32 bit set.
+12. Deleting the worktree's `.git` from inside can make the next launch derive the worktree from
+    an ancestor repository. The home directory and its ancestors are refused as a worktree;
+    ancestors below that are not.
+13. A main worktree made with `git init --separate-git-dir` (`.git` is a regular file whose
+    target has neither `commondir` nor `core.worktree`) matches neither of the two verified
+    layouts and stops with `path`.
+14. The check on redirected items is made against the writable items of the current launch. An
+    item written literally below the worktree (`rw = ["${worktree}", "~/work/a/b"]`) can have
+    `~/work/a` swapped for a link while the worktree is `~/work`, and a later launch with a
+    different worktree does not see that and applies `rw` to the link's target. Closing this
+    would need remembering the previous launch, which `process-wrap` does not do; write
+    subdirectories of the worktree with variables.
+
+## Not in 0.1
+
+No cgroup limits, no per-domain network allowance, no removal operator in the merge, no automatic
+merge of `default.toml` under another profile, no policy files found from the current directory,
+no `--new-session`, no double isolation when nested, no aarch64, no built-in default policy, no
+protection of `.git/hooks` and `.git/config`, and no shims for particular tools: those are written
+in your own dotfiles with `--profile`, `--workspace`, and `--rw`.
+
+## Specification
+
+The complete behaviour is specified in [`docs/spec/process-wrap.md`](docs/spec/process-wrap.md)
+(Japanese); the glossary is [`CONTEXT.md`](CONTEXT.md). The version lives in `Cargo.toml` only.
