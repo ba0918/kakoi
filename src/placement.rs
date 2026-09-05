@@ -169,9 +169,11 @@ fn check_protected_paths(
 /// from inside the isolation and the next start would apply the directive to any host
 /// path. A written `ro` is exempt: re-pointing or removing it only moves or lifts a
 /// read-only place, and what it could newly show is caught by the exposing pairs alone.
-/// The items are taken in the order of section 6.4, then the workspace. An item that
-/// resolves to nothing has nothing to bind. An item that landed is then checked against
-/// the written `hide` and `ro` items it would invalidate (`check_replacement`). A
+/// A written `hide` is first held to the link rule (`check_hide_links`), whose diagnostic
+/// wins when both apply. The items are taken in the order of section 6.4, then the
+/// workspace. An item that resolves to nothing has nothing to bind. An item that landed is
+/// then checked against the written `hide` and `ro` items it would invalidate
+/// (`check_replacement`). A
 /// `--workspace` whose real path is the current directory is exempt and hands nothing
 /// down: the process already sits there, so no redirection can move it.
 fn check_written_paths(
@@ -203,6 +205,9 @@ fn check_written_paths(
             item.path.display()
         );
         let reference = referenced_writable(item, workspace, writable, facts);
+        if item.directive == Directive::Hide {
+            check_hide_links(&role, item, writable, facts)?;
+        }
         if item.directive != Directive::Ro {
             check_landing(&role, reference, &real, &roots)?;
         }
@@ -215,6 +220,38 @@ fn check_written_paths(
         check_workspace_links(workspace, &variables.workspace, &roots, written, facts)?;
     }
     Ok(())
+}
+
+/// The further rule of specification section 5.6 for a written `hide`: its own resolution
+/// must follow no symbolic link that sits inside a writable item, wherever it lands.
+/// Removing that link from inside the isolation makes the next start skip the item, and
+/// what it hid shows through; a `hide` written as the real path follows no link, and a
+/// mount point one level deep cannot be renamed. Only the item's own resolution counts: a
+/// reference inherited from the workspace is the workspace's own to fail on. The first
+/// such link is named.
+fn check_hide_links(
+    role: &str,
+    item: &WrittenItem,
+    writable: &[&ResolvedItem],
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    let inside_writable = facts.traversed_links(&item.path).iter().find_map(|link| {
+        writable
+            .iter()
+            .find(|holder| link.starts_with(&holder.real))
+            .map(|holder| (link, holder))
+    });
+    match inside_writable {
+        Some((link, holder)) => Err(Diagnostic::path(format!(
+            "{role} follows the symbolic link {} inside the `{}` item {}, so the link could \
+             be removed from inside the isolation and the next start would leave the target \
+             unhidden",
+            link.display(),
+            directive_name(holder.directive),
+            holder.real.display()
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// The further rule of specification section 5.6 for a written item that referenced

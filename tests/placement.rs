@@ -774,13 +774,14 @@ fn a_lower_layer_rw_written_as_the_real_path_shields_the_hide_it_replaced() {
 }
 
 #[test]
-fn a_referenced_item_merging_with_a_hide_of_its_own_layer_is_accepted() {
-    // Two `hide` forms of one layer that resolve to the same place merge into one item
+fn a_referenced_item_merging_with_an_ro_of_its_own_layer_is_accepted() {
+    // Two `ro` forms of one layer that resolve to the same place merge into one item
     // (section 5.4); neither replaces the other, so the rule on lower layers does not
-    // apply even though the second form resolves through `~/a`.
+    // apply even though the second form resolves through `~/a`. (A `hide` in the linked
+    // form would fall to the link rule of section 5.6 instead.)
     let result = check(
         &layers(
-            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\", \"~/a/link\"]",
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/b/creds\", \"~/a/link\"]",
             None,
             &[],
             &[],
@@ -988,6 +989,159 @@ fn an_ro_written_through_a_writable_link_landing_inside_a_hide_is_rejected() {
     .unwrap_err();
 
     assert_path_diagnostic(&diagnostic, &["/home/u/a/l/y", "/home/u/b/creds"]);
+}
+
+#[test]
+fn a_hide_whose_resolution_follows_a_link_inside_a_writable_item_is_rejected_wherever_it_lands() {
+    // A `hide` written as a link inside `rw` is skipped by the next start once the link is
+    // removed from inside the isolation, and what it hid shows through. That holds whether
+    // the link lands outside every writable item (`~/proj/secrets -> ~/vault`) or inside a
+    // root item (`~/a/l -> ~/b/creds`), where the root-item check alone would let it pass.
+    for (name, profile, given, facts) in [
+        (
+            "landing outside every writable item",
+            "[mounts]\nrw = [\"~/proj\"]\nhide = [\"~/proj/secrets\"]",
+            "/home/u/proj/secrets",
+            host()
+                .dir("/home/u/vault")
+                .link_to_dir("/home/u/proj/secrets", "/home/u/vault")
+                .links_traversed("/home/u/proj/secrets", &["/home/u/proj/secrets"])
+                .directories_visited(
+                    "/home/u/proj/secrets",
+                    &["/", "/home", "/home/u", "/home/u/proj"],
+                ),
+        ),
+        (
+            "landing inside a root item",
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/a/l\"]",
+            "/home/u/a/l",
+            host()
+                .dir("/home/u/a")
+                .dir("/home/u/b")
+                .dir("/home/u/b/creds")
+                .link_to_dir("/home/u/a/l", "/home/u/b/creds")
+                .links_traversed("/home/u/a/l", &["/home/u/a/l"])
+                .directories_visited("/home/u/a/l", &["/", "/home", "/home/u", "/home/u/a"]),
+        ),
+    ] {
+        let diagnostic = check(
+            &layers(profile, None, &[], &[]),
+            &variables(),
+            facts,
+            WORKTREE,
+        )
+        .unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+        assert_path_diagnostic(&diagnostic, &[given]);
+    }
+}
+
+#[test]
+fn a_hide_written_by_real_path_inside_an_rw_item_is_accepted() {
+    // `rw = ["~/cache"]` with `hide = ["~/cache/x"]`, `x` a real directory: the resolution
+    // passes through `cache` but follows no link, and a mount point one level deep cannot
+    // be renamed from inside, so the `hide` stays where it was written.
+    let result = check(
+        &layers(
+            "[mounts]\nrw = [\"~/cache\"]\nhide = [\"~/cache/x\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/cache")
+            .dir("/home/u/cache/x")
+            .directories_visited(
+                "/home/u/cache/x",
+                &["/", "/home", "/home/u", "/home/u/cache"],
+            ),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn a_hide_that_fails_both_rules_names_the_followed_link() {
+    // `hide = ["~/x"]` with `~/x -> ~/proj/link/y` and `~/proj/link -> ~/vault`: the item
+    // lands outside every root (the root-item check) and follows a link inside `rw ~/proj`
+    // (the link rule). The link rule's diagnostic is the one shown, since the link it names
+    // is what the user has to change, so `~/proj/link` appears though it is no prefix of
+    // the item's own path.
+    let given = "/home/u/x";
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/proj\"]\nhide = [\"~/x\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir_with_ancestors("/home/u/vault/y")
+            .link_to_dir("/home/u/proj/link", "/home/u/vault")
+            .link_to_dir(given, "/home/u/vault/y")
+            .links_traversed(given, &[given, "/home/u/proj/link"])
+            .directories_visited(
+                given,
+                &["/", "/home", "/home/u", "/home/u/proj", "/home/u/vault"],
+            ),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[given, "/home/u/proj/link"]);
+}
+
+#[test]
+fn a_hide_written_with_a_workspace_variable_does_not_count_inherited_references() {
+    // `rw = ["${worktree}", "~/cache"]` with `hide = ["${worktree}/x"]`, `x` a real path,
+    // and `--workspace ~/cache/proj` given from elsewhere with `proj` a link to
+    // `~/cache/real`. The hide's own resolution follows no link; the link the workspace
+    // followed is inherited as a reference for the root-item check but is not the hide's
+    // to fail on, and the workspace itself lands inside `~/cache`, a root written by path.
+    let behind_the_link = Variables {
+        workspace: PathBuf::from("/home/u/cache/real"),
+        worktree: PathBuf::from("/home/u/cache/real"),
+        git_common_dir: None,
+        ..variables()
+    };
+    let through_cache = &["/", "/home", "/home/u", "/home/u/cache"];
+
+    let result = check_at(
+        &layers(
+            "[mounts]\nrw = [\"${worktree}\", \"~/cache\"]\nhide = [\"${worktree}/x\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &behind_the_link,
+        host()
+            .dir("/home/u/cache")
+            .dir("/home/u/cache/real")
+            .dir("/home/u/cache/real/x")
+            .link_to_dir("/home/u/cache/proj", "/home/u/cache/real")
+            .links_traversed("/home/u/cache/proj", &["/home/u/cache/proj"])
+            .directories_visited("/home/u/cache/proj", through_cache)
+            .directories_visited("/home/u/cache/real", through_cache)
+            .directories_visited(
+                "/home/u/cache/real/x",
+                &[
+                    "/",
+                    "/home",
+                    "/home/u",
+                    "/home/u/cache",
+                    "/home/u/cache/real",
+                ],
+            ),
+        "/home/u/elsewhere",
+        CONFIG_DIR,
+        Some("/home/u/cache/proj"),
+    );
+
+    assert!(result.is_ok(), "{result:?}");
 }
 
 #[test]
