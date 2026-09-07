@@ -28,9 +28,11 @@ cargo clippy --all-targets --locked -- -D warnings
 
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on
 the machine; they fail rather than skip when any of them is missing. They run
-`/usr/bin/python3` and `/usr/bin/git` inside the isolation and `/usr/bin/env` in a nested run,
-by those absolute paths (`python3` makes the raw system calls that observe the seccomp filter
-and the socket connections that observe the network mode). Tests point `HOME` and
+`/usr/bin/python3`, `/usr/bin/git`, and `/bin/sh` inside the isolation, `/usr/bin/env` and
+`/bin/sh` in a nested run, and copies of `/bin/echo`, `/bin/cat`, and `/bin/sh` placed in a
+temporary directory as the wrapped command, by those absolute paths (`python3` makes the raw
+system calls that observe the seccomp filter and the socket connections that observe the
+network mode). Tests point `HOME` and
 `XDG_CONFIG_HOME` at a temporary directory, hand the binary only `PATH` from the developer's
 environment, and never read the developer's real configuration directory.
 
