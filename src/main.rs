@@ -1,8 +1,10 @@
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode};
 
 use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
+use process_wrap::init;
 use process_wrap::launch;
 use process_wrap::plan_text;
 use process_wrap::startup::{self, Outcome};
@@ -13,6 +15,17 @@ fn main() -> ExitCode {
             let _ = std::io::stdout().write_all(text.as_bytes());
             ExitCode::SUCCESS
         }
+        Ok(Outcome::Init(request)) => match init::write_built_in_default(&request) {
+            Ok(path) => {
+                // The path as assembled, byte for byte, so that `$EDITOR "$(process-wrap
+                // init)"` opens it (specification section 4.1).
+                let mut stdout = std::io::stdout();
+                let _ = stdout.write_all(path.as_os_str().as_bytes());
+                let _ = stdout.write_all(b"\n");
+                ExitCode::SUCCESS
+            }
+            Err(diagnostic) => exit_with(diagnostic),
+        },
         Ok(Outcome::Nested(nested)) => {
             print_warnings(std::slice::from_ref(&nested.warning));
             let command = match nested.command {

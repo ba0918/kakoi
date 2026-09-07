@@ -9,6 +9,10 @@ use common::{
     run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir, RW_WORKSPACE,
 };
 use process_wrap::cli::{interpret, Invocation, Parsed};
+use process_wrap::diagnostic::Kind;
+
+/// A name for the failure message and the arrangement it makes under a temporary home.
+type Arrangement = (&'static str, fn(&Path));
 
 fn interpret_ok(arguments: &[&str]) -> Parsed {
     interpret(arguments.iter().map(OsString::from)).unwrap()
@@ -768,9 +772,6 @@ fn a_broken_default_toml_or_configuration_directory_is_a_policy_diagnostic() {
     // Only a name that is not there falls back: a `default.toml` or a configuration
     // directory that exists but cannot be followed stops the run, so a policy that broke is
     // never replaced by the wider built-in default (specification section 5.3).
-    /// A name for the failure message and the arrangement it makes under the home.
-    type Arrangement = (&'static str, fn(&Path));
-
     let arrangements: [Arrangement; 4] = [
         ("a broken link at default.toml", |home| {
             std::fs::create_dir_all(home.join(".config/process-wrap/profile")).unwrap();
@@ -864,4 +865,290 @@ fn a_present_default_toml_replaces_the_built_in_default() {
     let plan = String::from_utf8_lossy(&output.stdout);
     assert!(!plan.contains("process-wrap init"), "{report}");
     assert!(plan.contains(profile.to_str().unwrap()), "{report}");
+}
+
+/// Every path under `root`, relative and sorted. A symbolic link is listed but not walked.
+fn tree(root: &Path) -> Vec<PathBuf> {
+    fn walk(root: &Path, dir: &Path, into: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            into.push(path.strip_prefix(root).unwrap().to_path_buf());
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                walk(root, &path, into);
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    walk(root, root, &mut paths);
+    paths.sort();
+    paths
+}
+
+/// The bundled profile as bytes: what `init` writes and what the built-in default is.
+fn bundled_profile() -> Vec<u8> {
+    std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/profile/default.toml"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn init_writes_the_built_in_default_and_prints_its_path() {
+    let home = TempDir::new();
+    let before = tree(home.path());
+    // `/tmp/process-wrap` is the user's or the shim's to make; `init` does not touch it
+    // (specification section 14).
+    let shared = Path::new("/tmp/process-wrap");
+    let shared_before = shared.symlink_metadata().is_ok();
+
+    let output = run(home.path(), ["init"]);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+    let written = home
+        .path()
+        .join(".config/process-wrap/profile/default.toml");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("{}\n", written.display()),
+        "{report}"
+    );
+    assert_eq!(
+        std::fs::read(&written).unwrap(),
+        bundled_profile(),
+        "{report}"
+    );
+    let secrets = home.path().join(".config/process-wrap/secrets");
+    assert_eq!(
+        std::fs::metadata(&secrets).unwrap().permissions().mode() & 0o7777,
+        0o700,
+        "{report}"
+    );
+    let added: Vec<PathBuf> = tree(home.path())
+        .into_iter()
+        .filter(|path| !before.contains(path))
+        .collect();
+    assert_eq!(
+        added,
+        [
+            ".config",
+            ".config/process-wrap",
+            ".config/process-wrap/profile",
+            ".config/process-wrap/profile/default.toml",
+            ".config/process-wrap/secrets",
+        ]
+        .map(PathBuf::from),
+        "{report}"
+    );
+    assert_eq!(shared.symlink_metadata().is_ok(), shared_before, "{report}");
+}
+
+#[test]
+fn init_takes_a_profile_name() {
+    let home = TempDir::new();
+
+    let output = run(home.path(), ["init", "strict"]);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let written = home.path().join(".config/process-wrap/profile/strict.toml");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("{}\n", written.display()),
+        "{report}"
+    );
+    assert_eq!(
+        std::fs::read(&written).unwrap(),
+        bundled_profile(),
+        "{report}"
+    );
+}
+
+#[test]
+fn init_rejects_a_bad_name_or_extra_arguments() {
+    // `init` takes at most a NAME, and the NAME is one path component: anything else,
+    // including an option or a command, is a usage diagnostic (specification section 4.1).
+    for arguments in [
+        ["init", "../x"].as_slice(),
+        &["init", "--", "sh"],
+        &["init", "--print-plan"],
+    ] {
+        let diagnostic = interpret(arguments.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Usage, "{arguments:?}");
+    }
+}
+
+#[test]
+fn init_refuses_to_overwrite_an_existing_profile() {
+    // There is no `--force`: the boundary the user wrote is never replaced by the product,
+    // so the way to rewrite it is to remove it first (specification section 4.1).
+    let home = TempDir::new();
+    let written = home.write(".config/process-wrap/profile/default.toml", "# mine\n");
+
+    let output = run(home.path(), ["init"]);
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(
+        diagnostic.contains(written.to_str().unwrap()),
+        "{diagnostic}"
+    );
+    assert_eq!(std::fs::read_to_string(&written).unwrap(), "# mine\n");
+}
+
+#[test]
+fn init_refuses_a_broken_link_or_a_regular_file_in_the_way() {
+    // The name written to is not followed, so a broken link there is something that already
+    // exists; the components above it are followed and must end at directories
+    // (specification section 4.1).
+    let arrangements: [(Arrangement, &str); 2] = [
+        (
+            ("a broken link at the file", |home| {
+                std::fs::create_dir_all(home.join(".config/process-wrap/profile")).unwrap();
+                std::os::unix::fs::symlink(
+                    home.join("nowhere"),
+                    home.join(".config/process-wrap/profile/default.toml"),
+                )
+                .unwrap();
+            }),
+            ".config/process-wrap/profile/default.toml",
+        ),
+        (
+            ("a regular file at profile/", |home| {
+                std::fs::create_dir_all(home.join(".config/process-wrap")).unwrap();
+                std::fs::write(home.join(".config/process-wrap/profile"), "").unwrap();
+            }),
+            ".config/process-wrap/profile",
+        ),
+    ];
+
+    for ((name, arrange), target) in arrangements {
+        let home = TempDir::new();
+        arrange(home.path());
+
+        let output = run(home.path(), ["init"]);
+
+        let diagnostic = assert_diagnostic(&output, 125, "path");
+        assert!(
+            diagnostic.contains(home.path().join(target).to_str().unwrap()),
+            "{name}: {diagnostic}"
+        );
+    }
+}
+
+#[test]
+fn init_follows_a_linked_configuration_directory_and_prints_the_written_path() {
+    // A user keeps the configuration directory in dotfiles behind a link: the file lands at
+    // the target, and the line printed is the path as assembled, link and all
+    // (specification section 4.1).
+    let home = TempDir::new();
+    let target = home.path().join("dotfiles/process-wrap");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::create_dir_all(home.path().join(".config")).unwrap();
+    std::os::unix::fs::symlink(&target, home.path().join(".config/process-wrap")).unwrap();
+
+    let output = run(home.path(), ["init"]);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let real_home = home.path().canonicalize().unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!(
+            "{}\n",
+            real_home
+                .join(".config/process-wrap/profile/default.toml")
+                .display()
+        ),
+        "{report}"
+    );
+    assert_eq!(
+        std::fs::read(target.join("profile/default.toml")).unwrap(),
+        bundled_profile(),
+        "{report}"
+    );
+}
+
+#[test]
+fn init_creates_missing_ancestors_of_the_configuration_directory() {
+    // A new machine has no `~/.config` either; the ancestors of the place the user's own
+    // environment names are made too (specification section 4.1).
+    let home = TempDir::new();
+
+    let output = binary(home.path())
+        .env_remove("XDG_CONFIG_HOME")
+        .args(["init"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let real_home = home.path().canonicalize().unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!(
+            "{}\n",
+            real_home
+                .join(".config/process-wrap/profile/default.toml")
+                .display()
+        ),
+        "{report}"
+    );
+}
+
+#[test]
+fn init_ignores_nesting_the_current_directory_and_bwrap() {
+    // Inside an isolation, from a directory that is gone, and on a machine without `bwrap`,
+    // the configuration can still be put in place (specification sections 4.1 and 12.1).
+    let nested_home = TempDir::new();
+    let nested = binary(nested_home.path())
+        .env("PROCESS_WRAP", "1")
+        .args(["init"])
+        .output()
+        .unwrap();
+    let report = output_report(&nested);
+    assert_eq!(nested.status.code(), Some(0), "{report}");
+    assert!(nested.stderr.is_empty(), "{report}");
+
+    let deleted_home = TempDir::new();
+    let deleted = run_from_deleted_dir(deleted_home.path(), ["init"]);
+    assert_eq!(
+        deleted.status.code(),
+        Some(0),
+        "{}",
+        output_report(&deleted)
+    );
+
+    let bare_home = TempDir::new();
+    let without_bwrap = binary(bare_home.path())
+        .env("PATH", "")
+        .args(["init"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        without_bwrap.status.code(),
+        Some(0),
+        "{}",
+        output_report(&without_bwrap)
+    );
+}
+
+#[test]
+fn init_without_a_usable_home_is_an_env_diagnostic() {
+    // The home directory is the one check `init` passes (specification section 13,
+    // stage 2).
+    let home = TempDir::new();
+
+    let output = binary(home.path())
+        .env("HOME", "")
+        .args(["init"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "env");
 }

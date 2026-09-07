@@ -28,6 +28,8 @@ pub struct Invocation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Parsed {
     Invocation(Invocation),
+    /// `init [NAME]`: write the built-in default out as the profile `NAME`.
+    Init(String),
     Help(String),
     Version(String),
 }
@@ -97,6 +99,9 @@ where
     I: IntoIterator<Item = OsString>,
 {
     let arguments: Vec<OsString> = arguments.into_iter().collect();
+    if arguments.first().is_some_and(|word| word == "init") {
+        return Ok(Parsed::Init(init_name(&arguments[1..])?));
+    }
     check_option_values(&arguments)?;
     // `--help` and `--version` are plain flags, so that the whole command line is checked
     // before either is answered (specification section 4.1).
@@ -153,6 +158,30 @@ where
         print_plan: parsed.print_plan,
         command: parsed.command,
     }))
+}
+
+/// The `NAME` of the `init` form, `default` when it is left out (specification
+/// section 4.1). Read from the words as written, because the parser takes everything after
+/// `--` as the command; `init` is exclusive, so any further word is an error. A word
+/// starting with `-` is an option, which `init` does not combine with.
+fn init_name(rest: &[OsString]) -> Result<String, Diagnostic> {
+    let name = match rest {
+        [] => return Ok(DEFAULT_PROFILE.to_string()),
+        [name] => name,
+        _ => return Err(Diagnostic::usage("init takes nothing but a profile name")),
+    };
+    if name.as_encoded_bytes().starts_with(b"-") {
+        return Err(Diagnostic::usage("init cannot be combined with any option"));
+    }
+    let name = name
+        .to_str()
+        .ok_or_else(|| Diagnostic::usage("the profile name is not valid UTF-8"))?;
+    if !is_single_path_component(name) {
+        return Err(Diagnostic::usage(format!(
+            "the profile name `{name}` is not a single path component"
+        )));
+    }
+    Ok(name.to_string())
 }
 
 const OPTIONS_WITH_A_VALUE: [&str; 5] = [

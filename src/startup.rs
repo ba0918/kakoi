@@ -29,8 +29,17 @@ use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 #[derive(Debug)]
 pub enum Outcome {
     Text(String),
+    Init(InitRequest),
     Nested(Nested),
     Prepared(Box<Prepared>),
+}
+
+/// The `init` form (specification section 4.1): where to write and under what name. It is
+/// the one form that writes, and the only check before it is the home directory.
+#[derive(Debug)]
+pub struct InitRequest {
+    pub config_dir: PathBuf,
+    pub name: String,
 }
 
 /// A nested run (specification section 12.1): the warning to print first, then the
@@ -61,6 +70,19 @@ where
     // Stages 1 and 2 need nothing from the host.
     let invocation = match cli::interpret(arguments)? {
         Parsed::Help(text) | Parsed::Version(text) => return Ok(Outcome::Text(text)),
+        // The `init` form looks at neither nesting nor the current directory nor `bwrap`:
+        // the home directory is the only check it passes (specification section 13,
+        // stage 2), because a machine without `bwrap`, and a shell inside an isolation,
+        // can still put the configuration in place.
+        Parsed::Init(name) => {
+            let env = HostEnvironment::from_process();
+            let home =
+                env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
+            return Ok(Outcome::Init(InitRequest {
+                config_dir: env.config_dir(&home),
+                name,
+            }));
+        }
         Parsed::Invocation(invocation) => invocation,
     };
     let host: BTreeMap<OsString, OsString> = std::env::vars_os().collect();

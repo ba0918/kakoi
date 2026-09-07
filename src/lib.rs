@@ -9,6 +9,7 @@ pub mod command;
 pub mod diagnostic;
 pub mod environment;
 pub mod executables;
+pub mod init;
 pub mod isolated_env;
 pub mod launch;
 pub mod layers;
