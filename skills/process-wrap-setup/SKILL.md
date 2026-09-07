@@ -8,8 +8,9 @@ description: "Adapt a process-wrap installation to this machine: propose profile
 `process-wrap` runs a command inside a bubblewrap mount namespace shaped by a layered
 policy. It ships with a built-in default written for WSL2, and `process-wrap init` writes
 that default out as `<configuration directory>/profile/default.toml` so it can be edited.
-The configuration directory is `$XDG_CONFIG_HOME/process-wrap` or, when that variable is
-unset, `~/.config/process-wrap`.
+The configuration directory is `$XDG_CONFIG_HOME/process-wrap` when that variable holds an
+absolute path and `~/.config/process-wrap` otherwise — unset, empty and a relative path all
+fall back the same way.
 
 What is generic lives in the built-in default. What is specific to this machine — which
 agent CLIs are installed, where their state lives, which host commands the isolation cuts
