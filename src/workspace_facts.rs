@@ -4,6 +4,7 @@
 //! common dir (specification section 14). Runs no command.
 
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use crate::environment::{PathState, RealEntry};
@@ -25,10 +26,14 @@ pub fn real_entry(path: &Path) -> RealEntry {
 }
 
 /// What is at `path` itself: nothing by that name, something that exists but reaches no
-/// real path, or the real entry behind it.
+/// real path, or the real entry behind it. Only `ErrorKind::NotFound` says the name is not
+/// there; every other error (no search bit on the parent, a loop, a name too long) says the
+/// name cannot be looked at, which specification section 5.3 counts as being there.
 pub fn entry_state(path: &Path) -> PathState {
-    if fs::symlink_metadata(path).is_err() {
-        return PathState::Absent;
+    match fs::symlink_metadata(path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return PathState::Absent,
+        Err(_) => return PathState::Broken,
     }
     match real_entry(path) {
         RealEntry::Missing => PathState::Broken,

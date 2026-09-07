@@ -815,6 +815,42 @@ fn a_broken_default_toml_or_configuration_directory_is_a_policy_diagnostic() {
     }
 }
 
+/// Puts `mode` back on `path` when the test leaves, whether it passed or panicked, so that
+/// a directory a test made unsearchable never outlives it.
+struct RestoredMode(PathBuf, u32);
+
+impl Drop for RestoredMode {
+    fn drop(&mut self) {
+        let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(self.1));
+    }
+}
+
+#[test]
+fn an_unsearchable_configuration_directory_is_not_taken_for_an_absent_one() {
+    // A configuration directory whose search bit an installer or an archive left off is
+    // there: its `default.toml` cannot be looked at, which is not the same as never having
+    // been written out. The run stops instead of standing the wider built-in default in for
+    // the profile that is on disk (specification section 5.3).
+    let (home, workspace) = home_without_a_configuration_directory();
+    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    let config_dir = home.path().join(".config/process-wrap");
+    std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let _restore = RestoredMode(config_dir, 0o700);
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args(["--print-plan", "--", "/bin/true"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "policy");
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("process-wrap init"),
+        "{}",
+        output_report(&output)
+    );
+}
+
 #[test]
 fn a_policy_file_overlays_the_built_in_default() {
     // The built-in default adds no layer: `--policy-file` stacks on it as it would on a

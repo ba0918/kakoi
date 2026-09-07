@@ -42,9 +42,10 @@ fn make_directory(path: &Path, mode: Option<u32>) -> Result<(), Diagnostic> {
     let failure = |reason: &str| Diagnostic::path(format!("{} {reason}", path.display()));
     match entry_state(path) {
         PathState::Directory(_) => return Ok(()),
-        PathState::Broken | PathState::NotDirectory(_) => {
-            return Err(failure("is not a directory"))
-        }
+        // A name behind which no real path is reached: a dangling link, or one whose
+        // parent has no search bit. Saying "is not a directory" of it would be a guess.
+        PathState::Broken => return Err(failure("exists but reaches no real path")),
+        PathState::NotDirectory(_) => return Err(failure("is not a directory")),
         PathState::Absent => {}
     }
     let mut builder = DirBuilder::new();
@@ -68,8 +69,12 @@ fn make_directory(path: &Path, mode: Option<u32>) -> Result<(), Diagnostic> {
 /// counts; the check before it is only there to say what is in the way.
 fn write_file(path: &Path, text: &str) -> Result<(), Diagnostic> {
     let failure = |reason: &str| Diagnostic::path(format!("{} {reason}", path.display()));
-    if entry_state(path) != PathState::Absent {
-        return Err(failure("already exists"));
+    match entry_state(path) {
+        PathState::Absent => {}
+        PathState::Broken => return Err(failure("exists but reaches no real path")),
+        PathState::Directory(_) | PathState::NotDirectory(_) => {
+            return Err(failure("already exists"))
+        }
     }
     let mut file = OpenOptions::new()
         .write(true)
