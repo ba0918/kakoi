@@ -73,7 +73,7 @@ Then, as you need them:
   `--workspace` and `--add-dir` to `--rw`, creates `/tmp/process-wrap`, and executes
   `process-wrap`. `PROCESS_WRAP_SHIM_OFF=1` runs the real codex instead, under its own sandbox.
   It is a template, not part of the product, so check it yourself after a codex upgrade: that
-  every subcommand of `codex --help` is in one of its two lists; that running an isolated form
+  every subcommand of `codex --help` is in one of its lists; that running an isolated form
   with `--print-plan` shows the `--workspace` and `--rw` it copied; and that with
   `PROCESS_WRAP_SHIM_OFF=1` no `process-wrap` is started. Write your own shim for another CLI
   from this one.
