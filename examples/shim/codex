@@ -1,242 +1,236 @@
 #!/usr/bin/env bash
 #
-# A shim template for the Codex CLI (specification section 16 of process-wrap).
+# A shim template for process-wrap (specification section 16).
 #
-# Copy it somewhere on your PATH ahead of the real codex, for example
-# ~/.local/bin/codex, and make it executable. Every codex invocation then goes
-# through process-wrap, which builds the boundary from your profile.
+# Copy it to a directory that comes before the wrapped command on your PATH,
+# name the copy after that command, fill in the tool section below, and make it
+# executable. Every invocation of that name then goes through process-wrap,
+# which builds the boundary from your profile. The body below the tool section
+# does not depend on the command being wrapped; the values shipped in the tool
+# section are an example, filled in for the Codex CLI.
 #
-# What it does:
-#   - classifies the invocation: the forms where the agent may run commands go
-#     into the isolation, everything else is passed straight to the real codex;
-#   - inserts --dangerously-bypass-approvals-and-sandbox into the isolated
-#     forms, because the boundary is process-wrap's and codex's own sandbox
-#     would only narrow it in ways that change per turn. The isolated forms
-#     take the flag in two places: the subcommands that list it among their
-#     own options take it right after the subcommand, and the rest take it
-#     in front of everything, where codex reads its global options;
-#   - copies --cd/-C to --workspace and --add-dir to --rw, so that the place
-#     codex works in is the place process-wrap opens for writing (codex keeps
-#     its own copies of those options; nothing is removed);
-#   - creates /tmp/process-wrap if it is not there, the one directory shared
-#     with the host (process-wrap never creates it);
-#   - execs process-wrap. Nesting is not this shim's business: process-wrap
-#     detects PROCESS_WRAP=1 itself and warns.
+# Everything is isolated by default. `--help` and `--version` are no exception,
+# and nothing here decides from a subcommand whether isolation is needed, so a
+# subcommand that a newer version of the wrapped command adds is isolated like
+# any other. There are two ways out, and both are yours to open:
 #
-# PROCESS_WRAP_SHIM_OFF=1 execs the real codex with your arguments unchanged
-# and no bypass flag: codex runs under its own sandbox, outside process-wrap.
-# Use it to run something that must reach what the profile hides, such as a
-# setup skill that writes the configuration directory.
+#   - PROCESS_WRAP_SHIM_OFF=1 execs the real command with your arguments
+#     unchanged and no flag inserted, outside process-wrap. It takes nothing
+#     away that you did not already have: process-wrap trusts the host it is
+#     started from.
+#   - a subcommand in the allow list is passed straight through, with its
+#     arguments unchanged and no flag inserted. Nothing is created in /tmp on
+#     that path either.
 #
-# Keeping the classification current: the three lists below are from codex-cli
-# 0.153.4. After a codex upgrade, run `codex --help` and check that every
-# subcommand it lists is in one of them. A bare word in none of them is read as
-# a prompt, that is, as the interactive session, which is what codex itself
-# does; a subcommand added by a newer codex and left out of the lists would
-# therefore be given the bypass flag as a global option and might be refused by
-# codex. A name belongs in is_isolated_subcommand only if `codex <name> --help`
-# lists that flag among the subcommand's own options, so read that help for each
-# name you add there. Listing it is necessary, not sufficient: other subcommands
-# list it too (in 0.153.4, archive, delete, queue and unarchive). A form that
-# runs the agent without listing it goes in is_isolated_by_global_flag instead.
+# Both lists ship empty. Add a name only when something breaks, and only the
+# one that broke:
 #
-# Whether the flag in the global position reaches the subcommand is for you to
-# see for yourself, outside this template: run `codex review --base <ref>` and
-# check that the header codex prints says something other than
-# `sandbox: read-only`.
+#   | What broke                                     | Where the name goes    |
+#   |------------------------------------------------|------------------------|
+#   | the command refuses the flag, or takes it and   | the no-flag list       |
+#   | it has no effect                                |                        |
+#   | it cannot reach the host from inside the        | the allow list, once   |
+#   | isolation, and no model runs                    | you have approved it   |
+#   | a model runs and it still breaks inside the     | neither list; fix the  |
+#   | isolation                                       | profile instead        |
 #
-# Check takes_a_value against the same `codex --help` output. An option that
-# takes a value and is missing from that list has its value read as a bare
-# word, that is, as the subcommand, with the same consequence.
+# Before you put a name in the allow list, check that no model runs while it
+# executes: that the wrapped command asks no model and cannot run a command a
+# model produced (specification section 2). Read the command's documentation
+# and watch a run of it. For codex, the header printed at start-up and the
+# output of `exec` are where that shows. The subcommand most likely to end up
+# there first is the one that authenticates — `login` in codex's case. That is
+# a reading of its help text, not a measurement, and it is not shipped in the
+# list below: check it yourself before you trust it.
 #
-# The argument forms it reads: an option's value written as the following word
-# (`-C DIR`, `--cd DIR`) or attached to the option (`--cd=DIR`, `-CDIR`). An
-# option clap accepts several values for, such as `-i, --image <FILE>...`, must
-# be written one value per option (`-i a.png -i b.png`), because the shim reads
-# exactly one word after each option and shell gives it no way to know where
-# clap ends a value list. A second file written bare (`-i a.png b.png`) is read
-# here as the subcommand, so the invocation is classified as the interactive
-# session and the real subcommand after it is passed on as a prompt word.
+# Filling in the tool section for another command: REAL_COMMAND is the name of
+# the executable to look for on PATH. BYPASS_FLAG is the flag that turns the
+# command's own sandbox off, or empty if it has none — the boundary is
+# process-wrap's, and a sandbox of the command's own would only narrow it in
+# ways that change from turn to turn. WORKSPACE_OPTIONS and RW_OPTIONS are the
+# options whose values name a directory the command works in, which become
+# process-wrap's --workspace and --rw. Read all of these off the command's
+# `--help`. A value is read when it is written as the following word, attached
+# with `=`, or, for a one-letter option, attached to the option; an option
+# whose value is written in some other way is not copied, and then the command
+# is refused a directory rather than given one. Nothing after `--` is read.
 #
-# To see what process-wrap makes of an isolated invocation, run the same
-# command by hand with --print-plan in front of the `--`:
+# Checking a copy of this template without running the real command: put two
+# directories at the front of PATH, one holding your copy under the wrapped
+# command's name, the other holding stand-ins for the wrapped command and for
+# process-wrap that print their arguments and exit 0. The copy finds the
+# stand-in as the real command, and what the stand-ins print is the whole of
+# what this shim decided. Point SHARED_DIR somewhere writable of your own while
+# you do that. To see what process-wrap makes of an isolated invocation, run it
+# by hand with --print-plan in front of the `--`:
 #     process-wrap --workspace "$PWD" --print-plan -- codex ...
 # The plan shows the mount items, the variables, and the bwrap arguments.
 
+# ---------------------------------------------------------------------------
+# Tool section: the values for the command being wrapped. Shipped filled in for
+# codex, which is an example of a command to wrap, not a requirement of
+# process-wrap.
+# ---------------------------------------------------------------------------
+
+# The name of the real executable to look for on PATH.
+readonly REAL_COMMAND=codex
+
+# The flag that turns the wrapped command's own sandbox off, inserted at the
+# front of the argument list, where a command reads its global options. Empty
+# if the command has no such flag; nothing is inserted then.
+readonly BYPASS_FLAG=--dangerously-bypass-approvals-and-sandbox
+
+# The options whose value is a directory to copy to process-wrap's --workspace
+# and --rw. The last --workspace wins; every --rw is passed on.
+readonly WORKSPACE_OPTIONS=(--cd -C)
+readonly RW_OPTIONS=(--add-dir)
+
+# Subcommands passed straight through to the real command, outside
+# process-wrap. Empty as shipped: put a name here only after checking that no
+# model runs while it executes.
+readonly ALLOW_LIST=()
+
+# Subcommands that go through process-wrap but without BYPASS_FLAG in front.
+# Empty as shipped: put a name here when the command refuses the flag or takes
+# it without effect.
+readonly NO_FLAG_LIST=()
+
+# ---------------------------------------------------------------------------
+# Nothing below this line is specific to the command being wrapped.
+# ---------------------------------------------------------------------------
+
 set -euo pipefail
 
-readonly BYPASS_FLAG=--dangerously-bypass-approvals-and-sandbox
 readonly SHARED_DIR=/tmp/process-wrap
 
 self=$(realpath "${BASH_SOURCE[0]}")
 
 fail() {
-	printf 'codex (process-wrap shim): %s\n' "$*" >&2
+	printf '%s (process-wrap shim): %s\n' "${REAL_COMMAND}" "$*" >&2
 	exit 127
 }
 
-# The real codex: the first executable named codex on PATH that is not this
+# The real command: the first executable of that name on PATH that is not this
 # shim. Comparing real paths keeps a link to the shim from being taken for it.
-resolve_codex() {
+# What is passed on is the path as found on PATH rather than what it resolves
+# to, so a version manager's own shim keeps the name it dispatches on.
+resolve_real_command() {
 	local dir candidate
 	local IFS=:
 	for dir in ${PATH:-}; do
-		candidate="${dir:-.}/codex"
+		candidate="${dir:-.}/${REAL_COMMAND}"
 		[ -x "${candidate}" ] && [ ! -d "${candidate}" ] || continue
 		[ "$(realpath "${candidate}")" != "${self}" ] || continue
 		printf '%s\n' "${candidate}"
 		return 0
 	done
-	fail 'no codex found on PATH besides this shim'
+	fail "no ${REAL_COMMAND} found on PATH besides this shim"
 }
 
-# Top-level options that take the following word as their value, so that the
-# value is never mistaken for the subcommand (`codex -m NAME exec` and so on).
-takes_a_value() {
-	case "$1" in
-	-c | --config | -i | --image | -m | --model | -p | --profile | -s | --sandbox | \
-		-a | --ask-for-approval | -C | --cd | --add-dir | --enable | --disable | \
-		--remote | --remote-auth-token-env | --local-provider)
+# Whether a word is in a list. Only the first word of the argument list is ever
+# looked up: an argument list that starts with an option matches nothing and is
+# isolated as usual, which puts a misreading on the isolating side.
+in_list() {
+	local needle=$1
+	shift
+	local name
+	for name in "$@"; do
+		if [ "${name}" = "${needle}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+# The value an option carries, written as the following word (`-C DIR`),
+# attached with `=` (`--cd=DIR`, `-C=DIR`), or attached to a one-letter option
+# (`-CDIR`). Sets option_value and option_words, the number of words the option
+# and its value occupy together.
+read_option_value() {
+	local option=$1 argument=$2 next_exists=$3 next=${4-}
+	case "${argument}" in
+	"${option}")
+		[ "${next_exists}" = true ] || return 1
+		option_value=${next}
+		option_words=2
+		return 0
+		;;
+	"${option}"=*)
+		option_value=${argument#*=}
+		option_words=1
+		return 0
+		;;
+	esac
+	# Only a one-letter option can carry its value attached to it.
+	case "${option}" in
+	-?) ;;
+	*) return 1 ;;
+	esac
+	case "${argument}" in
+	"${option}"?*)
+		option_value=${argument#"${option}"}
+		option_words=1
 		return 0
 		;;
 	esac
 	return 1
 }
 
-# The forms where the agent may run commands and `codex <name> --help` lists the
-# bypass flag among the subcommand's own options, so the flag goes right after
-# the subcommand. Both facts are needed to put a name here: subcommands outside
-# this list also list the flag among their own options.
-is_isolated_subcommand() {
-	case "$1" in
-	exec | e | resume | fork) return 0 ;;
-	esac
-	return 1
-}
+first_word=${1-}
+real_command=$(resolve_real_command)
 
-# The forms where the agent may run commands but the subcommand does not list
-# the bypass flag among its own options, so the flag goes in the global
-# position, in front of everything, as it does for the interactive session.
-# `codex review --help` lists no such flag; `codex --help` lists it as a global
-# option. Whether it reaches the subcommand from there is the check in the
-# header above.
-is_isolated_by_global_flag() {
-	case "$1" in
-	review) return 0 ;;
-	esac
-	return 1
-}
+if [ "${PROCESS_WRAP_SHIM_OFF:-}" = 1 ] ||
+	in_list "${first_word}" ${ALLOW_LIST[@]+"${ALLOW_LIST[@]}"}; then
+	exec "${real_command}" "$@"
+fi
 
-# The forms that run no agent: authentication, servers, session bookkeeping,
-# diagnostics, version and completion output. A form in which the agent may run
-# commands belongs in one of the two lists above instead, whichever place takes
-# the flag.
-is_passed_through_subcommand() {
-	case "$1" in
-	agents | login | logout | mcp | plugin | mcp-server | app-server | \
-		remote-control | completion | update | doctor | sandbox | debug | apply | a | \
-		queue | archive | delete | unarchive | migrate-rollouts | cloud | exec-server | \
-		features | help)
-		return 0
-		;;
-	esac
-	return 1
-}
+command_args=("$@")
+if [ -n "${BYPASS_FLAG}" ] &&
+	! in_list "${first_word}" ${NO_FLAG_LIST[@]+"${NO_FLAG_LIST[@]}"}; then
+	command_args=("${BYPASS_FLAG}" "$@")
+fi
 
-isolate=true
-flag_in_front=true
-workspace="${PWD}"
+# The place the command works in should be the place process-wrap opens for
+# writing. The command keeps its own copies of these options; nothing is
+# removed from what it is given.
+workspace=${PWD}
 rw_dirs=()
-codex_args=()
-subcommand_seen=false
-prompt_reached=false
 
 arguments=("$@")
+option_value=
+option_words=1
 index=0
 while [ "${index}" -lt "${#arguments[@]}" ]; do
-	argument="${arguments[${index}]}"
-	if [ "${prompt_reached}" = true ]; then
-		codex_args+=("${argument}")
-		index=$((index + 1))
-		continue
+	argument=${arguments[${index}]}
+	# Nothing after `--` is an option of the wrapped command.
+	if [ "${argument}" = -- ]; then
+		break
 	fi
-	case "${argument}" in
-	--)
-		# Everything after `--` is the prompt: no option and no subcommand.
-		prompt_reached=true
-		codex_args+=("${argument}")
-		;;
-	-h | --help | -V | --version)
-		isolate=false
-		codex_args+=("${argument}")
-		;;
-	--cd=* | -C=*)
-		workspace="${argument#*=}"
-		codex_args+=("${argument}")
-		;;
-	-C?*)
-		# A short option's value attached to it, which clap accepts. `-C=DIR` is
-		# matched above, so what follows `-C` here is the value itself. `-C` is
-		# the only attached form with a meaning for process-wrap: the other
-		# value-taking short options are passed on unread, and attaching their
-		# value consumes no word, so the subcommand is still found.
-		workspace="${argument#-C}"
-		codex_args+=("${argument}")
-		;;
-	--add-dir=*)
-		rw_dirs+=("${argument#*=}")
-		codex_args+=("${argument}")
-		;;
-	-*)
-		codex_args+=("${argument}")
-		if takes_a_value "${argument}" && [ $((index + 1)) -lt "${#arguments[@]}" ]; then
-			value="${arguments[$((index + 1))]}"
-			case "${argument}" in
-			-C | --cd) workspace="${value}" ;;
-			--add-dir) rw_dirs+=("${value}") ;;
-			esac
-			codex_args+=("${value}")
-			index=$((index + 1))
+	next_exists=false
+	next=
+	if [ $((index + 1)) -lt "${#arguments[@]}" ]; then
+		next_exists=true
+		next=${arguments[$((index + 1))]}
+	fi
+	option_words=1
+	matched=false
+	for option in ${WORKSPACE_OPTIONS[@]+"${WORKSPACE_OPTIONS[@]}"}; do
+		if read_option_value "${option}" "${argument}" "${next_exists}" "${next}"; then
+			workspace=${option_value}
+			matched=true
+			break
 		fi
-		;;
-	*)
-		codex_args+=("${argument}")
-		if [ "${subcommand_seen}" = false ]; then
-			subcommand_seen=true
-			if is_isolated_subcommand "${argument}"; then
-				flag_in_front=false
-				codex_args+=("${BYPASS_FLAG}")
-			elif is_isolated_by_global_flag "${argument}"; then
-				# Isolated, with no place for the flag after the
-				# subcommand, so it goes in front as it does for the
-				# interactive session: the value the branch sets is the
-				# one already there, and the branch is what shows the
-				# word was classified rather than read as a prompt.
-				flag_in_front=true
-			elif is_passed_through_subcommand "${argument}"; then
-				flag_in_front=false
-				isolate=false
+	done
+	if [ "${matched}" = false ]; then
+		for option in ${RW_OPTIONS[@]+"${RW_OPTIONS[@]}"}; do
+			if read_option_value "${option}" "${argument}" "${next_exists}" "${next}"; then
+				rw_dirs+=("${option_value}")
+				break
 			fi
-			# A word in none of the three lists is a prompt, so the form
-			# stays the interactive session.
-		fi
-		;;
-	esac
-	index=$((index + 1))
+		done
+	fi
+	index=$((index + option_words))
 done
-
-codex=$(resolve_codex)
-
-if [ "${PROCESS_WRAP_SHIM_OFF:-}" = 1 ] || [ "${isolate}" = false ]; then
-	exec "${codex}" "$@"
-fi
-
-# The interactive session has no subcommand to put the flag after, and the forms
-# in is_isolated_by_global_flag do not take it there, so for both it goes in
-# front of everything, where codex reads its global options.
-if [ "${flag_in_front}" = true ]; then
-	codex_args=("${BYPASS_FLAG}" ${codex_args[@]+"${codex_args[@]}"})
-fi
 
 # mkdir -p takes a symbolic link to a directory for the directory itself, and
 # process-wrap resolves the rw item to its real path. On a host where another
@@ -253,6 +247,6 @@ for dir in ${rw_dirs[@]+"${rw_dirs[@]}"}; do
 	process_wrap_args+=(--rw "${dir}")
 done
 
-# The resolved path, not the name: inside the isolation `codex` would find this
-# shim again on PATH and the pair would call each other for ever.
-exec process-wrap "${process_wrap_args[@]}" -- "${codex}" ${codex_args[@]+"${codex_args[@]}"}
+# Nesting is not this shim's business: process-wrap detects PROCESS_WRAP=1
+# itself and warns.
+exec process-wrap "${process_wrap_args[@]}" -- "${real_command}" ${command_args[@]+"${command_args[@]}"}
