@@ -67,16 +67,48 @@ Then, as you need them:
   inside the isolation, so the file cannot be read from in there; the value arrives as the
   environment variable named on the left of the line.
 
-- **Wrap codex.** Copy [`examples/shim/codex`](examples/shim/codex) to a directory that comes
-  before the real codex on your `PATH` and make it executable. It classifies the invocation,
-  inserts codex's own sandbox-bypass flag into the forms that run the agent, copies `--cd` to
-  `--workspace` and `--add-dir` to `--rw`, creates `/tmp/process-wrap`, and executes
-  `process-wrap`. `PROCESS_WRAP_SHIM_OFF=1` runs the real codex instead, under its own sandbox.
-  It is a template, not part of the product, so check it yourself after a codex upgrade: that
-  every subcommand of `codex --help` is in one of its lists; that running an isolated form
-  with `--print-plan` shows the `--workspace` and `--rw` it copied; and that with
-  `PROCESS_WRAP_SHIM_OFF=1` no `process-wrap` is started. Write your own shim for another CLI
-  from this one.
+- **Wrap a command.** `process-wrap` knows nothing about the command it wraps.
+  [`examples/shim/codex`](examples/shim/codex) is a shim template: copy it to a directory that
+  comes before the real command on your `PATH`, name the copy after that command, fill in the
+  tool section at the top of the file, and make it executable. Every invocation of that name then
+  goes through `process-wrap`. The tool section is everything that depends on the command being
+  wrapped — its name, the flag that turns its own sandbox off, the options whose values are
+  copied to `--workspace` and `--rw`, and the allow list and the no-flag list described below. The
+  body under it depends on none of them. The values shipped in the tool section are filled in for
+  codex as an example of a command to wrap, not because the tool has anything to do with codex.
+
+  Everything is isolated by default: `--help` and `--version` are no exception, and no subcommand
+  decides otherwise, so a subcommand a newer version of the command adds is isolated like the
+  rest. There are two ways out, and both are yours to open. A subcommand in the shim's allow list
+  is passed straight to the real command, outside `process-wrap` — a whitelist you approve and
+  answer for, empty as shipped. And `PROCESS_WRAP_SHIM_OFF=1` runs the real command with your
+  arguments unchanged, outside `process-wrap`, whatever the lists say. Add a name to a list only
+  when something breaks, and only the name that broke:
+
+  | What broke | Where the name goes |
+  |---|---|
+  | the command refuses the flag, or takes it and it has no effect | the no-flag list |
+  | it cannot reach the host from inside the isolation, and no model runs | the allow list |
+  | a model runs and it still breaks inside the isolation | neither list; fix the profile |
+
+  "No model runs" is what to check before approving an allow-list entry: while that subcommand
+  executes, the wrapped command asks no model and cannot run a command a model produced. Read the
+  command's documentation and watch a run of it — for codex, the header printed at start-up and
+  the output of `exec` are where it shows. The name most likely to be the first one in the list
+  is the one that authenticates, `login` in codex's case; that is a reading of the help text
+  rather than a measurement, and nothing is shipped in either list.
+
+  It is a template, not part of the product, so what is checked here about the bundled one and
+  what you check about your copy are two different things. Checked here, with a stand-in named
+  `process-wrap` at the front of `PATH` that prints its arguments and exits, so that the real
+  command never runs: that an argument list starting with a subcommand, one starting with an
+  option, and `--help` all reach `process-wrap`; that the values of the copied options appear in
+  its arguments; that a name put in a list temporarily takes effect only when it is the first
+  word, an argument list starting with an option being isolated as usual; that a copy whose flag
+  is empty still reaches `process-wrap`; and that with `PROCESS_WRAP_SHIM_OFF=1` none is started.
+  One condition needs the real command: that the flag put in front reaches it, which for codex is
+  a start-up header saying something other than `sandbox: read-only`. Yours to check about your
+  copy: that for every name in its allow list, no model runs while that subcommand executes.
 
 - **Let an agent fit the profile to this machine.** [`skills/process-wrap-setup`](skills/process-wrap-setup)
   is an Agent Skill that proposes profile entries for the agent CLIs you have installed, a place
@@ -421,9 +453,9 @@ item written by its real path, such as `rw = ["~/work"]` with `~/work -> ~/data/
 No cgroup limits, no per-domain network allowance, no removal operator in the merge, no automatic
 merge of `default.toml` under another profile, no policy files found from the current directory,
 no `--new-session`, no double isolation when nested, no aarch64, no protection of `.git/hooks`
-and `.git/config`, no shims for claude or opencode (write your own from
-[`examples/shim/codex`](examples/shim/codex)), no `init --force` (remove the file first), and no
-installer for the setup skill (use your agent CLI's own means, such as
+and `.git/config`, no tool-section values for any command other than codex (fill in your own in a
+copy of [`examples/shim/codex`](examples/shim/codex)), no `init --force` (remove the file first),
+and no installer for the setup skill (use your agent CLI's own means, such as
 `gh skill install ba0918/process-wrap process-wrap-setup`).
 
 ## Specification
