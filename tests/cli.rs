@@ -1152,3 +1152,20 @@ fn init_without_a_usable_home_is_an_env_diagnostic() {
 
     assert_diagnostic(&output, 125, "env");
 }
+
+#[test]
+fn the_built_in_default_starts_without_a_warning() {
+    // Someone running on the built-in default has placed no secret file yet, and must not
+    // be warned about one on every start (specification section 16).
+    let (home, workspace) = home_without_a_configuration_directory();
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args(["--print-plan", "--", "/bin/true"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+}

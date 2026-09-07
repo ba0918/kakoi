@@ -1,6 +1,8 @@
-# The bundled profile for WSL2 (specification section 16). Install it as
-# $XDG_CONFIG_HOME/process-wrap/profile/default.toml (or ~/.config/process-wrap/profile/
-# default.toml) and adjust it to the tools you run.
+# The built-in default, written for WSL2 (specification section 16): the profile
+# process-wrap starts with when no profile has been written yet. `process-wrap init`
+# writes this file out as $XDG_CONFIG_HOME/process-wrap/profile/default.toml (or
+# ~/.config/process-wrap/profile/default.toml) and prints the path, so that you can read
+# it and adjust it to the tools you run.
 #
 # Paths are absolute, start with `~` (the real path of HOME), or start with one of the
 # four variables: ${workspace}, ${worktree}, ${git_common_dir}, ${config_dir}. An item
@@ -113,7 +115,9 @@ unset = [
 ]
 
 # Secrets are read from files under the configuration directory's secrets/, which is
-# always hidden inside the isolation. A missing file only warns; add a line per secret
-# you want injected.
+# always hidden inside the isolation. Nothing is injected until you uncomment a line: to
+# pass a GitHub token, uncomment the one below and put the token in secrets/gh-token.
+# The line is commented so that a start on the built-in default, where no secret file has
+# been placed, does not warn about a missing one on every run.
 [secrets]
-GH_TOKEN = "${config_dir}/secrets/gh-token"
+# GH_TOKEN = "${config_dir}/secrets/gh-token"
