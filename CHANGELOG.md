@@ -15,13 +15,13 @@
 - Added the placement checks that refuse a policy file, the configuration directory, a secret
   file, or a `path-prepend` entry that could be swapped from inside the isolation; a written
   `rw`, `rw-file`, or `hide` item, a `--workspace`, a scan `root`, or a `hide-mounts` `under`
-  whose path resolves through an `rw` item to a place outside every root item; a `hide` whose
-  path follows a link inside an `rw` item, wherever it lands; a scan `root` or `hide-mounts`
-  `under` below an `rw` mount point; an item that would expose what a lower `hide` or `ro`
-  covers, including the `hide` items generated for `secrets/` and hidden mounts; and an item
-  landing on `/`, `/dev`, or `/proc` or inside the latter two. Written `ro` items are not held
-  to the root-item check, so a dotfiles link written as `ro` passes. The home directory and its
-  ancestors are refused as a worktree or an `rw` item.
+  whose path resolves through an `rw` item to a place outside every root item; a `hide`, a scan
+  `root`, or a `hide-mounts` `under` whose path follows a link inside an `rw` item, wherever it
+  lands; a scan `root` or `hide-mounts` `under` below an `rw` mount point; an item that would
+  expose what a lower `hide` or `ro` covers, including the `hide` items generated for `secrets/`
+  and hidden mounts; and an item landing on `/`, `/dev`, or `/proc` or inside the latter two.
+  Written `ro` items are not held to the root-item check, so a dotfiles link written as `ro`
+  passes. The home directory and its ancestors are refused as a worktree or an `rw` item.
 - Added a seccomp filter that fails `ioctl(TIOCSTI)` with `EPERM` and ends processes making
   foreign-architecture or x32 system calls.
 - Added `--print-plan`, one-line diagnostics with the exit codes 125 (a diagnostic of
