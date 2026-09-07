@@ -202,6 +202,14 @@ if [ "${interactive}" = true ]; then
 	codex_args=("${BYPASS_FLAG}" ${codex_args[@]+"${codex_args[@]}"})
 fi
 
+# mkdir -p takes a symbolic link to a directory for the directory itself, and
+# process-wrap resolves the rw item to its real path. On a host where another
+# local user can win the name, a link left here would make its target writable
+# inside the isolation, and the boundary would not catch it: /tmp is hidden, not
+# writable, so nothing on the way is inside a writable item.
+if [ -L "${SHARED_DIR}" ]; then
+	fail "${SHARED_DIR} is a symbolic link; remove it and let a real directory be made there"
+fi
 mkdir -p "${SHARED_DIR}"
 
 process_wrap_args=(--workspace "${workspace}")
