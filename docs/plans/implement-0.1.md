@@ -7,6 +7,7 @@
 3. `docs/plans/implement-0.1-b-mounts.md` — ステップ 6〜10（ブランチ `implement-0.1-b-mounts`）。A2 のマージ後
 4. `docs/plans/implement-0.1-c-launch.md` — ステップ 11〜16（ブランチ `implement-0.1-c-launch`）。B のマージ後。済み
 5. `docs/plans/implement-0.1-d-revision.md` — ステップ 17〜25（ブランチ `implement-0.1-d-revision`）。C のマージ後。仕様の改訂（コミット 98a9d5f）への追従。改訂で変わった節の割り当ては D の表が本文書の表に優先する
+6. `docs/plans/implement-0.1-e-onboarding.md` — ステップ 26〜32（ブランチ `implement-0.1-e-onboarding`）。D のマージ後。仕様の改訂（コミット 37fd24b、入れて即使える: 組み込みの既定、`init`、シムの雛形、セットアップスキル）への追従。
 
 ## Goal
 
