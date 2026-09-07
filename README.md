@@ -212,7 +212,7 @@ paths and `~user` are rejected. `~` is the real path of `HOME`. The variables ar
 | `${workspace}` | The workspace's real path: `--workspace`, or the current directory. |
 | `${worktree}` | The first directory from the workspace upwards that has a `.git` (a directory or a regular file); the workspace itself when there is none. |
 | `${git_common_dir}` | The shared `.git` of the worktree, verified against git's own back links. Has no value when the worktree is not under git. |
-| `${config_dir}` | The configuration directory's real path. |
+| `${config_dir}` | The configuration directory's real path. Has no value when the configuration directory does not exist. |
 
 An item whose variable has no value, or whose path does not exist, is skipped and shown as
 skipped in the plan. Nothing is mounted on a path that does not exist.
