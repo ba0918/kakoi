@@ -11,7 +11,10 @@
 #     into the isolation, everything else is passed straight to the real codex;
 #   - inserts --dangerously-bypass-approvals-and-sandbox into the isolated
 #     forms, because the boundary is process-wrap's and codex's own sandbox
-#     would only narrow it in ways that change per turn;
+#     would only narrow it in ways that change per turn. The isolated forms
+#     take the flag in two places: the subcommands that list it among their
+#     own options take it right after the subcommand, and the rest take it
+#     in front of everything, where codex reads its global options;
 #   - copies --cd/-C to --workspace and --add-dir to --rw, so that the place
 #     codex works in is the place process-wrap opens for writing (codex keeps
 #     its own copies of those options; nothing is removed);
@@ -25,14 +28,21 @@
 # Use it to run something that must reach what the profile hides, such as a
 # setup skill that writes the configuration directory.
 #
-# Keeping the classification current: the two lists below are from codex-cli
+# Keeping the classification current: the three lists below are from codex-cli
 # 0.153.4. After a codex upgrade, run `codex --help` and check that every
-# subcommand it lists is in one of them. A bare word in neither list is read as
+# subcommand it lists is in one of them. A bare word in none of them is read as
 # a prompt, that is, as the interactive session, which is what codex itself
 # does; a subcommand added by a newer codex and left out of the lists would
 # therefore be given the bypass flag as a global option and might be refused by
-# codex. Only the four forms in is_isolated_subcommand accept that flag, so
-# check `codex <name> --help` before adding one there.
+# codex. Only the four forms in is_isolated_subcommand list that flag among
+# their own options, so check `codex <name> --help` before adding one there;
+# a form that runs the agent without listing it goes in
+# is_isolated_by_global_flag instead.
+#
+# Whether the flag in the global position reaches the subcommand is for you to
+# see for yourself, outside this template: run `codex review --base <ref>` and
+# check that the header codex prints says something other than
+# `sandbox: read-only`.
 #
 # Check takes_a_value against the same `codex --help` output. An option that
 # takes a value and is missing from that list has its value read as a bare
@@ -92,8 +102,9 @@ takes_a_value() {
 	return 1
 }
 
-# The forms where the agent may run commands, including the interactive session
-# (no subcommand at all). These are also the four that accept the bypass flag.
+# The forms where the agent may run commands and `codex <name> --help` lists the
+# bypass flag among the subcommand's own options, so the flag goes right after
+# the subcommand. These are the four that take it in that position.
 is_isolated_subcommand() {
 	case "$1" in
 	exec | e | resume | fork) return 0 ;;
@@ -101,11 +112,26 @@ is_isolated_subcommand() {
 	return 1
 }
 
+# The forms where the agent may run commands but the subcommand does not list
+# the bypass flag among its own options, so the flag goes in the global
+# position, in front of everything, as it does for the interactive session.
+# `codex review --help` lists no such flag; `codex --help` lists it as a global
+# option. Whether it reaches the subcommand from there is the check in the
+# header above.
+is_isolated_by_global_flag() {
+	case "$1" in
+	review) return 0 ;;
+	esac
+	return 1
+}
+
 # The forms that run no agent: authentication, servers, session bookkeeping,
-# diagnostics, version and completion output.
+# diagnostics, version and completion output. A form in which the agent may run
+# commands belongs in one of the two lists above instead, whichever place takes
+# the flag.
 is_passed_through_subcommand() {
 	case "$1" in
-	agents | review | login | logout | mcp | plugin | mcp-server | app-server | \
+	agents | login | logout | mcp | plugin | mcp-server | app-server | \
 		remote-control | completion | update | doctor | sandbox | debug | apply | a | \
 		queue | archive | delete | unarchive | migrate-rollouts | cloud | exec-server | \
 		features | help)
@@ -116,7 +142,7 @@ is_passed_through_subcommand() {
 }
 
 isolate=true
-interactive=true
+flag_in_front=true
 workspace="${PWD}"
 rw_dirs=()
 codex_args=()
@@ -176,14 +202,21 @@ while [ "${index}" -lt "${#arguments[@]}" ]; do
 		if [ "${subcommand_seen}" = false ]; then
 			subcommand_seen=true
 			if is_isolated_subcommand "${argument}"; then
-				interactive=false
+				flag_in_front=false
 				codex_args+=("${BYPASS_FLAG}")
+			elif is_isolated_by_global_flag "${argument}"; then
+				# Isolated, with no place for the flag after the
+				# subcommand, so it goes in front as it does for the
+				# interactive session: the value the branch sets is the
+				# one already there, and the branch is what shows the
+				# word was classified rather than read as a prompt.
+				flag_in_front=true
 			elif is_passed_through_subcommand "${argument}"; then
-				interactive=false
+				flag_in_front=false
 				isolate=false
 			fi
-			# A word in neither list is a prompt, so the form stays the
-			# interactive session.
+			# A word in none of the three lists is a prompt, so the form
+			# stays the interactive session.
 		fi
 		;;
 	esac
@@ -196,9 +229,10 @@ if [ "${PROCESS_WRAP_SHIM_OFF:-}" = 1 ] || [ "${isolate}" = false ]; then
 	exec "${codex}" "$@"
 fi
 
-# The interactive session has no subcommand to put the flag after, so it goes in
+# The interactive session has no subcommand to put the flag after, and the forms
+# in is_isolated_by_global_flag do not take it there, so for both it goes in
 # front of everything, where codex reads its global options.
-if [ "${interactive}" = true ]; then
+if [ "${flag_in_front}" = true ]; then
 	codex_args=("${BYPASS_FLAG}" ${codex_args[@]+"${codex_args[@]}"})
 fi
 
