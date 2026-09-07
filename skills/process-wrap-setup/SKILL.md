@@ -52,9 +52,14 @@ mode that asks for approval before a write.
 4. **Compare `codex --help` with the shim's classification and ask the user about the
    rest.** Run `codex --help`, list its subcommands, and compare them with the three
    lists in the shim (`is_isolated_subcommand`, `is_isolated_by_global_flag` and
-   `is_passed_through_subcommand`). Report every subcommand that is in none of them, say
-   for each whether it looks like a form in which the agent may run commands, and ask the
-   user which list it belongs in. The user decides; do not add one on your own.
+   `is_passed_through_subcommand`). Report every subcommand that is in none of them and say
+   for each whether it looks like a form in which the agent may run commands. For one that
+   does look like such a form, also run `codex <name> --help` and say whether it lists
+   `--dangerously-bypass-approvals-and-sandbox` among the subcommand's own options: if it
+   does, present `is_isolated_subcommand`; if it does not, present
+   `is_isolated_by_global_flag`. Listing that flag is the criterion, not membership of any
+   fixed set of names — subcommands outside `is_isolated_subcommand` list it too. Then ask
+   the user which list it belongs in. The user decides; do not add one on your own.
 5. **Put a `--print-plan` from before the change next to one from after.** Run
    `process-wrap --print-plan -- true` before proposing a change and again after the user
    has accepted it, and show the two side by side. The plan lists the mount items applied
