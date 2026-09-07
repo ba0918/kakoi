@@ -43,8 +43,11 @@ fn make_directory(path: &Path, mode: Option<u32>) -> Result<(), Diagnostic> {
     match entry_state(path) {
         PathState::Directory(_) => return Ok(()),
         // A name behind which no real path is reached: a dangling link, or one whose
-        // parent has no search bit. Saying "is not a directory" of it would be a guess.
-        PathState::Broken => return Err(failure("exists but reaches no real path")),
+        // parent has no search bit. The two are told apart by nothing here, and under the
+        // second the name may not be there at all, so the reason names both.
+        PathState::Broken => return Err(failure(
+            "cannot be made a directory: something is at the name, or the name cannot be looked at",
+        )),
         PathState::NotDirectory(_) => return Err(failure("is not a directory")),
         PathState::Absent => {}
     }
@@ -71,7 +74,11 @@ fn write_file(path: &Path, text: &str) -> Result<(), Diagnostic> {
     let failure = |reason: &str| Diagnostic::path(format!("{} {reason}", path.display()));
     match entry_state(path) {
         PathState::Absent => {}
-        PathState::Broken => return Err(failure("exists but reaches no real path")),
+        PathState::Broken => {
+            return Err(failure(
+                "cannot be written: something is at the name, or the name cannot be looked at",
+            ))
+        }
         PathState::Directory(_) | PathState::NotDirectory(_) => {
             return Err(failure("already exists"))
         }
