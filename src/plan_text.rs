@@ -11,7 +11,7 @@ use std::ffi::OsStr;
 use std::fmt::Write;
 
 use crate::diagnostic::escape_control;
-use crate::layers::{Directive, LayerOrigin, Policy};
+use crate::layers::{Directive, LayerOrigin, Policy, PolicySource};
 use crate::mounts::{ItemOrigin, SkippedRole};
 use crate::plan::{Argument, Plan};
 use crate::policy::{EnvMode, NetworkMode, PolicyPath};
@@ -23,8 +23,8 @@ pub fn render(plan: &Plan) -> String {
         text.push_str("nested: yes (PROCESS_WRAP=1; the plan is shown but would not be applied)\n");
     }
     text.push_str("policy files:\n");
-    for file in &plan.policy_files {
-        let _ = writeln!(text, "  {}", shown(file));
+    for source in &plan.policy_sources {
+        let _ = writeln!(text, "  {}", policy_source(source));
     }
     text.push_str("variables:\n");
     let _ = writeln!(text, "  workspace = {}", shown(&plan.variables.workspace));
@@ -201,9 +201,21 @@ fn directive(directive: Directive) -> &'static str {
     }
 }
 
+/// Where a policy came from. The built-in default names `process-wrap init`, the form that
+/// writes it out, which is the contract of specification section 13.
+fn policy_source(source: &PolicySource) -> String {
+    match source {
+        PolicySource::File(path) => shown(path),
+        PolicySource::BuiltInDefault => {
+            "the built-in default (write it out with `process-wrap init`)".to_string()
+        }
+    }
+}
+
 fn layer(origin: &LayerOrigin) -> String {
     match origin {
         LayerOrigin::Profile(path) => format!("the profile {}", shown(path)),
+        LayerOrigin::BuiltInDefault => "the built-in default".to_string(),
         LayerOrigin::PolicyFile(path) => format!("the policy file {}", shown(path)),
         LayerOrigin::CommandLine => "the command line".to_string(),
     }

@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
 use crate::isolated_env::{assemble_environment, Environment, SecretFile};
-use crate::layers::{Directive, Layer, Policy};
+use crate::layers::{Directive, Layer, Policy, PolicySource};
 use crate::mounts::{
-    generate, loaded_policy_files, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
+    generate, policy_sources, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
     MountFacts, ResolvedItem, ResolvedMounts, SkippedPath,
 };
 use crate::placement::{
@@ -47,15 +47,15 @@ pub struct IsolationFacts {
 }
 
 /// The isolation as resolved: the mount items, the scan roots, `hide-mounts` `under`s,
-/// and `path-prepend` entries skipped, the environment, the warnings so far, and the real
-/// paths of the policy files read.
+/// and `path-prepend` entries skipped, the environment, the warnings so far, and where the
+/// policies read came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Isolation {
     pub mounts: ResolvedMounts,
     pub skipped_paths: Vec<SkippedPath>,
     pub environment: Environment,
     pub warnings: Vec<Warning>,
-    pub policy_files: Vec<PathBuf>,
+    pub policy_sources: Vec<PolicySource>,
 }
 
 /// Stage 7 of specification section 13, in its order: the identity of the written mount
@@ -115,7 +115,7 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         skipped_paths: skipped_paths(inputs.expanded, &facts.mounts),
         environment: assembled.environment,
         warnings,
-        policy_files: loaded_policy_files(inputs.layers, &facts.mounts),
+        policy_sources: policy_sources(inputs.layers, &facts.mounts),
     })
 }
 
@@ -127,8 +127,9 @@ pub struct Plan {
     /// applied.
     pub nested: bool,
     pub policy: Policy,
-    /// The real paths of the policy files read.
-    pub policy_files: Vec<PathBuf>,
+    /// Where the policies read came from: files at their real paths, or the built-in
+    /// default.
+    pub policy_sources: Vec<PolicySource>,
     pub variables: Variables,
     pub mounts: ResolvedMounts,
     pub skipped_paths: Vec<SkippedPath>,
@@ -156,7 +157,7 @@ pub fn plan(
     Plan {
         nested: is_nested(inputs.host),
         policy: inputs.policy.clone(),
-        policy_files: isolation.policy_files,
+        policy_sources: isolation.policy_sources,
         variables: inputs.variables.clone(),
         mounts: isolation.mounts,
         skipped_paths: isolation.skipped_paths,

@@ -3,18 +3,42 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::cli::Invocation;
+use crate::cli::{Invocation, DEFAULT_PROFILE};
 use crate::diagnostic::Diagnostic;
+use crate::environment::PathState;
 use crate::policy::{parse_policy, EnvMode, HideMounts, NetworkMode, PolicyFile, PolicyPath, Scan};
 use crate::regular_file::{read_regular_file, Links};
+use crate::workspace_facts::probe_path;
 
-/// Where a written layer came from, lowest first: the profile, the `--policy-file`, the
-/// command line.
+/// The bundled profile compiled into the binary: the built-in default (specification
+/// section 2), what `process-wrap init` writes out.
+pub const BUILT_IN_DEFAULT: &str = include_str!("../examples/profile/default.toml");
+
+/// Where a written layer came from, lowest first: the profile (a file or the built-in
+/// default), the `--policy-file`, the command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LayerOrigin {
     Profile(PathBuf),
+    BuiltInDefault,
     PolicyFile(PathBuf),
     CommandLine,
+}
+
+/// Where a policy the run read came from, as the plan names it: a file at its real path,
+/// or the built-in default.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PolicySource {
+    File(PathBuf),
+    BuiltInDefault,
+}
+
+impl PolicySource {
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            PolicySource::File(path) => Some(path),
+            PolicySource::BuiltInDefault => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,12 +176,7 @@ pub fn load_layers(invocation: &Invocation, config_dir: &Path) -> Result<Vec<Lay
     let profile_path = config_dir
         .join("profile")
         .join(format!("{}.toml", invocation.profile));
-    let mut layers = vec![Layer {
-        origin: LayerOrigin::Profile(profile_path.clone()),
-        policy: read_policy_file(&profile_path, || {
-            format!("profile `{}`", invocation.profile)
-        })?,
-    }];
+    let mut layers = vec![global_scope(invocation, &profile_path)?];
     if let Some(path) = &invocation.policy_file {
         layers.push(Layer {
             origin: LayerOrigin::PolicyFile(path.clone()),
@@ -166,6 +185,24 @@ pub fn load_layers(invocation: &Invocation, config_dir: &Path) -> Result<Vec<Lay
     }
     layers.push(Layer::command_line(invocation));
     Ok(layers)
+}
+
+/// The global scope: the profile file, or the built-in default when `default.toml` has not
+/// been written out (specification section 5.3). "Not written out" is the components of the
+/// assembled path looked at from the root, the first failure being a name that does not
+/// exist; a broken link or a regular file in the way is read and stops the run, so a policy
+/// that broke is never replaced by the wider built-in default.
+fn global_scope(invocation: &Invocation, path: &Path) -> Result<Layer, Diagnostic> {
+    if invocation.profile == DEFAULT_PROFILE && probe_path(path) == PathState::Absent {
+        return Ok(Layer {
+            origin: LayerOrigin::BuiltInDefault,
+            policy: parse_policy(BUILT_IN_DEFAULT, path)?,
+        });
+    }
+    Ok(Layer {
+        origin: LayerOrigin::Profile(path.to_path_buf()),
+        policy: read_policy_file(path, || format!("profile `{}`", invocation.profile))?,
+    })
 }
 
 /// Reads one policy file following a symbolic link at its path (a user keeps policy files

@@ -595,9 +595,11 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     std::fs::create_dir(&workspace).unwrap();
     let arguments = ["--workspace", workspace.to_str().unwrap(), "--print-plan"];
 
-    // Without a profile the policy is read and found missing: a diagnostic, not a plan.
+    // A nested run reads the policy too: a named profile that is not there is a
+    // diagnostic, not a plan.
     let without_a_profile = binary(home.path())
         .env("PROCESS_WRAP", "1")
+        .args(["--profile", "strict"])
         .args(arguments)
         .output()
         .unwrap();
@@ -706,4 +708,160 @@ fn print_plan_is_identical_across_two_runs() {
     assert_eq!(second.status.code(), Some(0), "{report}");
     assert!(!first.stdout.is_empty(), "{report}");
     assert_eq!(first.stdout, second.stdout, "{report}");
+}
+
+/// A workspace under a fresh home, with nothing written to the configuration directory.
+fn home_without_a_configuration_directory() -> (TempDir, PathBuf) {
+    let home = TempDir::new();
+    let workspace = home.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+    (home, workspace)
+}
+
+#[test]
+fn the_built_in_default_is_used_when_default_toml_is_absent() {
+    // The state of a new machine: nothing has been written to the configuration directory,
+    // whether it is the one under `~/.config` or the one `XDG_CONFIG_HOME` names, whose own
+    // ancestors are missing too (specification section 5.3).
+    let (home, workspace) = home_without_a_configuration_directory();
+
+    for (name, config_home) in [
+        ("no configuration directory", home.path().join(".config")),
+        (
+            "no XDG_CONFIG_HOME directory",
+            home.path().join("missing/xdg"),
+        ),
+    ] {
+        let output = binary(home.path())
+            .env("XDG_CONFIG_HOME", &config_home)
+            .current_dir(&workspace)
+            .args(["--print-plan", "--", "/bin/true"])
+            .output()
+            .unwrap();
+
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{name}: {report}");
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("process-wrap init"),
+            "{name}: {report}"
+        );
+    }
+}
+
+#[test]
+fn a_named_profile_never_falls_back_to_the_built_in_default() {
+    // A user who names a profile means that file; falling back would run a wider policy
+    // than the one asked for (specification section 5.3).
+    let (home, workspace) = home_without_a_configuration_directory();
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args(["--profile", "strict", "--print-plan", "--", "/bin/true"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+#[test]
+fn a_broken_default_toml_or_configuration_directory_is_a_policy_diagnostic() {
+    // Only a name that is not there falls back: a `default.toml` or a configuration
+    // directory that exists but cannot be followed stops the run, so a policy that broke is
+    // never replaced by the wider built-in default (specification section 5.3).
+    /// A name for the failure message and the arrangement it makes under the home.
+    type Arrangement = (&'static str, fn(&Path));
+
+    let arrangements: [Arrangement; 4] = [
+        ("a broken link at default.toml", |home| {
+            std::fs::create_dir_all(home.join(".config/process-wrap/profile")).unwrap();
+            std::os::unix::fs::symlink(
+                home.join("nowhere"),
+                home.join(".config/process-wrap/profile/default.toml"),
+            )
+            .unwrap();
+        }),
+        ("a broken link at the configuration directory", |home| {
+            std::fs::create_dir_all(home.join(".config")).unwrap();
+            std::os::unix::fs::symlink(home.join("nowhere"), home.join(".config/process-wrap"))
+                .unwrap();
+        }),
+        ("a regular file at the configuration directory", |home| {
+            std::fs::create_dir_all(home.join(".config")).unwrap();
+            std::fs::write(home.join(".config/process-wrap"), "").unwrap();
+        }),
+        ("a regular file at profile/", |home| {
+            std::fs::create_dir_all(home.join(".config/process-wrap")).unwrap();
+            std::fs::write(home.join(".config/process-wrap/profile"), "").unwrap();
+        }),
+    ];
+
+    for (name, arrange) in arrangements {
+        let (home, workspace) = home_without_a_configuration_directory();
+        arrange(home.path());
+
+        let output = binary(home.path())
+            .current_dir(&workspace)
+            .args(["--print-plan", "--", "/bin/true"])
+            .output()
+            .unwrap();
+
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(125), "{name}: {report}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).starts_with("process-wrap: policy: "),
+            "{name}: {report}"
+        );
+    }
+}
+
+#[test]
+fn a_policy_file_overlays_the_built_in_default() {
+    // The built-in default adds no layer: `--policy-file` stacks on it as it would on a
+    // profile file. Its `${config_dir}` item has no value, because a run on the built-in
+    // default has no configuration directory, so it is reported as skipped (specification
+    // sections 5.2 and 5.3).
+    let (home, workspace) = home_without_a_configuration_directory();
+    let policy_file = home.write("p.toml", "[mounts]\nro = [\"${config_dir}/x\"]\n");
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--policy-file",
+            policy_file.to_str().unwrap(),
+            "--print-plan",
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan = String::from_utf8_lossy(&output.stdout);
+    assert!(plan.contains("process-wrap init"), "{report}");
+    assert!(
+        plan.lines()
+            .any(|line| line.contains("skipped") && line.contains("${config_dir}/x")),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_present_default_toml_replaces_the_built_in_default() {
+    // Once `default.toml` is there it is the whole global scope; the built-in default is
+    // not read beside it (specification section 5.3).
+    let (home, workspace) = home_without_a_configuration_directory();
+    let profile = home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args(["--print-plan", "--", "/bin/true"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan = String::from_utf8_lossy(&output.stdout);
+    assert!(!plan.contains("process-wrap init"), "{report}");
+    assert!(plan.contains(profile.to_str().unwrap()), "{report}");
 }

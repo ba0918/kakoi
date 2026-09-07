@@ -35,7 +35,7 @@ pub fn protected_paths(
             .iter()
             .filter_map(|layer| match &layer.origin {
                 LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.clone()),
-                LayerOrigin::CommandLine => None,
+                LayerOrigin::BuiltInDefault | LayerOrigin::CommandLine => None,
             })
             .collect(),
         config_dir: config_dir.map(Path::to_path_buf),

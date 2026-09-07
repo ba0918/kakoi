@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HomeDirectory, RealEntry};
-use crate::layers::{Directive, Layer, LayerOrigin, Policy};
+use crate::layers::{Directive, Layer, LayerOrigin, Policy, PolicySource};
 use crate::policy::{PolicyPath, Variable};
 use crate::variables::Variables;
 
@@ -205,7 +205,7 @@ pub fn candidates(
         .iter()
         .filter_map(|layer| match &layer.origin {
             LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.as_path()),
-            LayerOrigin::CommandLine => None,
+            LayerOrigin::BuiltInDefault | LayerOrigin::CommandLine => None,
         })
         .chain(config_dir)
         .chain(expanded.secrets.values().filter_map(Expansion::path))
@@ -572,14 +572,16 @@ pub fn generate(
 
 /// The real paths of the policy files that were read, for the scan to leave alone. A
 /// file that no longer has a real path cannot be hit by the scan anyway.
-pub fn loaded_policy_files(layers: &[Layer], facts: &MountFacts) -> Vec<PathBuf> {
+pub fn policy_sources(layers: &[Layer], facts: &MountFacts) -> Vec<PolicySource> {
     layers
         .iter()
         .filter_map(|layer| match &layer.origin {
-            LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path),
+            LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(PolicySource::File(
+                facts.entry(path).path().unwrap_or(path).to_path_buf(),
+            )),
+            LayerOrigin::BuiltInDefault => Some(PolicySource::BuiltInDefault),
             LayerOrigin::CommandLine => None,
         })
-        .map(|path| facts.entry(path).path().unwrap_or(path).to_path_buf())
         .collect()
 }
 
@@ -602,7 +604,8 @@ fn scan_items(
     facts: &MountFacts,
     swappable_ro: &[PathBuf],
 ) -> Result<Scanned, Diagnostic> {
-    let policy_files = loaded_policy_files(layers, facts);
+    let sources = policy_sources(layers, facts);
+    let policy_files: Vec<&Path> = sources.iter().filter_map(PolicySource::path).collect();
     let mut hits: Vec<&ScanHit> = facts.scan_hits.iter().collect();
     hits.sort_by(|a, b| byte_order(&a.found_at, &b.found_at));
     let mut scanned = Scanned {
@@ -615,7 +618,7 @@ fn scan_items(
         let RealEntry::NotDirectory(real) = &hit.target else {
             continue;
         };
-        if policy_files.contains(real) {
+        if policy_files.contains(&real.as_path()) {
             continue;
         }
         let into_ro = written

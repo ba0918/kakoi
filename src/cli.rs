@@ -7,6 +7,10 @@ use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser};
 
 use crate::diagnostic::Diagnostic;
 
+/// The profile of the global scope when `--profile` is omitted (specification
+/// section 4.1). Only this name falls back to the built-in default (section 5.3).
+pub const DEFAULT_PROFILE: &str = "default";
+
 /// The interpreted command line. Option paths are as written until `anchored` joins the
 /// relative ones to the current directory; `command` is passed through untouched.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,7 +47,7 @@ pub enum Parsed {
 )]
 struct Arguments {
     /// Profile name for the global scope.
-    #[arg(long, value_name = "NAME", default_value = "default")]
+    #[arg(long, value_name = "NAME", default_value = DEFAULT_PROFILE)]
     profile: String,
 
     /// Policy file for the process scope.
