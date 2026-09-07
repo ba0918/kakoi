@@ -854,9 +854,10 @@ fn an_unsearchable_configuration_directory_is_not_taken_for_an_absent_one() {
 #[test]
 fn a_policy_file_overlays_the_built_in_default() {
     // The built-in default adds no layer: `--policy-file` stacks on it as it would on a
-    // profile file. Its `${config_dir}` item has no value, because a run on the built-in
-    // default has no configuration directory, so it is reported as skipped (specification
-    // sections 5.2 and 5.3).
+    // profile file, and the run still reports the built-in default (specification
+    // sections 5.2 and 5.3). What becomes of its valueless `${config_dir}` item is fixed on
+    // the structured value by `plan.rs::a_missing_configuration_directory_leaves_config_dir_valueless`;
+    // the plan's display form is not a contract of 0.1 (specification section 13).
     let (home, workspace) = home_without_a_configuration_directory();
     let policy_file = home.write("p.toml", "[mounts]\nro = [\"${config_dir}/x\"]\n");
 
@@ -876,11 +877,6 @@ fn a_policy_file_overlays_the_built_in_default() {
     assert_eq!(output.status.code(), Some(0), "{report}");
     let plan = String::from_utf8_lossy(&output.stdout);
     assert!(plan.contains("process-wrap init"), "{report}");
-    assert!(
-        plan.lines()
-            .any(|line| line.contains("skipped") && line.contains("${config_dir}/x")),
-        "{report}"
-    );
 }
 
 #[test]
