@@ -242,19 +242,23 @@ Three rules refine this:
 - A written `ro` item is not held to it. Re-pointing or deleting an `ro` link only moves a
   read-only place or lifts it; the one thing it could newly show, landing on a `hide`, is caught
   separately. So a dotfiles link written as `ro` passes.
-- A written `hide` whose path follows a symbolic link inside an `rw` item is refused wherever it
-  lands, from the first launch: deleting that link from inside makes the next launch skip the
-  item, and what it hid shows through. Write the link's target, the real path, instead; a `hide`
-  written as a real path inside an `rw` item is fine (the mount point cannot be renamed).
-- A scan `root` or a `hide-mounts` `under` whose path passes through a writable item must be the
-  mount point of an `rw` item itself, not a directory below it: the root is not mounted, so a
-  subdirectory can be renamed from inside and the next launch scans an empty tree and hides
-  nothing.
+- A written `hide`, a scan `root`, or a `hide-mounts` `under` whose path follows a symbolic link
+  inside an `rw` item is refused wherever it lands, even on the mount point of another `rw` item,
+  from the first launch: deleting that link from inside makes the next launch skip the item, and
+  what it hid shows through, or skip the origin, and nothing under it is hidden. Write the link's
+  target, the real path, instead; a `hide` written as a real path inside an `rw` item is fine (the
+  mount point cannot be renamed). The diagnostic names the path, the link followed, and the
+  reason.
+- A scan `root` or a `hide-mounts` `under` whose path passes through a writable item without
+  following a link must be the mount point of an `rw` item itself, not a directory below it: the
+  root is not mounted, so a subdirectory can be renamed from inside and the next launch scans an
+  empty tree and hides nothing.
 
 In short: the path of a link you placed inside an `rw` area stops the launch when written as
-`hide` wherever it lands, and when written as `rw` or `rw-file` unless the link's target lies inside
-an item that cannot be redirected from inside; write the link's real target instead. The same link
-written as `ro` passes, but what that `ro` protects is only as much as known gap 15 below says.
+`hide`, as a scan `root`, or as a `hide-mounts` `under`, wherever it lands, and when written as
+`rw` or `rw-file` unless the link's target lies inside an item that cannot be redirected from
+inside; write the link's real target instead. The same link written as `ro` passes, but what that
+`ro` protects is only as much as known gap 15 below says.
 
 Landing inside something hidden is refused too, whatever the item was written as: an `rw`,
 `rw-file`, or `ro` item whose path passes through a writable item and lands on or inside a
