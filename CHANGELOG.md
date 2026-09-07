@@ -57,11 +57,18 @@
   it to its deepest existing ancestor, so a launch whose configuration directory is named under a
   writable item stops with `path` rather than letting a profile be planted there; one that exists
   but cannot be followed to a directory is a `path` diagnostic.
-- Added `examples/shim/codex`, a template shim that classifies codex invocations, inserts codex's
-  sandbox-bypass flag into the isolated ones, copies `--cd` to `--workspace` and `--add-dir` to
-  `--rw`, and executes `process-wrap`; `PROCESS_WRAP_SHIM_OFF=1` runs the real codex instead.
+- Added `examples/shim/codex`, a shim template made of a body that does not depend on the command
+  being wrapped and a tool section at the top of the file that carries everything that does: the
+  real command's name, the flag that turns its own sandbox off, the options copied to
+  `--workspace` and `--rw`, and two lists that ship empty. Every invocation goes through
+  `process-wrap` by default, `--help` and `--version` included, and no subcommand decides
+  otherwise; a subcommand in the allow list is passed straight to the real command instead, as is
+  every invocation under `PROCESS_WRAP_SHIM_OFF=1`, and neither creates `/tmp/process-wrap`. The
+  values in the tool section are filled in for codex as an example of a command to wrap.
 - Added `skills/process-wrap-setup/SKILL.md`, an Agent Skill that proposes the machine-specific
-  parts of a profile, the shim's place, and `path-prepend` entries, and that shows a diff and
-  waits for approval before writing.
+  parts of a profile, a copy of the shim template with its tool section filled in from the wrapped
+  command's own `--help`, `path-prepend` entries for replacement commands, and where a command
+  that broke inside the isolation belongs, and that shows a diff and waits for approval before
+  writing.
 - The bundled profile's `secrets` entry is commented out, so a start on the built-in default does
   not warn about a secret file nobody has placed.
