@@ -41,7 +41,10 @@ pub fn write_built_in_default(request: &InitRequest) -> Result<PathBuf, Diagnost
 fn make_directory(path: &Path, mode: Option<u32>) -> Result<(), Diagnostic> {
     let failure = |reason: &str| Diagnostic::path(format!("{} {reason}", path.display()));
     match entry_state(path) {
-        PathState::Directory(_) => return Ok(()),
+        // One that is already there is given the mode too: the instructions before `init`
+        // had the user make `secrets/` by hand, where the usual umask leaves it readable by
+        // everyone, and the run would otherwise end saying nothing about it (section 4.1).
+        PathState::Directory(_) => return give_mode(path, mode),
         // A name behind which no real path is reached: a dangling link, or one whose
         // parent has no search bit. The two are told apart by nothing here, and under the
         // second the name may not be there at all, so the reason names both.
@@ -58,13 +61,22 @@ fn make_directory(path: &Path, mode: Option<u32>) -> Result<(), Diagnostic> {
     builder
         .create(path)
         .map_err(|error| failure(&format!("cannot be created: {error}")))?;
-    // The umask narrows what the builder asks for, so the mode is set once the directory
-    // is there.
-    if let Some(mode) = mode {
-        fs::set_permissions(path, Permissions::from_mode(mode))
-            .map_err(|error| failure(&format!("cannot be given the mode {mode:o}: {error}")))?;
-    }
-    Ok(())
+    give_mode(path, mode)
+}
+
+/// Gives the directory at `path` `mode`, when one is asked for. The builder is told the
+/// mode as well, so that a directory it makes is never wider than asked for even for a
+/// moment, but the umask narrows what the builder asks for and this is what settles it.
+fn give_mode(path: &Path, mode: Option<u32>) -> Result<(), Diagnostic> {
+    let Some(mode) = mode else {
+        return Ok(());
+    };
+    fs::set_permissions(path, Permissions::from_mode(mode)).map_err(|error| {
+        Diagnostic::path(format!(
+            "{} cannot be given the mode {mode:o}: {error}",
+            path.display()
+        ))
+    })
 }
 
 /// Writes `text` at `path`, refusing to replace anything already there whatever its kind,

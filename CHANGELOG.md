@@ -45,7 +45,8 @@
   never falls back. The plan names it with the string `process-wrap init`.
 - Added `process-wrap init [NAME]`, which writes the built-in default to `profile/NAME.toml`
   (`default` when the name is left out), creating the configuration directory, its missing
-  ancestors, `profile/`, and `secrets/` (mode 0700), and printing the path it wrote. It refuses
+  ancestors, `profile/`, and `secrets/` (mode 0700, narrowing a `secrets/` that is already there
+  to that mode), and printing the path it wrote. It refuses
   to replace anything already at that name and has no `--force`. It is the only form that writes,
   and it checks the grammar and the home directory only, so it works without `bwrap` and inside
   an isolation.

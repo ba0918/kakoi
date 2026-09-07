@@ -1026,6 +1026,28 @@ fn init_takes_a_profile_name() {
 }
 
 #[test]
+fn init_narrows_an_existing_secrets_directory_to_0700() {
+    // The install instructions before `init` had the user make the directory by hand, where
+    // the usual umask leaves it 0755. `init` sets the mode on a `secrets/` that is already
+    // there, so following the current instructions does not leave a wide one behind
+    // (specification section 4.1).
+    let home = TempDir::new();
+    let secrets = home.path().join(".config/process-wrap/secrets");
+    std::fs::create_dir_all(&secrets).unwrap();
+    std::fs::set_permissions(&secrets, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let output = run(home.path(), ["init"]);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(
+        std::fs::metadata(&secrets).unwrap().permissions().mode() & 0o7777,
+        0o700,
+        "{report}"
+    );
+}
+
+#[test]
 fn init_rejects_a_bad_name_or_extra_arguments() {
     // `init` takes at most a NAME, and the NAME is one path component: anything else,
     // including an option or a command, is a usage diagnostic (specification section 4.1).
