@@ -81,13 +81,13 @@ Then, as you need them:
 - **Let an agent fit the profile to this machine.** [`skills/process-wrap-setup`](skills/process-wrap-setup)
   is an Agent Skill that proposes profile entries for the agent CLIs you have installed, a place
   for the shim, and `path-prepend` entries for replacement commands. Install it with your CLI's
-  own means, such as `gh skill install`. Run it outside the isolation — before the shim is on
-  `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`, or from a CLI not started through `process-wrap` —
-  because the configuration directory may not sit inside a writable mount item and an isolated
-  agent therefore cannot edit its own profile. The agent is not isolated while it runs, so run
-  your CLI in a mode that asks before writing, and check the skill for yourself: that each of
-  its "What to keep to" items is written there as an instruction, and that one trial shows you a
-  diff and asks for approval before the first write.
+  own means, such as `gh skill install ba0918/process-wrap process-wrap-setup`. Run it outside
+  the isolation — before the shim is on `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`, or from a CLI
+  not started through `process-wrap` — because the configuration directory may not sit inside a
+  writable mount item and an isolated agent therefore cannot edit its own profile. The agent is
+  not isolated while it runs, so run your CLI in a mode that asks before writing, and check the
+  skill for yourself: that each of its "What to keep to" items is written there as an
+  instruction, and that one trial shows you a diff and asks for approval before the first write.
 
 ## Usage
 
@@ -423,7 +423,8 @@ merge of `default.toml` under another profile, no policy files found from the cu
 no `--new-session`, no double isolation when nested, no aarch64, no protection of `.git/hooks`
 and `.git/config`, no shims for claude or opencode (write your own from
 [`examples/shim/codex`](examples/shim/codex)), no `init --force` (remove the file first), and no
-installer for the setup skill (use your agent CLI's own means, such as `gh skill install`).
+installer for the setup skill (use your agent CLI's own means, such as
+`gh skill install ba0918/process-wrap process-wrap-setup`).
 
 ## Specification
 
