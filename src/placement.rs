@@ -117,16 +117,21 @@ pub fn written_paths(expanded: &ExpandedPolicy, workspace: Option<&Path>) -> Wri
     }
 }
 
-/// The root-item check of specification section 5.6 on the scan `root`s and the
-/// `hide-mounts` `under`s (the roots first, then the `under`s, each in merged order), made
-/// before generation against `before_generation`, the written items with the replacement
-/// of section 5.4 applied to the written layers alone. An origin whose resolution
-/// referenced something inside a writable item must be the mount point of a writable item
-/// that lies in a root item: the origin itself is not mounted, so anything below a mount
-/// point could be renamed or re-pointed from inside the isolation, and the next start
-/// would walk an empty tree and hide no `.env` or mount. One expanded from a workspace
-/// variable inherits what the `--workspace` under check referenced. An origin that
-/// resolves to nothing is skipped and not at issue.
+/// The checks of specification section 5.6 on the scan `root`s and the `hide-mounts`
+/// `under`s (the roots first, then the `under`s, each in merged order), made before
+/// generation against `before_generation`, the written items with the replacement of
+/// section 5.4 applied to the written layers alone. An origin is first held to the link
+/// rule (`link_inside_writable`): its own resolution must follow no symbolic link inside a
+/// writable item, wherever it lands, since removing that link from inside the isolation
+/// makes the next start skip the origin and hide nothing under it. Only the origin's own
+/// resolution counts there: a reference inherited from the workspace is the workspace's
+/// own to fail on. Then the root-item check: an origin whose resolution referenced
+/// something inside a writable item must be the mount point of a writable item that lies
+/// in a root item, since the origin itself is not mounted, so anything below a mount point
+/// could be renamed or re-pointed from inside the isolation, and the next start would walk
+/// an empty tree and hide no `.env` or mount. One expanded from a workspace variable
+/// inherits what the `--workspace` under check referenced. The link rule's diagnostic wins
+/// when both apply. An origin that resolves to nothing is skipped and not at issue.
 pub fn check_origins(
     expanded: &ExpandedPolicy,
     before_generation: &ResolvedMounts,
@@ -155,6 +160,17 @@ pub fn check_origins(
         let Some(real) = facts.entry(path).path().map(Path::to_path_buf) else {
             continue;
         };
+        if let Some((link, holder)) = link_inside_writable(path, &writable, facts) {
+            return Err(Diagnostic::path(format!(
+                "{role} `{form}` at {} follows the symbolic link {} inside the `{}` item {}, \
+                 so the link could be removed from inside the isolation and the next start \
+                 would skip the origin and hide nothing under it",
+                path.display(),
+                link.display(),
+                directive_name(holder.directive),
+                holder.real.display()
+            )));
+        }
         let inherits = derived_from_workspace(variable_of(form));
         let Some(reference) = referenced_writable(path, inherits, workspace, &writable, facts)
         else {
@@ -364,21 +380,14 @@ fn check_written_paths(
 /// Removing that link from inside the isolation makes the next start skip the item, and
 /// what it hid shows through; a `hide` written as the real path follows no link, and a
 /// mount point one level deep cannot be renamed. Only the item's own resolution counts: a
-/// reference inherited from the workspace is the workspace's own to fail on. The first
-/// such link is named.
+/// reference inherited from the workspace is the workspace's own to fail on.
 fn check_hide_links(
     role: &str,
     item: &WrittenItem,
     writable: &[&ResolvedItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
-    let inside_writable = facts.traversed_links(&item.path).iter().find_map(|link| {
-        writable
-            .iter()
-            .find(|holder| link.starts_with(&holder.real))
-            .map(|holder| (link, holder))
-    });
-    match inside_writable {
+    match link_inside_writable(&item.path, writable, facts) {
         Some((link, holder)) => Err(Diagnostic::path(format!(
             "{role} follows the symbolic link {} inside the `{}` item {}, so the link could \
              be removed from inside the isolation and the next start would leave the target \
@@ -389,6 +398,22 @@ fn check_hide_links(
         ))),
         None => Ok(()),
     }
+}
+
+/// The first symbolic link the resolution of `path` followed that sits inside a writable
+/// item, with that item: what the link rule of specification section 5.6 for a written
+/// `hide` and for a scan origin names, since the link is what the user has to change.
+fn link_inside_writable<'a>(
+    path: &Path,
+    writable: &'a [&'a ResolvedItem],
+    facts: &'a MountFacts,
+) -> Option<(&'a Path, &'a ResolvedItem)> {
+    facts.traversed_links(path).iter().find_map(|link| {
+        writable
+            .iter()
+            .find(|holder| link.starts_with(&holder.real))
+            .map(|holder| (link.as_path(), *holder))
+    })
 }
 
 /// The further rule of specification section 5.6 for a written item that referenced

@@ -1282,23 +1282,13 @@ fn an_item_under_root_but_outside_dev_and_proc_is_accepted() {
 
 #[test]
 fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point() {
-    // A scan root is not mounted, so a root below an `rw` item (or behind a link inside
-    // one) can be renamed or re-pointed from inside the isolation, and the next start
-    // walks an empty tree and hides no `.env`. The mount point of an `rw` item itself
-    // cannot be renamed, and a root that referenced nothing writable is not at issue. The
-    // diagnostic names the root and the `rw` item it resolved through.
+    // A scan root is not mounted, so a root below an `rw` item can be renamed from inside
+    // the isolation, and the next start walks an empty tree and hides no `.env`. The mount
+    // point of an `rw` item itself cannot be renamed, and a root that referenced nothing
+    // writable is not at issue. The diagnostic names the root and the `rw` item it
+    // resolved through. (A root behind a link inside `rw` is the link rule's, above.)
     let through_b = &["/", "/home", "/home/u", "/home/u/b"];
     for (name, profile, facts, mentions) in [
-        (
-            "a link inside rw pointed at a place that is no item",
-            "[mounts]\nrw = [\"~/a\"]\n[[mounts.scan]]\nroot = \"~/a/link\"\nnames = [\".env\"]",
-            host()
-                .dir("/home/u/a")
-                .link_to_dir("/home/u/a/link", WORKTREE)
-                .links_traversed("/home/u/a/link", &["/home/u/a/link"])
-                .directories_visited("/home/u/a/link", &["/", "/home", "/home/u", "/home/u/a"]),
-            Some(&["/home/u/a/link", "/home/u/a"][..]),
-        ),
         (
             "a real directory below rw",
             "[mounts]\nrw = [\"~/b\"]\n[[mounts.scan]]\nroot = \"~/b/tree\"\nnames = [\".env\"]",
@@ -1341,6 +1331,116 @@ fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point(
             None => assert!(result.is_ok(), "{name}: {result:?}"),
         }
     }
+}
+
+#[test]
+fn a_scan_origin_following_a_link_inside_a_writable_item_is_rejected_wherever_it_lands() {
+    // A scan `root` or a `hide-mounts` `under` written as a link inside `rw` is skipped by
+    // the next start once the link is removed from inside the isolation, and nothing under
+    // it is hidden. That holds even where it lands on the mount point of `rw ~/b`, which
+    // the mount-point rule alone would let through. The diagnostic names the origin and
+    // the link followed; the mount point written as its real path, and the worktree, which
+    // follow no link, pass.
+    let through_a = &["/", "/home", "/home/u", "/home/u/a"];
+    let two_roots = "[mounts]\nrw = [\"~/a\", \"~/b\"]\n";
+    let link_to_b = || {
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .link_to_dir("/home/u/a/link", "/home/u/b")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/a/link", through_a)
+    };
+    for (name, profile, facts, mentions) in [
+        (
+            "a root through a link inside rw landing on the mount point of another rw",
+            format!("{two_roots}[[mounts.scan]]\nroot = \"~/a/link\"\nnames = [\".env\"]"),
+            link_to_b(),
+            Some(&["/home/u/a/link"][..]),
+        ),
+        (
+            "an under through a link inside rw landing on the mount point of another rw",
+            format!("{two_roots}[[mounts.hide-mounts]]\nunder = \"~/a/link\"\nfstype = [\"9p\"]"),
+            link_to_b(),
+            Some(&["/home/u/a/link"][..]),
+        ),
+        (
+            "a root that is no link itself but follows one inside rw",
+            format!("{two_roots}[[mounts.scan]]\nroot = \"~/x\"\nnames = [\".env\"]"),
+            link_to_b()
+                .link_to_dir("/home/u/x", "/home/u/b")
+                .links_traversed("/home/u/x", &["/home/u/x", "/home/u/a/link"])
+                .directories_visited("/home/u/x", through_a),
+            Some(&["/home/u/x", "/home/u/a/link"][..]),
+        ),
+        (
+            "the mount point of rw itself",
+            format!("{two_roots}[[mounts.scan]]\nroot = \"~/b\"\nnames = [\".env\"]"),
+            host()
+                .dir("/home/u/a")
+                .dir("/home/u/b")
+                .directories_visited("/home/u/b", &["/", "/home", "/home/u"]),
+            None,
+        ),
+        (
+            "the worktree, referencing nothing writable",
+            format!("{two_roots}[[mounts.scan]]\nroot = \"${{worktree}}\"\nnames = [\".env\"]"),
+            host()
+                .dir("/home/u/a")
+                .dir("/home/u/b")
+                .directories_visited(WORKTREE, &["/", "/home", "/home/u"]),
+            None,
+        ),
+    ] {
+        let result = check(
+            &layers(&profile, None, &[], &[]),
+            &variables(),
+            facts,
+            WORKTREE,
+        );
+
+        match mentions {
+            Some(mentions) => {
+                let diagnostic = result.expect_err(name);
+                assert_eq!(diagnostic.kind(), Kind::Path, "{name}: {diagnostic}");
+                assert_path_diagnostic(&diagnostic, mentions);
+            }
+            None => assert!(result.is_ok(), "{name}: {result:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_scan_origin_that_fails_both_rules_names_the_followed_link() {
+    // `root = "~/x"` with `~/x -> ~/a/link/y` and `~/a/link -> ~/vault`: the root lands
+    // outside every writable item and is no mount point (the mount-point rule) and follows
+    // a link inside `rw ~/a` (the link rule). The link rule's diagnostic is the one shown,
+    // since the link it names is what the user has to change, so `~/a/link` appears though
+    // it is no prefix of the root's own path.
+    let given = "/home/u/x";
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\"]\n[[mounts.scan]]\nroot = \"~/x\"\nnames = [\".env\"]",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir_with_ancestors("/home/u/vault/y")
+            .link_to_dir("/home/u/a/link", "/home/u/vault")
+            .link_to_dir(given, "/home/u/vault/y")
+            .links_traversed(given, &[given, "/home/u/a/link"])
+            .directories_visited(
+                given,
+                &["/", "/home", "/home/u", "/home/u/a", "/home/u/vault"],
+            ),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[given, "/home/u/a/link"]);
 }
 
 #[test]
