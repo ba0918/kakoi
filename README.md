@@ -24,21 +24,77 @@ carry them.
 cargo install --path .
 ```
 
-Then put a profile in place. The bundled [`examples/profile/default.toml`](examples/profile/default.toml)
-is written for WSL2 and is a good starting point:
-
-```sh
-mkdir -p ~/.config/process-wrap/profile ~/.config/process-wrap/secrets
-cp examples/profile/default.toml ~/.config/process-wrap/profile/default.toml
-```
-
 `bwrap` must be on `PATH`; on Debian and Ubuntu it is the `bubblewrap` package.
+
+That is the whole installation. With no profile written anywhere, `process-wrap -- COMMAND`
+starts on the built-in default: the bundled [`examples/profile/default.toml`](examples/profile/default.toml),
+compiled into the binary. Where the plan would name the profile file it then says
+`process-wrap init` instead. Two things are empty on a machine you have just installed on:
+`/tmp` is replaced by an empty directory and the shared `/tmp/process-wrap` does not exist yet,
+so nothing passes through `/tmp` until you or your shim creates it; and `~/.config/gh` is hidden,
+so a `gh` inside the isolation is not authenticated.
+
+The configuration directory is `$XDG_CONFIG_HOME/process-wrap` when that variable holds an
+absolute path and `~/.config/process-wrap` otherwise. The built-in default is used whenever
+`profile/default.toml` is simply not there — including while `XDG_CONFIG_HOME` points into
+dotfiles you have not cloned yet on a new machine. Anything else in the way, such as a broken
+symbolic link or a regular file where a directory belongs, stops the launch with a `policy`
+diagnostic instead, so a profile that broke is never quietly replaced by the wider default. A
+profile named with `--profile NAME` never falls back either.
+
+Then, as you need them:
+
+- **Write the boundary out and edit it.** `process-wrap init` writes the built-in default to
+  `<configuration directory>/profile/default.toml`, creates `profile/` and `secrets/` (mode
+  0700) and any missing ancestor beside it, and prints the path of the file it wrote:
+
+  ```sh
+  $EDITOR "$(process-wrap init)"
+  ```
+
+  It refuses to replace anything already at that name and has no `--force`: remove the file
+  first if you want it back. `process-wrap init NAME` writes `profile/NAME.toml`, which
+  `--profile NAME` then selects.
+
+- **Read what the default gives you.** It is written for WSL2: it hides the Windows drives under
+  `/mnt`, `/run/WSL`, `/tmp`, `/run/user`, and the usual credential directories, opens the
+  workspace and the worktree for writing, and drops the credential-shaped environment variables.
+  Read the file `init` wrote, or run `process-wrap --print-plan -- true` to see what it makes of
+  the machine you are on.
+
+- **Pass a GitHub token.** Uncomment the `secrets` line in the profile `init` wrote and put the
+  token in `<configuration directory>/secrets/gh-token`, one line. `secrets/` is always hidden
+  inside the isolation, so the file cannot be read from in there; the value arrives as the
+  environment variable named on the left of the line.
+
+- **Wrap codex.** Copy [`examples/shim/codex`](examples/shim/codex) to a directory that comes
+  before the real codex on your `PATH` and make it executable. It classifies the invocation,
+  inserts codex's own sandbox-bypass flag into the forms that run the agent, copies `--cd` to
+  `--workspace` and `--add-dir` to `--rw`, creates `/tmp/process-wrap`, and executes
+  `process-wrap`. `PROCESS_WRAP_SHIM_OFF=1` runs the real codex instead, under its own sandbox.
+  It is a template, not part of the product, so check it yourself after a codex upgrade: that
+  every subcommand of `codex --help` is in one of its two lists; that running an isolated form
+  with `--print-plan` shows the `--workspace` and `--rw` it copied; and that with
+  `PROCESS_WRAP_SHIM_OFF=1` no `process-wrap` is started. Write your own shim for another CLI
+  from this one.
+
+- **Let an agent fit the profile to this machine.** [`skills/process-wrap-setup`](skills/process-wrap-setup)
+  is an Agent Skill that proposes profile entries for the agent CLIs you have installed, a place
+  for the shim, and `path-prepend` entries for replacement commands. Install it with your CLI's
+  own means, such as `gh skill install`. Run it outside the isolation — before the shim is on
+  `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`, or from a CLI not started through `process-wrap` —
+  because the configuration directory may not sit inside a writable mount item and an isolated
+  agent therefore cannot edit its own profile. The agent is not isolated while it runs, so run
+  your CLI in a mode that asks before writing, and check the skill for yourself: that each of
+  its "What to keep to" items is written there as an instruction, and that one trial shows you a
+  diff and asks for approval before the first write.
 
 ## Usage
 
 ```
 process-wrap [OPTIONS] -- COMMAND [ARGS]...
 process-wrap [OPTIONS] --print-plan [-- COMMAND [ARGS]...]
+process-wrap init [NAME]
 process-wrap --version
 process-wrap --help
 ```
@@ -52,6 +108,7 @@ process-wrap --help
 | `--hide PATH` | A `hide` directive on the command-line layer. Repeatable. |
 | `--print-plan` | Print the plan and exit without running the command. |
 | `--version`, `--help` | Print the version or the usage. Each is used alone. |
+| `init [NAME]` | Write the built-in default to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. Used alone; see [Install](#install). |
 
 Everything after `--` is the command and its arguments, passed through unchanged. Relative paths
 given on the command line are taken from the current directory; `~` and variables are not
@@ -270,8 +327,11 @@ two: the isolation mounts those itself, and an item there would cover its view (
 
 The case that meets this most often is dotfiles: the configuration directory's real location is
 inside the dotfiles worktree, so `rw = ["${worktree}"]` would put the profile inside a writable
-area. Write the profile for that repository like this instead, and point `--workspace` at the
-subdirectory you actually work in:
+area. Keeping it there is fine in itself — `process-wrap init` follows a link at the
+configuration directory and writes at its target, which is how the directory comes to live in
+dotfiles at all — and what this check refuses is having that target inside a writable item of the
+same launch. Write the profile for that repository like this instead, and point `--workspace` at
+the subdirectory you actually work in:
 
 ```toml
 [mounts]
@@ -357,9 +417,10 @@ item written by its real path, such as `rw = ["~/work"]` with `~/work -> ~/data/
 
 No cgroup limits, no per-domain network allowance, no removal operator in the merge, no automatic
 merge of `default.toml` under another profile, no policy files found from the current directory,
-no `--new-session`, no double isolation when nested, no aarch64, no built-in default policy, no
-protection of `.git/hooks` and `.git/config`, and no shims for particular tools: those are written
-in your own dotfiles with `--profile`, `--workspace`, and `--rw`.
+no `--new-session`, no double isolation when nested, no aarch64, no protection of `.git/hooks`
+and `.git/config`, no shims for claude or opencode (write your own from
+[`examples/shim/codex`](examples/shim/codex)), no `init --force` (remove the file first), and no
+installer for the setup skill (use your agent CLI's own means, such as `gh skill install`).
 
 ## Specification
 

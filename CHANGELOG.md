@@ -38,3 +38,25 @@
   the plan, or stops the launch with `path` when that `ro` item could be re-pointed from inside;
   a `hide-mounts` with an unreadable mount list stops with `path`; skipped scan roots,
   `hide-mounts` `under`s, and `path-prepend` entries are shown in the plan with the reason.
+- The bundled profile is compiled into the binary as the built-in default, so `process-wrap --
+  COMMAND` works with nothing written to the configuration directory. It stands in for the global
+  scope only when `--profile` is `default` and `profile/default.toml` is not there at all; a
+  broken link or a regular file in the way is a `policy` diagnostic instead, and a named profile
+  never falls back. The plan names it with the string `process-wrap init`.
+- Added `process-wrap init [NAME]`, which writes the built-in default to `profile/NAME.toml`
+  (`default` when the name is left out), creating the configuration directory, its missing
+  ancestors, `profile/`, and `secrets/` (mode 0700), and printing the path it wrote. It refuses
+  to replace anything already at that name and has no `--force`. It is the only form that writes,
+  and it checks the grammar and the home directory only, so it works without `bwrap` and inside
+  an isolation.
+- A configuration directory that does not exist leaves `${config_dir}` without a value, so items
+  written with it are skipped with the reason shown in the plan, and it is not held to the
+  placement checks; one that exists but cannot be followed to a directory is a `path` diagnostic.
+- Added `examples/shim/codex`, a template shim that classifies codex invocations, inserts codex's
+  sandbox-bypass flag into the isolated ones, copies `--cd` to `--workspace` and `--add-dir` to
+  `--rw`, and executes `process-wrap`; `PROCESS_WRAP_SHIM_OFF=1` runs the real codex instead.
+- Added `skills/process-wrap-setup/SKILL.md`, an Agent Skill that proposes the machine-specific
+  parts of a profile, the shim's place, and `path-prepend` entries, and that shows a diff and
+  waits for approval before writing.
+- The bundled profile's `secrets` entry is commented out, so a start on the built-in default does
+  not warn about a secret file nobody has placed.
