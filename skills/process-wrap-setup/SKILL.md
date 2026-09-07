@@ -37,8 +37,12 @@ mode that asks for approval before a write.
    built-in default already has before proposing more; say which of them do not apply to
    this machine.
 2. **Propose where the codex shim goes.** The template is `examples/shim/codex` in the
-   `process-wrap` repository. Propose a directory on `PATH` that comes before the real
-   codex, ask the user to confirm it, and show the copy as a diff before writing.
+   `process-wrap` source tree, which an installed skill does not carry beside it. Ask the
+   user where that source tree is — the directory `cargo install --path` was run from, or
+   a clone they made — and read the template from there. If they have none, say so and
+   stop; do not write a shim from memory. Then propose a directory on `PATH` that comes
+   before the real codex, ask the user to confirm it, and show the copy as a diff before
+   writing.
 3. **Propose `path-prepend` entries for replacement commands.** Some host commands stop
    working inside the isolation because the profile hides the socket or the drive they
    need. Where a stand-in exists, propose a directory holding it in
