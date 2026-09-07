@@ -41,6 +41,7 @@ pub enum Parsed {
     about = "Run a command inside a bubblewrap mount namespace shaped by a layered policy.",
     override_usage = "process-wrap [OPTIONS] -- COMMAND [ARGS]...\n       \
                       process-wrap [OPTIONS] --print-plan [-- COMMAND [ARGS]...]\n       \
+                      process-wrap init [NAME]\n       \
                       process-wrap --version\n       \
                       process-wrap --help",
     color = clap::ColorChoice::Never,
