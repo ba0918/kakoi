@@ -250,9 +250,9 @@ Three rules refine this:
   mount point cannot be renamed). The diagnostic names the path, the link followed, and the
   reason.
 - A scan `root` or a `hide-mounts` `under` whose path passes through a writable item without
-  following a link must be the mount point of an `rw` item itself, not a directory below it: the
-  root is not mounted, so a subdirectory can be renamed from inside and the next launch scans an
-  empty tree and hides nothing.
+  following a link inside one must be the mount point of an `rw` item itself, not a directory
+  below it: the root is not mounted, so a subdirectory can be renamed from inside and the next
+  launch scans an empty tree and hides nothing.
 
 In short: the path of a link you placed inside an `rw` area stops the launch when written as
 `hide`, as a scan `root`, or as a `hide-mounts` `under`, wherever it lands, and when written as
