@@ -41,6 +41,10 @@ pub struct Diagnostic {
 /// `\r`, and `\t` for the usual three, `\xNN` for the rest. A value taken from the command
 /// line or a policy file then cannot split a line or reach the terminal as a control
 /// sequence (specification section 13). Unicode line separators are left as they are.
+pub fn is_control_character(character: char) -> bool {
+    matches!(character, '\x00'..='\x1f' | '\x7f')
+}
+
 pub fn escape_control(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
@@ -48,7 +52,7 @@ pub fn escape_control(text: &str) -> String {
             '\n' => escaped.push_str("\\n"),
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
-            '\x00'..='\x1f' | '\x7f' => {
+            character if is_control_character(character) => {
                 escaped.push_str(&format!("\\x{:02X}", character as u32));
             }
             _ => escaped.push(character),

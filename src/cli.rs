@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser};
 
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{is_control_character, Diagnostic};
 
 /// The profile of the global scope when `--profile` is omitted (specification
 /// section 4.1). Only this name falls back to the built-in default (section 5.3).
@@ -231,10 +231,16 @@ fn has_end_of_options(arguments: &[OsString]) -> bool {
     arguments.iter().any(|argument| argument == "--")
 }
 
-/// Whether `name` is one path component: not empty, without `/`, and neither `.` nor `..`
-/// (specification section 4.1).
+/// Whether `name` is one path component: not empty, without `/` and without a control
+/// character, and neither `.` nor `..` (specification section 4.1). A control character is
+/// refused because the path `init` writes is printed as it stands, unescaped, so a newline
+/// in the name would break the one line the output is (section 13).
 fn is_single_path_component(name: &str) -> bool {
-    !name.is_empty() && !name.contains('/') && name != "." && name != ".."
+    !name.is_empty()
+        && !name.contains('/')
+        && !name.chars().any(is_control_character)
+        && name != "."
+        && name != ".."
 }
 
 fn anchor_all(paths: Vec<PathBuf>, current_dir: &Path) -> Vec<PathBuf> {

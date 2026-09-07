@@ -47,7 +47,9 @@
   (`default` when the name is left out), creating the configuration directory, its missing
   ancestors, `profile/`, and `secrets/` (mode 0700, narrowing a `secrets/` that is already there
   to that mode), and printing the path it wrote. It refuses
-  to replace anything already at that name and has no `--force`. It is the only form that writes,
+  to replace anything already at that name and has no `--force`. `NAME` is one path component
+  without a control character, the constraint `--profile` carries too, so the path it prints
+  stays the one line it is documented to be. It is the only form that writes,
   and it checks the grammar and the home directory only, so it works without `bwrap` and inside
   an isolation.
 - A configuration directory that does not exist leaves `${config_dir}` without a value, so items

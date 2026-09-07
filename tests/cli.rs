@@ -169,7 +169,7 @@ fn command_is_passed_through_unresolved() {
 fn a_profile_name_that_is_not_a_single_path_component_is_a_usage_diagnostic() {
     let home = TempDir::new();
 
-    for name in ["", "a/b", ".", ".."] {
+    for name in ["", "a/b", ".", "..", "a\nb"] {
         let output = run(home.path(), ["--profile", name, "--", "true"]);
 
         assert_diagnostic(&output, 125, "usage");
@@ -1049,10 +1049,12 @@ fn init_narrows_an_existing_secrets_directory_to_0700() {
 
 #[test]
 fn init_rejects_a_bad_name_or_extra_arguments() {
-    // `init` takes at most a NAME, and the NAME is one path component: anything else,
-    // including an option or a command, is a usage diagnostic (specification section 4.1).
+    // `init` takes at most a NAME, and the NAME is one path component without a control
+    // character: anything else, including an option or a command, is a usage diagnostic
+    // (specification section 4.1).
     for arguments in [
         ["init", "../x"].as_slice(),
+        &["init", "a\nb"],
         &["init", "--", "sh"],
         &["init", "--print-plan"],
     ] {
