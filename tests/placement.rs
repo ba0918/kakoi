@@ -1286,7 +1286,7 @@ fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point(
     // the isolation, and the next start walks an empty tree and hides no `.env`. The mount
     // point of an `rw` item itself cannot be renamed, and a root that referenced nothing
     // writable is not at issue. The diagnostic names the root and the `rw` item it
-    // resolved through. (A root behind a link inside `rw` is the link rule's, above.)
+    // resolved through. (A root behind a link inside `rw` is the link rule's, below.)
     let through_b = &["/", "/home", "/home/u", "/home/u/b"];
     for (name, profile, facts, mentions) in [
         (
