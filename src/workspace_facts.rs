@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::environment::RealEntry;
+use crate::environment::{PathState, RealEntry};
 use crate::regular_file::{read_regular_file, Links, ReadError};
 use crate::variables::{
     core_worktree, worktree_marker, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
@@ -22,6 +22,36 @@ pub fn real_entry(path: &Path) -> RealEntry {
         Ok(_) => RealEntry::NotDirectory(real),
         Err(_) => RealEntry::Missing,
     }
+}
+
+/// What is at `path` itself: nothing by that name, something that exists but reaches no
+/// real path, or the real entry behind it.
+pub fn entry_state(path: &Path) -> PathState {
+    if fs::symlink_metadata(path).is_err() {
+        return PathState::Absent;
+    }
+    match real_entry(path) {
+        RealEntry::Missing => PathState::Broken,
+        RealEntry::Directory(real) => PathState::Directory(real),
+        RealEntry::NotDirectory(real) => PathState::NotDirectory(real),
+    }
+}
+
+/// The state of `path` with its components looked at from the root: the first component
+/// that fails decides (specification section 5.3). Only a component that does not exist by
+/// name makes the whole path absent; a dangling link or a regular file where a directory
+/// must be makes it broken.
+pub fn probe_path(path: &Path) -> PathState {
+    let mut ancestors: Vec<&Path> = path.ancestors().skip(1).collect();
+    ancestors.reverse();
+    for ancestor in ancestors {
+        match entry_state(ancestor) {
+            PathState::Directory(_) => {}
+            PathState::Absent => return PathState::Absent,
+            PathState::Broken | PathState::NotDirectory(_) => return PathState::Broken,
+        }
+    }
+    entry_state(path)
 }
 
 /// Reads the facts for `workspace`.

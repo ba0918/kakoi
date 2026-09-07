@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
-use crate::environment::RealEntry;
+use crate::environment::{PathState, RealEntry};
 
 /// What an entry git creates (a directory's `.git`, the `HEAD` of a common dir) is, looked
 /// at without following symbolic links.
@@ -68,7 +68,8 @@ pub struct Variables {
     pub workspace: PathBuf,
     pub worktree: PathBuf,
     pub git_common_dir: Option<PathBuf>,
-    pub config_dir: PathBuf,
+    /// None when the configuration directory does not exist (specification section 5.2).
+    pub config_dir: Option<PathBuf>,
 }
 
 /// The first ancestor whose `.git` is a directory or a regular file, if any.
@@ -111,12 +112,27 @@ pub fn core_worktree(config: &str) -> Option<String> {
 /// Derives the variables, or the diagnostic that stops the run. `config_dir` is what the
 /// outer layer found behind the configuration directory.
 pub fn derive_variables(
-    config_dir: &RealEntry,
+    config_dir: &PathState,
     facts: &WorkspaceFacts,
 ) -> Result<Variables, Diagnostic> {
-    let config_dir = config_dir
-        .path()
-        .ok_or_else(|| Diagnostic::path("the configuration directory has no real path"))?;
+    // A configuration directory that is not there leaves `${config_dir}` without a value;
+    // one that is there but reaches no directory of its own stops the run (specification
+    // section 5.2).
+    let config_dir = match config_dir {
+        PathState::Absent => None,
+        PathState::Directory(path) => Some(path.clone()),
+        PathState::Broken => {
+            return Err(Diagnostic::path(
+                "the configuration directory exists but has no real path",
+            ))
+        }
+        PathState::NotDirectory(path) => {
+            return Err(Diagnostic::path(format!(
+                "the configuration directory {} is not a directory",
+                path.display()
+            )))
+        }
+    };
     let workspace = match &facts.workspace {
         RealEntry::Directory(path) => path.clone(),
         RealEntry::NotDirectory(path) => {
@@ -138,7 +154,7 @@ pub fn derive_variables(
         workspace,
         worktree,
         git_common_dir,
-        config_dir: config_dir.to_path_buf(),
+        config_dir,
     })
 }
 

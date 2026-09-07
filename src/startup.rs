@@ -22,7 +22,7 @@ use crate::plan::{
 };
 use crate::secret_facts::read_secret_files;
 use crate::variables::derive_variables;
-use crate::workspace_facts::{collect_workspace_facts, real_entry};
+use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 
 /// What the start-up ends with: text to print (the usage or the version), a nested run
 /// that goes straight to the command, or everything the start needs.
@@ -91,14 +91,20 @@ where
         .clone()
         .unwrap_or_else(|| current_dir.clone());
     let facts = collect_workspace_facts(&workspace);
-    let variables = derive_variables(&real_entry(&config_dir), &facts)?;
+    let variables = derive_variables(&probe_path(&config_dir), &facts)?;
+    // A configuration directory that does not exist is not a protected path
+    // (specification section 5.6).
+    let protected_config_dir = variables
+        .config_dir
+        .is_some()
+        .then_some(config_dir.as_path());
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
     let expanded = expand_policy(&policy, &variables, &home);
     let wanted = candidates(
         &expanded,
         &layers,
         &variables,
-        &config_dir,
+        protected_config_dir,
         invocation.workspace.as_deref(),
     );
     let facts = IsolationFacts {
@@ -111,7 +117,7 @@ where
         expanded: &expanded,
         variables: &variables,
         home: &home,
-        config_dir: &config_dir,
+        config_dir: protected_config_dir,
         workspace: invocation.workspace.as_deref(),
         current_dir: &current_dir,
         host: &host,

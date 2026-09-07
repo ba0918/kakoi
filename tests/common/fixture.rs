@@ -34,7 +34,7 @@ pub fn variables() -> Variables {
         workspace: PathBuf::from(WORKTREE),
         worktree: PathBuf::from(WORKTREE),
         git_common_dir: Some(PathBuf::from(WORKTREE).join(".git")),
-        config_dir: PathBuf::from(CONFIG_DIR),
+        config_dir: Some(PathBuf::from(CONFIG_DIR)),
     }
 }
 
@@ -231,7 +231,7 @@ pub fn xdg_profile_layer(text: &str) -> Layer {
 /// The variables with the configuration directory outside the home.
 pub fn xdg_variables() -> Variables {
     Variables {
-        config_dir: PathBuf::from(XDG_CONFIG_DIR),
+        config_dir: Some(PathBuf::from(XDG_CONFIG_DIR)),
         ..variables()
     }
 }

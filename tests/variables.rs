@@ -5,11 +5,11 @@ mod common;
 
 use common::TempDir;
 use process_wrap::diagnostic::Kind;
-use process_wrap::environment::{HomeDirectory, HostEnvironment, RealEntry};
+use process_wrap::environment::{HomeDirectory, HostEnvironment, PathState, RealEntry};
 use process_wrap::variables::{
     derive_variables, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
-use process_wrap::workspace_facts::{collect_workspace_facts, real_entry};
+use process_wrap::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 
 /// The checked home directory `/home/u`.
 fn home() -> HomeDirectory {
@@ -22,8 +22,8 @@ fn home() -> HomeDirectory {
 }
 
 /// The configuration directory under that home, as found on disk.
-fn config_dir() -> RealEntry {
-    RealEntry::Directory(PathBuf::from("/home/u/.config/process-wrap"))
+fn config_dir() -> PathState {
+    PathState::Directory(PathBuf::from("/home/u/.config/process-wrap"))
 }
 
 fn ancestor(path: &str, dot_git: GitEntry) -> Ancestor {
@@ -390,22 +390,28 @@ fn a_checked_home_is_the_real_path_of_home() {
 }
 
 #[test]
-fn a_config_dir_without_a_real_path_is_a_path_diagnostic() {
-    let diagnostic = derive_variables(
-        &RealEntry::Missing,
-        &facts(
-            [
-                GitEntry::Absent,
-                GitEntry::Directory,
-                GitEntry::Absent,
-                GitEntry::Absent,
-            ],
-            None,
-        ),
+fn a_broken_configuration_directory_is_a_path_diagnostic() {
+    // A configuration directory that exists but cannot be followed to a directory of its
+    // own stops the run; only a name that does not exist leaves `${config_dir}` without a
+    // value (specification section 5.2).
+    let under_git = facts(
+        [
+            GitEntry::Absent,
+            GitEntry::Directory,
+            GitEntry::Absent,
+            GitEntry::Absent,
+        ],
+        None,
+    );
+    let broken_link = derive_variables(&PathState::Broken, &under_git).unwrap_err();
+    let regular_file = derive_variables(
+        &PathState::NotDirectory(PathBuf::from("/home/u/.config/process-wrap")),
+        &under_git,
     )
     .unwrap_err();
 
-    assert_eq!(diagnostic.kind(), Kind::Path);
+    assert_eq!(broken_link.kind(), Kind::Path);
+    assert_eq!(regular_file.kind(), Kind::Path);
 }
 
 #[test]
@@ -434,11 +440,14 @@ fn the_config_dir_follows_xdg_config_home() {
         None,
     );
     let variables = derive_variables(
-        &RealEntry::Directory(PathBuf::from("/real/xdg/process-wrap")),
+        &PathState::Directory(PathBuf::from("/real/xdg/process-wrap")),
         &repository,
     )
     .unwrap();
-    assert_eq!(variables.config_dir, Path::new("/real/xdg/process-wrap"));
+    assert_eq!(
+        variables.config_dir.as_deref(),
+        Some(Path::new("/real/xdg/process-wrap"))
+    );
 }
 
 /// Runs git in `cwd` with the developer's own configuration shut out.
@@ -462,10 +471,10 @@ fn git(cwd: &Path, arguments: &[&str]) {
     );
 }
 
-fn real_config_dir(home: &TempDir) -> RealEntry {
+fn real_config_dir(home: &TempDir) -> PathState {
     let config_dir = home.path().join(".config/process-wrap");
     std::fs::create_dir_all(&config_dir).unwrap();
-    real_entry(&config_dir)
+    probe_path(&config_dir)
 }
 
 #[test]
@@ -588,14 +597,14 @@ fn the_config_dir_variable_is_the_real_path() {
     assert_eq!(config_dir, real_home.join("link/process-wrap"));
 
     let variables = derive_variables(
-        &real_entry(&config_dir),
+        &probe_path(&config_dir),
         &collect_workspace_facts(&workspace),
     )
     .unwrap();
 
     assert_eq!(
         variables.config_dir,
-        real_home.join("dotfiles/config/process-wrap")
+        Some(real_home.join("dotfiles/config/process-wrap"))
     );
 }
 

@@ -921,7 +921,7 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
         &expanded,
         &layers,
         &variables(),
-        Path::new(CONFIG_DIR),
+        Some(Path::new(CONFIG_DIR)),
         Some(Path::new("/home/u/given/ws")),
     );
 

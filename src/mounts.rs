@@ -85,7 +85,7 @@ pub fn expand(path: &PolicyPath, variables: &Variables, home: &HomeDirectory) ->
                 Variable::Workspace => Some(variables.workspace.as_path()),
                 Variable::Worktree => Some(variables.worktree.as_path()),
                 Variable::GitCommonDir => variables.git_common_dir.as_deref(),
-                Variable::ConfigDir => Some(variables.config_dir.as_path()),
+                Variable::ConfigDir => variables.config_dir.as_deref(),
             };
             match value {
                 Some(value) => (value, rest),
@@ -185,7 +185,7 @@ pub fn candidates(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
     variables: &Variables,
-    config_dir: &Path,
+    config_dir: Option<&Path>,
     workspace: Option<&Path>,
 ) -> Candidates {
     let mut paths = Vec::new();
@@ -207,7 +207,7 @@ pub fn candidates(
             LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.as_path()),
             LayerOrigin::CommandLine => None,
         })
-        .chain(std::iter::once(config_dir))
+        .chain(config_dir)
         .chain(expanded.secrets.values().filter_map(Expansion::path))
         .chain(
             expanded
@@ -235,7 +235,9 @@ pub fn candidates(
             .chain(workspace)
             .map(Path::to_path_buf),
     );
-    paths.push(variables.config_dir.join("secrets"));
+    if let Some(config_dir) = &variables.config_dir {
+        paths.push(config_dir.join("secrets"));
+    }
     paths.sort();
     paths.dedup();
     traversals.sort();
@@ -718,12 +720,14 @@ fn secret_items(
             ));
         }
     }
-    let config_secrets = variables.config_dir.join("secrets");
-    generated.extend(hidden(
-        &config_secrets,
-        ItemOrigin::ConfigSecrets,
-        facts.entry(&config_secrets),
-    ));
+    if let Some(config_dir) = &variables.config_dir {
+        let config_secrets = config_dir.join("secrets");
+        generated.extend(hidden(
+            &config_secrets,
+            ItemOrigin::ConfigSecrets,
+            facts.entry(&config_secrets),
+        ));
+    }
     generated
 }
 

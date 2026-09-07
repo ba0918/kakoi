@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::fixture::{
-    home, layers, merged, variables, variables_without_git, Facts, CONFIG_DIR, POLICY_FILE,
-    PROFILE, WORKTREE,
+    command_line_layer, home, layers, merged, policy_file_layer, variables, variables_without_git,
+    Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
 use process_wrap::command::{command_candidates, resolve_command};
@@ -23,6 +23,7 @@ use process_wrap::plan::{
     ResolvedCommand,
 };
 use process_wrap::policy::NetworkMode;
+use process_wrap::variables::Variables;
 
 /// Writes an executable script at `relative` under `dir`.
 fn executable(dir: &TempDir, relative: &str) -> PathBuf {
@@ -250,7 +251,7 @@ fn isolation_with(
         expanded: &expanded,
         variables: &variables,
         home: &home,
-        config_dir: Path::new(CONFIG_DIR),
+        config_dir: Some(Path::new(CONFIG_DIR)),
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
@@ -413,7 +414,13 @@ fn a_scan_root_or_hide_mounts_under_with_a_valueless_variable_is_skipped_and_rep
     let layers = layers(profile, Some(""), &[], &[]);
     let expanded = expand_policy(&merged(&layers), &variables, &home());
 
-    let wanted = candidates(&expanded, &layers, &variables, Path::new(CONFIG_DIR), None);
+    let wanted = candidates(
+        &expanded,
+        &layers,
+        &variables,
+        Some(Path::new(CONFIG_DIR)),
+        None,
+    );
     assert!(wanted.scans.is_empty(), "{:?}", wanted.scans);
     assert!(
         wanted.hide_mounts_under.is_empty(),
@@ -1050,4 +1057,59 @@ fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
         .output()
         .unwrap();
     assert_diagnostic(&home_alone, 125, "path");
+}
+
+#[test]
+fn a_missing_configuration_directory_leaves_config_dir_valueless() {
+    // Nothing exists at the configuration directory, so `${config_dir}` has no value: the
+    // `ro` item written with it is skipped with a reason (specification section 5.2), the
+    // configuration directory is not a protected path, so `rw ~/.config` does not stop the
+    // run (section 5.6), and no `hide` is generated for its `secrets/` (section 6.3).
+    let variables = Variables {
+        config_dir: None,
+        ..variables()
+    };
+    let layers = vec![
+        policy_file_layer(
+            "[mounts]\nrw = [\"${worktree}\", \"~/.config\"]\nro = [\"${config_dir}/x\"]\n",
+        ),
+        command_line_layer(&[], &[]),
+    ];
+    let policy = merged(&layers);
+    let home = home();
+    let expanded = expand_policy(&policy, &variables, &home);
+    let inputs = Inputs {
+        layers: &layers,
+        policy: &policy,
+        expanded: &expanded,
+        variables: &variables,
+        home: &home,
+        config_dir: None,
+        workspace: None,
+        current_dir: Path::new(WORKTREE),
+        host: &BTreeMap::new(),
+    };
+    let facts = IsolationFacts {
+        mounts: Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .dir_with_ancestors("/home/u/.config")
+            .file_with_ancestors(POLICY_FILE)
+            .mount_facts(),
+        secrets: BTreeMap::new(),
+    };
+
+    let isolation = resolve_isolation(&inputs, &facts).unwrap();
+
+    assert_eq!(isolation.mounts.skipped.len(), 1, "{:?}", isolation.mounts);
+    assert_eq!(isolation.mounts.skipped[0].directive, Directive::Ro);
+    assert!(!isolation.mounts.skipped[0].reason.is_empty());
+    assert!(
+        !isolation
+            .mounts
+            .items
+            .iter()
+            .any(|item| item.origin == ItemOrigin::ConfigSecrets),
+        "{:?}",
+        isolation.mounts.items
+    );
 }

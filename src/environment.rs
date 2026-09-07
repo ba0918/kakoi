@@ -31,6 +31,22 @@ impl RealEntry {
     }
 }
 
+/// What is at a path when its name is looked at first (specification sections 5.2, 5.3,
+/// and 4.1): nothing by that name, something that exists but through which no real path is
+/// reached, or the real entry behind it. Only `Absent` means "not there"; everything else
+/// is broken, so a configuration directory or a profile that is in the way is never taken
+/// for one that was never placed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PathState {
+    /// Nothing exists at the name, looked at without following a symbolic link.
+    Absent,
+    /// Something exists at the name but no real path is reached through it: a dangling
+    /// link, or a name that cannot be read.
+    Broken,
+    Directory(PathBuf),
+    NotDirectory(PathBuf),
+}
+
 /// The home directory: the real path of `HOME`, after the checks of specification
 /// section 2. `~` expands to it and the configuration directory falls back to it.
 #[derive(Debug, Clone, PartialEq, Eq)]

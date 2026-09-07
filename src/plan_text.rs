@@ -37,7 +37,14 @@ pub fn render(plan: &Plan) -> String {
             .as_deref()
             .map_or_else(|| "(no value)".to_string(), shown)
     );
-    let _ = writeln!(text, "  config_dir = {}", shown(&plan.variables.config_dir));
+    let _ = writeln!(
+        text,
+        "  config_dir = {}",
+        plan.variables
+            .config_dir
+            .as_deref()
+            .map_or_else(|| "(no value)".to_string(), shown)
+    );
     render_policy(&mut text, &plan.policy);
     text.push_str("mounts:\n");
     for item in &plan.mounts.items {
