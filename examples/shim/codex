@@ -34,6 +34,19 @@
 # codex. Only the four forms in is_isolated_subcommand accept that flag, so
 # check `codex <name> --help` before adding one there.
 #
+# Check takes_a_value against the same `codex --help` output. An option that
+# takes a value and is missing from that list has its value read as a bare
+# word, that is, as the subcommand, with the same consequence.
+#
+# The argument forms it reads: an option's value written as the following word
+# (`-C DIR`, `--cd DIR`) or attached to the option (`--cd=DIR`, `-CDIR`). An
+# option clap accepts several values for, such as `-i, --image <FILE>...`, must
+# be written one value per option (`-i a.png -i b.png`), because the shim reads
+# exactly one word after each option and shell gives it no way to know where
+# clap ends a value list. A second file written bare (`-i a.png b.png`) is read
+# here as the subcommand, so the invocation is classified as the interactive
+# session and the real subcommand after it is passed on as a prompt word.
+#
 # To see what process-wrap makes of an isolated invocation, run the same
 # command by hand with --print-plan in front of the `--`:
 #     process-wrap --workspace "$PWD" --print-plan -- codex ...
@@ -131,6 +144,15 @@ while [ "${index}" -lt "${#arguments[@]}" ]; do
 		;;
 	--cd=* | -C=*)
 		workspace="${argument#*=}"
+		codex_args+=("${argument}")
+		;;
+	-C?*)
+		# A short option's value attached to it, which clap accepts. `-C=DIR` is
+		# matched above, so what follows `-C` here is the value itself. `-C` is
+		# the only attached form with a meaning for process-wrap: the other
+		# value-taking short options are passed on unread, and attaching their
+		# value consumes no word, so the subcommand is still found.
+		workspace="${argument#-C}"
 		codex_args+=("${argument}")
 		;;
 	--add-dir=*)
