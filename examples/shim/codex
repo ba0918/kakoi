@@ -34,10 +34,11 @@
 # a prompt, that is, as the interactive session, which is what codex itself
 # does; a subcommand added by a newer codex and left out of the lists would
 # therefore be given the bypass flag as a global option and might be refused by
-# codex. Only the four forms in is_isolated_subcommand list that flag among
-# their own options, so check `codex <name> --help` before adding one there;
-# a form that runs the agent without listing it goes in
-# is_isolated_by_global_flag instead.
+# codex. A name belongs in is_isolated_subcommand only if `codex <name> --help`
+# lists that flag among the subcommand's own options, so read that help for each
+# name you add there. Listing it is necessary, not sufficient: other subcommands
+# list it too (in 0.153.4, archive, delete, queue and unarchive). A form that
+# runs the agent without listing it goes in is_isolated_by_global_flag instead.
 #
 # Whether the flag in the global position reaches the subcommand is for you to
 # see for yourself, outside this template: run `codex review --base <ref>` and
@@ -104,7 +105,8 @@ takes_a_value() {
 
 # The forms where the agent may run commands and `codex <name> --help` lists the
 # bypass flag among the subcommand's own options, so the flag goes right after
-# the subcommand. These are the four that take it in that position.
+# the subcommand. Both facts are needed to put a name here: subcommands outside
+# this list also list the flag among their own options.
 is_isolated_subcommand() {
 	case "$1" in
 	exec | e | resume | fork) return 0 ;;
