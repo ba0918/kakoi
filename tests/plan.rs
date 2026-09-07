@@ -251,7 +251,7 @@ fn isolation_with(
         expanded: &expanded,
         variables: &variables,
         home: &home,
-        config_dir: Some(Path::new(CONFIG_DIR)),
+        config_dir: Path::new(CONFIG_DIR),
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
@@ -414,13 +414,7 @@ fn a_scan_root_or_hide_mounts_under_with_a_valueless_variable_is_skipped_and_rep
     let layers = layers(profile, Some(""), &[], &[]);
     let expanded = expand_policy(&merged(&layers), &variables, &home());
 
-    let wanted = candidates(
-        &expanded,
-        &layers,
-        &variables,
-        Some(Path::new(CONFIG_DIR)),
-        None,
-    );
+    let wanted = candidates(&expanded, &layers, &variables, Path::new(CONFIG_DIR), None);
     assert!(wanted.scans.is_empty(), "{:?}", wanted.scans);
     assert!(
         wanted.hide_mounts_under.is_empty(),
@@ -1062,17 +1056,16 @@ fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
 #[test]
 fn a_missing_configuration_directory_leaves_config_dir_valueless() {
     // Nothing exists at the configuration directory, so `${config_dir}` has no value: the
-    // `ro` item written with it is skipped with a reason (specification section 5.2), the
-    // configuration directory is not a protected path, so `rw ~/.config` does not stop the
-    // run (section 5.6), and no `hide` is generated for its `secrets/` (section 6.3).
+    // `ro` item written with it is skipped with a reason (specification section 5.2) and no
+    // `hide` is generated for its `secrets/` (section 6.3). Its own placement is checked all
+    // the same, and passes here because nothing writable holds its existing prefixes
+    // (section 5.6).
     let variables = Variables {
         config_dir: None,
         ..variables()
     };
     let layers = vec![
-        policy_file_layer(
-            "[mounts]\nrw = [\"${worktree}\", \"~/.config\"]\nro = [\"${config_dir}/x\"]\n",
-        ),
+        policy_file_layer("[mounts]\nrw = [\"${worktree}\"]\nro = [\"${config_dir}/x\"]\n"),
         command_line_layer(&[], &[]),
     ];
     let policy = merged(&layers);
@@ -1084,7 +1077,7 @@ fn a_missing_configuration_directory_leaves_config_dir_valueless() {
         expanded: &expanded,
         variables: &variables,
         home: &home,
-        config_dir: None,
+        config_dir: Path::new(CONFIG_DIR),
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),

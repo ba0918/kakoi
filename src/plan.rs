@@ -29,9 +29,9 @@ pub struct Inputs<'a> {
     pub expanded: &'a ExpandedPolicy,
     pub variables: &'a Variables,
     pub home: &'a HomeDirectory,
-    /// The configuration directory as derived, before realisation; none when it does not
-    /// exist (specification section 5.6).
-    pub config_dir: Option<&'a Path>,
+    /// The configuration directory as derived, before realisation, whether or not
+    /// anything is at the name (specification section 5.6).
+    pub config_dir: &'a Path,
     /// The `--workspace` path as given (made absolute), before resolution; none when it
     /// was omitted.
     pub workspace: Option<&'a Path>,

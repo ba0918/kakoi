@@ -58,7 +58,7 @@ fn check_at(
         &facts,
         &swappable_ro,
     )?;
-    let protected = protected_paths(&expanded, layers, Some(Path::new(config_dir)));
+    let protected = protected_paths(&expanded, layers, Path::new(config_dir));
     check_placement(
         &resolved,
         &protected,

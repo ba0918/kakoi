@@ -50,8 +50,10 @@
   and it checks the grammar and the home directory only, so it works without `bwrap` and inside
   an isolation.
 - A configuration directory that does not exist leaves `${config_dir}` without a value, so items
-  written with it are skipped with the reason shown in the plan, and it is not held to the
-  placement checks; one that exists but cannot be followed to a directory is a `path` diagnostic.
+  written with it are skipped with the reason shown in the plan; the placement checks still hold
+  it to its deepest existing ancestor, so a launch whose configuration directory is named under a
+  writable item stops with `path` rather than letting a profile be planted there; one that exists
+  but cannot be followed to a directory is a `path` diagnostic.
 - Added `examples/shim/codex`, a template shim that classifies codex invocations, inserts codex's
   sandbox-bypass flag into the isolated ones, copies `--cd` to `--workspace` and `--add-dir` to
   `--rw`, and executes `process-wrap`; `PROCESS_WRAP_SHIM_OFF=1` runs the real codex instead.

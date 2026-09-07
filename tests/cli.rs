@@ -753,6 +753,30 @@ fn the_built_in_default_is_used_when_default_toml_is_absent() {
 }
 
 #[test]
+fn a_missing_configuration_directory_inside_a_writable_item_is_refused() {
+    // The built-in default makes the workspace writable, so a configuration directory named
+    // under it could be made from inside the isolation and a profile planted where the next
+    // start reads one. Nothing is at the name yet, but its deepest existing ancestor is, and
+    // that is what the check looks at (specification section 5.6).
+    let (home, workspace) = home_without_a_configuration_directory();
+
+    let output = binary(home.path())
+        .env("XDG_CONFIG_HOME", workspace.join("cfg"))
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan",
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "path");
+}
+
+#[test]
 fn a_named_profile_never_falls_back_to_the_built_in_default() {
     // A user who names a profile means that file; falling back would run a wider policy
     // than the one asked for (specification section 5.3).

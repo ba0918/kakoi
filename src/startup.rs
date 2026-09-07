@@ -114,12 +114,10 @@ where
         .unwrap_or_else(|| current_dir.clone());
     let facts = collect_workspace_facts(&workspace);
     let variables = derive_variables(&probe_path(&config_dir), &facts)?;
-    // A configuration directory that does not exist is not a protected path
-    // (specification section 5.6).
-    let protected_config_dir = variables
-        .config_dir
-        .is_some()
-        .then_some(config_dir.as_path());
+    // The configuration directory is a protected path whether or not anything is at the
+    // name: what does not exist yet can be made from inside the isolation and a profile
+    // planted there, so its existing prefixes are checked (specification section 5.6).
+    let protected_config_dir = config_dir.as_path();
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
     let expanded = expand_policy(&policy, &variables, &home);
     let wanted = candidates(

@@ -18,9 +18,9 @@ use crate::variables::Variables;
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProtectedPaths {
     pub policy_files: Vec<PathBuf>,
-    /// None when the configuration directory does not exist: it is then not protected
+    /// Protected whether or not it exists: only its existing prefixes are checked
     /// (specification section 5.6).
-    pub config_dir: Option<PathBuf>,
+    pub config_dir: PathBuf,
     pub secrets: Vec<(String, PathBuf)>,
     pub path_prepend: Vec<PathBuf>,
 }
@@ -28,7 +28,7 @@ pub struct ProtectedPaths {
 pub fn protected_paths(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
-    config_dir: Option<&Path>,
+    config_dir: &Path,
 ) -> ProtectedPaths {
     ProtectedPaths {
         policy_files: layers
@@ -38,7 +38,7 @@ pub fn protected_paths(
                 LayerOrigin::BuiltInDefault | LayerOrigin::CommandLine => None,
             })
             .collect(),
-        config_dir: config_dir.map(Path::to_path_buf),
+        config_dir: config_dir.to_path_buf(),
         secrets: expanded
             .secrets
             .iter()
@@ -290,9 +290,12 @@ fn check_protected_paths(
     for path in &protected.policy_files {
         check_prefixes(path, "the policy file", writable, facts)?;
     }
-    if let Some(config_dir) = &protected.config_dir {
-        check_prefixes(config_dir, "the configuration directory", writable, facts)?;
-    }
+    check_prefixes(
+        &protected.config_dir,
+        "the configuration directory",
+        writable,
+        facts,
+    )?;
     // A secret file inside `rw` could be swapped for a link to any host file, whose
     // content the next start would bring into the isolation as a variable.
     for (name, path) in &protected.secrets {

@@ -287,7 +287,10 @@ exist the item is skipped and `/tmp` stays empty inside.
 
 A policy file, the configuration directory, a secret file, or a `path-prepend` entry must not be
 inside an `rw` or `rw-file` item, and resolving its path must not pass through a symbolic link or
-a directory inside one. This can look wrong at first: mounting the file read-only would seem to
+a directory inside one. A configuration directory or a secret file that is not there yet is held
+to the same rule: the missing name itself carries nothing to protect, but its deepest existing
+ancestor is checked, because what is missing can be created from inside the isolation and read on
+the next launch. This can look wrong at first: mounting the file read-only would seem to
 suffice. It does not. The file itself cannot be moved, but its ancestor directory can be renamed
 from inside the isolation, and a different file put at the same path is what the next launch
 reads (measured with `bwrap` 0.9.0). The same reasoning applies to written `rw`, `rw-file`, and

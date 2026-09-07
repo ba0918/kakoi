@@ -185,7 +185,7 @@ pub fn candidates(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
     variables: &Variables,
-    config_dir: Option<&Path>,
+    config_dir: &Path,
     workspace: Option<&Path>,
 ) -> Candidates {
     let mut paths = Vec::new();
@@ -207,7 +207,7 @@ pub fn candidates(
             LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.as_path()),
             LayerOrigin::BuiltInDefault | LayerOrigin::CommandLine => None,
         })
-        .chain(config_dir)
+        .chain(std::iter::once(config_dir))
         .chain(expanded.secrets.values().filter_map(Expansion::path))
         .chain(
             expanded
