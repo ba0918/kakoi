@@ -201,12 +201,12 @@ Done when: `rw = ["${worktree}"]`、`ro = ["~/.config/opencode/x"]`（解決が�
 指すリンクなら `path` で止まり、診断がリンクのパスと `ro` の項目のパスを含む。同じ形のリンクが 2 本
 あれば、パスのバイト順で先のものが診断に出る。`.env` が `ro` の外の本物のファイルを指すリンクなら
 今までどおり隠す。マウント一覧が読めなかった事実を与えた `hide-mounts` 付きのポリシーは `path` で
-止まり、`hide-mounts` の無いポリシーは通る。既存の `scan_hides_the_target_of_a_matching_symlink`
-は「`ro` の外を指すリンク」の形に限定して残す。
+止まる（`hide-mounts` の無いポリシーにその事実を与える形は、外周がその組み合わせを作らないのでテストに
+しない）。既存の `scan_hides_the_target_of_a_matching_symlink` は「`ro` の外を指すリンク」の形に限定して
+残す。
 Shown by: test — `a_scan_link_into_an_unswappable_ro_item_is_left_visible_with_a_reason`、
 `a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic`、
-`the_first_offending_scan_link_in_byte_order_is_named`、`an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic`、
-`an_unreadable_mount_list_without_hide_mounts_is_ignored`。
+`the_first_offending_scan_link_in_byte_order_is_named`、`an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic`。
 Left to the implementer: リンクだったことと先を運ぶ型、「隠さなかった」の受け皿、走査の結果の整列を
 どこで行うか。
 Stop and hand back if: なし。
