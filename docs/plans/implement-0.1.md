@@ -1,6 +1,6 @@
 # process-wrap 0.1 実装計画（全体像）
 
-この文書は 4 本の計画の共通部分と全体の対応表である。cycle で回すのはこの文書ではなく、次の 4 本を順に回す。それぞれが自分のステップを持ち、方針と表はここを参照する。
+この文書は各計画の共通部分と全体の対応表である。cycle で回すのはこの文書ではなく、次の計画を順に回す。それぞれが自分のステップを持ち、方針と表はここを参照する。
 
 1. `docs/plans/implement-0.1-a-policy.md` — ステップ 1〜5（ブランチ `implement-0.1-a-policy`）。済み
 2. `docs/plans/implement-0.1-a2-followup.md` — ステップ 5.1〜5.5（ブランチ `implement-0.1-a2-followup`）。A のマージ後。仕様の改訂（コミット 1142262）への追従
@@ -8,6 +8,8 @@
 4. `docs/plans/implement-0.1-c-launch.md` — ステップ 11〜16（ブランチ `implement-0.1-c-launch`）。B のマージ後。済み
 5. `docs/plans/implement-0.1-d-revision.md` — ステップ 17〜25（ブランチ `implement-0.1-d-revision`）。C のマージ後。仕様の改訂（コミット 98a9d5f）への追従。改訂で変わった節の割り当ては D の表が本文書の表に優先する
 6. `docs/plans/implement-0.1-e-onboarding.md` — ステップ 26〜32（ブランチ `implement-0.1-e-onboarding`）。D のマージ後。仕様の改訂（コミット 37fd24b、入れて即使える: 組み込みの既定、`init`、シムの雛形、セットアップスキル）への追従。
+7. `docs/plans/implement-0.1-f-generic-shim.md` — ステップ 33〜38。E のマージ後。仕様の改訂（コミット dec21ed、シムを汎用の本体とツール節にし、既定を全部隔離にする）への追従。済み
+8. `docs/plans/implement-0.1-g-setup-skill-holes.md` — ステップ 39〜42（ブランチ `setup-skill-holes`）。F のマージ後。仕様の改訂（コミット fff75dc、セットアップスキルの実機試行で出た穴 6 件）への追従
 
 ## Goal
 
