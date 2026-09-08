@@ -38,7 +38,12 @@ mode that asks for approval before a write.
    the only source: do not decide it from a marker in the file or from its contents. If the
    answer is "kept elsewhere", the profile is not yours to write for the rest of the session;
    propose the lines for the user to add to the file they edit instead (item 2 of "What to keep
-   to"), and take the after-change plan the way item 7 below says.
+   to"), and take the after-change plan the way item 7 below says. If there is no profile
+   yet — `process-wrap init` has not been run — ask the user first whether to run it: it
+   writes the built-in default to the configuration directory, the same policy
+   `process-wrap --print-plan=full -- true` shows as merged. Run it only on their approval.
+   If they decline, make no profile proposals in this session and say so; the rest of the
+   steps still apply.
 2. **Find the commands that are installed and propose profile entries for them.** A command
    to wrap is any command the user wants to run inside the isolation; the agent CLIs they
    run — codex, claude, opencode and the rest — are the usual ones. Check which are on
