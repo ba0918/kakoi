@@ -53,7 +53,13 @@
 # `--help`. A value is read when it is written as the following word, attached
 # with `=`, or, for a one-letter option, attached to the option; an option
 # whose value is written in some other way is not copied, and then the command
-# is refused a directory rather than given one. Nothing after `--` is read.
+# is refused a directory rather than given one. The other direction is the one
+# misreading that widens the boundary: nothing here knows which of the
+# command's other options take a value, so a word equal to a copied option's
+# name is read as that option wherever it stands — the value of another
+# option, or a positional argument — and --workspace or --rw widens to what
+# follows it. `codex -m --cd /etc exec` sends process-wrap `--workspace /etc`.
+# Nothing after `--` is read.
 #
 # Checking a copy of this template without running the real command: put two
 # directories at the front of PATH, one holding your copy under the wrapped
