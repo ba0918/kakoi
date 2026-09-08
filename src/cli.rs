@@ -27,7 +27,8 @@ pub struct Invocation {
 
 /// Which form `--print-plan` shows (specification section 13): the summary; the full
 /// plan with the merged policy, the origin of every item, the whole environment, and the
-/// bwrap argument list; or the same content as one JSON document.
+/// bwrap argument list; or the same content as one line of JSON, for LLM agents and
+/// tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum PlanForm {
     Summary,
@@ -82,7 +83,7 @@ struct Arguments {
 
     /// Print the plan and exit without running the command. `=full` adds the merged
     /// policy, the origin of every item, the whole environment, and the bwrap arguments;
-    /// `=json` is the same as one JSON document.
+    /// `=json` is the same as one line of JSON, for LLM agents and tools.
     #[arg(
         long,
         value_name = "FORM",

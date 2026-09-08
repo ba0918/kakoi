@@ -28,7 +28,7 @@
   directory as `~`, the environment as its difference from the host's, secret values masked),
   `--print-plan=full`, which adds the merged policy, the origin of every item, the whole
   environment, and the `bwrap` argument list, and `--print-plan=json`, the same content as one
-  JSON document whose keys are a contract; one-line diagnostics with the exit codes 125 (a diagnostic of
+  line of JSON for LLM agents and tools, whose keys are a contract; one-line diagnostics with the exit codes 125 (a diagnostic of
   `process-wrap` itself), 126 (a command found but not executable, in a nested run), and 127 (a
   command not found), nesting detection through `PROCESS_WRAP=1`, and the bundled WSL2 profile
   `examples/profile/default.toml`.

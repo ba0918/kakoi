@@ -112,8 +112,8 @@ fn render_summary(text: &mut String, plan: &Plan) {
     render_command(text, plan);
     text.push_str(
         "(--print-plan=full adds the merged policy, the origin of every item, the whole \
-         environment, and the bwrap arguments; --print-plan=json is the same as one JSON \
-         document)\n",
+         environment, and the bwrap arguments; --print-plan=json is the same as one line \
+         of JSON, for LLM agents and tools)\n",
     );
 }
 

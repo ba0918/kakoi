@@ -109,7 +109,8 @@ directory inside it. Paths can use `~` and the variables `${workspace}`, `${work
 The process ID, IPC, UTS, cgroup, and user namespaces are always unshared. `--print-plan` shows
 every mount item with the reason it was applied or skipped and how the environment differs from
 the host's; `--print-plan=full` adds the merged policy, the final environment with secret values
-masked, and the `bwrap` argument list, and `--print-plan=json` is the same as one JSON document.
+masked, and the `bwrap` argument list, and `--print-plan=json` is the same as one line of JSON, for
+LLM agents and tools.
 
 ## Wrapping an LLM CLI
 

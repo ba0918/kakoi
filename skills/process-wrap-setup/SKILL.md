@@ -80,8 +80,9 @@ mode that asks for approval before a write.
    the host's, so the user can see exactly what the change opened or closed. Use
    `process-wrap --print-plan=full -- true` when the comparison has to be exact: it adds
    the merged policy, the origin of every item, the whole environment, and the bwrap
-   arguments. `process-wrap --print-plan=json -- true` is the same content as one JSON
-   document, for comparing the two plans by key rather than by line.
+   arguments. `process-wrap --print-plan=json -- true` is the same content as one line of
+   JSON, made for you rather than for the user: compare the two plans by key, and show the
+   user the summary.
 
 ## What to keep to
 

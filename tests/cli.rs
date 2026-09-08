@@ -508,6 +508,13 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
         !String::from_utf8_lossy(&output.stdout).contains("FAKE-TOKEN-VALUE"),
         "{report}"
     );
+    // One line: the form is for tools, which read it whole.
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1,
+        "{report}"
+    );
+    assert!(output.stdout.ends_with(b"\n"), "{report}");
     let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     for key in [
         "format_version",
@@ -682,7 +689,9 @@ fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
     assert!(!plan.contains("from-the-host"), "{report}");
     assert!(!plan.contains("KEPT"), "{report}");
     assert!(
-        plan.ends_with("--print-plan=json is the same as one JSON document)\n"),
+        plan.ends_with(
+            "--print-plan=json is the same as one line of JSON, for LLM agents and tools)\n"
+        ),
         "{report}"
     );
 }

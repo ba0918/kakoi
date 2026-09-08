@@ -1,5 +1,6 @@
-//! The plan as `--print-plan=json` shows it (specification section 13): one JSON
-//! document for tools and agents, with the same content as the full text form. The
+//! The plan as `--print-plan=json` shows it (specification section 13): one line of JSON
+//! for LLM agents and tools, never for a person, with the same content as the full text
+//! form and the summary's environment changes. The
 //! shape is the contract of that section: the keys named there stay and keep their
 //! meaning while `format_version` is 1; keys may be added. Secret values are `null`.
 //! Paths and other OS strings that are not valid UTF-8 are shown lossily. Pure.
@@ -17,10 +18,11 @@ use crate::policy::{EnvMode, NetworkMode, PolicyPath};
 /// The version of the shape: bumped when a key is removed or changes its meaning.
 pub const FORMAT_VERSION: u32 = 1;
 
-/// The JSON text of `plan`, pretty-printed, ending in a newline.
+/// The JSON text of `plan`: one line, compact, ending in a newline. Not indented: a
+/// person reads the summary, and a tool feeds this to `jq` or an LLM.
 pub fn render(plan: &Plan) -> String {
     let document = PlanDocument::from(plan);
-    let mut text = serde_json::to_string_pretty(&document).expect("the plan document serializes");
+    let mut text = serde_json::to_string(&document).expect("the plan document serializes");
     text.push('\n');
     text
 }

@@ -92,10 +92,17 @@ It shows:
 policy with the layer each entry came from, every mount item with its real path and its
 origin, the final environment in full, and the `bwrap` argument list.
 
-`--print-plan=json` prints the same content as the full form, plus the summary's environment
-changes, as one JSON document for tools and agents. Unlike the text forms, its shape is a
-contract: the top-level keys below stay and keep their meaning while `format_version` is the
-same; keys may be added.
+`--print-plan=json` is for LLM agents and tools, not for reading: the same content as the full
+form, plus the summary's environment changes, as a single line of JSON. Pipe it to `jq` to look
+at a part of it:
+
+```sh
+process-wrap --print-plan=json -- codex | jq -r '.mounts[] | "\(.directive)\t\(.path)"'
+process-wrap --print-plan=json -- codex | jq '.environment_changes'
+```
+
+Unlike the text forms, its shape is a contract: the top-level keys below stay and keep their
+meaning while `format_version` is the same; keys may be added.
 
 | Key | Value |
 | --- | --- |
