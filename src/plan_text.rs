@@ -5,7 +5,7 @@
 //! merged policy, the origin of every item, the whole environment with the secret values
 //! masked, and the bwrap argument list with the descriptors as symbols. Both name the
 //! resolved command. The layout is not a contract; the values embedded are escaped so
-//! that no control character reaches the terminal. Pure.
+//! that no control character reaches the terminal. The JSON form is `plan_json`. Pure.
 
 use std::ffi::OsStr;
 use std::fmt::Write;
@@ -16,10 +16,15 @@ use crate::diagnostic::escape_control;
 use crate::layers::{Directive, LayerOrigin, Policy, PolicySource};
 use crate::mounts::{ItemOrigin, SkippedRole};
 use crate::plan::{Argument, Plan};
+use crate::plan_json;
 use crate::policy::{EnvMode, NetworkMode, PolicyPath};
 
-/// The text of `plan` in `form`. A nested run is marked on the first line.
+/// The text of `plan` in `form`. A nested run is marked on the first line of the text
+/// forms.
 pub fn render(plan: &Plan, form: PlanForm) -> String {
+    if form == PlanForm::Json {
+        return plan_json::render(plan);
+    }
     let mut text = String::new();
     if plan.nested {
         text.push_str("nested: yes (PROCESS_WRAP=1; the plan is shown but would not be applied)\n");
@@ -49,7 +54,7 @@ pub fn render(plan: &Plan, form: PlanForm) -> String {
     );
     match form {
         PlanForm::Summary => render_summary(&mut text, plan),
-        PlanForm::Full => render_full(&mut text, plan),
+        PlanForm::Full | PlanForm::Json => render_full(&mut text, plan),
     }
     text
 }

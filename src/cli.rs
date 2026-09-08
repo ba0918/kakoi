@@ -25,13 +25,14 @@ pub struct Invocation {
     pub command: Vec<OsString>,
 }
 
-/// Which form `--print-plan` shows (specification section 13): the summary, or the full
+/// Which form `--print-plan` shows (specification section 13): the summary; the full
 /// plan with the merged policy, the origin of every item, the whole environment, and the
-/// bwrap argument list.
+/// bwrap argument list; or the same content as one JSON document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum PlanForm {
     Summary,
     Full,
+    Json,
 }
 
 /// What the command line asks for: a run, the help text, or the version line.
@@ -50,7 +51,7 @@ pub enum Parsed {
     version,
     about = "Run a command inside a bubblewrap mount namespace shaped by a layered policy.",
     override_usage = "process-wrap [OPTIONS] -- COMMAND [ARGS]...\n       \
-                      process-wrap [OPTIONS] --print-plan[=full] [-- COMMAND [ARGS]...]\n       \
+                      process-wrap [OPTIONS] --print-plan[=full|json] [-- COMMAND [ARGS]...]\n       \
                       process-wrap init [NAME]\n       \
                       process-wrap --version\n       \
                       process-wrap --help",
@@ -80,7 +81,8 @@ struct Arguments {
     hide: Vec<PathBuf>,
 
     /// Print the plan and exit without running the command. `=full` adds the merged
-    /// policy, the origin of every item, the whole environment, and the bwrap arguments.
+    /// policy, the origin of every item, the whole environment, and the bwrap arguments;
+    /// `=json` is the same as one JSON document.
     #[arg(
         long,
         value_name = "FORM",

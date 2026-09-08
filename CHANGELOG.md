@@ -26,8 +26,9 @@
   foreign-architecture or x32 system calls.
 - Added `--print-plan`, a summary of the plan for reading (the mount items with the home
   directory as `~`, the environment as its difference from the host's, secret values masked),
-  and `--print-plan=full`, which adds the merged policy, the origin of every item, the whole
-  environment, and the `bwrap` argument list; one-line diagnostics with the exit codes 125 (a diagnostic of
+  `--print-plan=full`, which adds the merged policy, the origin of every item, the whole
+  environment, and the `bwrap` argument list, and `--print-plan=json`, the same content as one
+  JSON document whose keys are a contract; one-line diagnostics with the exit codes 125 (a diagnostic of
   `process-wrap` itself), 126 (a command found but not executable, in a nested run), and 127 (a
   command not found), nesting detection through `PROCESS_WRAP=1`, and the bundled WSL2 profile
   `examples/profile/default.toml`.

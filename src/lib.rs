@@ -18,6 +18,7 @@ pub mod mount_list;
 pub mod mounts;
 pub mod placement;
 pub mod plan;
+pub mod plan_json;
 pub mod plan_text;
 pub mod policy;
 pub mod regular_file;

@@ -126,6 +126,7 @@ fn print_plan_takes_its_form_after_an_equals_sign() {
     for (arguments, form) in [
         (&["--print-plan=full", "--", "true"][..], PlanForm::Full),
         (&["--print-plan=summary"][..], PlanForm::Summary),
+        (&["--print-plan=json"][..], PlanForm::Json),
     ] {
         let Parsed::Invocation(invocation) = interpret_ok(arguments) else {
             panic!("not an invocation");
@@ -474,6 +475,130 @@ fn print_plan_full_adds_the_merged_policy_the_environment_and_the_bwrap_argument
         plan.contains("\n  --seccomp\n  <fd: seccomp filter>\n"),
         "{report}"
     );
+}
+
+#[test]
+fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
+    // The JSON form is for tools: the keys of specification section 13, secret values as
+    // `null`, the descriptors as tagged objects, and `command` as `null` when `COMMAND` is
+    // left out.
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN-VALUE\n");
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
+    );
+    let workspace = workspace.to_str().unwrap();
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace,
+            "--print-plan=json",
+            "--",
+            "/bin/true",
+            "one",
+        ],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("FAKE-TOKEN-VALUE"),
+        "{report}"
+    );
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for key in [
+        "format_version",
+        "nested",
+        "policy_sources",
+        "variables",
+        "home",
+        "policy",
+        "mounts",
+        "skipped_mounts",
+        "left_visible",
+        "skipped_paths",
+        "environment",
+        "environment_changes",
+        "command",
+        "bwrap",
+        "bwrap_arguments",
+    ] {
+        assert!(plan.get(key).is_some(), "{key} is missing: {report}");
+    }
+    assert_eq!(plan["format_version"], 1, "{report}");
+    assert_eq!(plan["nested"], false, "{report}");
+    assert_eq!(plan["policy_sources"][0]["kind"], "file", "{report}");
+    assert_eq!(plan["variables"]["workspace"], workspace, "{report}");
+    assert_eq!(
+        plan["variables"]["git_common_dir"],
+        serde_json::Value::Null,
+        "{report}"
+    );
+    assert_eq!(
+        plan["policy"]["mounts"][0]["path"], "${workspace}",
+        "{report}"
+    );
+    assert_eq!(
+        plan["policy"]["mounts"][0]["origin"]["kind"], "profile",
+        "{report}"
+    );
+    let mounts = plan["mounts"].as_array().unwrap();
+    let workspace_item = mounts
+        .iter()
+        .find(|item| item["path"] == workspace)
+        .unwrap_or_else(|| panic!("no workspace item: {report}"));
+    assert_eq!(workspace_item["directive"], "rw", "{report}");
+    assert_eq!(workspace_item["kind"], "directory", "{report}");
+    assert!(
+        mounts.iter().any(|item| item["origin"]["kind"] == "secret"
+            && item["origin"]["name"] == "TOKEN"
+            && item["kind"] == "not-directory"),
+        "{report}"
+    );
+    assert_eq!(
+        plan["environment"]["TOKEN"],
+        serde_json::Value::Null,
+        "{report}"
+    );
+    assert_eq!(plan["environment"]["PROCESS_WRAP"], "1", "{report}");
+    assert_eq!(plan["environment_changes"]["mode"], "inherit", "{report}");
+    assert_eq!(
+        plan["environment_changes"]["secrets"][0], "TOKEN",
+        "{report}"
+    );
+    assert_eq!(
+        plan["environment_changes"]["set"]["PROCESS_WRAP"], "1",
+        "{report}"
+    );
+    assert_eq!(plan["command"]["given"], "/bin/true", "{report}");
+    assert_eq!(plan["command"]["arguments"][0], "one", "{report}");
+    assert_eq!(plan["command"]["path"], "/bin/true", "{report}");
+    let arguments = plan["bwrap_arguments"].as_array().unwrap();
+    assert_eq!(arguments[0]["kind"], "literal", "{report}");
+    assert_eq!(arguments[0]["value"], "--ro-bind", "{report}");
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument["kind"] == "seccomp-filter"),
+        "{report}"
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument["kind"] == "empty-file"),
+        "{report}"
+    );
+    assert_eq!(arguments.last().unwrap()["value"], "one", "{report}");
+
+    let without_a_command = run(home.path(), ["--workspace", workspace, "--print-plan=json"]);
+
+    let report = output_report(&without_a_command);
+    assert_eq!(without_a_command.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&without_a_command.stdout).unwrap();
+    assert_eq!(plan["command"], serde_json::Value::Null, "{report}");
 }
 
 #[test]

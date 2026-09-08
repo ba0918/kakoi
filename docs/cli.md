@@ -17,7 +17,7 @@ process-wrap --help
 | `--workspace PATH` | The workspace. Defaults to the current directory. |
 | `--rw PATH` | An `rw` directive on the command-line layer. Repeatable. |
 | `--hide PATH` | A `hide` directive on the command-line layer. Repeatable. |
-| `--print-plan[=FORM]` | Print the plan and exit without running the command. `FORM` is `summary` (the default) or `full`; see [The plan](#the-plan). The value is written with `=` only. |
+| `--print-plan[=FORM]` | Print the plan and exit without running the command. `FORM` is `summary` (the default), `full`, or `json`; see [The plan](#the-plan). The value is written with `=` only. |
 | `--version`, `--help` | Print the version or the usage. Each is used alone. |
 | `init [NAME]` | Write the built-in default to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. Used alone; see [Getting started](getting-started.md#write-the-boundary-out-and-edit-it). |
 
@@ -45,7 +45,7 @@ To see what would happen without running anything:
 process-wrap --print-plan -- codex
 ```
 
-The plan comes in two forms. The summary, which `--print-plan` prints by itself, is written
+The plan comes in three forms. The summary, which `--print-plan` prints by itself, is written
 to be read:
 
 ```
@@ -92,11 +92,40 @@ It shows:
 policy with the layer each entry came from, every mount item with its real path and its
 origin, the final environment in full, and the `bwrap` argument list.
 
-In both forms only the values of the variables the policy names under `secrets` are masked.
-In the full form every other variable of the final environment is printed with its value as
-it is, and with `env.mode = "inherit"` that includes any host credential whose name matches
-none of the `unset` patterns ([known gap 6](security.md#known-gaps)). Treat the output of
-`--print-plan=full` as sensitive; the summary prints only the values the policy set.
+`--print-plan=json` prints the same content as the full form, plus the summary's environment
+changes, as one JSON document for tools and agents. Unlike the text forms, its shape is a
+contract: the top-level keys below stay and keep their meaning while `format_version` is the
+same; keys may be added.
+
+| Key | Value |
+| --- | --- |
+| `format_version` | `1`. Raised when a key is removed or changes its meaning. |
+| `nested` | Whether the run is nested (`PROCESS_WRAP=1`). |
+| `policy_sources` | The policy files read, each `{"kind": "file", "path": ...}` or `{"kind": "built-in-default"}`. |
+| `variables` | `workspace`, `worktree`, `git_common_dir`, `config_dir`; `null` where a variable has no value. |
+| `home` | The home directory. |
+| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`. |
+| `mounts` | The items applied, in order: `directive`, `path` (real), `kind` (`directory` or `not-directory`), `written`, `origin`. |
+| `skipped_mounts` | Written items skipped: `directive`, `written`, `origin`, `reason`. |
+| `left_visible` | Scan hits left visible: `link`, `reason`. |
+| `skipped_paths` | Skipped scan roots, `hide-mounts` `under`s, and `path-prepend` entries: `role` (`scan-root`, `hide-mounts-under`, `path-prepend`), `written`, `reason`. |
+| `environment` | The final environment; a secret's value is `null`. |
+| `environment_changes` | `mode`, `kept`, `unset`, `set`, `secrets`, as in the summary. |
+| `command` | `given`, `arguments`, `path`; `null` when `COMMAND` was left out. |
+| `bwrap` | The path of `bwrap`. |
+| `bwrap_arguments` | Each `{"kind": "literal", "value": ...}`, `{"kind": "seccomp-filter"}`, or `{"kind": "empty-file"}`. |
+
+An `origin` is an object whose `kind` is `profile`, `built-in-default`, `policy-file`,
+`command-line`, `scan`, `hide-mounts`, `secret`, or `config-secrets`, with `path` for the
+two kinds that name a file and `name` for `secret`. Paths that are not valid UTF-8 are shown
+with replacement characters; control characters are JSON-escaped.
+
+In every form only the values of the variables the policy names under `secrets` are masked.
+In the full and JSON forms every other variable of the final environment is printed with its
+value as it is, and with `env.mode = "inherit"` that includes any host credential whose name
+matches none of the `unset` patterns ([known gap 6](security.md#known-gaps)). Treat the
+output of `--print-plan=full` and `--print-plan=json` as sensitive; the summary prints only
+the values the policy set.
 
 ## Exit codes and diagnostics
 
