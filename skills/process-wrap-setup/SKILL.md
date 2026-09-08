@@ -52,7 +52,9 @@ mode that asks for approval before a write.
    works in, which become `--workspace` and `--rw`. Say plainly that these come from
    reading the help text and that you have not measured them; measuring them is the user's
    part. Leave both lists empty. Then propose a directory on `PATH` that comes before the
-   real command, ask the user to confirm it, and show the copy as a diff before writing.
+   real command, name the copy after the command being wrapped so that every invocation of
+   that name goes through it, ask the user to confirm the directory, and show the copy as a
+   diff before writing.
 3. **Propose `path-prepend` entries for replacement commands.** Some host commands stop
    working inside the isolation because the profile hides the socket or the drive they
    need. Where a stand-in exists, propose a directory holding it in
