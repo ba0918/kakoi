@@ -73,6 +73,9 @@
   parts of a profile, a copy of the shim template with its tool section filled in from the wrapped
   command's own `--help`, `path-prepend` entries for replacement commands, and where a command
   that broke inside the isolation belongs, and that shows a diff and waits for approval before
-  writing.
+  writing. It asks first whether the profile and the shim directory are edited elsewhere and
+  then proposes lines instead of writing, names the options the template cannot copy and the
+  way around each, checks on every route the command is started from that the shim is found
+  first, and never lists `secrets/`.
 - The bundled profile's `secrets` entry is commented out, so a start on the built-in default does
   not warn about a secret file nobody has placed.

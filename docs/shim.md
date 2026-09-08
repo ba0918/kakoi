@@ -93,10 +93,16 @@ that subcommand executes.
 ## The setup skill
 
 [`skills/process-wrap-setup`](../skills/process-wrap-setup) is an Agent Skill that fits an
-installation to the machine it is on. It proposes:
+installation to the machine it is on. It asks first whether your profile, and later the directory you pick for the shim, are edited
+somewhere else — generated, synced, or linked from a dotfiles repository — and if so proposes the
+lines or the file for you to put in place instead of writing there. It proposes:
 
 - profile entries for the commands you want to wrap that are installed;
-- a copy of the shim template with its tool section filled in for the command being wrapped;
+- a copy of the shim template with its tool section filled in for the command being wrapped,
+  saying which options in the command's `--help` the template cannot copy (a positional working
+  directory, several values after one option) and how to work around each;
+- a check, on every route you start the command from, that the copy is found before the real
+  command;
 - `path-prepend` entries for replacement commands;
 - for a command that broke inside the isolation, which of the two lists its name belongs in, or
   whether the profile is what to fix instead.
