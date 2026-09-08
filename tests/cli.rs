@@ -599,6 +599,18 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     assert_eq!(without_a_command.status.code(), Some(0), "{report}");
     let plan: serde_json::Value = serde_json::from_slice(&without_a_command.stdout).unwrap();
     assert_eq!(plan["command"], serde_json::Value::Null, "{report}");
+
+    // A nested run is marked by the `nested` key, not by a line in front.
+    let nested = binary(home.path())
+        .env("PROCESS_WRAP", "1")
+        .args(["--workspace", workspace, "--print-plan=json"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&nested);
+    assert_eq!(nested.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&nested.stdout).unwrap();
+    assert_eq!(plan["nested"], true, "{report}");
 }
 
 #[test]
@@ -669,7 +681,10 @@ fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
     assert!(!plan.contains("FAKE-TOKEN-VALUE"), "{report}");
     assert!(!plan.contains("from-the-host"), "{report}");
     assert!(!plan.contains("KEPT"), "{report}");
-    assert!(plan.ends_with("and the bwrap arguments)\n"), "{report}");
+    assert!(
+        plan.ends_with("--print-plan=json is the same as one JSON document)\n"),
+        "{report}"
+    );
 }
 
 #[test]

@@ -1,5 +1,5 @@
-//! The plan as `--print-plan` shows it (specification section 13), in two forms. The
-//! summary, the default, is what a person reads: the real paths of the policy files read,
+//! The plan as `--print-plan` shows it (specification section 13), in its two text forms.
+//! The summary, the default, is what a person reads: the real paths of the policy files read,
 //! the four variables, the network mode, each mount item applied or skipped, and how the
 //! environment differs from the host's. The full form (`--print-plan=full`) adds the
 //! merged policy, the origin of every item, the whole environment with the secret values
@@ -19,12 +19,18 @@ use crate::plan::{Argument, Plan};
 use crate::plan_json;
 use crate::policy::{EnvMode, NetworkMode, PolicyPath};
 
-/// The text of `plan` in `form`. A nested run is marked on the first line of the text
-/// forms.
+/// The text of `plan` in `form`.
 pub fn render(plan: &Plan, form: PlanForm) -> String {
-    if form == PlanForm::Json {
-        return plan_json::render(plan);
+    match form {
+        PlanForm::Summary => text_form(plan, render_summary),
+        PlanForm::Full => text_form(plan, render_full),
+        PlanForm::Json => plan_json::render(plan),
     }
+}
+
+/// A text form: the head the two share (the nested mark on the first line, the policy
+/// files, the variables), then `body`.
+fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
     let mut text = String::new();
     if plan.nested {
         text.push_str("nested: yes (PROCESS_WRAP=1; the plan is shown but would not be applied)\n");
@@ -52,16 +58,13 @@ pub fn render(plan: &Plan, form: PlanForm) -> String {
             .as_deref()
             .map_or_else(|| "(no value)".to_string(), shown)
     );
-    match form {
-        PlanForm::Summary => render_summary(&mut text, plan),
-        PlanForm::Full | PlanForm::Json => render_full(&mut text, plan),
-    }
+    body(&mut text, plan);
     text
 }
 
 /// The summary: the network mode, the mount items with `~` for the home directory and the
 /// origin only where it is not the global scope, the changes to the environment, and the
-/// command. Ends with the line that names the full form.
+/// command. Ends with the line that names the other two forms.
 fn render_summary(text: &mut String, plan: &Plan) {
     let _ = writeln!(text, "network: {}", network_mode(plan.policy.network_mode));
     let _ = writeln!(text, "mounts (~ is {}):", shown(&plan.home));
@@ -109,7 +112,8 @@ fn render_summary(text: &mut String, plan: &Plan) {
     render_command(text, plan);
     text.push_str(
         "(--print-plan=full adds the merged policy, the origin of every item, the whole \
-         environment, and the bwrap arguments)\n",
+         environment, and the bwrap arguments; --print-plan=json is the same as one JSON \
+         document)\n",
     );
 }
 
