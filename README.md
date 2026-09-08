@@ -121,13 +121,12 @@ Then, as you need them:
   wrapped, `path-prepend` entries for replacement commands, and, for a command that broke inside
   the isolation, which of the two lists its name belongs in or whether the profile is what to fix
   instead; it puts a `--print-plan` from before a change next to one from after. Install it with
-  your CLI's
-  own means, such as `gh skill install ba0918/process-wrap process-wrap-setup`. Run it outside
-  the isolation — before the shim is on `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`, or from a CLI
-  not started through `process-wrap` — because the configuration directory may not sit inside a
-  writable mount item and an isolated agent therefore cannot edit its own profile. The agent is
-  not isolated while it runs, so run your CLI in a mode that asks before writing, and check the
-  skill for yourself: that each of its "What to keep to" items is written there as an
+  your CLI's own means, such as `gh skill install ba0918/process-wrap process-wrap-setup`. Run it
+  outside the isolation — before the shim is on `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`, or from
+  a CLI not started through `process-wrap` — because the configuration directory may not sit
+  inside a writable mount item and an isolated agent therefore cannot edit its own profile. The
+  agent is not isolated while it runs, so run your CLI in a mode that asks before writing, and
+  check the skill for yourself: that each of its "What to keep to" items is written there as an
   instruction, and that one trial shows you a diff and asks for approval before the first write.
 
 ## Usage
