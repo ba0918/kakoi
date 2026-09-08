@@ -13,8 +13,9 @@ absolute path and `~/.config/process-wrap` otherwise — unset, empty and a rela
 fall back the same way.
 
 What is generic lives in the built-in default. What is specific to this machine — which
-agent CLIs are installed, where their state lives, which host commands the isolation cuts
-off — is what this skill works out with the user.
+commands to wrap are installed, where their state lives, what goes in the tool section of a
+shim for each of them, which host commands the isolation cuts off — is what this skill works
+out with the user.
 
 ## Run outside the isolation
 

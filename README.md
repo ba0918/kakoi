@@ -116,8 +116,12 @@ Then, as you need them:
   copy: that for every name in its allow list, no model runs while that subcommand executes.
 
 - **Let an agent fit the profile to this machine.** [`skills/process-wrap-setup`](skills/process-wrap-setup)
-  is an Agent Skill that proposes profile entries for the agent CLIs you have installed, a place
-  for the shim, and `path-prepend` entries for replacement commands. Install it with your CLI's
+  is an Agent Skill that proposes profile entries for the commands you want to wrap that are
+  installed, a copy of the shim template with its tool section filled in for the command being
+  wrapped, `path-prepend` entries for replacement commands, and, for a command that broke inside
+  the isolation, which of the two lists its name belongs in or whether the profile is what to fix
+  instead; it puts a `--print-plan` from before a change next to one from after. Install it with
+  your CLI's
   own means, such as `gh skill install ba0918/process-wrap process-wrap-setup`. Run it outside
   the isolation — before the shim is on `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`, or from a CLI
   not started through `process-wrap` — because the configuration directory may not sit inside a
