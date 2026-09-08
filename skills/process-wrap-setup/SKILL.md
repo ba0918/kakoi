@@ -53,8 +53,11 @@ mode that asks for approval before a write.
    reading the help text and that you have not measured them; measuring them is the user's
    part. Leave both lists empty. Then propose a directory on `PATH` that comes before the
    real command, name the copy after the command being wrapped so that every invocation of
-   that name goes through it, ask the user to confirm the directory, and show the copy as a
-   diff before writing.
+   that name goes through it, ask the user to confirm the directory, show the copy as a
+   diff before writing, and say with it that the copy will be made executable, since a diff
+   does not carry the file mode. After writing it, make it executable (`chmod +x`) and
+   check that it is; a copy without the executable bit is skipped by the `PATH` search in
+   silence, and the real command runs unwrapped.
 3. **Propose `path-prepend` entries for replacement commands.** Some host commands stop
    working inside the isolation because the profile hides the socket or the drive they
    need. Where a stand-in exists, propose a directory holding it in
