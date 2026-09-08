@@ -76,8 +76,11 @@ mode that asks for approval before a write.
 5. **Put a `--print-plan` from before the change next to one from after.** Run
    `process-wrap --print-plan -- true` before proposing a change and again after the user
    has accepted it, and show the two side by side. The plan lists the mount items applied
-   and skipped with the reason, the four variables, the final environment, and the bwrap
-   arguments, so the user can see exactly what the change opened or closed.
+   and skipped with the reason, the four variables, and how the environment differs from
+   the host's, so the user can see exactly what the change opened or closed. Use
+   `process-wrap --print-plan=full -- true` when the comparison has to be exact: it adds
+   the merged policy, the origin of every item, the whole environment, and the bwrap
+   arguments.
 
 ## What to keep to
 

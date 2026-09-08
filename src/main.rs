@@ -47,8 +47,9 @@ fn main() -> ExitCode {
         }
         Ok(Outcome::Prepared(prepared)) => {
             print_warnings(&prepared.plan.warnings);
-            if prepared.invocation.print_plan {
-                let _ = std::io::stdout().write_all(plan_text::render(&prepared.plan).as_bytes());
+            if let Some(form) = prepared.invocation.print_plan {
+                let text = plan_text::render(&prepared.plan, form);
+                let _ = std::io::stdout().write_all(text.as_bytes());
                 return ExitCode::SUCCESS;
             }
             // Returns only when bwrap could not be executed.

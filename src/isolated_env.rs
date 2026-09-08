@@ -64,6 +64,84 @@ impl Environment {
     }
 }
 
+/// How the final environment differs from the host's, for the summary of the plan
+/// (specification section 13). Every list is in name order.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct EnvironmentChanges {
+    /// Whether the host environment was inherited (`env.mode = "inherit"`); otherwise it
+    /// was cleared and `kept` counts the `pass` variables found on the host.
+    pub inherited: bool,
+    /// Variables that are the same as on the host.
+    pub kept: usize,
+    /// Host variables that are not in the final environment. Empty when the host
+    /// environment was cleared: then every host variable not passed is gone, which the
+    /// mode already says.
+    pub unset: Vec<OsString>,
+    /// Variables set to a value the host did not have, with the value as it may be shown.
+    /// A value that ends in the host's value after a `:` is shown as the part in front of
+    /// it and the placeholder `<the host's NAME>` (a `path-prepend` on `PATH`).
+    pub set: Vec<(OsString, String)>,
+    /// The secrets set, whose values are never shown.
+    pub secrets: Vec<OsString>,
+}
+
+/// The changes of `environment` against `host`.
+pub fn environment_changes(
+    policy: &Policy,
+    host: &Values,
+    environment: &Environment,
+) -> EnvironmentChanges {
+    let inherited = policy.env_mode == EnvMode::Inherit;
+    let mut changes = EnvironmentChanges {
+        inherited,
+        ..EnvironmentChanges::default()
+    };
+    for (name, value) in environment.shown() {
+        let Some(value) = value else {
+            changes.secrets.push(name);
+            continue;
+        };
+        match host.get(&name) {
+            Some(before) if *before == value => changes.kept += 1,
+            before => changes
+                .set
+                .push((name.clone(), shown_change(&name, before, &value))),
+        }
+    }
+    if inherited {
+        changes.unset = host
+            .keys()
+            .filter(|name| !environment.values.contains_key(*name))
+            .cloned()
+            .collect();
+    }
+    changes
+}
+
+/// `value` as the summary shows it: the whole value, or, when it ends in `before` after a
+/// `:`, the part in front of it and a placeholder for the host's value.
+fn shown_change(name: &OsStr, before: Option<&OsString>, value: &OsStr) -> String {
+    let whole = value.to_string_lossy().into_owned();
+    let Some(before) = before else {
+        return whole;
+    };
+    if before.is_empty() {
+        return whole;
+    }
+    let prefix = value
+        .as_bytes()
+        .strip_suffix(before.as_bytes())
+        .and_then(|prefix| prefix.strip_suffix(b":"));
+    match prefix {
+        Some(prefix) => format!(
+            "{}:<the host's {}>",
+            String::from_utf8_lossy(prefix),
+            name.to_string_lossy()
+        ),
+        None => whole,
+    }
+}
+
 /// The environment and the warnings raised while assembling it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assembled {

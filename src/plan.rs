@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
-use crate::isolated_env::{assemble_environment, Environment, SecretFile};
+use crate::isolated_env::{
+    assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
+};
 use crate::layers::{Directive, Layer, Policy, PolicySource};
 use crate::mounts::{
     generate, policy_sources, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
@@ -131,9 +133,13 @@ pub struct Plan {
     /// default.
     pub policy_sources: Vec<PolicySource>,
     pub variables: Variables,
+    /// The home directory, which the summary shortens to `~`.
+    pub home: PathBuf,
     pub mounts: ResolvedMounts,
     pub skipped_paths: Vec<SkippedPath>,
     pub environment: Environment,
+    /// How `environment` differs from the host's.
+    pub environment_changes: EnvironmentChanges,
     pub warnings: Vec<Warning>,
     pub bwrap: PathBuf,
     /// The command as given and resolved; none when `--print-plan` was given without one.
@@ -154,14 +160,18 @@ pub fn plan(
         &isolation.mounts.items,
         command.as_ref(),
     );
+    let environment_changes =
+        environment_changes(inputs.policy, inputs.host, &isolation.environment);
     Plan {
         nested: is_nested(inputs.host),
         policy: inputs.policy.clone(),
         policy_sources: isolation.policy_sources,
         variables: inputs.variables.clone(),
+        home: inputs.home.path().to_path_buf(),
         mounts: isolation.mounts,
         skipped_paths: isolation.skipped_paths,
         environment: isolation.environment,
+        environment_changes,
         warnings: isolation.warnings,
         bwrap,
         command,

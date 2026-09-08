@@ -59,7 +59,7 @@ pub fn command_line_layer(rw: &[&str], hide: &[&str]) -> Layer {
         workspace: None,
         rw: rw.iter().map(PathBuf::from).collect(),
         hide: hide.iter().map(PathBuf::from).collect(),
-        print_plan: false,
+        print_plan: None,
         command: vec![OsString::from("true")],
     })
 }

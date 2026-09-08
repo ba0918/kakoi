@@ -1,23 +1,25 @@
-//! The plan as `--print-plan` shows it (specification section 13): the merged policy, the
-//! real paths of the policy files read, the four variables, each mount item applied or
-//! skipped with the reason, each scan hit left visible with the reason, each scan root,
-//! `hide-mounts` `under`, and `path-prepend` entry skipped with the reason, the final
-//! environment with the secret values masked, the
-//! resolved command, and the bwrap argument list with the descriptors as symbols. The
-//! layout is not a contract; the values embedded are escaped so that no control character
-//! reaches the terminal. Pure.
+//! The plan as `--print-plan` shows it (specification section 13), in two forms. The
+//! summary, the default, is what a person reads: the real paths of the policy files read,
+//! the four variables, the network mode, each mount item applied or skipped, and how the
+//! environment differs from the host's. The full form (`--print-plan=full`) adds the
+//! merged policy, the origin of every item, the whole environment with the secret values
+//! masked, and the bwrap argument list with the descriptors as symbols. Both name the
+//! resolved command. The layout is not a contract; the values embedded are escaped so
+//! that no control character reaches the terminal. Pure.
 
 use std::ffi::OsStr;
 use std::fmt::Write;
+use std::path::Path;
 
+use crate::cli::PlanForm;
 use crate::diagnostic::escape_control;
 use crate::layers::{Directive, LayerOrigin, Policy, PolicySource};
 use crate::mounts::{ItemOrigin, SkippedRole};
 use crate::plan::{Argument, Plan};
 use crate::policy::{EnvMode, NetworkMode, PolicyPath};
 
-/// The text of `plan`. A nested run is marked on the first line.
-pub fn render(plan: &Plan) -> String {
+/// The text of `plan` in `form`. A nested run is marked on the first line.
+pub fn render(plan: &Plan, form: PlanForm) -> String {
     let mut text = String::new();
     if plan.nested {
         text.push_str("nested: yes (PROCESS_WRAP=1; the plan is shown but would not be applied)\n");
@@ -45,7 +47,71 @@ pub fn render(plan: &Plan) -> String {
             .as_deref()
             .map_or_else(|| "(no value)".to_string(), shown)
     );
-    render_policy(&mut text, &plan.policy);
+    match form {
+        PlanForm::Summary => render_summary(&mut text, plan),
+        PlanForm::Full => render_full(&mut text, plan),
+    }
+    text
+}
+
+/// The summary: the network mode, the mount items with `~` for the home directory and the
+/// origin only where it is not the global scope, the changes to the environment, and the
+/// command. Ends with the line that names the full form.
+fn render_summary(text: &mut String, plan: &Plan) {
+    let _ = writeln!(text, "network: {}", network_mode(plan.policy.network_mode));
+    let _ = writeln!(text, "mounts (~ is {}):", shown(&plan.home));
+    for item in &plan.mounts.items {
+        let _ = writeln!(
+            text,
+            "  {:<7} {}{}",
+            directive(item.directive),
+            shortened(&item.real, &plan.home),
+            item_origin_note(&item.origin)
+        );
+    }
+    for item in &plan.mounts.skipped {
+        let _ = writeln!(
+            text,
+            "  skipped {} `{}`{}: {}",
+            directive(item.directive),
+            escape_control(&item.written),
+            layer_note(&item.origin),
+            escape_control(&item.reason)
+        );
+    }
+    render_left_visible_and_skipped_paths(text, plan);
+    let changes = &plan.environment_changes;
+    let kept = match (changes.inherited, changes.kept) {
+        (true, 1) => "1 variable as on the host".to_string(),
+        (true, count) => format!("{count} variables as on the host"),
+        (false, 1) => "1 variable passed from the host".to_string(),
+        (false, count) => format!("{count} variables passed from the host"),
+    };
+    let _ = writeln!(
+        text,
+        "environment ({}): {kept}, and:",
+        env_mode(plan.policy.env_mode)
+    );
+    for name in &changes.unset {
+        let _ = writeln!(text, "  unset  {}", shown(name));
+    }
+    for (name, value) in &changes.set {
+        let _ = writeln!(text, "  set    {}={}", shown(name), escape_control(value));
+    }
+    for name in &changes.secrets {
+        let _ = writeln!(text, "  secret {} (value not shown)", shown(name));
+    }
+    render_command(text, plan);
+    text.push_str(
+        "(--print-plan=full adds the merged policy, the origin of every item, the whole \
+         environment, and the bwrap arguments)\n",
+    );
+}
+
+/// The full form: the merged policy, every mount item with its real path and its origin,
+/// the whole environment, the command, and the bwrap argument list.
+fn render_full(text: &mut String, plan: &Plan) {
+    render_policy(text, &plan.policy);
     text.push_str("mounts:\n");
     for item in &plan.mounts.items {
         let _ = writeln!(
@@ -67,6 +133,28 @@ pub fn render(plan: &Plan) -> String {
             escape_control(&item.reason)
         );
     }
+    render_left_visible_and_skipped_paths(text, plan);
+    text.push_str("environment:\n");
+    for (name, value) in plan.environment.shown() {
+        match value {
+            Some(value) => {
+                let _ = writeln!(text, "  {}={}", shown(&name), shown(&value));
+            }
+            None => {
+                let _ = writeln!(text, "  {}=<secret, not shown>", shown(&name));
+            }
+        }
+    }
+    render_command(text, plan);
+    text.push_str("bwrap arguments:\n");
+    for argument in &plan.arguments {
+        let _ = writeln!(text, "  {}", argument_text(argument));
+    }
+}
+
+/// The scan hits left visible and the scan roots, `hide-mounts` `under`s, and
+/// `path-prepend` entries skipped, each with the reason. The same in both forms.
+fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
     for left in &plan.mounts.left_visible {
         let _ = writeln!(
             text,
@@ -88,17 +176,9 @@ pub fn render(plan: &Plan) -> String {
             escape_control(&skipped.reason)
         );
     }
-    text.push_str("environment:\n");
-    for (name, value) in plan.environment.shown() {
-        match value {
-            Some(value) => {
-                let _ = writeln!(text, "  {}={}", shown(&name), shown(&value));
-            }
-            None => {
-                let _ = writeln!(text, "  {}=<secret, not shown>", shown(&name));
-            }
-        }
-    }
+}
+
+fn render_command(text: &mut String, plan: &Plan) {
     let _ = writeln!(
         text,
         "command: {}",
@@ -107,11 +187,6 @@ pub fn render(plan: &Plan) -> String {
             .map_or_else(|| "(none)".to_string(), |command| shown(&command.path))
     );
     let _ = writeln!(text, "bwrap: {}", shown(&plan.bwrap));
-    text.push_str("bwrap arguments:\n");
-    for argument in &plan.arguments {
-        let _ = writeln!(text, "  {}", argument_text(argument));
-    }
-    text
 }
 
 fn render_policy(text: &mut String, policy: &Policy) {
@@ -143,16 +218,12 @@ fn render_policy(text: &mut String, policy: &Policy) {
             list(&hide_mounts.fstype)
         );
     }
-    let network = match policy.network_mode {
-        NetworkMode::Host => "host",
-        NetworkMode::None => "none",
-    };
-    let _ = writeln!(text, "  network.mode = {network}");
-    let env_mode = match policy.env_mode {
-        EnvMode::Inherit => "inherit",
-        EnvMode::Clear => "clear",
-    };
-    let _ = writeln!(text, "  env.mode = {env_mode}");
+    let _ = writeln!(
+        text,
+        "  network.mode = {}",
+        network_mode(policy.network_mode)
+    );
+    let _ = writeln!(text, "  env.mode = {}", env_mode(policy.env_mode));
     let _ = writeln!(text, "  env.pass = {}", list(&policy.env_pass));
     for (name, value) in &policy.env_set {
         let _ = writeln!(
@@ -201,6 +272,20 @@ fn directive(directive: Directive) -> &'static str {
     }
 }
 
+fn network_mode(mode: NetworkMode) -> &'static str {
+    match mode {
+        NetworkMode::Host => "host",
+        NetworkMode::None => "none",
+    }
+}
+
+fn env_mode(mode: EnvMode) -> &'static str {
+    match mode {
+        EnvMode::Inherit => "inherit",
+        EnvMode::Clear => "clear",
+    }
+}
+
 /// Where a policy came from. The built-in default names `process-wrap init`, the form that
 /// writes it out, which is the contract of specification section 13.
 fn policy_source(source: &PolicySource) -> String {
@@ -221,6 +306,16 @@ fn layer(origin: &LayerOrigin) -> String {
     }
 }
 
+/// The summary's note on a written item's layer: nothing for the global scope, which the
+/// `policy files` lines name; a short label for the other two layers.
+fn layer_note(origin: &LayerOrigin) -> &'static str {
+    match origin {
+        LayerOrigin::Profile(_) | LayerOrigin::BuiltInDefault => "",
+        LayerOrigin::PolicyFile(_) => " (--policy-file)",
+        LayerOrigin::CommandLine => " (command line)",
+    }
+}
+
 fn item_origin(origin: &ItemOrigin) -> String {
     match origin {
         ItemOrigin::Written(origin) => layer(origin),
@@ -228,6 +323,18 @@ fn item_origin(origin: &ItemOrigin) -> String {
         ItemOrigin::HideMounts => "hide-mounts".to_string(),
         ItemOrigin::SecretFile(name) => format!("the secret `{}`", escape_control(name)),
         ItemOrigin::ConfigSecrets => "the configuration directory's secrets/".to_string(),
+    }
+}
+
+/// The summary's note on an applied item's origin: nothing for the global scope, a short
+/// label otherwise.
+fn item_origin_note(origin: &ItemOrigin) -> String {
+    match origin {
+        ItemOrigin::Written(origin) => layer_note(origin).to_string(),
+        ItemOrigin::Scan => " (scan)".to_string(),
+        ItemOrigin::HideMounts => " (hide-mounts)".to_string(),
+        ItemOrigin::SecretFile(name) => format!(" (secret {})", escape_control(name)),
+        ItemOrigin::ConfigSecrets => " (secrets/ of the configuration directory)".to_string(),
     }
 }
 
@@ -245,6 +352,17 @@ fn list(items: &[String]) -> String {
         .map(|item| format!("`{}`", escape_control(item)))
         .collect();
     format!("[{}]", quoted.join(", "))
+}
+
+/// `path` with the home directory replaced by `~`: the home itself, or a path below it.
+/// A path that only shares a prefix of the name (`/home/user2` for `/home/user`) is left
+/// whole.
+fn shortened(path: &Path, home: &Path) -> String {
+    match path.strip_prefix(home) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
+        Ok(rest) => format!("~/{}", shown(rest)),
+        Err(_) => shown(path),
+    }
 }
 
 /// A path or an OS string as it may be shown: lossily as text, control characters

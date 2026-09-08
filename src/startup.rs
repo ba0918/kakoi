@@ -89,7 +89,7 @@ where
     // Stage 2, nested without `--print-plan`: stages 3 to 8 are skipped, nothing is read
     // and nothing changed, and the command is resolved on the host's `PATH`
     // (specification sections 12.1 and 13).
-    if is_nested(&host) && !invocation.print_plan {
+    if is_nested(&host) && invocation.print_plan.is_none() {
         return Ok(Outcome::Nested(Nested {
             warning: nested_warning(),
             command: locate_command(&invocation.command[0], &host),

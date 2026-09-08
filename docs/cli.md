@@ -2,7 +2,7 @@
 
 ```
 process-wrap [OPTIONS] -- COMMAND [ARGS]...
-process-wrap [OPTIONS] --print-plan [-- COMMAND [ARGS]...]
+process-wrap [OPTIONS] --print-plan[=FORM] [-- COMMAND [ARGS]...]
 process-wrap init [NAME]
 process-wrap --version
 process-wrap --help
@@ -17,7 +17,7 @@ process-wrap --help
 | `--workspace PATH` | The workspace. Defaults to the current directory. |
 | `--rw PATH` | An `rw` directive on the command-line layer. Repeatable. |
 | `--hide PATH` | A `hide` directive on the command-line layer. Repeatable. |
-| `--print-plan` | Print the plan and exit without running the command. |
+| `--print-plan[=FORM]` | Print the plan and exit without running the command. `FORM` is `summary` (the default) or `full`; see [The plan](#the-plan). The value is written with `=` only. |
 | `--version`, `--help` | Print the version or the usage. Each is used alone. |
 | `init [NAME]` | Write the built-in default to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. Used alone; see [Getting started](getting-started.md#write-the-boundary-out-and-edit-it). |
 
@@ -45,21 +45,58 @@ To see what would happen without running anything:
 process-wrap --print-plan -- codex
 ```
 
-The plan shows:
+The plan comes in two forms. The summary, which `--print-plan` prints by itself, is written
+to be read:
 
-- the merged policy and the policy files read;
+```
+policy files:
+  /home/you/.config/process-wrap/profile/default.toml
+variables:
+  workspace = /home/you/work/project
+  worktree = /home/you/work/project
+  git_common_dir = /home/you/work/project/.git
+  config_dir = /home/you/.config/process-wrap
+network: host
+mounts (~ is /home/you):
+  hide    ~/.ssh
+  rw      ~/work/project
+  hide    ~/work/project/.env (scan)
+  skipped rw `~/.npm`: does not exist
+environment (inherit): 41 variables as on the host, and:
+  unset  SSH_AUTH_SOCK
+  set    PATH=/home/you/.local/lib/process-wrap/bin:<the host's PATH>
+  set    PROCESS_WRAP=1
+  secret GH_TOKEN (value not shown)
+command: /usr/bin/codex
+bwrap: /usr/bin/bwrap
+```
+
+It shows:
+
+- the policy files read;
 - the four variables (`${workspace}`, `${worktree}`, `${git_common_dir}`, `${config_dir}`);
-- every mount item, applied or skipped with the reason;
+- the network mode;
+- every mount item, applied or skipped with the reason, in the order they are applied. The
+  home directory is shortened to `~`, and an item is annotated with where it came from only
+  when that is not the profile: `(--policy-file)`, `(command line)`, `(scan)`,
+  `(hide-mounts)`, or the secret it hides;
 - every scan hit left visible, and every scan root, `hide-mounts` `under`, or `path-prepend`
   entry skipped, each with the reason;
-- the final environment, with secret values masked;
-- the resolved command and the `bwrap` argument list.
+- how the environment differs from the host's: the variables unset, the variables set with
+  their values (a `PATH` that only grew in front shows the part added), and the names of the
+  secrets. Variables that are as on the host are counted, not listed;
+- the resolved command.
 
-Only the values of the variables the policy names under `secrets` are masked. Every other
-variable of the final environment is printed with its value as it is, and with
-`env.mode = "inherit"` that includes any host credential whose name matches none of the `unset`
-patterns ([known gap 6](security.md#known-gaps)). Treat the output of `--print-plan` as
-sensitive.
+`--print-plan=full` is the whole plan, for comparing two runs or for checking what reaches
+`bwrap`. In place of the summary's mount list and environment changes it prints the merged
+policy with the layer each entry came from, every mount item with its real path and its
+origin, the final environment in full, and the `bwrap` argument list.
+
+In both forms only the values of the variables the policy names under `secrets` are masked.
+In the full form every other variable of the final environment is printed with its value as
+it is, and with `env.mode = "inherit"` that includes any host credential whose name matches
+none of the `unset` patterns ([known gap 6](security.md#known-gaps)). Treat the output of
+`--print-plan=full` as sensitive; the summary prints only the values the policy set.
 
 ## Exit codes and diagnostics
 
