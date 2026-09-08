@@ -99,13 +99,18 @@ Then, as you need them:
   rather than a measurement, and nothing is shipped in either list.
 
   It is a template, not part of the product, so what is checked here about the bundled one and
-  what you check about your copy are two different things. Checked here, with a stand-in named
-  `process-wrap` at the front of `PATH` that prints its arguments and exits, so that the real
-  command never runs: that an argument list starting with a subcommand, one starting with an
-  option, and `--help` all reach `process-wrap`; that the values of the copied options appear in
-  its arguments; that a name put in a list temporarily takes effect only when it is the first
-  word, an argument list starting with an option being isolated as usual; that a copy whose flag
-  is empty still reaches `process-wrap`; and that with `PROCESS_WRAP_SHIM_OFF=1` none is started.
+  what you check about your copy are two different things. What is checked here runs with two
+  directories at the front of `PATH`: the first holds the copy under the wrapped command's name,
+  the second holds stand-ins for the wrapped command and for `process-wrap` that print their
+  arguments and exit. The order matters, since a stand-in found before the copy would take the
+  invocation instead of it, and with both directories in place the real command never runs — on
+  the paths that go straight to it either. The conditions: that an argument list starting with a
+  subcommand, one starting with an option, and `--help` all reach `process-wrap`; that the values
+  of the copied options appear in its arguments; that a name put in a list temporarily takes
+  effect only when it is the first word, an argument list starting with an option being isolated
+  as usual; that a copy whose flag is empty still reaches `process-wrap`; and that with
+  `PROCESS_WRAP_SHIM_OFF=1` the `process-wrap` stand-in is not started, the stand-in for the
+  wrapped command being reached instead with the arguments unchanged.
   One condition needs the real command: that the flag put in front reaches it, which for codex is
   a start-up header saying something other than `sandbox: read-only`. Yours to check about your
   copy: that for every name in its allow list, no model runs while that subcommand executes.
