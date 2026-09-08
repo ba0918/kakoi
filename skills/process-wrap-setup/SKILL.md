@@ -1,6 +1,6 @@
 ---
 name: process-wrap-setup
-description: "Adapt a process-wrap installation to this machine: ask first whether the profile and the shim directory are edited elsewhere (then propose lines instead of writing), propose profile entries for the commands that are installed, a copy of the shim template with its tool section filled in for the command being wrapped and a check that every route to the command finds the copy first, path-prepend entries for replacement commands, and where a command that broke inside the isolation belongs. Use when the user asks to set up, adjust, or review their process-wrap profile, install a shim for a command, or work out why a command inside the isolation cannot see, write, or reach something."
+description: "Adapt a process-wrap installation to this machine: propose profile entries for the commands that are installed, a copy of the shim template with its tool section filled in for the command being wrapped, a check that every route to the command finds the copy first, path-prepend entries for replacement commands, and where a command that broke inside the isolation belongs; asks first whether the profile or the shim is kept elsewhere and then proposes instead of writing. Use when the user asks to set up, adjust, or review their process-wrap profile, install a shim for a command, or work out why a command inside the isolation cannot see, write, or reach something."
 ---
 
 # process-wrap setup
@@ -31,7 +31,7 @@ mode that asks for approval before a write.
 
 ## What to do
 
-1. **Ask first whether the profile is edited somewhere else.** Before proposing anything for
+1. **Ask first whether the profile is kept elsewhere.** Before proposing anything for
    the profile, ask the user whether the profile in the configuration directory is the file
    they edit, or whether it is produced from a file kept elsewhere — generated or synced from
    a dotfiles repository or a template, or a symbolic link to such a file. The user's answer is
@@ -77,8 +77,9 @@ mode that asks for approval before a write.
      one path that does not exist: for `--rw` it is skipped, for `--workspace` `process-wrap`
      stops with a `path` diagnostic.
 
-   None of these is fixed by editing the template's body; the specification leaves them out
-   on purpose (section 18).
+   None of these is fixed by editing the template's body. The first two are left out of the
+   template on purpose (specification section 18); the third is the same one-value-per-option
+   reading seen from the other side.
 
    Then propose a directory on `PATH` that comes before the real command, name the copy
    after the command being wrapped so that every invocation of that name goes through it,
@@ -95,7 +96,10 @@ mode that asks for approval before a write.
    shell, the command execution of the agent CLI this skill runs in, a cron job, an editor,
    and so on. For each route, resolve the name with `command -v NAME` on that route and
    compare the real path of what it returns (`realpath`) with the real path of the copy;
-   they must be the same file. Do not start the command to find out. The two routes you
+   they must be the same file. `command -v` looks past shell functions and aliases, so on
+   an interactive shell also check that none claims the name (`type NAME` in bash and zsh,
+   `type -a NAME` in fish); a function under the command's name takes the invocation before
+   `PATH` is searched at all. Do not start the command to find out. The two routes you
    always check are the user's interactive shell and this CLI's own command execution — the
    latter you can run yourself. Routes you cannot reach are the user's to check, with the
    same command. If the check fails on this CLI's side, the likeliest reason is that the
@@ -166,10 +170,13 @@ mode that asks for approval before a write.
    see it, and you never repeat a secret value back. What this protects is the value and
    the set of names; the variable names and paths the profile and the plan print are not
    secret. Whether a secret file is in place you learn from the launch output, when the
-   profile has a `secrets` entry for it: a `process-wrap: warning:` line means the file is
-   missing, no warning and no diagnostic means it is there, and a diagnostic of kind
-   `secret` means it is there but its value is unusable. When the profile has no `secrets`
-   entry — the built-in default has none — the launch tells you nothing, so ask the user.
+   profile has a `secrets` entry for it: a `process-wrap: warning:` line naming that
+   secret means the file is missing (other warnings — an `rw` item not covering the
+   workspace, nesting — say nothing about it), no such warning and no diagnostic means it
+   is there, and a diagnostic of kind `secret` means it is there but its value is unusable.
+   If the launch stops with a diagnostic of another kind, it never reached the secrets and
+   you learn nothing. When the profile has no `secrets` entry — the built-in default has
+   none — the launch tells you nothing either, so ask the user.
 5. **Do not edit the specification or the public documentation of `process-wrap`** (the
    README and the pages under `docs/`). They describe the product, not this machine. If
    something on this machine cannot be expressed in the policy format, say so and stop; do

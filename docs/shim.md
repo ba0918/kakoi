@@ -93,14 +93,16 @@ that subcommand executes.
 ## The setup skill
 
 [`skills/process-wrap-setup`](../skills/process-wrap-setup) is an Agent Skill that fits an
-installation to the machine it is on. It asks first whether your profile, and later the directory you pick for the shim, are edited
-somewhere else — generated, synced, or linked from a dotfiles repository — and if so proposes the
-lines or the file for you to put in place instead of writing there. It proposes:
+installation to the machine it is on. It asks first whether your profile, and later the shim in
+the directory you pick, are kept elsewhere — generated, synced, or linked from a dotfiles
+repository — and if so proposes the lines or the file for you to put in place instead of writing
+there. It proposes:
 
 - profile entries for the commands you want to wrap that are installed;
 - a copy of the shim template with its tool section filled in for the command being wrapped,
   saying which options in the command's `--help` the template cannot copy (a positional working
-  directory, several values after one option) and how to work around each;
+  directory, several values after one option, several values joined into one word) and how to
+  work around each;
 - a check, on every route you start the command from, that the copy is found before the real
   command;
 - `path-prepend` entries for replacement commands;
@@ -119,4 +121,4 @@ or from a CLI not started through `process-wrap`. The configuration directory ma
 a writable mount item, so an isolated agent cannot edit its own profile. The agent is therefore
 not isolated while the skill runs. Run your CLI in a mode that asks before writing, and check
 the skill for yourself: that each of its "What to keep to" items is written there as an
-instruction, and that one trial shows you a diff and asks for approval before the first write.
+instruction, and that a trial shows you a diff and asks for approval before every write.
