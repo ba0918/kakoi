@@ -20,8 +20,8 @@ that carry them.
 - **Light enough for every launch.** One binary, one `bwrap` call, no daemon, no image, no
   persistent state. `cd` into the repository and run.
 - **A trust boundary you can state in a sentence.** The host is trusted; the isolated process is
-  not. What the policy names is what the process gets, and the exceptions are written down as
-  [known gaps](docs/security.md#known-gaps) rather than left implicit.
+  not. The policy decides what the process can write and what it cannot see, and the exceptions
+  are written down as [known gaps](docs/security.md#known-gaps) rather than left implicit.
 
 ## Requirements
 

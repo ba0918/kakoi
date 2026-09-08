@@ -92,6 +92,6 @@ mode that asks for approval before a write.
    0700 and is always hidden inside the isolation, and that the profile refers to it as
    `${config_dir}/secrets/<name>`. The user puts the value there; you never see it, and
    you never repeat a secret value back.
-4. **Do not edit the specification or the README of `process-wrap`.** They describe the
-   product, not this machine. If something on this machine cannot be expressed in the
+4. **Do not edit the specification or the public documentation of `process-wrap`** (the
+   README and the pages under `docs/`). They describe the product, not this machine. If something on this machine cannot be expressed in the
    policy format, say so and stop; do not work around it by changing the documents.
