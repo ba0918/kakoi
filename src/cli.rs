@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser};
+use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser, ValueEnum};
 
 use crate::diagnostic::{is_control_character, Diagnostic};
 
@@ -20,8 +20,20 @@ pub struct Invocation {
     pub workspace: Option<PathBuf>,
     pub rw: Vec<PathBuf>,
     pub hide: Vec<PathBuf>,
-    pub print_plan: bool,
+    /// The form of the plan to print; none when the command is to be run.
+    pub print_plan: Option<PlanForm>,
     pub command: Vec<OsString>,
+}
+
+/// Which form `--print-plan` shows (specification section 13): the summary; the full
+/// plan with the merged policy, the origin of every item, the whole environment, and the
+/// bwrap argument list; or the same content as one line of JSON, for LLM agents and
+/// tools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PlanForm {
+    Summary,
+    Full,
+    Json,
 }
 
 /// What the command line asks for: a run, the help text, or the version line.
@@ -40,7 +52,7 @@ pub enum Parsed {
     version,
     about = "Run a command inside a bubblewrap mount namespace shaped by a layered policy.",
     override_usage = "process-wrap [OPTIONS] -- COMMAND [ARGS]...\n       \
-                      process-wrap [OPTIONS] --print-plan [-- COMMAND [ARGS]...]\n       \
+                      process-wrap [OPTIONS] --print-plan[=full|json] [-- COMMAND [ARGS]...]\n       \
                       process-wrap init [NAME]\n       \
                       process-wrap --version\n       \
                       process-wrap --help",
@@ -69,9 +81,18 @@ struct Arguments {
     #[arg(long, value_name = "PATH", action = ArgAction::Append)]
     hide: Vec<PathBuf>,
 
-    /// Print the plan to standard output and exit without running the command.
-    #[arg(long)]
-    print_plan: bool,
+    /// Print the plan and exit without running the command. `=full` adds the merged
+    /// policy, the origin of every item, the whole environment, and the bwrap arguments;
+    /// `=json` is the same as one line of JSON, for LLM agents and tools.
+    #[arg(
+        long,
+        value_name = "FORM",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "summary",
+        value_enum
+    )]
+    print_plan: Option<PlanForm>,
 
     /// The command and its arguments, after `--`.
     #[arg(last = true, allow_hyphen_values = true, value_name = "COMMAND")]
@@ -139,7 +160,7 @@ where
         }
         return Ok(Parsed::Version(parser.render_version()));
     }
-    if parsed.command.is_empty() && !parsed.print_plan {
+    if parsed.command.is_empty() && parsed.print_plan.is_none() {
         return Err(Diagnostic::usage(
             "COMMAND is required unless --print-plan is given",
         ));

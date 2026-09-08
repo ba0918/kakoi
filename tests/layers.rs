@@ -37,7 +37,7 @@ fn invocation(profile: &str, policy_file: Option<&str>) -> Invocation {
         workspace: None,
         rw: vec![PathBuf::from("/cli/rw")],
         hide: vec![],
-        print_plan: false,
+        print_plan: None,
         command: vec![OsString::from("true")],
     }
 }

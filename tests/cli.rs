@@ -8,7 +8,7 @@ use common::{
     assert_diagnostic, binary, home_with_workspace, output_report, run,
     run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir, RW_WORKSPACE,
 };
-use process_wrap::cli::{interpret, Invocation, Parsed};
+use process_wrap::cli::{interpret, Invocation, Parsed, PlanForm};
 use process_wrap::diagnostic::Kind;
 
 /// A name for the failure message and the arrangement it makes under a temporary home.
@@ -115,8 +115,36 @@ fn print_plan_form_parses_without_a_command() {
         panic!("not an invocation");
     };
 
-    assert!(invocation.print_plan);
+    assert_eq!(invocation.print_plan, Some(PlanForm::Summary));
     assert!(invocation.command.is_empty());
+}
+
+#[test]
+fn print_plan_takes_its_form_after_an_equals_sign() {
+    // The value is written with `=` only: separated, `full` would be taken for a command
+    // written without `--` (specification section 4.1).
+    for (arguments, form) in [
+        (&["--print-plan=full", "--", "true"][..], PlanForm::Full),
+        (&["--print-plan=summary"][..], PlanForm::Summary),
+        (&["--print-plan=json"][..], PlanForm::Json),
+    ] {
+        let Parsed::Invocation(invocation) = interpret_ok(arguments) else {
+            panic!("not an invocation");
+        };
+        assert_eq!(invocation.print_plan, Some(form), "{arguments:?}");
+    }
+
+    let home = TempDir::new();
+    for arguments in [
+        &["--print-plan=bogus"][..],
+        &["--print-plan="][..],
+        &["--print-plan", "full"][..],
+        &["--print-plan=summary", "--print-plan=full"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
 }
 
 #[test]
@@ -226,6 +254,7 @@ fn a_repeated_single_use_option_is_a_usage_diagnostic() {
     for arguments in [
         &["--profile", "a", "--profile", "b", "--", "true"][..],
         &["--print-plan", "--print-plan"][..],
+        &["--print-plan=full", "--print-plan"][..],
     ] {
         let output = run(home.path(), arguments);
 
@@ -403,9 +432,268 @@ fn print_plan_exits_zero_and_prints_the_resolved_command() {
     assert_eq!(output.status.code(), Some(0), "{report}");
     assert!(output.stderr.is_empty(), "{report}");
     let plan = String::from_utf8(output.stdout).unwrap();
-    assert!(plan.contains("/bin/true"), "{report}");
+    assert!(plan.contains("command: /bin/true\n"), "{report}");
     assert!(plan.contains(workspace.to_str().unwrap()), "{report}");
-    assert!(plan.contains("--ro-bind"), "{report}");
+    // The summary leaves the bwrap argument list to the full form.
+    assert!(!plan.contains("bwrap arguments:"), "{report}");
+    assert!(!plan.contains("--ro-bind"), "{report}");
+}
+
+#[test]
+fn print_plan_full_adds_the_merged_policy_the_environment_and_the_bwrap_arguments() {
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+
+    let output = binary(home.path())
+        .env("KEPT", "as-is")
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=full",
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan = String::from_utf8(output.stdout).unwrap();
+    assert!(plan.contains("policy (merged):\n"), "{report}");
+    assert!(
+        plan.contains("mounts.rw `${workspace}` (from the profile "),
+        "{report}"
+    );
+    // The whole environment, a variable the policy did not touch included.
+    assert!(plan.contains("\n  KEPT=as-is\n"), "{report}");
+    assert!(plan.contains("command: /bin/true\n"), "{report}");
+    assert!(
+        plan.contains("bwrap arguments:\n  --ro-bind\n  /\n  /\n"),
+        "{report}"
+    );
+    assert!(
+        plan.contains("\n  --seccomp\n  <fd: seccomp filter>\n"),
+        "{report}"
+    );
+}
+
+#[test]
+fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
+    // The JSON form is for tools: the keys of specification section 13, secret values as
+    // `null`, the descriptors as tagged objects, and `command` as `null` when `COMMAND` is
+    // left out.
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN-VALUE\n");
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
+    );
+    let workspace = workspace.to_str().unwrap();
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace,
+            "--print-plan=json",
+            "--",
+            "/bin/true",
+            "one",
+        ],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("FAKE-TOKEN-VALUE"),
+        "{report}"
+    );
+    // One line: the form is for tools, which read it whole.
+    assert_eq!(
+        output.stdout.iter().filter(|byte| **byte == b'\n').count(),
+        1,
+        "{report}"
+    );
+    assert!(output.stdout.ends_with(b"\n"), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for key in [
+        "format_version",
+        "nested",
+        "policy_sources",
+        "variables",
+        "home",
+        "policy",
+        "mounts",
+        "skipped_mounts",
+        "left_visible",
+        "skipped_paths",
+        "environment",
+        "environment_changes",
+        "command",
+        "bwrap",
+        "bwrap_arguments",
+    ] {
+        assert!(plan.get(key).is_some(), "{key} is missing: {report}");
+    }
+    assert_eq!(plan["format_version"], 1, "{report}");
+    assert_eq!(plan["nested"], false, "{report}");
+    assert_eq!(plan["policy_sources"][0]["kind"], "file", "{report}");
+    assert_eq!(plan["variables"]["workspace"], workspace, "{report}");
+    assert_eq!(
+        plan["variables"]["git_common_dir"],
+        serde_json::Value::Null,
+        "{report}"
+    );
+    assert_eq!(
+        plan["policy"]["mounts"][0]["path"], "${workspace}",
+        "{report}"
+    );
+    assert_eq!(
+        plan["policy"]["mounts"][0]["origin"]["kind"], "profile",
+        "{report}"
+    );
+    let mounts = plan["mounts"].as_array().unwrap();
+    let workspace_item = mounts
+        .iter()
+        .find(|item| item["path"] == workspace)
+        .unwrap_or_else(|| panic!("no workspace item: {report}"));
+    assert_eq!(workspace_item["directive"], "rw", "{report}");
+    assert_eq!(workspace_item["kind"], "directory", "{report}");
+    assert!(
+        mounts.iter().any(|item| item["origin"]["kind"] == "secret"
+            && item["origin"]["name"] == "TOKEN"
+            && item["kind"] == "not-directory"),
+        "{report}"
+    );
+    assert_eq!(
+        plan["environment"]["TOKEN"],
+        serde_json::Value::Null,
+        "{report}"
+    );
+    assert_eq!(plan["environment"]["PROCESS_WRAP"], "1", "{report}");
+    assert_eq!(plan["environment_changes"]["mode"], "inherit", "{report}");
+    assert_eq!(
+        plan["environment_changes"]["secrets"][0], "TOKEN",
+        "{report}"
+    );
+    assert_eq!(
+        plan["environment_changes"]["set"]["PROCESS_WRAP"], "1",
+        "{report}"
+    );
+    assert_eq!(plan["command"]["given"], "/bin/true", "{report}");
+    assert_eq!(plan["command"]["arguments"][0], "one", "{report}");
+    assert_eq!(plan["command"]["path"], "/bin/true", "{report}");
+    let arguments = plan["bwrap_arguments"].as_array().unwrap();
+    assert_eq!(arguments[0]["kind"], "literal", "{report}");
+    assert_eq!(arguments[0]["value"], "--ro-bind", "{report}");
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument["kind"] == "seccomp-filter"),
+        "{report}"
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument["kind"] == "empty-file"),
+        "{report}"
+    );
+    assert_eq!(arguments.last().unwrap()["value"], "one", "{report}");
+
+    let without_a_command = run(home.path(), ["--workspace", workspace, "--print-plan=json"]);
+
+    let report = output_report(&without_a_command);
+    assert_eq!(without_a_command.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&without_a_command.stdout).unwrap();
+    assert_eq!(plan["command"], serde_json::Value::Null, "{report}");
+
+    // A nested run is marked by the `nested` key, not by a line in front.
+    let nested = binary(home.path())
+        .env("PROCESS_WRAP", "1")
+        .args(["--workspace", workspace, "--print-plan=json"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&nested);
+    assert_eq!(nested.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&nested.stdout).unwrap();
+    assert_eq!(plan["nested"], true, "{report}");
+}
+
+#[test]
+fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
+    // The summary shows how the environment differs from the host's rather than the whole
+    // of it, masks the secrets, shows the home directory as `~` in the mount items, and
+    // notes the origin only of items that did not come from the global scope
+    // (specification section 13).
+    let (home, workspace) = home_with_workspace();
+    home.write("bin/.keep", "");
+    home.write("cache/.keep", "");
+    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN-VALUE\n");
+    home.write(
+        ".config/process-wrap/profile/default.toml",
+        format!(
+            "{RW_WORKSPACE}[env]\nunset = [\"*_SECRET\"]\nset = {{ ADDED = \"1\" }}\n\
+             path-prepend = [\"~/bin\"]\n\
+             [secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"
+        ),
+    );
+    let cache = home.path().join("cache");
+
+    let output = binary(home.path())
+        .env("PATH", "/usr/bin:/bin")
+        .env("KEPT", "as-is")
+        .env("MY_SECRET", "gone")
+        .env("TOKEN", "from-the-host")
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--rw",
+            cache.to_str().unwrap(),
+            "--print-plan",
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan = String::from_utf8(output.stdout).unwrap();
+    assert!(plan.contains("\nnetwork: host\n"), "{report}");
+    assert!(plan.contains("\n  rw      ~/ws\n"), "{report}");
+    assert!(
+        plan.contains("\n  rw      ~/cache (command line)\n"),
+        "{report}"
+    );
+    // Three variables are as on the host: HOME, XDG_CONFIG_HOME, and KEPT.
+    assert!(
+        plan.contains("\nenvironment (inherit): 3 variables as on the host, and:\n"),
+        "{report}"
+    );
+    assert!(plan.contains("\n  unset  MY_SECRET\n"), "{report}");
+    assert!(plan.contains("\n  set    ADDED=1\n"), "{report}");
+    assert!(
+        plan.contains(&format!(
+            "\n  set    PATH={}:<the host's PATH>\n",
+            home.path().join("bin").display()
+        )),
+        "{report}"
+    );
+    assert!(plan.contains("\n  set    PROCESS_WRAP=1\n"), "{report}");
+    assert!(
+        plan.contains("\n  secret TOKEN (value not shown)\n"),
+        "{report}"
+    );
+    assert!(!plan.contains("FAKE-TOKEN-VALUE"), "{report}");
+    assert!(!plan.contains("from-the-host"), "{report}");
+    assert!(!plan.contains("KEPT"), "{report}");
+    assert!(
+        plan.ends_with(
+            "--print-plan=json is the same as one line of JSON, for LLM agents and tools)\n"
+        ),
+        "{report}"
+    );
 }
 
 #[test]
@@ -597,35 +885,58 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     let home = TempDir::new();
     let workspace = home.path().join("ws");
     std::fs::create_dir(&workspace).unwrap();
-    let arguments = ["--workspace", workspace.to_str().unwrap(), "--print-plan"];
+    let arguments = ["--workspace", workspace.to_str().unwrap()];
 
     // A nested run reads the policy too: a named profile that is not there is a
     // diagnostic, not a plan.
     let without_a_profile = binary(home.path())
         .env("PROCESS_WRAP", "1")
-        .args(["--profile", "strict"])
+        .args(["--profile", "strict", "--print-plan"])
         .args(arguments)
         .output()
         .unwrap();
     assert_diagnostic(&without_a_profile, 125, "policy");
 
     home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
-    let plain = run(home.path(), arguments);
+    // The full form: the nested plan is the plain plan with one line in front that marks
+    // it as nested. (The summary shows the environment as its difference from the host's,
+    // and the nested host already carries `PROCESS_WRAP=1`, so only the full form, which
+    // shows the final environment itself, is the same line for line.)
+    let full = ["--print-plan=full"];
+    let plain = binary(home.path())
+        .args(arguments)
+        .args(full)
+        .output()
+        .unwrap();
     let nested = binary(home.path())
         .env("PROCESS_WRAP", "1")
         .args(arguments)
+        .args(full)
         .output()
         .unwrap();
 
     let report = format!("{}\n{}", output_report(&plain), output_report(&nested));
     assert_eq!(plain.status.code(), Some(0), "{report}");
     assert_eq!(nested.status.code(), Some(0), "{report}");
-    // The nested plan is the plain plan with one line in front that marks it as nested.
     let plain = String::from_utf8(plain.stdout).unwrap();
     let nested = String::from_utf8(nested.stdout).unwrap();
     let (first_line, rest) = nested.split_once('\n').unwrap();
     assert_eq!(rest, plain, "{report}");
     assert!(!plain.contains(first_line), "{report}");
+
+    // The summary carries the same first line.
+    let summary = binary(home.path())
+        .env("PROCESS_WRAP", "1")
+        .args(arguments)
+        .arg("--print-plan")
+        .output()
+        .unwrap();
+
+    let report = output_report(&summary);
+    assert_eq!(summary.status.code(), Some(0), "{report}");
+    let summary = String::from_utf8(summary.stdout).unwrap();
+    assert!(summary.starts_with(&format!("{first_line}\n")), "{report}");
+    assert!(summary.contains("\n  rw      ~/ws\n"), "{report}");
 }
 
 #[test]

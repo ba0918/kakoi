@@ -8,7 +8,9 @@ mod common;
 use common::fixture::{layers, merged};
 use common::TempDir;
 use process_wrap::diagnostic::{Diagnostic, Kind};
-use process_wrap::isolated_env::{assemble_environment, Assembled, SecretFile};
+use process_wrap::isolated_env::{
+    assemble_environment, environment_changes, Assembled, EnvironmentChanges, SecretFile,
+};
 use process_wrap::secret_facts::read_secret_file;
 
 fn host(pairs: &[(&str, &str)]) -> BTreeMap<OsString, OsString> {
@@ -408,6 +410,75 @@ fn assemble_from_file(path: &std::path::Path) -> Result<Assembled, Diagnostic> {
         .into_iter()
         .collect();
     assemble(SECRET, &host(&[]), &secrets, &[])
+}
+
+#[test]
+fn the_changes_against_the_host_name_what_was_unset_set_and_kept() {
+    // The summary of the plan shows the environment as its difference from the host's
+    // (specification section 13): a secret is named without its value, a variable the
+    // host had with the same value is only counted, and a `PATH` that grew in front is
+    // shown as the part added and a placeholder for the host's.
+    let profile = "[env]\nunset = [\"DROP\"]\nset = { NEW = \"1\", SAME = \"1\" }\n\
+         path-prepend = [\"/opt/bin\"]\n\
+         [secrets]\nS = \"/home/u/tokens/s\"";
+    let host = host(&[
+        ("DROP", "1"),
+        ("KEEP", "1"),
+        ("SAME", "1"),
+        ("PATH", "/usr/bin"),
+        ("S", "host"),
+    ]);
+    let assembled = assemble(
+        profile,
+        &host,
+        &secret_bytes(&[("S", b"from-file\n")]),
+        &["/opt/bin"],
+    )
+    .unwrap();
+    let policy = merged(&layers(profile, None, &[], &[]));
+
+    let changes = environment_changes(&policy, &host, &assembled.environment);
+
+    assert_eq!(
+        changes,
+        EnvironmentChanges {
+            inherited: true,
+            kept: 2,
+            unset: vec![OsString::from("DROP")],
+            set: vec![
+                (OsString::from("NEW"), "1".to_string()),
+                (
+                    OsString::from("PATH"),
+                    "/opt/bin:<the host's PATH>".to_string()
+                ),
+                (OsString::from("PROCESS_WRAP"), "1".to_string()),
+            ],
+            secrets: vec![OsString::from("S")],
+        }
+    );
+}
+
+#[test]
+fn the_changes_against_a_cleared_host_count_the_passed_variables_and_name_no_unset() {
+    // With the host cleared, every variable not passed is gone, which the mode says by
+    // itself; listing them would drown the summary.
+    let profile = "[env]\nmode = \"clear\"\npass = [\"KEEP\", \"ABSENT\"]\n";
+    let host = host(&[("KEEP", "1"), ("DROP", "1")]);
+    let assembled = assemble(profile, &host, &BTreeMap::new(), &[]).unwrap();
+    let policy = merged(&layers(profile, None, &[], &[]));
+
+    let changes = environment_changes(&policy, &host, &assembled.environment);
+
+    assert_eq!(
+        changes,
+        EnvironmentChanges {
+            inherited: false,
+            kept: 1,
+            unset: vec![],
+            set: vec![(OsString::from("PROCESS_WRAP"), "1".to_string())],
+            secrets: vec![],
+        }
+    );
 }
 
 #[test]
