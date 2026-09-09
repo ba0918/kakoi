@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.1.1] - 2026-09-09
+
 ### Added
 
 - Every release carries a statically linked binary for Linux on x86_64, as
@@ -58,4 +60,5 @@ layered policy, and returns the command's exit code unchanged.
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
 
+[0.1.1]: https://github.com/ba0918/process-wrap/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ba0918/process-wrap/releases/tag/v0.1.0
