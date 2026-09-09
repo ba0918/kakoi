@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- Every release carries a statically linked binary for Linux on x86_64, as
+  `process-wrap-v<version>-x86_64-unknown-linux-musl.tar.gz` with its SHA-256 beside it.
+  `mise use -g github:ba0918/process-wrap` installs it, and the archive can be taken by hand
+  from the release page. Installing no longer needs a Rust toolchain, and the binary links
+  against nothing on the machine.
+
+### Changed
+
+- The install instructions lead with that binary. Building from source is still supported and
+  is now `cargo install --git https://github.com/ba0918/process-wrap --locked`; the old
+  `cargo install --path .` needed a clone.
+- The setup skill carries its own copy of the shim template, so it no longer asks where the
+  `process-wrap` source tree is. The shim template itself can be fetched from the repository
+  with `curl` rather than copied out of a clone.
+
 ## [0.1.0] - 2026-09-09
 
 The first release. `process-wrap` runs a command inside a bubblewrap mount namespace shaped by a
