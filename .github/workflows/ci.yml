@@ -1,0 +1,85 @@
+# The checks PROJECT.md calls locally reproducible, run on every push and pull request.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The workflow only reads the repository; nothing here writes to it.
+permissions:
+  contents: read
+
+# A newer push on the same ref supersedes an older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    # Pinned rather than ubuntu-latest: the label is moving to 26.04, and the image
+    # decides whether an unprivileged user namespace can be created at all, which is
+    # the one thing every test that starts the binary depends on.
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # PROJECT.md: the tests that start the binary need bwrap 0.9.0 or later, git 2.x,
+      # and python3, and fail rather than skip when one is missing. The versions are
+      # printed so a missing requirement reads as a version line, not as a test failure.
+      - name: Install bubblewrap and report the test requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          bwrap --version
+          git --version
+          python3 --version
+
+      # Ubuntu 23.10 and later set kernel.apparmor_restrict_unprivileged_userns=1, which
+      # stops bwrap from creating the namespace ("setting up uid map: Permission denied").
+      # The runner is a throwaway VM, so the restriction is lifted rather than replaced by
+      # an AppArmor profile. The guard keeps the step correct on an image without the knob.
+      - name: Allow unprivileged user namespaces
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl kernel.apparmor_restrict_unprivileged_userns
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          else
+            echo "no apparmor_restrict_unprivileged_userns knob on this image"
+          fi
+
+      - name: cargo build
+        run: cargo build --locked
+
+      - name: cargo test
+        run: cargo test --all-targets --locked
+
+      - name: cargo fmt
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  msrv:
+    # Cargo.toml declares rust-version = "1.85"; this job is what makes that claim true.
+    # It builds only: the behaviour is covered by `check`, and bwrap is not needed here.
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.85.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo build on the minimum supported Rust version
+        run: cargo build --locked
