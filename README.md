@@ -30,12 +30,21 @@ that carry them.
 - On Ubuntu 24.04 and later, permission for `bwrap` to use a user namespace: the restriction is
   on by default, and every launch needs the namespace. See
   [Allowing the user namespace](docs/getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
-- A Rust toolchain, 1.85 or later, to build
+- A Rust toolchain, 1.85 or later, only to build from source
 
 ## Install
 
 ```sh
-cargo install --path .
+mise use -g github:ba0918/process-wrap
+```
+
+Every release carries a statically linked binary for Linux on x86_64: nothing to build, and no
+library it has to find on your machine. Without `mise`, take the archive from the
+[latest release](https://github.com/ba0918/process-wrap/releases/latest), check it against the
+`.sha256` beside it, and put `process-wrap` on your `PATH`. To build from source instead:
+
+```sh
+cargo install --git https://github.com/ba0918/process-wrap --locked
 ```
 
 That is the whole installation. With no profile written anywhere, `process-wrap -- COMMAND`
@@ -120,9 +129,11 @@ LLM agents and tools.
 `process-wrap` knows nothing about the command it wraps. A shim on `PATH` does the wrapping:
 
 ```sh
-cp examples/shim/codex ~/.local/bin/codex   # a directory that comes before the real codex on PATH
+# ~/.local/bin has to come before the real codex on PATH
+curl -fsSLo ~/.local/bin/codex \
+  https://raw.githubusercontent.com/ba0918/process-wrap/main/examples/shim/codex
 chmod +x ~/.local/bin/codex
-codex                                        # now every invocation goes through process-wrap
+codex   # now every invocation goes through process-wrap
 ```
 
 The shim finds the real `codex` further down `PATH`, copies its `--cd` and `--add-dir` values to

@@ -1,15 +1,23 @@
 # Getting started
 
-This page takes you from `cargo install` to a profile of your own. The [README](../README.md)
+This page takes you from installing to a profile of your own. The [README](../README.md)
 has the short version; the [command line](cli.md) and [policy](policy.md) pages have the
 reference.
 
 ## Install
 
-`process-wrap` is built from source with a Rust toolchain (1.85 or later):
+```sh
+mise use -g github:ba0918/process-wrap
+```
+
+Every release carries a statically linked binary for Linux on x86_64, so this needs no Rust
+toolchain and nothing on the machine for the binary to link against. Without `mise`, take the
+archive from the [latest release](https://github.com/ba0918/process-wrap/releases/latest), check
+it against the `.sha256` beside it, and put `process-wrap` on your `PATH`. Building from source
+instead needs a Rust toolchain (1.85 or later):
 
 ```sh
-cargo install --path .
+cargo install --git https://github.com/ba0918/process-wrap --locked
 ```
 
 `bwrap` 0.9.0 or later must be on `PATH`; on Debian and Ubuntu it is the `bubblewrap` package.

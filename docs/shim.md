@@ -12,9 +12,12 @@ copy after that command, fill in the tool section at the top of the file, and ma
 executable:
 
 ```sh
-cp examples/shim/codex ~/.local/bin/codex
+curl -fsSLo ~/.local/bin/codex \
+  https://raw.githubusercontent.com/ba0918/process-wrap/main/examples/shim/codex
 chmod +x ~/.local/bin/codex
 ```
+
+With the repository cloned, `cp examples/shim/codex ~/.local/bin/codex` does the same thing.
 
 Every invocation of that name then goes through `process-wrap`. The shim finds the real command
 further down `PATH` (skipping itself), creates `/tmp/process-wrap` when it is missing, and hands
