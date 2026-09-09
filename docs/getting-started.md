@@ -44,19 +44,27 @@ sysctl kernel.apparmor_restrict_unprivileged_userns
 
 `1` means it does. A machine with no such key does not carry the restriction at all.
 
-Two ways to allow the namespace:
+Two ways to allow the namespace, and they are not interchangeable:
 
-- Give `bwrap` an AppArmor profile that permits user namespaces, which leaves the restriction in
-  place for everything else. Recent Ubuntu ships one; look for `bwrap-userns-restrict` under
-  `/usr/share/apparmor/extra-profiles/`.
 - Turn the restriction off for the machine:
 
   ```sh
   sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
   ```
 
-  This lasts until the next boot; a line in `/etc/sysctl.d/` keeps it. It is the blunter of the
-  two: the restriction stops applying to every unconfined program, not only to `bwrap`.
+  This lasts until the next boot; a line in `/etc/sysctl.d/` keeps it. It is the blunt one: the
+  restriction stops applying to every unconfined program, not only to `bwrap`.
+- Load the AppArmor profile Ubuntu ships for `bwrap`, `bwrap-userns-restrict` under
+  `/usr/share/apparmor/extra-profiles/`, which leaves the restriction in place for everything
+  else. **A command that sandboxes itself then cannot start inside the isolation.** The profile
+  lets `bwrap` make a user namespace and denies the same to whatever `bwrap` starts, so an LLM
+  CLI carrying a bubblewrap sandbox of its own stops with `bwrap: No permissions to create new
+  namespace`. Setting the sysctl to `0` afterwards does not undo that — the profile is still
+  loaded, and a confined `bwrap` stays confined — so undoing it means unloading the profile:
+
+  ```sh
+  sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
+  ```
 
 Ubuntu describes the restriction in the
 [24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/).
