@@ -887,7 +887,12 @@ fn tiocsti_is_denied_with_eperm() {
 #[test]
 fn tiocsti_with_high_bits_is_denied_with_eperm() {
     let (home, workspace) = home_with_workspace();
-    let request = libc::TIOCSTI | (1 << 32);
+    // `TIOCSTI` is a `c_ulong` against glibc and a `c_int` against musl, so the shift is
+    // written in 64 bits rather than in the constant's own type. The cast is what makes
+    // the musl build compile; against glibc the same cast is the one clippy calls
+    // unnecessary, so the lint is turned off here rather than the cast removed.
+    #[allow(clippy::unnecessary_cast)]
+    let request = libc::TIOCSTI as u64 | (1u64 << 32);
 
     let output = run_script(
         &home,
