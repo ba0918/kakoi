@@ -53,12 +53,11 @@ mode that asks for approval before a write.
    under). Read the entries the built-in default already has before proposing more; say
    which of them do not apply to this machine.
 3. **Propose a copy of the shim template with its tool section filled in.** The template is
-   `examples/shim/codex` in the `process-wrap` source tree, which an installed skill does
-   not carry beside it. Ask the user where that source tree is — the directory
-   `cargo install --path` was run from, or a clone they made — and read the template from
-   there. If they have none, say so and stop; do not write a shim from memory. The body
-   below the tool section is the same for every command; what changes is the tool section
-   at the top, and the values shipped in it are filled in for codex as an example. For the
+   `assets/shim/codex` beside this file, so it is there however `process-wrap` itself was
+   installed. Read it from there and do not write a shim from memory; if that file is
+   missing, say so and stop rather than reconstructing it. The body below the tool section
+   is the same for every command; what changes is the tool section at the top, and the
+   values shipped in it are filled in for codex as an example. For the
    command the user wants to wrap, propose those values from the output of that command's
    own `--help` and from nothing else: its executable name, the flag that turns its own
    sandbox off (empty if it has none), and the options whose values name a directory it
