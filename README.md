@@ -27,6 +27,9 @@ that carry them.
 
 - Linux on x86_64, including WSL2 (no aarch64 in 0.1)
 - `bwrap` 0.9.0 or later on `PATH` (the `bubblewrap` package on Debian and Ubuntu)
+- On Ubuntu 24.04 and later, permission for `bwrap` to use a user namespace: the restriction is
+  on by default, and every launch needs the namespace. See
+  [Allowing the user namespace](docs/getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
 - A Rust toolchain, 1.85 or later, to build
 
 ## Install

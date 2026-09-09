@@ -20,6 +20,39 @@ starts on the built-in default: the bundled
 [`examples/profile/default.toml`](../examples/profile/default.toml), compiled into the binary.
 Where the plan would name the profile file, it says `process-wrap init` instead.
 
+## Allowing the user namespace on Ubuntu 24.04 and later
+
+`process-wrap` always unshares a user namespace, so every launch depends on being allowed to
+create one. Ubuntu 24.04 restricts that by default: an unconfined program may create a user
+namespace, but the capabilities inside it are denied, and setting the mounts up is the next
+thing `bwrap` does. The launch then fails with `bwrap`'s own message and exit code rather than
+a `process-wrap` diagnostic, commonly `bwrap: setting up uid map: Permission denied`.
+
+Whether the restriction applies:
+
+```sh
+sysctl kernel.apparmor_restrict_unprivileged_userns
+```
+
+`1` means it does. A machine with no such key does not carry the restriction at all.
+
+Two ways to allow the namespace:
+
+- Give `bwrap` an AppArmor profile that permits user namespaces, which leaves the restriction in
+  place for everything else. Recent Ubuntu ships one; look for `bwrap-userns-restrict` under
+  `/usr/share/apparmor/extra-profiles/`.
+- Turn the restriction off for the machine:
+
+  ```sh
+  sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+  ```
+
+  This lasts until the next boot; a line in `/etc/sysctl.d/` keeps it. It is the blunter of the
+  two: the restriction stops applying to every unconfined program, not only to `bwrap`.
+
+Ubuntu describes the restriction in the
+[24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/).
+
 ## The first launch
 
 Two things are empty on a machine you have just installed on:

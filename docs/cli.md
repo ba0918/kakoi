@@ -149,7 +149,9 @@ When the command runs, its exit code is returned as it is; a command killed by s
 128 + `s`. `process-wrap` executes `bwrap` in place rather than waiting for it as a child, so a
 failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
 own output and exit code. Only in a nested run, where `process-wrap` executes the command itself,
-does a failed `exec` become the `command not executable` diagnostic above.
+does a failed `exec` become the `command not executable` diagnostic above. The failure a
+fresh machine meets first is a user namespace the kernel will not let `bwrap` create; see
+[Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
 
 ## Nesting
 
