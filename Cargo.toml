@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Run a command inside a bubblewrap mount namespace shaped by a layered policy."
+license = "MIT"
+repository = "https://github.com/ba0918/process-wrap"
 include = [
     "/src/**",
     "/examples/**",
     "/Cargo.toml",
     "/Cargo.lock",
+    "/LICENSE",
     "/README.md",
     "/CHANGELOG.md",
 ]

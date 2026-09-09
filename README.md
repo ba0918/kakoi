@@ -178,3 +178,7 @@ and the fifteen known gaps are in [Security model](docs/security.md).
 network allowance, no aarch64, no protection of `.git/hooks` and `.git/config`, and no shipped
 tool-section values for any CLI other than codex. The complete list is in
 [Not in 0.1](docs/security.md#not-in-01).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
