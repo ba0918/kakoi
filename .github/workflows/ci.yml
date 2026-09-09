@@ -83,3 +83,104 @@ jobs:
 
       - name: cargo build on the minimum supported Rust version
         run: cargo build --locked
+
+  release:
+    # The tag confirms the checks passed; it never starts them, so this job waits for
+    # both. It runs on every push to main and releases nothing unless the manifest's
+    # version has a dated changelog heading and a comparison link and no tag yet, so an
+    # ordinary push is a no-op and a release is cut by promoting the changelog.
+    needs: [check, msrv]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+
+    # The only job that writes: it creates the tag and the release.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Specification section 17: Cargo.toml is the only place the version lives.
+      - name: Decide whether this commit is a release
+        id: decide
+        run: |
+          version=$(awk -F'"' '
+            /^\[package\]/ { p = 1; next }
+            /^\[/          { p = 0 }
+            p && /^version[ \t]*=/ { print $2; exit }
+          ' Cargo.toml)
+          if [ -z "$version" ]; then
+            echo "no version in Cargo.toml"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "the manifest says $version"
+
+          if ! grep -qF "## [$version] - " CHANGELOG.md; then
+            echo "the changelog has no released heading for $version; nothing to release"
+            exit 0
+          fi
+          if grep -F "## [$version] - " CHANGELOG.md | grep -q "Unreleased"; then
+            echo "the changelog heading for $version is still unreleased; nothing to release"
+            exit 0
+          fi
+          if ! grep -qF "[$version]: " CHANGELOG.md; then
+            echo "the changelog has no comparison link for $version; nothing to release"
+            exit 0
+          fi
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null
+          asked=$?
+          set -e
+          case $asked in
+            0) echo "v$version is already published; leaving it alone"; exit 0 ;;
+            2) ;;
+            *) echo "origin could not be asked about v$version (git ls-remote exited $asked)"
+               exit 1 ;;
+          esac
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+      # Specification section 17 states the release is consistent when the version of
+      # `--version`, of Cargo.toml, and of the tag agree. The first two are checked here;
+      # the tag is named from the same value below.
+      - name: Check that --version agrees with the manifest
+        if: steps.decide.outputs.release == 'true'
+        run: |
+          cargo build --locked
+          printed=$(./target/debug/process-wrap --version)
+          expected="process-wrap ${{ steps.decide.outputs.version }}"
+          if [ "$printed" != "$expected" ]; then
+            echo "--version prints '$printed', the manifest says '$expected'"
+            exit 1
+          fi
+          echo "$printed"
+
+      - name: Take the release notes from the changelog
+        if: steps.decide.outputs.release == 'true'
+        run: |
+          awk -v v="${{ steps.decide.outputs.version }}" '
+            index($0, "## [" v "] - ") == 1 { f = 1; next }
+            f && index($0, "## ") == 1      { exit }
+            f && /^\[[^]]+\]: /             { exit }
+            f                               { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "the changelog section for this version is empty"
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Create the tag and the release
+        if: steps.decide.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${{ steps.decide.outputs.version }}
+          gh release create "v$version" \
+            --title "v$version" \
+            --notes-file notes.md \
+            --target "$GITHUB_SHA"
