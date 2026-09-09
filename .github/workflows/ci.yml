@@ -16,6 +16,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The target the release is built for. It appears here as well so that the checks and
+  # the published binary are built the same way.
+  PUBLISHED_TARGET: x86_64-unknown-linux-musl
 
 jobs:
   check:
@@ -24,14 +27,27 @@ jobs:
     # the one thing every test that starts the binary depends on.
     runs-on: ubuntu-24.04
 
+    # Both targets run the whole suite. The published binary is the musl one, and the
+    # two libc implementations do not agree on the type of every constant, so a suite
+    # that passes against glibc is not evidence about what is shipped.
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+
     steps:
       - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       # PROJECT.md: the tests that start the binary need bwrap 0.9.0 or later, git 2.x,
       # and python3, and fail rather than skip when one is missing. The versions are
@@ -58,16 +74,25 @@ jobs:
           fi
 
       - name: cargo build
-        run: cargo build --locked
+        run: cargo build --locked --target ${{ matrix.target }}
 
       - name: cargo test
-        run: cargo test --all-targets --locked
+        run: cargo test --all-targets --locked --target ${{ matrix.target }}
 
+      # Formatting does not depend on the target, so one of the two runs it.
       - name: cargo fmt
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: cargo fmt --check
 
       - name: cargo clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --locked --target ${{ matrix.target }} -- -D warnings
+
+      # The setup skill carries its own copy of the shim template, because a skill
+      # installed on its own has no source tree beside it. Two copies can drift, so the
+      # check is here rather than left to whoever edits one of them.
+      - name: The skill's copy of the shim template matches the original
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: diff examples/shim/codex skills/process-wrap-setup/assets/shim/codex
 
   msrv:
     # Cargo.toml declares rust-version = "1.85"; this job is what makes that claim true.
@@ -101,6 +126,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.PUBLISHED_TARGET }}
 
       - uses: Swatinem/rust-cache@v2
 
@@ -145,19 +172,38 @@ jobs:
           echo "release=true" >> "$GITHUB_OUTPUT"
 
       # Specification section 17 states the release is consistent when the version of
-      # `--version`, of Cargo.toml, and of the tag agree. The first two are checked here;
-      # the tag is named from the same value below.
-      - name: Check that --version agrees with the manifest
+      # `--version`, of Cargo.toml, and of the tag agree. The binary asked here is the
+      # one that will be published, not a host build that happens to sit beside it.
+      - name: Build the binary that will be published
         if: steps.decide.outputs.release == 'true'
         run: |
-          cargo build --locked
-          printed=$(./target/debug/process-wrap --version)
+          cargo build --release --locked --target "$PUBLISHED_TARGET"
+          binary="target/$PUBLISHED_TARGET/release/process-wrap"
+          printed=$("$binary" --version)
           expected="process-wrap ${{ steps.decide.outputs.version }}"
           if [ "$printed" != "$expected" ]; then
             echo "--version prints '$printed', the manifest says '$expected'"
             exit 1
           fi
           echo "$printed"
+          file "$binary"
+
+      # The archive's name is what an installer reads to decide the download fits the
+      # machine, so the target triple stays in it. The binary sits at the root of the
+      # archive: a directory inside would leave finding it to the installer.
+      - name: Package the binary
+        id: package
+        if: steps.decide.outputs.release == 'true'
+        run: |
+          version=${{ steps.decide.outputs.version }}
+          name="process-wrap-v$version-$PUBLISHED_TARGET"
+          mkdir -p dist
+          cp "target/$PUBLISHED_TARGET/release/process-wrap" dist/
+          tar -czf "$name.tar.gz" -C dist process-wrap
+          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+          tar -tzf "$name.tar.gz"
+          cat "$name.tar.gz.sha256"
+          echo "archive=$name.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Take the release notes from the changelog
         if: steps.decide.outputs.release == 'true'
@@ -180,7 +226,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=${{ steps.decide.outputs.version }}
+          archive=${{ steps.package.outputs.archive }}
           gh release create "v$version" \
             --title "v$version" \
             --notes-file notes.md \
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" \
+            "$archive" "$archive.sha256"
+
+      # The tag exists once the command above returns. A release whose files failed to
+      # upload would leave an installer with nothing to fetch, so what the release now
+      # carries is read back rather than assumed.
+      - name: Check that the release carries the binary and its checksum
+        if: steps.decide.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${{ steps.decide.outputs.version }}
+          gh release view "v$version" --json assets -q '.assets[].name'
+          count=$(gh release view "v$version" --json assets -q '.assets | length')
+          if [ "$count" -ne 2 ]; then
+            echo "the release carries $count files, expected the archive and its checksum"
+            exit 1
+          fi
