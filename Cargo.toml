@@ -16,6 +16,12 @@ include = [
     "/CHANGELOG.md",
 ]
 
+[profile.release]
+# The published binary carries no symbol table: about a fifth off its size, at the cost
+# of a panic backtrace naming addresses instead of functions. A panic here is a defect to
+# reproduce from the diagnostic and the command line, not to read out of a user's trace.
+strip = true
+
 [dependencies]
 clap = { version = "=4.6.6", features = ["derive"] }
 libc = "=0.2.189"
