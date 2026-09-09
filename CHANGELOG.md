@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-09-09
 
 The first release. `process-wrap` runs a command inside a bubblewrap mount namespace shaped by a
 layered policy, and returns the command's exit code unchanged.
@@ -40,3 +40,5 @@ layered policy, and returns the command's exit code unchanged.
 - `skills/process-wrap-setup/SKILL.md`, an Agent Skill that proposes the machine-specific parts
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
+
+[0.1.0]: https://github.com/ba0918/process-wrap/releases/tag/v0.1.0
