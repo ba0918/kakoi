@@ -98,8 +98,9 @@ either.
 ## Write the boundary out and edit it
 
 `kakoi init` writes the built-in default to `<configuration directory>/profile/default.toml`,
-creates `profile/` and `secrets/` (mode 0700) and any missing ancestor, and prints the path of
-the file it wrote:
+creates the configuration directory and its `profile/` and `secrets/` components (`secrets/`
+is mode 0700; `profile/` and the written file follow your umask), and prints the path of the
+file it wrote:
 
 ```sh
 $EDITOR "$(kakoi init)"
@@ -121,9 +122,9 @@ kakoi --print-plan -- true
 ```
 
 to see what it makes of the machine you are on: what is writable, read-only, or hidden, and
-which environment variables change. `--print-plan=full` adds the merged policy, the whole
-environment, and the `bwrap` arguments; `--print-plan=json` is one line of JSON for LLM agents and
-tools. The plan is described on the
+which environment variables change. `--print-plan=full` prints the whole plan: the merged
+policy, each mount item's real path and origin, the whole environment, the resolved command,
+and the `bwrap` arguments; `--print-plan=json` is one line of JSON for LLM agents and tools. The plan is described on the
 [command line](cli.md#the-plan) page.
 
 ## Pass a GitHub token
