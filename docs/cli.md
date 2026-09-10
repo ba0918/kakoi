@@ -75,13 +75,14 @@ bwrap: /usr/bin/bwrap
 
 It shows:
 
-- the policy files read;
+- the policy files read (when the built-in default stands in for `profile/default.toml`, the
+  field shows the string `kakoi init`);
 - the four variables (`${workspace}`, `${worktree}`, `${git_common_dir}`, `${config_dir}`);
 - the network mode;
 - every mount item, applied or skipped with the reason, in the order they are applied. The
   home directory is shortened to `~`, and an item is annotated with where it came from only
   when that is not the profile: `(--policy-file)`, `(command line)`, `(scan)`,
-  `(hide-mounts)`, or the secret it hides;
+  `(hide-mounts)`, `(secrets/ of the configuration directory)`, or the secret it hides;
 - every scan hit left visible, every scan root, `hide-mounts` `under`, or `path-prepend`
   entry skipped, and every entry an `rw-copy` item could not take from the host, each with the
   reason. A line explaining `rw-copy` follows the mount list whenever one is in use, since the
@@ -144,7 +145,7 @@ the values the policy set.
 A failure of `kakoi` itself is one line on standard error of the form
 `kakoi: <kind>: <description>`, and the exit code is 125. Two exceptions: a command that
 cannot be found exits 127, and, in a nested run, a command that was found but cannot be executed
-(a script whose interpreter does not exist, a file of a format the kernel cannot run) exits 126.
+(a script whose interpreter does not exist) exits 126.
 
 The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`, and
 `command not executable`. Warnings are one line each starting with `kakoi: warning: ` and
@@ -162,7 +163,9 @@ fresh machine meets first is a user namespace the kernel will not let `bwrap` cr
 
 `kakoi` sets `KAKOI=1` inside the isolation. When it finds that variable already
 set, it does not isolate again: it prints a nesting warning and executes the command itself,
-without `bwrap`. Nesting is detected only through that variable
+without `bwrap`. With `--print-plan`, it reads the policy and prints the plan instead, runs
+nothing, and prints no warning; the plan starts with a `nested:` line (the JSON form carries
+`nested` instead). Nesting is detected only through that variable
 ([known gap 8](security.md#known-gaps)).
 
 ## Open files
