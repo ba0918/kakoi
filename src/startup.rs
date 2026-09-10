@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use crate::cli::{self, Invocation, Parsed};
 use crate::command::{command_candidates, resolve_command};
+use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::first_executable;
@@ -143,6 +144,9 @@ where
         host: &host,
     };
     let isolation = resolve_isolation(&inputs, &facts)?;
+    // The last of stage 7: what each `rw-copy` item that applies starts the isolation
+    // with, read only for the items that survived the resolution and the checks.
+    let copies = read_copy_sources(&isolation.mounts.items)?;
     let bwrap = locate_bwrap(&host)?;
     // A nested run resolves on the host's `PATH` rather than the isolation's
     // (specification section 4.2).
@@ -159,7 +163,7 @@ where
             path: locate_command(command, search_in)?,
         }),
     };
-    let plan = plan::plan(&inputs, isolation, bwrap, command);
+    let plan = plan::plan(&inputs, isolation, copies, bwrap, command);
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,
         current_dir,

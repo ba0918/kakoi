@@ -1780,3 +1780,144 @@ fn rw_over_the_workspace_alone_yields_no_warning() {
         assert!(warnings.is_empty(), "{profile}: {warnings:?}");
     }
 }
+
+// The `rw-copy` directive against the placement rules: nothing written inside one reaches
+// the host, so it is not a writable item, and it is exempt from the landing rule for the
+// same reason `ro` is. What it can still do is show the host's content where a `hide`
+// covered it, and what an `rw` can still do to it is let the writes through.
+
+#[test]
+fn a_policy_file_inside_an_rw_copy_area_is_accepted() {
+    // The policy file's own place is protected because a writable item there lets the next
+    // start read something else. An `rw-copy` gives the isolation a copy: the rewrite dies
+    // with the tmpfs, the host's file and the names on the way to it are untouched, and the
+    // next start reads what it read this time.
+    let result = check(
+        &layers(
+            &format!("[mounts]\nrw-copy = [\"{}\"]", "/home/u/policies"),
+            Some(""),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host().file_with_ancestors(POLICY_FILE),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn the_configuration_directory_and_a_secret_file_inside_an_rw_copy_area_are_accepted() {
+    let result = check(
+        &layers(
+            "[mounts]\nrw-copy = [\"~/.config\"]\n\
+             [secrets]\nT = \"${config_dir}/secrets/t\"",
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host().file_with_ancestors("/home/u/.config/kakoi/secrets/t"),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn a_referenced_rw_copy_landing_inside_a_hide_is_rejected() {
+    // `rw-copy ~/a/link` resolves through the `rw ~/a` and lands on the hidden `~/b/creds`.
+    // Section 6.4 mounts the narrower item after the `hide`, and an `rw-copy` starts from
+    // the host's content, so the link would show what the `hide` covered.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nhide = [\"~/b/creds\"]",
+            Some("[mounts]\nrw-copy = [\"~/a/link\"]"),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
+fn a_referenced_rw_copy_landing_inside_an_ro_is_accepted() {
+    // The same shape over an `ro`: the copy shows the bytes the `ro` already showed and
+    // writes none of them back, so nothing is newly readable or writable. This is the rule
+    // `ro` itself is held to.
+    let result = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/b/creds\"]",
+            Some("[mounts]\nrw-copy = [\"~/a/link\"]"),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .link_to_dir("/home/u/a/link", "/home/u/b/creds")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn a_referenced_rw_landing_inside_an_rw_copy_is_rejected() {
+    // The other direction: the user asked for a place whose writes end with the run, and a
+    // redirectable `rw` over it is mounted afterwards and lets them through to the host.
+    let diagnostic = check(
+        &layers(
+            "[mounts]\nrw = [\"~/a\", \"~/b\"]\nrw-copy = [\"~/b/creds\"]",
+            Some("[mounts]\nrw-file = [\"~/a/link\"]"),
+            &[],
+            &[],
+        ),
+        &variables(),
+        host()
+            .dir("/home/u/a")
+            .dir("/home/u/b")
+            .dir("/home/u/b/creds")
+            .file("/home/u/b/creds/k")
+            .link_to_file("/home/u/a/link", "/home/u/b/creds/k")
+            .links_traversed("/home/u/a/link", &["/home/u/a/link"])
+            .directories_visited("/home/u/b/creds", &["/", "/home", "/home/u", "/home/u/b"]),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
+}
+
+#[test]
+fn an_rw_copy_over_the_work_place_still_warns_that_no_rw_covers_it() {
+    // The warning of section 6.5 is about work that survives the run. An `rw-copy` over the
+    // worktree gives the command a copy it can write and lose, which is exactly the case
+    // the warning is for.
+    let warnings = check(
+        &layers("[mounts]\nrw-copy = [\"${worktree}\"]", None, &[], &[]),
+        &variables(),
+        host(),
+        WORKTREE,
+    )
+    .unwrap();
+
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].to_string().contains(WORKTREE), "{warnings:?}");
+}

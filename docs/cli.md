@@ -59,9 +59,11 @@ variables:
 network: host
 mounts (~ is /home/you):
   hide    ~/.ssh
+  rw-copy ~/.gitconfig
   rw      ~/work/project
   hide    ~/work/project/.env (scan)
   skipped rw `~/.npm`: does not exist
+  (rw-copy starts from a copy of the host's content and is writable inside; nothing written there reaches the host, and it is gone when the command ends)
 environment (inherit): 41 variables as on the host, and:
   unset  SSH_AUTH_SOCK
   set    KAKOI=1
@@ -80,8 +82,10 @@ It shows:
   home directory is shortened to `~`, and an item is annotated with where it came from only
   when that is not the profile: `(--policy-file)`, `(command line)`, `(scan)`,
   `(hide-mounts)`, or the secret it hides;
-- every scan hit left visible, and every scan root, `hide-mounts` `under`, or `path-prepend`
-  entry skipped, each with the reason;
+- every scan hit left visible, every scan root, `hide-mounts` `under`, or `path-prepend`
+  entry skipped, and every entry an `rw-copy` item could not take from the host, each with the
+  reason. A line explaining `rw-copy` follows the mount list whenever one is in use, since the
+  name alone does not say that its writing stops at the boundary;
 - how the environment differs from the host's: the variables unset, the variables set with
   their values (a `PATH` that only grew in front shows the part added), and the names of the
   secrets. Variables that are as on the host are counted, not listed;
@@ -116,11 +120,12 @@ meaning while `format_version` is the same; keys may be added.
 | `skipped_mounts` | Written items skipped: `directive`, `written`, `origin`, `reason`. |
 | `left_visible` | Scan hits left visible: `link`, `reason`. |
 | `skipped_paths` | Skipped scan roots, `hide-mounts` `under`s, and `path-prepend` entries: `role` (`scan-root`, `hide-mounts-under`, `path-prepend`), `written`, `reason`. |
+| `not_copied` | Entries an `rw-copy` item could not take from the host: `item` (the item's real path), `path`, `reason`. |
 | `environment` | The final environment; a secret's value is `null`. |
 | `environment_changes` | `mode`, `kept`, `unset`, `set`, `secrets`, as in the summary. |
 | `command` | `given`, `arguments`, `path`; `null` when `COMMAND` was left out. |
 | `bwrap` | The path of `bwrap`. |
-| `bwrap_arguments` | Each `{"kind": "literal", "value": ...}`, `{"kind": "seccomp-filter"}`, or `{"kind": "empty-file"}`. |
+| `bwrap_arguments` | Each `{"kind": "literal", "value": ...}`, `{"kind": "seccomp-filter"}`, `{"kind": "empty-file"}`, or `{"kind": "copied-file", "bytes": ...}` for one file of an `rw-copy` item (the content is not shown, only its length). |
 
 An `origin` is an object whose `kind` is `profile`, `built-in-default`, `policy-file`,
 `command-line`, `scan`, `hide-mounts`, `secret`, or `config-secrets`, with `path` for the
@@ -162,7 +167,8 @@ without `bwrap`. Nesting is detected only through that variable
 
 ## Open files
 
-Before making the file descriptors it hands to `bwrap` (one per hidden file, plus the seccomp
+Before making the file descriptors it hands to `bwrap` (one per hidden file, one per file an
+`rw-copy` item starts the isolation with, plus the seccomp
 filter), `kakoi` raises its soft limit on open files to the hard limit, always, so that a
 scan hiding thousands of files starts under the usual limit of 1024 and the same input gives the
 same result. The command inherits the raised limit. A nested run makes no descriptors and leaves

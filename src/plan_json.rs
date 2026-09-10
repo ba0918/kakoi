@@ -39,6 +39,7 @@ struct PlanDocument {
     skipped_mounts: Vec<SkippedMount>,
     left_visible: Vec<LeftVisible>,
     skipped_paths: Vec<SkippedPath>,
+    not_copied: Vec<NotCopied>,
     environment: BTreeMap<String, Option<String>>,
     environment_changes: EnvironmentChanges,
     command: Option<Command>,
@@ -142,6 +143,15 @@ struct SkippedPath {
     reason: String,
 }
 
+/// An entry an `rw-copy` item could not take from the host: `item` is the item's real
+/// path, `path` the entry, `reason` why it is not there inside.
+#[derive(Serialize)]
+struct NotCopied {
+    item: String,
+    path: String,
+    reason: String,
+}
+
 #[derive(Serialize)]
 struct EnvironmentChanges {
     mode: &'static str,
@@ -161,9 +171,15 @@ struct Command {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum BwrapArgument {
-    Literal { value: String },
+    Literal {
+        value: String,
+    },
     EmptyFile,
     SeccompFilter,
+    /// One file of an `rw-copy` item; the content is not shown, only its length.
+    CopiedFile {
+        bytes: usize,
+    },
 }
 
 impl From<&Plan> for PlanDocument {
@@ -229,6 +245,15 @@ impl From<&Plan> for PlanDocument {
                     reason: skipped.reason.clone(),
                 })
                 .collect(),
+            not_copied: plan
+                .not_copied
+                .iter()
+                .map(|entry| NotCopied {
+                    item: text(&entry.item),
+                    path: text(&entry.path),
+                    reason: entry.reason.clone(),
+                })
+                .collect(),
             environment: plan
                 .environment
                 .shown()
@@ -263,6 +288,9 @@ impl From<&Plan> for PlanDocument {
                     Argument::Literal(value) => BwrapArgument::Literal { value: text(value) },
                     Argument::EmptyFile => BwrapArgument::EmptyFile,
                     Argument::Seccomp => BwrapArgument::SeccompFilter,
+                    Argument::CopiedFile(content) => BwrapArgument::CopiedFile {
+                        bytes: content.bytes().len(),
+                    },
                 })
                 .collect(),
         }
@@ -327,6 +355,7 @@ fn directive(directive: Directive) -> &'static str {
     match directive {
         Directive::Rw => "rw",
         Directive::RwFile => "rw-file",
+        Directive::RwCopy => "rw-copy",
         Directive::Ro => "ro",
         Directive::Hide => "hide",
     }

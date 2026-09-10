@@ -11,6 +11,7 @@ use common::fixture::{
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
 use kakoi::command::{command_candidates, resolve_command};
+use kakoi::copies::CopySources;
 use kakoi::diagnostic::{Diagnostic, Kind};
 use kakoi::executables::first_executable;
 use kakoi::isolated_env::SecretFile;
@@ -134,6 +135,7 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
         NetworkMode::Host,
         Path::new("/home/u/proj"),
         &items,
+        &CopySources::default(),
         Some(&sh_dash_c_echo()),
     );
 
@@ -184,7 +186,13 @@ fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
     // carries neither `--argv0` nor the trailing `--` (specification section 14).
     let items = [item(Directive::Rw, "/home/u/proj", EntryKind::Directory)];
 
-    let arguments = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &items, None);
+    let arguments = bwrap_arguments(
+        NetworkMode::Host,
+        Path::new("/home/u/proj"),
+        &items,
+        &CopySources::default(),
+        None,
+    );
 
     for absent in ["--argv0", "--"] {
         assert!(
@@ -197,8 +205,20 @@ fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
 
 #[test]
 fn share_net_is_present_only_for_host_mode() {
-    let host = bwrap_arguments(NetworkMode::Host, Path::new("/home/u/proj"), &[], None);
-    let none = bwrap_arguments(NetworkMode::None, Path::new("/home/u/proj"), &[], None);
+    let host = bwrap_arguments(
+        NetworkMode::Host,
+        Path::new("/home/u/proj"),
+        &[],
+        &CopySources::default(),
+        None,
+    );
+    let none = bwrap_arguments(
+        NetworkMode::None,
+        Path::new("/home/u/proj"),
+        &[],
+        &CopySources::default(),
+        None,
+    );
 
     assert!(host.contains(&literal("--share-net")));
     assert!(!none.contains(&literal("--share-net")));
@@ -213,6 +233,7 @@ fn the_argument_list_carries_no_environment_flags() {
         NetworkMode::Host,
         Path::new("/home/u/proj"),
         &items,
+        &CopySources::default(),
         Some(&sh_dash_c_echo()),
     );
 

@@ -70,11 +70,15 @@ impl Layer {
     }
 }
 
-/// The four directives of the mount table (specification section 6.1).
+/// The five directives of the mount table (specification section 6.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Directive {
     Rw,
     RwFile,
+    /// The host's content to start from, writable inside, and nothing written reaching
+    /// the host: a tmpfs seeded with what is at the real path, or, for a regular file, a
+    /// bound copy of its bytes.
+    RwCopy,
     Ro,
     Hide,
 }
@@ -125,6 +129,7 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         for (directive, paths) in [
             (Directive::Rw, &file.mounts.rw),
             (Directive::RwFile, &file.mounts.rw_file),
+            (Directive::RwCopy, &file.mounts.rw_copy),
             (Directive::Ro, &file.mounts.ro),
             (Directive::Hide, &file.mounts.hide),
         ] {

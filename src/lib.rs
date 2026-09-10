@@ -6,6 +6,8 @@ compile_error!("kakoi supports only x86_64 (specification section 3)");
 
 pub mod cli;
 pub mod command;
+pub mod copies;
+pub mod copy_facts;
 pub mod diagnostic;
 pub mod environment;
 pub mod executables;

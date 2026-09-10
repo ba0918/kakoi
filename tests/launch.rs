@@ -952,3 +952,353 @@ fn a_nested_launch_runs_under_the_outer_boundary() {
     assert_eq!(stderr.lines().count(), 1, "{report}");
     assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }
+
+// `rw-copy`: the isolation starts from the host's content, writes it freely, and the host
+// keeps what it had (specification section 6.1).
+
+/// A directory under `home` with `mode`.
+fn directory(home: &TempDir, relative: &str, mode: u32) -> PathBuf {
+    let path = home.path().join(relative);
+    std::fs::create_dir_all(&path).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+    path
+}
+
+/// A file under `home` with `body` and `mode`.
+fn file(home: &TempDir, relative: &str, body: &str, mode: u32) -> PathBuf {
+    let path = home.write(relative, body);
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+    path
+}
+
+#[test]
+fn an_rw_copy_file_is_written_inside_and_the_host_file_is_untouched() {
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/settings.json", "{\"from\":\"host\"}\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf/settings.json\"]\n",
+    );
+    let before = tree_snapshot(home.path());
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "cat ~/conf/settings.json; \
+         printf '{\"from\":\"inside\"}\\n' > ~/conf/settings.json && echo written; \
+         cat ~/conf/settings.json",
+    );
+
+    // The host's content is what the isolation starts from, the write succeeds, and
+    // reading it back shows what was written.
+    assert_eq!(
+        assert_ran_clean(&output),
+        "{\"from\":\"host\"}\nwritten\n{\"from\":\"inside\"}\n"
+    );
+    // The host's file still holds what it held, and nothing of the run is left anywhere
+    // under the home.
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("conf/settings.json")).unwrap(),
+        "{\"from\":\"host\"}\n"
+    );
+    assert_eq!(tree_snapshot(home.path()), before);
+}
+
+#[test]
+fn an_rw_copy_directory_carries_the_host_tree_and_keeps_every_change_inside() {
+    let (home, workspace) = home_with_workspace();
+    file(&home, "conf/keep.txt", "host\n", 0o644);
+    file(&home, "conf/sub/deep.txt", "deep\n", 0o600);
+    file(&home, "conf/run-me", "#!/bin/sh\necho from-host\n", 0o755);
+    directory(&home, "conf/empty", 0o755);
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+    let before = tree_snapshot(home.path());
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "cat ~/conf/keep.txt ~/conf/sub/deep.txt; \
+         ~/conf/run-me; \
+         test -d ~/conf/empty && echo empty-is-there; \
+         echo new > ~/conf/made.txt && cat ~/conf/made.txt; \
+         echo changed > ~/conf/keep.txt && cat ~/conf/keep.txt; \
+         printf '#!/bin/sh\\necho made-inside\\n' > ~/conf/mine && chmod +x ~/conf/mine && ~/conf/mine",
+    );
+
+    assert_eq!(
+        assert_ran_clean(&output),
+        // The host's files read as the host has them, the execute bit came with `run-me`,
+        // the empty directory is there, a new file can be made, an existing one can be
+        // overwritten, and a file made inside can be marked executable and run.
+        "host\ndeep\nfrom-host\nempty-is-there\nnew\nchanged\nmade-inside\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("conf/keep.txt")).unwrap(),
+        "host\n"
+    );
+    assert!(!home.path().join("conf/made.txt").exists());
+    assert!(!home.path().join("conf/mine").exists());
+    assert_eq!(tree_snapshot(home.path()), before);
+}
+
+#[test]
+fn an_rw_copy_directory_reproduces_a_symbolic_link_as_a_link() {
+    // A link is copied as a link with the same target text, not followed: the isolation
+    // sees the tree the host has.
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/real.txt", "behind the link\n");
+    std::os::unix::fs::symlink("real.txt", home.path().join("conf/alias.txt")).unwrap();
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+    let before = tree_snapshot(home.path());
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "test -L ~/conf/alias.txt && echo still-a-link; \
+         readlink ~/conf/alias.txt; cat ~/conf/alias.txt",
+    );
+
+    assert_eq!(
+        assert_ran_clean(&output),
+        "still-a-link\nreal.txt\nbehind the link\n"
+    );
+    assert_eq!(tree_snapshot(home.path()), before);
+}
+
+#[test]
+fn an_entry_an_rw_copy_cannot_reproduce_is_reported_in_the_plan_and_left_out() {
+    // A socket is the host's own; a copy of one is not it, and no bwrap argument makes one
+    // in a tmpfs. It is left out of the copy and the plan says so, rather than passing over
+    // it without a word.
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/keep.txt", "host\n");
+    let socket_path = home.path().join("conf/ipc.sock");
+    let _listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let plan = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan",
+            "--",
+            "/bin/true",
+        ],
+    );
+    let output = run_script(&home, &workspace, "cat ~/conf/keep.txt; ls ~/conf");
+
+    let report = output_report(&plan);
+    let text = String::from_utf8(plan.stdout).unwrap();
+    assert!(
+        text.contains(&format!("not copied {}", socket_path.display())),
+        "{report}"
+    );
+    assert!(text.contains("is not a regular file"), "{report}");
+    // The rest of the directory is there, and the socket is not.
+    assert_eq!(assert_ran_clean(&output), "host\nkeep.txt\n");
+}
+
+#[test]
+fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {
+    // Nothing is mounted on a path that does not exist (specification section 6.2): the
+    // item is skipped with its reason and no name is created on the host.
+    let (home, workspace) = home_with_workspace();
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/missing\"]\n",
+    );
+    let before = tree_snapshot(home.path());
+
+    let plan = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan",
+            "--",
+            "/bin/true",
+        ],
+    );
+    let output = run_script(&home, &workspace, "test ! -e ~/missing && echo not-there");
+
+    let report = output_report(&plan);
+    assert!(
+        String::from_utf8_lossy(&plan.stdout)
+            .contains("skipped rw-copy `~/missing`: does not exist"),
+        "{report}"
+    );
+    assert_eq!(assert_ran_clean(&output), "not-there\n");
+    assert_eq!(tree_snapshot(home.path()), before);
+}
+
+#[test]
+fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_path_diagnostic() {
+    // A FIFO has no content to copy. The run stops rather than standing an empty regular
+    // file in for it.
+    let (home, workspace) = home_with_workspace();
+    let fifo = home.path().join("pipe");
+    let name = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
+    // SAFETY: `mkfifo` reads the NUL-terminated name and makes the FIFO.
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o644) }, 0);
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/pipe\"]\n",
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains("~/pipe"), "{diagnostic}");
+    assert!(diagnostic.contains("not a regular file"), "{diagnostic}");
+}
+
+#[test]
+fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
+    // The content is held in memory twice over, so a source pointed at something large is
+    // refused before the start rather than paged in.
+    let (home, workspace) = home_with_workspace();
+    for index in 0..=kakoi::copies::ENTRY_LIMIT {
+        home.write(format!("conf/f{index}"), "x\n");
+    }
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains("~/conf"), "{diagnostic}");
+    assert!(
+        diagnostic.contains(&format!("more than {} entries", kakoi::copies::ENTRY_LIMIT)),
+        "{diagnostic}"
+    );
+}
+
+#[test]
+fn a_narrower_rw_inside_an_rw_copy_directory_still_reaches_the_host() {
+    // The order of section 6.4 holds: the tmpfs is mounted at the `rw-copy` item and the
+    // narrower `rw` after it, so that one directory keeps writing through to the host.
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/settings.json", "host\n");
+    home.write("conf/state/db", "host\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\", \"~/conf/state\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "echo inside > ~/conf/settings.json; echo inside > ~/conf/state/db; echo done",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "done\n");
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("conf/settings.json")).unwrap(),
+        "host\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("conf/state/db")).unwrap(),
+        "inside\n"
+    );
+}
+
+#[test]
+fn a_policy_file_inside_an_rw_copy_area_launches_and_the_host_profile_is_untouched() {
+    // An `rw-copy` area is not a writable place for the placement rules: what is written
+    // there dies with the isolation, so the profile the next start reads cannot be changed
+    // from inside. The launch is allowed, and the rewrite from inside stays inside.
+    let (home, workspace) = home_with_workspace();
+    let written = format!(
+        "[mounts]\nrw = [\"${{workspace}}\"]\nrw-copy = [\"{}\"]\n",
+        home.path().join(".config").display()
+    );
+    profile(&home, &written);
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "echo '[mounts]' > ~/.config/kakoi/profile/default.toml && echo rewritten; \
+         cat ~/.config/kakoi/profile/default.toml",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "rewritten\n[mounts]\n");
+    assert_eq!(
+        std::fs::read_to_string(home.path().join(".config/kakoi/profile/default.toml")).unwrap(),
+        written
+    );
+}
+
+#[test]
+fn the_plan_shows_an_rw_copy_item_in_every_form() {
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/settings.json", "host\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+    let workspace = workspace.to_str().unwrap();
+    let real = home.path().join("conf");
+
+    let summary = run(
+        home.path(),
+        ["--workspace", workspace, "--print-plan", "--", "/bin/true"],
+    );
+    let json = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace,
+            "--print-plan=json",
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    // The summary names the item with its directive and says what the directive does, so
+    // that `rw-copy` is not read as an `rw`.
+    let report = output_report(&summary);
+    let text = String::from_utf8(summary.stdout).unwrap();
+    assert!(text.contains("rw-copy ~/conf\n"), "{report}");
+    assert!(
+        text.contains("rw-copy starts from a copy of the host's content"),
+        "{report}"
+    );
+    assert!(
+        text.contains("nothing written there reaches the host"),
+        "{report}"
+    );
+
+    // The JSON form carries the same item with the directive as its own string.
+    let report = output_report(&json);
+    let document: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    let items = document["mounts"].as_array().unwrap();
+    let copied = items
+        .iter()
+        .find(|item| item["directive"] == "rw-copy")
+        .unwrap_or_else(|| panic!("no rw-copy item: {report}"));
+    assert_eq!(copied["path"], real.to_str().unwrap());
+    assert_eq!(copied["kind"], "directory");
+    assert_eq!(copied["written"], "~/conf");
+    assert!(document["not_copied"].is_array(), "{report}");
+    assert_eq!(
+        document["policy"]["mounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["directive"] == "rw-copy")
+            .unwrap()["path"],
+        "~/conf"
+    );
+}
