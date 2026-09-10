@@ -8,8 +8,8 @@ use common::{
     assert_diagnostic, binary, home_with_workspace, output_report, run,
     run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir, RW_WORKSPACE,
 };
-use process_wrap::cli::{interpret, Invocation, Parsed, PlanForm};
-use process_wrap::diagnostic::Kind;
+use kakoi::cli::{interpret, Invocation, Parsed, PlanForm};
+use kakoi::diagnostic::Kind;
 
 /// A name for the failure message and the arrangement it makes under a temporary home.
 type Arrangement = (&'static str, fn(&Path));
@@ -326,7 +326,7 @@ fn an_unknown_option_from_a_deleted_current_directory_is_a_usage_diagnostic() {
 #[test]
 fn a_deleted_current_directory_is_a_path_diagnostic() {
     let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
     let workspace = home
         .write("workspace/.keep", "")
         .parent()
@@ -344,10 +344,7 @@ fn a_deleted_current_directory_is_a_path_diagnostic() {
 #[test]
 fn a_bad_home_beside_a_broken_profile_is_an_env_diagnostic() {
     let home = TempDir::new();
-    home.write(
-        ".config/process-wrap/profile/default.toml",
-        "[mounts\nbroken",
-    );
+    home.write(".config/kakoi/profile/default.toml", "[mounts\nbroken");
     let file = home.write("home-file", "");
 
     let output = binary(home.path())
@@ -362,10 +359,7 @@ fn a_bad_home_beside_a_broken_profile_is_an_env_diagnostic() {
 #[test]
 fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     let home = TempDir::new();
-    home.write(
-        ".config/process-wrap/profile/default.toml",
-        "[mounts\nbroken",
-    );
+    home.write(".config/kakoi/profile/default.toml", "[mounts\nbroken");
     let missing = home.path().join("missing");
 
     let output = run(
@@ -380,7 +374,7 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
 fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
     let (home, workspace) = home_with_workspace();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"relative/path\"]\n",
     );
 
@@ -401,7 +395,7 @@ fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
 fn print_plan_with_a_diagnostic_prints_no_plan() {
     let (home, workspace) = home_with_workspace();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"relative/path\"]\n",
     );
 
@@ -442,7 +436,7 @@ fn print_plan_exits_zero_and_prints_the_resolved_command() {
 #[test]
 fn print_plan_full_adds_the_merged_policy_the_environment_and_the_bwrap_arguments() {
     let (home, workspace) = home_with_workspace();
-    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    home.write(".config/kakoi/profile/default.toml", RW_WORKSPACE);
 
     let output = binary(home.path())
         .env("KEPT", "as-is")
@@ -483,9 +477,9 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     // `null`, the descriptors as tagged objects, and `command` as `null` when `COMMAND` is
     // left out.
     let (home, workspace) = home_with_workspace();
-    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN-VALUE\n");
+    home.write(".config/kakoi/secrets/token", "FAKE-TOKEN-VALUE\n");
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
     );
     let workspace = workspace.to_str().unwrap();
@@ -570,16 +564,13 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
         serde_json::Value::Null,
         "{report}"
     );
-    assert_eq!(plan["environment"]["PROCESS_WRAP"], "1", "{report}");
+    assert_eq!(plan["environment"]["KAKOI"], "1", "{report}");
     assert_eq!(plan["environment_changes"]["mode"], "inherit", "{report}");
     assert_eq!(
         plan["environment_changes"]["secrets"][0], "TOKEN",
         "{report}"
     );
-    assert_eq!(
-        plan["environment_changes"]["set"]["PROCESS_WRAP"], "1",
-        "{report}"
-    );
+    assert_eq!(plan["environment_changes"]["set"]["KAKOI"], "1", "{report}");
     assert_eq!(plan["command"]["given"], "/bin/true", "{report}");
     assert_eq!(plan["command"]["arguments"][0], "one", "{report}");
     assert_eq!(plan["command"]["path"], "/bin/true", "{report}");
@@ -609,7 +600,7 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
 
     // A nested run is marked by the `nested` key, not by a line in front.
     let nested = binary(home.path())
-        .env("PROCESS_WRAP", "1")
+        .env("KAKOI", "1")
         .args(["--workspace", workspace, "--print-plan=json"])
         .output()
         .unwrap();
@@ -629,9 +620,9 @@ fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
     let (home, workspace) = home_with_workspace();
     home.write("bin/.keep", "");
     home.write("cache/.keep", "");
-    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN-VALUE\n");
+    home.write(".config/kakoi/secrets/token", "FAKE-TOKEN-VALUE\n");
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         format!(
             "{RW_WORKSPACE}[env]\nunset = [\"*_SECRET\"]\nset = {{ ADDED = \"1\" }}\n\
              path-prepend = [\"~/bin\"]\n\
@@ -680,7 +671,7 @@ fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
         )),
         "{report}"
     );
-    assert!(plan.contains("\n  set    PROCESS_WRAP=1\n"), "{report}");
+    assert!(plan.contains("\n  set    KAKOI=1\n"), "{report}");
     assert!(
         plan.contains("\n  secret TOKEN (value not shown)\n"),
         "{report}"
@@ -702,7 +693,7 @@ fn a_control_character_in_a_warning_is_escaped() {
     // A secret whose file does not exist raises the warning of specification section 9,
     // which embeds the key name; the name carries an ESC.
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         format!("{RW_WORKSPACE}[secrets]\n\"A\\u001bB\" = \"~/no-such-file\"\n"),
     );
 
@@ -715,17 +706,17 @@ fn a_control_character_in_a_warning_is_escaped() {
     assert_eq!(output.status.code(), Some(0), "{report}");
     let stderr = String::from_utf8(output.stderr.clone()).unwrap();
     assert_eq!(stderr.matches('\n').count(), 1, "{report}");
-    assert!(stderr.starts_with("process-wrap: warning: "), "{report}");
+    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
     assert!(!output.stderr.contains(&0x1b), "{report}");
     assert!(!output.stdout.contains(&0x1b), "{report}");
 }
 
-/// The built binary started as a nested run: `PROCESS_WRAP=1` in its environment. No
+/// The built binary started as a nested run: `KAKOI=1` in its environment. No
 /// profile exists under `home` and `PATH` is `path`, so anything but the nested branch
 /// ends in a diagnostic.
 fn nested(home: &TempDir, path: &Path) -> std::process::Command {
     let mut command = binary(home.path());
-    command.env("PROCESS_WRAP", "1").env("PATH", path);
+    command.env("KAKOI", "1").env("PATH", path);
     command
 }
 
@@ -745,7 +736,7 @@ fn a_nested_launch_warns_and_runs_the_command_without_bwrap() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     let mut lines = stderr.lines();
     assert!(
-        lines.next().unwrap().starts_with("process-wrap: warning: "),
+        lines.next().unwrap().starts_with("kakoi: warning: "),
         "{report}"
     );
     assert_eq!(lines.collect::<Vec<_>>(), ["err"], "{report}");
@@ -759,7 +750,7 @@ fn a_nested_launch_leaves_the_environment_unchanged() {
         .env_clear()
         .env("HOME", home.path())
         .env("XDG_CONFIG_HOME", home.path().join(".config"))
-        .env("PROCESS_WRAP", "1")
+        .env("KAKOI", "1")
         .env("PATH", "/nonexistent")
         .env("MARKER", "kept as is");
     let expected: std::collections::BTreeSet<String> = command
@@ -810,9 +801,9 @@ fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_miss
     let stderr = String::from_utf8(missing.stderr).unwrap();
     let lines: Vec<&str> = stderr.lines().collect();
     assert_eq!(lines.len(), 2, "{report}");
-    assert!(lines[0].starts_with("process-wrap: warning: "), "{report}");
+    assert!(lines[0].starts_with("kakoi: warning: "), "{report}");
     assert!(
-        lines[1].starts_with("process-wrap: command not found: "),
+        lines[1].starts_with("kakoi: command not found: "),
         "{report}"
     );
 }
@@ -856,9 +847,9 @@ fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     let lines: Vec<&str> = stderr.lines().collect();
     assert_eq!(lines.len(), 2, "{report}");
-    assert!(lines[0].starts_with("process-wrap: warning: "), "{report}");
+    assert!(lines[0].starts_with("kakoi: warning: "), "{report}");
     assert!(
-        lines[1].starts_with("process-wrap: command not executable: "),
+        lines[1].starts_with("kakoi: command not executable: "),
         "{report}"
     );
 }
@@ -890,17 +881,17 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     // A nested run reads the policy too: a named profile that is not there is a
     // diagnostic, not a plan.
     let without_a_profile = binary(home.path())
-        .env("PROCESS_WRAP", "1")
+        .env("KAKOI", "1")
         .args(["--profile", "strict", "--print-plan"])
         .args(arguments)
         .output()
         .unwrap();
     assert_diagnostic(&without_a_profile, 125, "policy");
 
-    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    home.write(".config/kakoi/profile/default.toml", RW_WORKSPACE);
     // The full form: the nested plan is the plain plan with one line in front that marks
     // it as nested. (The summary shows the environment as its difference from the host's,
-    // and the nested host already carries `PROCESS_WRAP=1`, so only the full form, which
+    // and the nested host already carries `KAKOI=1`, so only the full form, which
     // shows the final environment itself, is the same line for line.)
     let full = ["--print-plan=full"];
     let plain = binary(home.path())
@@ -909,7 +900,7 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
         .output()
         .unwrap();
     let nested = binary(home.path())
-        .env("PROCESS_WRAP", "1")
+        .env("KAKOI", "1")
         .args(arguments)
         .args(full)
         .output()
@@ -926,7 +917,7 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
 
     // The summary carries the same first line.
     let summary = binary(home.path())
-        .env("PROCESS_WRAP", "1")
+        .env("KAKOI", "1")
         .args(arguments)
         .arg("--print-plan")
         .output()
@@ -943,12 +934,12 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
 fn secret_values_never_reach_stdout_or_stderr() {
     let (home, workspace) = home_with_workspace();
     let value = "FAKE-SECRET-VALUE-not-a-real-credential";
-    home.write(".config/process-wrap/secrets/token", format!("{value}\n"));
+    home.write(".config/kakoi/secrets/token", format!("{value}\n"));
     // `GIT_CONFIG_COUNT` as a secret with a non-numeric value: the `env` diagnostic of
     // specification section 10 names the variable and must not show its value.
-    home.write(".config/process-wrap/secrets/count", format!("{value}\n"));
+    home.write(".config/kakoi/secrets/count", format!("{value}\n"));
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
     );
     let with_diagnostic = home.write(
@@ -995,9 +986,9 @@ fn print_plan_is_identical_across_two_runs() {
     home.write("ws/sub/keep.txt", "");
     home.write("cache/.keep", "");
     home.write("notes/a.md", "");
-    home.write(".config/process-wrap/secrets/token", "FAKE-TOKEN\n");
+    home.write(".config/kakoi/secrets/token", "FAKE-TOKEN\n");
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\n\
          rw = [\"${workspace}\", \"~/cache\", \"${git_common_dir}\"]\n\
          ro = [\"~/notes\"]\n\
@@ -1057,7 +1048,7 @@ fn the_built_in_default_is_used_when_default_toml_is_absent() {
         let report = output_report(&output);
         assert_eq!(output.status.code(), Some(0), "{name}: {report}");
         assert!(
-            String::from_utf8_lossy(&output.stdout).contains("process-wrap init"),
+            String::from_utf8_lossy(&output.stdout).contains("kakoi init"),
             "{name}: {report}"
         );
     }
@@ -1109,25 +1100,24 @@ fn a_broken_default_toml_or_configuration_directory_is_a_policy_diagnostic() {
     // never replaced by the wider built-in default (specification section 5.3).
     let arrangements: [Arrangement; 4] = [
         ("a broken link at default.toml", |home| {
-            std::fs::create_dir_all(home.join(".config/process-wrap/profile")).unwrap();
+            std::fs::create_dir_all(home.join(".config/kakoi/profile")).unwrap();
             std::os::unix::fs::symlink(
                 home.join("nowhere"),
-                home.join(".config/process-wrap/profile/default.toml"),
+                home.join(".config/kakoi/profile/default.toml"),
             )
             .unwrap();
         }),
         ("a broken link at the configuration directory", |home| {
             std::fs::create_dir_all(home.join(".config")).unwrap();
-            std::os::unix::fs::symlink(home.join("nowhere"), home.join(".config/process-wrap"))
-                .unwrap();
+            std::os::unix::fs::symlink(home.join("nowhere"), home.join(".config/kakoi")).unwrap();
         }),
         ("a regular file at the configuration directory", |home| {
             std::fs::create_dir_all(home.join(".config")).unwrap();
-            std::fs::write(home.join(".config/process-wrap"), "").unwrap();
+            std::fs::write(home.join(".config/kakoi"), "").unwrap();
         }),
         ("a regular file at profile/", |home| {
-            std::fs::create_dir_all(home.join(".config/process-wrap")).unwrap();
-            std::fs::write(home.join(".config/process-wrap/profile"), "").unwrap();
+            std::fs::create_dir_all(home.join(".config/kakoi")).unwrap();
+            std::fs::write(home.join(".config/kakoi/profile"), "").unwrap();
         }),
     ];
 
@@ -1144,7 +1134,7 @@ fn a_broken_default_toml_or_configuration_directory_is_a_policy_diagnostic() {
         let report = output_report(&output);
         assert_eq!(output.status.code(), Some(125), "{name}: {report}");
         assert!(
-            String::from_utf8_lossy(&output.stderr).starts_with("process-wrap: policy: "),
+            String::from_utf8_lossy(&output.stderr).starts_with("kakoi: policy: "),
             "{name}: {report}"
         );
     }
@@ -1167,8 +1157,8 @@ fn an_unsearchable_configuration_directory_is_not_taken_for_an_absent_one() {
     // been written out. The run stops instead of standing the wider built-in default in for
     // the profile that is on disk (specification section 5.3).
     let (home, workspace) = home_without_a_configuration_directory();
-    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
-    let config_dir = home.path().join(".config/process-wrap");
+    home.write(".config/kakoi/profile/default.toml", RW_WORKSPACE);
+    let config_dir = home.path().join(".config/kakoi");
     std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
     let _restore = RestoredMode(config_dir, 0o700);
 
@@ -1180,7 +1170,7 @@ fn an_unsearchable_configuration_directory_is_not_taken_for_an_absent_one() {
 
     assert_diagnostic(&output, 125, "policy");
     assert!(
-        !String::from_utf8_lossy(&output.stdout).contains("process-wrap init"),
+        !String::from_utf8_lossy(&output.stdout).contains("kakoi init"),
         "{}",
         output_report(&output)
     );
@@ -1211,7 +1201,7 @@ fn a_policy_file_overlays_the_built_in_default() {
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
     let plan = String::from_utf8_lossy(&output.stdout);
-    assert!(plan.contains("process-wrap init"), "{report}");
+    assert!(plan.contains("kakoi init"), "{report}");
 }
 
 #[test]
@@ -1219,7 +1209,7 @@ fn a_present_default_toml_replaces_the_built_in_default() {
     // Once `default.toml` is there it is the whole global scope; the built-in default is
     // not read beside it (specification section 5.3).
     let (home, workspace) = home_without_a_configuration_directory();
-    let profile = home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    let profile = home.write(".config/kakoi/profile/default.toml", RW_WORKSPACE);
 
     let output = binary(home.path())
         .current_dir(&workspace)
@@ -1230,7 +1220,7 @@ fn a_present_default_toml_replaces_the_built_in_default() {
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
     let plan = String::from_utf8_lossy(&output.stdout);
-    assert!(!plan.contains("process-wrap init"), "{report}");
+    assert!(!plan.contains("kakoi init"), "{report}");
     assert!(plan.contains(profile.to_str().unwrap()), "{report}");
 }
 
@@ -1267,9 +1257,9 @@ fn bundled_profile() -> Vec<u8> {
 fn init_writes_the_built_in_default_and_prints_its_path() {
     let home = TempDir::new();
     let before = tree(home.path());
-    // `/tmp/process-wrap` is the user's or the shim's to make; `init` does not touch it
+    // `/tmp/kakoi` is the user's or the shim's to make; `init` does not touch it
     // (specification section 14).
-    let shared = Path::new("/tmp/process-wrap");
+    let shared = Path::new("/tmp/kakoi");
     let shared_before = shared.symlink_metadata().is_ok();
 
     let output = run(home.path(), ["init"]);
@@ -1277,9 +1267,7 @@ fn init_writes_the_built_in_default_and_prints_its_path() {
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
     assert!(output.stderr.is_empty(), "{report}");
-    let written = home
-        .path()
-        .join(".config/process-wrap/profile/default.toml");
+    let written = home.path().join(".config/kakoi/profile/default.toml");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         format!("{}\n", written.display()),
@@ -1290,7 +1278,7 @@ fn init_writes_the_built_in_default_and_prints_its_path() {
         bundled_profile(),
         "{report}"
     );
-    let secrets = home.path().join(".config/process-wrap/secrets");
+    let secrets = home.path().join(".config/kakoi/secrets");
     assert_eq!(
         std::fs::metadata(&secrets).unwrap().permissions().mode() & 0o7777,
         0o700,
@@ -1304,10 +1292,10 @@ fn init_writes_the_built_in_default_and_prints_its_path() {
         added,
         [
             ".config",
-            ".config/process-wrap",
-            ".config/process-wrap/profile",
-            ".config/process-wrap/profile/default.toml",
-            ".config/process-wrap/secrets",
+            ".config/kakoi",
+            ".config/kakoi/profile",
+            ".config/kakoi/profile/default.toml",
+            ".config/kakoi/secrets",
         ]
         .map(PathBuf::from),
         "{report}"
@@ -1323,7 +1311,7 @@ fn init_takes_a_profile_name() {
 
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
-    let written = home.path().join(".config/process-wrap/profile/strict.toml");
+    let written = home.path().join(".config/kakoi/profile/strict.toml");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         format!("{}\n", written.display()),
@@ -1343,7 +1331,7 @@ fn init_narrows_an_existing_secrets_directory_to_0700() {
     // there, so following the current instructions does not leave a wide one behind
     // (specification section 4.1).
     let home = TempDir::new();
-    let secrets = home.path().join(".config/process-wrap/secrets");
+    let secrets = home.path().join(".config/kakoi/secrets");
     std::fs::create_dir_all(&secrets).unwrap();
     std::fs::set_permissions(&secrets, std::fs::Permissions::from_mode(0o755)).unwrap();
 
@@ -1380,7 +1368,7 @@ fn init_refuses_to_overwrite_an_existing_profile() {
     // There is no `--force`: the boundary the user wrote is never replaced by the product,
     // so the way to rewrite it is to remove it first (specification section 4.1).
     let home = TempDir::new();
-    let written = home.write(".config/process-wrap/profile/default.toml", "# mine\n");
+    let written = home.write(".config/kakoi/profile/default.toml", "# mine\n");
 
     let output = run(home.path(), ["init"]);
 
@@ -1400,21 +1388,21 @@ fn init_refuses_a_broken_link_or_a_regular_file_in_the_way() {
     let arrangements: [(Arrangement, &str); 2] = [
         (
             ("a broken link at the file", |home| {
-                std::fs::create_dir_all(home.join(".config/process-wrap/profile")).unwrap();
+                std::fs::create_dir_all(home.join(".config/kakoi/profile")).unwrap();
                 std::os::unix::fs::symlink(
                     home.join("nowhere"),
-                    home.join(".config/process-wrap/profile/default.toml"),
+                    home.join(".config/kakoi/profile/default.toml"),
                 )
                 .unwrap();
             }),
-            ".config/process-wrap/profile/default.toml",
+            ".config/kakoi/profile/default.toml",
         ),
         (
             ("a regular file at profile/", |home| {
-                std::fs::create_dir_all(home.join(".config/process-wrap")).unwrap();
-                std::fs::write(home.join(".config/process-wrap/profile"), "").unwrap();
+                std::fs::create_dir_all(home.join(".config/kakoi")).unwrap();
+                std::fs::write(home.join(".config/kakoi/profile"), "").unwrap();
             }),
-            ".config/process-wrap/profile",
+            ".config/kakoi/profile",
         ),
     ];
 
@@ -1438,10 +1426,10 @@ fn init_follows_a_linked_configuration_directory_and_prints_the_written_path() {
     // the target, and the line printed is the path as assembled, link and all
     // (specification section 4.1).
     let home = TempDir::new();
-    let target = home.path().join("dotfiles/process-wrap");
+    let target = home.path().join("dotfiles/kakoi");
     std::fs::create_dir_all(&target).unwrap();
     std::fs::create_dir_all(home.path().join(".config")).unwrap();
-    std::os::unix::fs::symlink(&target, home.path().join(".config/process-wrap")).unwrap();
+    std::os::unix::fs::symlink(&target, home.path().join(".config/kakoi")).unwrap();
 
     let output = run(home.path(), ["init"]);
 
@@ -1453,7 +1441,7 @@ fn init_follows_a_linked_configuration_directory_and_prints_the_written_path() {
         format!(
             "{}\n",
             real_home
-                .join(".config/process-wrap/profile/default.toml")
+                .join(".config/kakoi/profile/default.toml")
                 .display()
         ),
         "{report}"
@@ -1485,7 +1473,7 @@ fn init_creates_missing_ancestors_of_the_configuration_directory() {
         format!(
             "{}\n",
             real_home
-                .join(".config/process-wrap/profile/default.toml")
+                .join(".config/kakoi/profile/default.toml")
                 .display()
         ),
         "{report}"
@@ -1498,7 +1486,7 @@ fn init_ignores_nesting_the_current_directory_and_bwrap() {
     // the configuration can still be put in place (specification sections 4.1 and 12.1).
     let nested_home = TempDir::new();
     let nested = binary(nested_home.path())
-        .env("PROCESS_WRAP", "1")
+        .env("KAKOI", "1")
         .args(["init"])
         .output()
         .unwrap();

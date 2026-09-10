@@ -168,7 +168,7 @@ pub fn assemble_environment(
     let (secret_names, warnings) = apply_secrets(&mut values, policy, secrets)?;
     apply_instead_of(&mut values, &policy.instead_of)?;
     prepend_path(&mut values, path_prepend);
-    values.insert(OsString::from("PROCESS_WRAP"), OsString::from("1"));
+    values.insert(OsString::from("KAKOI"), OsString::from("1"));
     Ok(Assembled {
         environment: Environment {
             values,

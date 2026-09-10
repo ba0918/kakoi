@@ -13,7 +13,7 @@ fn the_bundled_default_profile_loads_and_passes_the_placement_checks() {
         "/examples/profile/default.toml"
     ))
     .unwrap();
-    home.write(".config/process-wrap/profile/default.toml", bundled);
+    home.write(".config/kakoi/profile/default.toml", bundled);
     let workspace = home.path().join("ws");
     std::fs::create_dir(&workspace).unwrap();
 
@@ -29,7 +29,7 @@ fn the_bundled_default_profile_loads_and_passes_the_placement_checks() {
     assert!(
         stderr
             .lines()
-            .all(|line| line.starts_with("process-wrap: warning: ")),
+            .all(|line| line.starts_with("kakoi: warning: ")),
         "{report}"
     );
     let plan = String::from_utf8(output.stdout).unwrap();

@@ -7,11 +7,11 @@ mod common;
 
 use common::fixture::{layers, merged};
 use common::TempDir;
-use process_wrap::diagnostic::{Diagnostic, Kind};
-use process_wrap::isolated_env::{
+use kakoi::diagnostic::{Diagnostic, Kind};
+use kakoi::isolated_env::{
     assemble_environment, environment_changes, Assembled, EnvironmentChanges, SecretFile,
 };
-use process_wrap::secret_facts::read_secret_file;
+use kakoi::secret_facts::read_secret_file;
 
 fn host(pairs: &[(&str, &str)]) -> BTreeMap<OsString, OsString> {
     pairs
@@ -52,7 +52,7 @@ fn the_environment_is_assembled_in_the_seven_stages() {
             ("KEEP", "1"),
             ("PATH", "/usr/bin"),
             ("S", "host"),
-            ("PROCESS_WRAP", "stale"),
+            ("KAKOI", "stale"),
         ]),
         &secret_bytes(&[("S", b"from-file\n")]),
         &["/opt/bin"],
@@ -66,7 +66,7 @@ fn the_environment_is_assembled_in_the_seven_stages() {
         ("KEEP", "1"),
         ("NEW", "${worktree}"),
         ("PATH", "/opt/bin:/usr/bin"),
-        ("PROCESS_WRAP", "1"),
+        ("KAKOI", "1"),
         ("S", "from-file"),
     ])
     .into_iter()
@@ -100,7 +100,7 @@ fn unset_accepts_wildcards() {
     )
     .unwrap();
 
-    assert_eq!(names(&assembled), ["ABC", "PROCESS_WRAP", "TOKEN"]);
+    assert_eq!(names(&assembled), ["ABC", "KAKOI", "TOKEN"]);
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn unset_with_brackets_removes_only_the_literal_name() {
     )
     .unwrap();
 
-    assert_eq!(names(&assembled), ["PROCESS_WRAP", "a"]);
+    assert_eq!(names(&assembled), ["KAKOI", "a"]);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn clear_without_path_leaves_path_absent() {
         &[],
     )
     .unwrap();
-    assert_eq!(names(&without_prepend), ["KEEP", "PROCESS_WRAP"]);
+    assert_eq!(names(&without_prepend), ["KAKOI", "KEEP"]);
     assert!(without_prepend.warnings.is_empty());
 
     let with_prepend = assemble(
@@ -242,7 +242,7 @@ fn a_missing_secret_file_is_a_warning_without_the_variable() {
     assert!(
         assembled.warnings[0]
             .to_string()
-            .starts_with("process-wrap: warning: "),
+            .starts_with("kakoi: warning: "),
         "{:?}",
         assembled.warnings
     );
@@ -291,7 +291,7 @@ fn instead_of_entries_continue_the_git_config_count() {
         ("GIT_CONFIG_VALUE_0", "u"),
         ("GIT_CONFIG_VALUE_1", "git@x:"),
         ("GIT_CONFIG_VALUE_2", "git@y:"),
-        ("PROCESS_WRAP", "1"),
+        ("KAKOI", "1"),
     ])
     .into_iter()
     .collect();
@@ -446,12 +446,12 @@ fn the_changes_against_the_host_name_what_was_unset_set_and_kept() {
             kept: 2,
             unset: vec![OsString::from("DROP")],
             set: vec![
+                (OsString::from("KAKOI"), "1".to_string()),
                 (OsString::from("NEW"), "1".to_string()),
                 (
                     OsString::from("PATH"),
                     "/opt/bin:<the host's PATH>".to_string()
                 ),
-                (OsString::from("PROCESS_WRAP"), "1".to_string()),
             ],
             secrets: vec![OsString::from("S")],
         }
@@ -475,7 +475,7 @@ fn the_changes_against_a_cleared_host_count_the_passed_variables_and_name_no_uns
             inherited: false,
             kept: 1,
             unset: vec![],
-            set: vec![(OsString::from("PROCESS_WRAP"), "1".to_string())],
+            set: vec![(OsString::from("KAKOI"), "1".to_string())],
             secrets: vec![],
         }
     );

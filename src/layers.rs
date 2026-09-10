@@ -11,7 +11,7 @@ use crate::regular_file::{read_regular_file, Links};
 use crate::workspace_facts::probe_path;
 
 /// The bundled profile compiled into the binary: the built-in default (specification
-/// section 2), what `process-wrap init` writes out.
+/// section 2), what `kakoi init` writes out.
 pub const BUILT_IN_DEFAULT: &str = include_str!("../examples/profile/default.toml");
 
 /// Where a written layer came from, lowest first: the profile (a file or the built-in

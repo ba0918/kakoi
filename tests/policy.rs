@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use process_wrap::diagnostic::Kind;
-use process_wrap::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath, Variable};
+use kakoi::diagnostic::Kind;
+use kakoi::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath, Variable};
 
 const EXAMPLE: &str = r#"
 [mounts]
-rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/process-wrap", "~/.cache"]
+rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/kakoi", "~/.cache"]
 rw-file = ["~/.claude.json"]
 ro      = ["~/.codex/AGENTS.md"]
 hide    = ["/tmp", "/run/user", "~/.ssh", "~/.aws", "/run/WSL"]
@@ -56,7 +56,7 @@ fn the_example_policy_file_loads() {
             PolicyPath::Variable(Variable::Workspace, String::new()),
             PolicyPath::Variable(Variable::Worktree, String::new()),
             PolicyPath::Variable(Variable::GitCommonDir, String::new()),
-            PolicyPath::Absolute(PathBuf::from("/tmp/process-wrap")),
+            PolicyPath::Absolute(PathBuf::from("/tmp/kakoi")),
             PolicyPath::Home("/.cache".to_string()),
         ]
     );

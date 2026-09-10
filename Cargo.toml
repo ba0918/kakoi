@@ -1,11 +1,11 @@
 [package]
-name = "process-wrap"
-version = "0.1.1"
+name = "kakoi"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Run a command inside a bubblewrap mount namespace shaped by a layered policy."
 license = "MIT"
-repository = "https://github.com/ba0918/process-wrap"
+repository = "https://github.com/ba0918/kakoi"
 include = [
     "/src/**",
     "/examples/**",

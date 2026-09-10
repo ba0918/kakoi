@@ -8,14 +8,14 @@ use common::fixture::{
     command_line_layer, home, layers, merged, variables, xdg_profile_layer, xdg_variables, Facts,
     CONFIG_DIR, POLICY_FILE, WORKTREE, XDG_CONFIG_DIR, XDG_PROFILE,
 };
-use process_wrap::diagnostic::{Diagnostic, Kind, Warning};
-use process_wrap::layers::{Layer, LayerOrigin};
-use process_wrap::mounts::{expand_policy, generate, resolve_written};
-use process_wrap::placement::{
+use kakoi::diagnostic::{Diagnostic, Kind, Warning};
+use kakoi::layers::{Layer, LayerOrigin};
+use kakoi::mounts::{expand_policy, generate, resolve_written};
+use kakoi::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
 };
-use process_wrap::policy::parse_policy;
-use process_wrap::variables::Variables;
+use kakoi::policy::parse_policy;
+use kakoi::variables::Variables;
 
 /// Resolves the mounts of the written layers against `facts` and checks their placement
 /// with the current directory at `current_dir`, the configuration directory at
@@ -1754,9 +1754,7 @@ fn no_rw_over_the_workspace_yields_a_warning() {
 
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(
-        warnings[0]
-            .to_string()
-            .starts_with("process-wrap: warning: "),
+        warnings[0].to_string().starts_with("kakoi: warning: "),
         "{warnings:?}"
     );
 }

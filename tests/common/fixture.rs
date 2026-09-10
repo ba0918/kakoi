@@ -5,16 +5,16 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use process_wrap::cli::Invocation;
-use process_wrap::environment::{HomeDirectory, HostEnvironment, RealEntry};
-use process_wrap::layers::{merge, Layer, LayerOrigin, Policy};
-use process_wrap::mounts::{Mount, MountFacts, ScanHit};
-use process_wrap::policy::parse_policy;
-use process_wrap::variables::Variables;
+use kakoi::cli::Invocation;
+use kakoi::environment::{HomeDirectory, HostEnvironment, RealEntry};
+use kakoi::layers::{merge, Layer, LayerOrigin, Policy};
+use kakoi::mounts::{Mount, MountFacts, ScanHit};
+use kakoi::policy::parse_policy;
+use kakoi::variables::Variables;
 
 pub const HOME: &str = "/home/u";
-pub const CONFIG_DIR: &str = "/home/u/.config/process-wrap";
-pub const PROFILE: &str = "/home/u/.config/process-wrap/profile/default.toml";
+pub const CONFIG_DIR: &str = "/home/u/.config/kakoi";
+pub const PROFILE: &str = "/home/u/.config/kakoi/profile/default.toml";
 pub const POLICY_FILE: &str = "/home/u/policies/p.toml";
 pub const WORKTREE: &str = "/home/u/proj";
 
@@ -218,8 +218,8 @@ pub fn variables_without_git() -> Variables {
 }
 
 /// A configuration directory outside the home, as `XDG_CONFIG_HOME=/etc/xdg` gives.
-pub const XDG_CONFIG_DIR: &str = "/etc/xdg/process-wrap";
-pub const XDG_PROFILE: &str = "/etc/xdg/process-wrap/profile/default.toml";
+pub const XDG_CONFIG_DIR: &str = "/etc/xdg/kakoi";
+pub const XDG_PROFILE: &str = "/etc/xdg/kakoi/profile/default.toml";
 
 pub fn xdg_profile_layer(text: &str) -> Layer {
     Layer {

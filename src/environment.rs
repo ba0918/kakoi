@@ -1,4 +1,4 @@
-//! The variables of the host environment that `process-wrap` trusts (specification
+//! The variables of the host environment that `kakoi` trusts (specification
 //! section 14), the home directory checked from them (section 2), and the configuration
 //! directory derived from both.
 
@@ -96,13 +96,13 @@ impl HostEnvironment {
         }
     }
 
-    /// The configuration directory: `$XDG_CONFIG_HOME/process-wrap`, or
-    /// `~/.config/process-wrap` when `XDG_CONFIG_HOME` is unset, empty, or not absolute.
+    /// The configuration directory: `$XDG_CONFIG_HOME/kakoi`, or
+    /// `~/.config/kakoi` when `XDG_CONFIG_HOME` is unset, empty, or not absolute.
     pub fn config_dir(&self, home: &HomeDirectory) -> PathBuf {
         let base = match &self.xdg_config_home {
             Some(xdg) if xdg.is_absolute() => xdg.clone(),
             _ => home.path().join(".config"),
         };
-        base.join("process-wrap")
+        base.join("kakoi")
     }
 }

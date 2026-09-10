@@ -10,20 +10,18 @@ use common::fixture::{
     Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
-use process_wrap::command::{command_candidates, resolve_command};
-use process_wrap::diagnostic::{Diagnostic, Kind};
-use process_wrap::executables::first_executable;
-use process_wrap::isolated_env::SecretFile;
-use process_wrap::layers::{Directive, LayerOrigin};
-use process_wrap::mounts::{
-    candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole,
-};
-use process_wrap::plan::{
+use kakoi::command::{command_candidates, resolve_command};
+use kakoi::diagnostic::{Diagnostic, Kind};
+use kakoi::executables::first_executable;
+use kakoi::isolated_env::SecretFile;
+use kakoi::layers::{Directive, LayerOrigin};
+use kakoi::mounts::{candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole};
+use kakoi::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
     ResolvedCommand,
 };
-use process_wrap::policy::NetworkMode;
-use process_wrap::variables::Variables;
+use kakoi::policy::NetworkMode;
+use kakoi::variables::Variables;
 
 /// Writes an executable script at `relative` under `dir`.
 fn executable(dir: &TempDir, relative: &str) -> PathBuf {
@@ -114,7 +112,7 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
     // sees the name it was called by, not where it was found.
     let items = [
         item(Directive::Hide, "/tmp", EntryKind::Directory),
-        item(Directive::Rw, "/tmp/process-wrap", EntryKind::Directory),
+        item(Directive::Rw, "/tmp/kakoi", EntryKind::Directory),
         item(
             Directive::Ro,
             "/home/u/.codex/AGENTS.md",
@@ -161,8 +159,8 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
             literal("--tmpfs"),
             literal("/tmp"),
             literal("--bind"),
-            literal("/tmp/process-wrap"),
-            literal("/tmp/process-wrap"),
+            literal("/tmp/kakoi"),
+            literal("/tmp/kakoi"),
             literal("--ro-bind"),
             literal("/home/u/.codex/AGENTS.md"),
             literal("/home/u/.codex/AGENTS.md"),
@@ -236,7 +234,7 @@ fn isolation(
 /// `isolation` with the variables given.
 fn isolation_with(
     profile: &str,
-    variables: &process_wrap::variables::Variables,
+    variables: &kakoi::variables::Variables,
     facts: Facts,
     secrets: &[(&str, SecretFile)],
 ) -> Result<Isolation, Diagnostic> {
@@ -483,7 +481,7 @@ fn stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order() {
 /// A home for a binary test: an empty profile and a workspace directory under it.
 fn home_with_workspace() -> (TempDir, PathBuf) {
     let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
     let workspace = home.path().join("ws");
     std::fs::create_dir(&workspace).unwrap();
     (home, workspace)
@@ -566,7 +564,7 @@ fn print_plan_without_a_command_skips_resolution() {
 /// passes through a link that sits inside it.
 fn home_with_a_policy_file_behind_a_chain_of_links(profile: &str, policy_file: &str) -> TempDir {
     let (home, _) = home_with_workspace();
-    home.write(".config/process-wrap/profile/default.toml", profile);
+    home.write(".config/kakoi/profile/default.toml", profile);
     home.write("real/pol/p.toml", policy_file);
     std::fs::create_dir(home.path().join("cache")).unwrap();
     std::os::unix::fs::symlink(home.path().join("real"), home.path().join("cache/link")).unwrap();
@@ -623,7 +621,7 @@ fn home_with_a_policy_file_behind_a_link_stepping_back_through(
     policy_file: &str,
 ) -> TempDir {
     let (home, _) = home_with_workspace();
-    home.write(".config/process-wrap/profile/default.toml", profile);
+    home.write(".config/kakoi/profile/default.toml", profile);
     home.write("real/pol/p.toml", policy_file);
     std::fs::create_dir_all(home.path().join("cache")).unwrap();
     std::fs::create_dir_all(home.path().join(through)).unwrap();
@@ -701,7 +699,7 @@ fn a_link_stepping_back_through_a_directory_outside_writable_areas_is_accepted()
 /// to `target` through `cache`.
 fn home_with_a_rewired_cache(profile: &str, target: &str) -> TempDir {
     let (home, _) = home_with_workspace();
-    home.write(".config/process-wrap/profile/default.toml", profile);
+    home.write(".config/kakoi/profile/default.toml", profile);
     std::fs::create_dir_all(home.path().join(target)).unwrap();
     std::fs::create_dir_all(home.path().join("cache/evil")).unwrap();
     std::os::unix::fs::symlink("evil", home.path().join("cache/pip")).unwrap();
@@ -744,7 +742,7 @@ fn a_nested_item_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
 #[test]
 fn a_nested_item_that_is_a_real_directory_is_accepted() {
     let (home, workspace) = home_with_workspace();
-    home.write(".config/process-wrap/profile/default.toml", NESTED_RW);
+    home.write(".config/kakoi/profile/default.toml", NESTED_RW);
     std::fs::create_dir_all(home.path().join("cache/pip/http")).unwrap();
 
     let output = run_with_workspace(&home, &workspace);
@@ -769,7 +767,7 @@ fn a_nested_item_rewired_into_another_writable_item_is_accepted() {
 fn a_workspace_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
     let (home, _) = home_with_workspace();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"~/cache\"]",
     );
     let victim = home.path().join("victim");
@@ -792,7 +790,7 @@ const RW_WORKTREE_AND_CACHE: &str = "[mounts]\nrw = [\"${worktree}\", \"~/cache\
 /// A home with `cache/proj` as a workspace under an `rw` cache, and `victim` beside it.
 fn home_with_a_project_under_the_cache(profile: &str) -> TempDir {
     let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", profile);
+    home.write(".config/kakoi/profile/default.toml", profile);
     std::fs::create_dir_all(home.path().join("cache/proj")).unwrap();
     std::fs::create_dir(home.path().join("victim")).unwrap();
     home
@@ -829,7 +827,7 @@ fn a_workspace_under_an_rw_cache_given_from_elsewhere_is_accepted_until_rewired(
 fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
     let home = TempDir::new();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"${worktree}\"]",
     );
     std::fs::create_dir_all(home.path().join("proj/.git")).unwrap();
@@ -866,7 +864,7 @@ fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_na
     for (name, with_git) in [("with .git", true), ("without .git", false)] {
         let home = TempDir::new();
         home.write(
-            ".config/process-wrap/profile/default.toml",
+            ".config/kakoi/profile/default.toml",
             "[mounts]\nrw = [\"${worktree}\"]",
         );
         std::fs::create_dir_all(home.path().join("proj/sub")).unwrap();
@@ -908,7 +906,7 @@ fn a_rewired_workspace_is_not_vouched_for_by_a_literal_form_merging_into_the_sam
     // item at `victim`, and that item is still derived from the redirected workspace.
     let home = TempDir::new();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"${worktree}\", \"~/proj/sub\"]",
     );
     std::fs::create_dir_all(home.path().join("proj/sub")).unwrap();
@@ -931,7 +929,7 @@ fn a_rewired_workspace_is_not_vouched_for_by_a_literal_form_merging_into_the_sam
 fn a_workspace_behind_a_link_landing_in_an_rw_item_written_by_path_is_accepted() {
     let home = TempDir::new();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"~/work\"]",
     );
     std::fs::create_dir_all(home.path().join("data/work/proj")).unwrap();
@@ -959,7 +957,7 @@ fn an_ro_reached_through_a_link_between_two_rw_items_stays_accepted_when_the_lin
     // `ro` is not held to the root items (specification section 5.6).
     let (home, workspace) = home_with_workspace();
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/a/l/y\"]",
     );
     std::fs::create_dir_all(home.path().join("a")).unwrap();
@@ -990,7 +988,7 @@ fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
     for (name, directive) in [("hide", "hide"), ("rw-file", "rw-file")] {
         let (home, workspace) = home_with_workspace();
         home.write(
-            ".config/process-wrap/profile/default.toml",
+            ".config/kakoi/profile/default.toml",
             format!("[mounts]\nrw = [\"~/cache\"]\n{directive} = [\"~/cache/x/state\"]"),
         );
         home.write("cache/x/state", "");

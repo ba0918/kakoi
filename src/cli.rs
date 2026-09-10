@@ -48,14 +48,14 @@ pub enum Parsed {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "process-wrap",
+    name = "kakoi",
     version,
     about = "Run a command inside a bubblewrap mount namespace shaped by a layered policy.",
-    override_usage = "process-wrap [OPTIONS] -- COMMAND [ARGS]...\n       \
-                      process-wrap [OPTIONS] --print-plan[=full|json] [-- COMMAND [ARGS]...]\n       \
-                      process-wrap init [NAME]\n       \
-                      process-wrap --version\n       \
-                      process-wrap --help",
+    override_usage = "kakoi [OPTIONS] -- COMMAND [ARGS]...\n       \
+                      kakoi [OPTIONS] --print-plan[=full|json] [-- COMMAND [ARGS]...]\n       \
+                      kakoi init [NAME]\n       \
+                      kakoi --version\n       \
+                      kakoi --help",
     color = clap::ColorChoice::Never,
     disable_help_flag = true,
     disable_version_flag = true
@@ -142,7 +142,7 @@ where
         );
     let matches = parser
         .try_get_matches_from_mut(
-            std::iter::once(OsString::from("process-wrap")).chain(arguments.iter().cloned()),
+            std::iter::once(OsString::from("kakoi")).chain(arguments.iter().cloned()),
         )
         .map_err(|_| Diagnostic::usage("invalid command line"))?;
     let parsed = Arguments::from_arg_matches(&matches).expect("matches follow the definition");

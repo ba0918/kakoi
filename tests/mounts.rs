@@ -8,18 +8,18 @@ use common::fixture::{
     home, layers, merged, variables, variables_without_git, Facts, CONFIG_DIR, POLICY_FILE, PROFILE,
 };
 use common::TempDir;
-use process_wrap::diagnostic::{Diagnostic, Kind};
-use process_wrap::environment::{HostEnvironment, RealEntry};
-use process_wrap::layers::{Directive, Layer, LayerOrigin};
-use process_wrap::mount_facts::collect_mount_facts;
-use process_wrap::mount_list::read_mount_list;
-use process_wrap::mounts::{
+use kakoi::diagnostic::{Diagnostic, Kind};
+use kakoi::environment::{HostEnvironment, RealEntry};
+use kakoi::layers::{Directive, Layer, LayerOrigin};
+use kakoi::mount_facts::collect_mount_facts;
+use kakoi::mount_list::read_mount_list;
+use kakoi::mounts::{
     candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
     MountFacts, ResolvedMounts, ScanHit, ScanRequest,
 };
-use process_wrap::scan::scan;
-use process_wrap::variables::Variables;
-use process_wrap::wildcard::matches;
+use kakoi::scan::scan;
+use kakoi::variables::Variables;
+use kakoi::wildcard::matches;
 
 /// Resolves the mount items of the written layers against `facts` and applies the
 /// generated items, with no `ro` item held to be swappable (the placement rules that
@@ -109,14 +109,14 @@ fn variables_expand_only_in_path_values() {
     let path = |text: &str| Expansion::Path(PathBuf::from(text));
     assert_eq!(
         expanded.mounts[0].path,
-        path("/home/u/.config/process-wrap/agents.md")
+        path("/home/u/.config/kakoi/agents.md")
     );
     assert_eq!(expanded.scans[0].root, path("/home/u/proj"));
     assert_eq!(expanded.hide_mounts[0].under, path("/home/u/proj/mnt"));
     assert_eq!(expanded.path_prepend[0].path, path("/home/u/proj/.git/bin"));
     assert_eq!(
         expanded.secrets["T"],
-        path("/home/u/.config/process-wrap/secrets/t")
+        path("/home/u/.config/kakoi/secrets/t")
     );
     assert_eq!(policy.env_set["X"], "${worktree}");
 }
@@ -697,7 +697,7 @@ fn existing_secret_files_are_hidden() {
         &variables(),
         Facts::new()
             .file("/home/u/tokens/a")
-            .link_to_file("/home/u/.config/process-wrap/secrets/c", "/home/u/vault/c"),
+            .link_to_file("/home/u/.config/kakoi/secrets/c", "/home/u/vault/c"),
     )
     .unwrap();
 
@@ -720,16 +720,13 @@ fn the_config_secrets_directory_is_hidden() {
     let resolved = resolve(
         &layers("", None, &[], &[]),
         &variables(),
-        Facts::new().dir("/home/u/.config/process-wrap/secrets"),
+        Facts::new().dir("/home/u/.config/kakoi/secrets"),
     )
     .unwrap();
 
     assert_eq!(
         order(&resolved),
-        [(
-            Directive::Hide,
-            Path::new("/home/u/.config/process-wrap/secrets")
-        )]
+        [(Directive::Hide, Path::new("/home/u/.config/kakoi/secrets"))]
     );
     assert_eq!(resolved.items[0].origin, ItemOrigin::ConfigSecrets);
 
@@ -855,13 +852,13 @@ fn a_scanned_env_file_inside_an_rw_worktree_is_hidden() {
 fn an_rw_subdirectory_shows_through_a_hidden_tmp() {
     let resolved = resolve(
         &layers(
-            "[mounts]\nrw = [\"/tmp/process-wrap\"]\nhide = [\"/tmp\"]",
+            "[mounts]\nrw = [\"/tmp/kakoi\"]\nhide = [\"/tmp\"]",
             None,
             &[],
             &[],
         ),
         &variables(),
-        Facts::new().dir("/tmp").dir("/tmp/process-wrap"),
+        Facts::new().dir("/tmp").dir("/tmp/kakoi"),
     )
     .unwrap();
 
@@ -869,7 +866,7 @@ fn an_rw_subdirectory_shows_through_a_hidden_tmp() {
         order(&resolved),
         [
             (Directive::Hide, Path::new("/tmp")),
-            (Directive::Rw, Path::new("/tmp/process-wrap")),
+            (Directive::Rw, Path::new("/tmp/kakoi")),
         ]
     );
 }
@@ -937,12 +934,12 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
         "/home/u",
         "/",
         PROFILE,
-        "/home/u/.config/process-wrap/profile",
+        "/home/u/.config/kakoi/profile",
         POLICY_FILE,
         "/home/u/policies",
         CONFIG_DIR,
         "/home/u/.config",
-        "/home/u/.config/process-wrap/secrets",
+        "/home/u/.config/kakoi/secrets",
     ] {
         assert!(
             candidates.paths.contains(&PathBuf::from(expected)),

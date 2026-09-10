@@ -33,7 +33,7 @@ pub fn render(plan: &Plan, form: PlanForm) -> String {
 fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
     let mut text = String::new();
     if plan.nested {
-        text.push_str("nested: yes (PROCESS_WRAP=1; the plan is shown but would not be applied)\n");
+        text.push_str("nested: yes (KAKOI=1; the plan is shown but would not be applied)\n");
     }
     text.push_str("policy files:\n");
     for source in &plan.policy_sources {
@@ -295,13 +295,13 @@ fn env_mode(mode: EnvMode) -> &'static str {
     }
 }
 
-/// Where a policy came from. The built-in default names `process-wrap init`, the form that
+/// Where a policy came from. The built-in default names `kakoi init`, the form that
 /// writes it out, which is the contract of specification section 13.
 fn policy_source(source: &PolicySource) -> String {
     match source {
         PolicySource::File(path) => shown(path),
         PolicySource::BuiltInDefault => {
-            "the built-in default (write it out with `process-wrap init`)".to_string()
+            "the built-in default (write it out with `kakoi init`)".to_string()
         }
     }
 }

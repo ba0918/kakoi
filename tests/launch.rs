@@ -39,7 +39,7 @@ fn a_command_exit_code_passes_through() {
 
 /// Overwrites the `default` profile of `home` with `text`.
 fn profile(home: &TempDir, text: &str) {
-    home.write(".config/process-wrap/profile/default.toml", text);
+    home.write(".config/kakoi/profile/default.toml", text);
 }
 
 /// Runs `script` with `/bin/sh -c` inside the isolation of `home`'s profile, with the
@@ -59,13 +59,13 @@ fn run_script(home: &TempDir, workspace: &Path, script: &str) -> Output {
         .unwrap()
 }
 
-/// Exit 0 and no diagnostic or warning from `process-wrap` itself; returns standard
+/// Exit 0 and no diagnostic or warning from `kakoi` itself; returns standard
 /// output as text.
 fn assert_ran_clean(output: &Output) -> String {
     let report = output_report(output);
     assert_eq!(output.status.code(), Some(0), "{report}");
     assert!(
-        !String::from_utf8_lossy(&output.stderr).contains("process-wrap:"),
+        !String::from_utf8_lossy(&output.stderr).contains("kakoi:"),
         "{report}"
     );
     String::from_utf8(output.stdout.clone()).unwrap()
@@ -121,7 +121,7 @@ fn adjacent_stages_yield_the_earlier_diagnostic() {
     // Stage 7 beside stage 8: an empty secret file and no `bwrap` on `PATH`.
     let (home, workspace) = home_with_workspace();
     let empty_path = TempDir::new();
-    home.write(".config/process-wrap/secrets/empty", "");
+    home.write(".config/kakoi/secrets/empty", "");
     profile(
         &home,
         &format!("{RW_WORKSPACE}[secrets]\nEMPTY = \"${{config_dir}}/secrets/empty\"\n"),
@@ -393,7 +393,7 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
         &format!("{RW_WORKSPACE}hide = [\"{}\"]\n", hidden.display()),
     );
 
-    let through_process_wrap = binary(home.path())
+    let through_kakoi = binary(home.path())
         .args([
             "--workspace",
             workspace.to_str().unwrap(),
@@ -419,17 +419,17 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
 
     let report = format!(
         "{}\nbwrap alone: {}",
-        output_report(&through_process_wrap),
+        output_report(&through_kakoi),
         output_report(&bwrap_alone)
     );
     assert_ne!(bwrap_alone.status.code(), Some(0), "{report}");
     assert_eq!(
-        through_process_wrap.status.code(),
+        through_kakoi.status.code(),
         bwrap_alone.status.code(),
         "{report}"
     );
-    assert!(through_process_wrap.stdout.is_empty(), "{report}");
-    assert_eq!(through_process_wrap.stderr, bwrap_alone.stderr, "{report}");
+    assert!(through_kakoi.stdout.is_empty(), "{report}");
+    assert_eq!(through_kakoi.stderr, bwrap_alone.stderr, "{report}");
 }
 
 #[test]
@@ -506,8 +506,7 @@ fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String, u64)> {
         for entry in entries {
             let path = entry.path();
             let relative = path.strip_prefix(root).unwrap().to_path_buf();
-            if relative == Path::new("ws") || relative == Path::new(".config/process-wrap/profile")
-            {
+            if relative == Path::new("ws") || relative == Path::new(".config/kakoi/profile") {
                 continue;
             }
             let metadata = std::fs::symlink_metadata(&path).unwrap();
@@ -526,7 +525,7 @@ fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String, u64)> {
 #[test]
 fn a_launch_leaves_the_host_tree_unchanged() {
     let (home, workspace) = home_with_workspace();
-    home.write(".config/process-wrap/secrets/token", "FAKE\n");
+    home.write(".config/kakoi/secrets/token", "FAKE\n");
     home.write("cache/.keep", "");
     home.write("notes/a.md", "");
     home.write("ws/.env", "X=1\n");
@@ -634,7 +633,7 @@ fn a_scanned_env_file_reads_empty() {
 fn the_shared_tmp_subdirectory_is_visible_inside_an_empty_tmp() {
     // Scene 4: `/tmp` hidden, one directory under it rw. The scene names `/tmp`, and
     // `TempDir::new` follows `TMPDIR`, which may point elsewhere: so the workspace that
-    // stands in for `/tmp/process-wrap` is placed under `/tmp` explicitly, beside a
+    // stands in for `/tmp/kakoi` is placed under `/tmp` explicitly, beside a
     // marker that only the hiding of `/tmp` can make invisible (the root is `ro` bound).
     // Nothing on the host outside the temporary directories is touched.
     let home = TempDir::new();
@@ -760,8 +759,8 @@ fn network_none_has_no_route() {
 fn a_secret_is_readable_as_a_variable_and_the_file_is_empty() {
     let (home, workspace) = home_with_workspace();
     let value = "FAKE-SECRET-VALUE-not-a-real-credential";
-    let file = home.write(".config/process-wrap/secrets/token", format!("{value}\n"));
-    home.write(".config/process-wrap/secrets/unnamed", "also-not-real\n");
+    let file = home.write(".config/kakoi/secrets/token", format!("{value}\n"));
+    home.write(".config/kakoi/secrets/unnamed", "also-not-real\n");
     profile(
         &home,
         &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
@@ -816,7 +815,7 @@ fn a_secret_whose_file_is_missing_is_not_set_from_the_host() {
     assert_eq!(output.stdout, b"absent\n", "{report}");
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert_eq!(stderr.lines().count(), 1, "{report}");
-    assert!(stderr.starts_with("process-wrap: warning: "), "{report}");
+    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }
 
 #[test]
@@ -934,14 +933,14 @@ fn a_nested_launch_runs_under_the_outer_boundary() {
         ),
     );
 
-    // The inner `process-wrap` is the same binary, started from inside the isolation
-    // with the environment the outer one assembled (`PROCESS_WRAP=1` included).
+    // The inner `kakoi` is the same binary, started from inside the isolation
+    // with the environment the outer one assembled (`KAKOI=1` included).
     let output = run_script(
         &home,
         &workspace,
         &format!(
             "{} -- /bin/sh -c 'test ! -e {} && echo inner-ok'",
-            env!("CARGO_BIN_EXE_process-wrap"),
+            env!("CARGO_BIN_EXE_kakoi"),
             home.path().join("box/file").display()
         ),
     );
@@ -951,5 +950,5 @@ fn a_nested_launch_runs_under_the_outer_boundary() {
     assert_eq!(output.stdout, b"inner-ok\n", "{report}");
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert_eq!(stderr.lines().count(), 1, "{report}");
-    assert!(stderr.starts_with("process-wrap: warning: "), "{report}");
+    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }

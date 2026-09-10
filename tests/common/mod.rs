@@ -16,7 +16,7 @@ static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 /// of a failed assertion (which quotes the plan in full). `HOME` and `XDG_CONFIG_HOME` point
 /// into `home` so that no test reads the developer's real configuration directory.
 pub fn binary(home: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_process-wrap"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kakoi"));
     command.env_clear();
     if let Some(path) = std::env::var_os("PATH") {
         command.env("PATH", path);
@@ -114,7 +114,7 @@ pub fn output_report(output: &Output) -> String {
 }
 
 /// Exit `code`, nothing on standard output, and one diagnostic line on standard error of the
-/// form `process-wrap: <kind>: <description>`. Returns the line so a test can check the
+/// form `kakoi: <kind>: <description>`. Returns the line so a test can check the
 /// description.
 pub fn assert_diagnostic(output: &Output, code: i32, kind: &str) -> String {
     let report = output_report(output);
@@ -124,7 +124,7 @@ pub fn assert_diagnostic(output: &Output, code: i32, kind: &str) -> String {
     assert_eq!(diagnostic.matches('\n').count(), 1, "{report}");
     assert!(diagnostic.ends_with('\n'), "{report}");
     assert!(
-        diagnostic.starts_with(&format!("process-wrap: {kind}: ")),
+        diagnostic.starts_with(&format!("kakoi: {kind}: ")),
         "{report}"
     );
     diagnostic
@@ -138,7 +138,7 @@ pub const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
 /// workspace directory `ws` under it.
 pub fn home_with_workspace() -> (TempDir, PathBuf) {
     let home = TempDir::new();
-    home.write(".config/process-wrap/profile/default.toml", RW_WORKSPACE);
+    home.write(".config/kakoi/profile/default.toml", RW_WORKSPACE);
     let workspace = home.path().join("ws");
     fs::create_dir(&workspace).unwrap();
     (home, workspace)
@@ -156,7 +156,7 @@ impl TempDir {
     /// A directory directly under `parent`, for a test whose scene names the parent.
     pub fn under(parent: &Path) -> Self {
         let path = parent.join(format!(
-            "process-wrap-{}-{}",
+            "kakoi-{}-{}",
             std::process::id(),
             SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));

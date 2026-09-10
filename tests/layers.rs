@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::TempDir;
-use process_wrap::cli::Invocation;
-use process_wrap::diagnostic::Kind;
-use process_wrap::environment::{HomeDirectory, HostEnvironment};
-use process_wrap::layers::{load_layers, merge, Directive, Layer, LayerOrigin, MountItem};
-use process_wrap::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
-use process_wrap::workspace_facts::real_entry;
+use kakoi::cli::Invocation;
+use kakoi::diagnostic::Kind;
+use kakoi::environment::{HomeDirectory, HostEnvironment};
+use kakoi::layers::{load_layers, merge, Directive, Layer, LayerOrigin, MountItem};
+use kakoi::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
+use kakoi::workspace_facts::real_entry;
 
 fn profile(text: &str) -> Layer {
     Layer {
@@ -250,7 +250,7 @@ fn the_same_key_in_env_set_and_secrets_is_a_policy_diagnostic() {
 fn a_missing_profile_file_is_a_policy_diagnostic() {
     let home = TempDir::new();
     let config = config_dir(&home);
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
 
     let diagnostic = load_layers(&invocation("missing", None), &config).unwrap_err();
 
@@ -261,7 +261,7 @@ fn a_missing_profile_file_is_a_policy_diagnostic() {
 fn a_missing_policy_file_target_is_a_policy_diagnostic() {
     let home = TempDir::new();
     let config = config_dir(&home);
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
     let target = home.path().join("absent.toml");
 
     let diagnostic = load_layers(
@@ -278,15 +278,15 @@ fn an_explicit_default_profile_equals_the_omitted_form() {
     let home = TempDir::new();
     let config = config_dir(&home);
     home.write(
-        ".config/process-wrap/profile/default.toml",
+        ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"/d\"]",
     );
 
     let explicit = load_layers(&invocation("default", None), &config).unwrap();
     let omitted = load_layers(
-        &process_wrap::cli::interpret(["--", "true"].map(OsString::from))
+        &kakoi::cli::interpret(["--", "true"].map(OsString::from))
             .map(|parsed| match parsed {
-                process_wrap::cli::Parsed::Invocation(mut invocation) => {
+                kakoi::cli::Parsed::Invocation(mut invocation) => {
                     invocation.rw = vec![PathBuf::from("/cli/rw")];
                     invocation
                 }
@@ -311,12 +311,9 @@ fn an_explicit_default_profile_equals_the_omitted_form() {
 fn a_named_profile_does_not_read_default_toml() {
     let home = TempDir::new();
     let config = config_dir(&home);
+    home.write(".config/kakoi/profile/default.toml", "[mounts\nbroken");
     home.write(
-        ".config/process-wrap/profile/default.toml",
-        "[mounts\nbroken",
-    );
-    home.write(
-        ".config/process-wrap/profile/strict.toml",
+        ".config/kakoi/profile/strict.toml",
         "[mounts]\nrw = [\"/s\"]",
     );
     let policy_file = home.write("policy.toml", "[mounts]\nro = [\"/p\"]");
@@ -342,10 +339,7 @@ fn a_named_profile_does_not_read_default_toml() {
 #[test]
 fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
     let home = TempDir::new();
-    home.write(
-        ".config/process-wrap/profile/default.toml",
-        "[mounts\nbroken",
-    );
+    home.write(".config/kakoi/profile/default.toml", "[mounts\nbroken");
 
     let config = HostEnvironment {
         home: Some(home.path().to_path_buf()),
@@ -355,10 +349,7 @@ fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
 
     assert_eq!(
         config,
-        home.path()
-            .canonicalize()
-            .unwrap()
-            .join(".config/process-wrap")
+        home.path().canonicalize().unwrap().join(".config/kakoi")
     );
     let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Policy);
@@ -367,11 +358,8 @@ fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
 #[test]
 fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
     let home = TempDir::new();
-    home.write(
-        ".config/process-wrap/profile/default.toml",
-        "[mounts\nbroken",
-    );
-    home.write("xdg/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "[mounts\nbroken");
+    home.write("xdg/kakoi/profile/default.toml", "");
 
     let config = HostEnvironment {
         home: Some(home.path().to_path_buf()),
@@ -381,10 +369,7 @@ fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
 
     assert_eq!(
         config,
-        home.path()
-            .canonicalize()
-            .unwrap()
-            .join(".config/process-wrap")
+        home.path().canonicalize().unwrap().join(".config/kakoi")
     );
     let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Policy);
@@ -394,7 +379,7 @@ fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
 fn a_fifo_policy_file_is_a_policy_diagnostic() {
     let home = TempDir::new();
     let config = config_dir(&home);
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
     let fifo = home.path().join("policy.fifo");
     let status = std::process::Command::new("mkfifo")
         .arg(&fifo)
@@ -415,7 +400,7 @@ fn a_fifo_policy_file_is_a_policy_diagnostic() {
 fn an_oversized_policy_file_is_a_policy_diagnostic() {
     let home = TempDir::new();
     let config = config_dir(&home);
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
     let line = format!("#{}\n", "x".repeat(62));
     let exactly_one_mib = line.repeat((1 << 20) / line.len());
     assert_eq!(exactly_one_mib.len(), 1 << 20);
@@ -441,7 +426,7 @@ fn an_oversized_policy_file_is_a_policy_diagnostic() {
 fn a_policy_file_behind_a_symlink_is_read() {
     let home = TempDir::new();
     let config = config_dir(&home);
-    home.write(".config/process-wrap/profile/default.toml", "");
+    home.write(".config/kakoi/profile/default.toml", "");
     let target = home.write("dotfiles/policy.toml", "[mounts]\nro = [\"/p\"]");
     let link = home.path().join("policy.toml");
     std::os::unix::fs::symlink(&target, &link).unwrap();

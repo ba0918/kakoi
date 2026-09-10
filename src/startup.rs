@@ -170,7 +170,7 @@ where
 /// The one line a nested run prints (specification section 12.1).
 fn nested_warning() -> Warning {
     Warning::new(
-        "PROCESS_WRAP=1: already inside an isolation, so the policy is not applied and the \
+        "KAKOI=1: already inside an isolation, so the policy is not applied and the \
          command runs under the outer boundary",
     )
 }
