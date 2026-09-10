@@ -1,7 +1,7 @@
 # The built-in default, written for WSL2 (specification section 16): the profile
-# process-wrap starts with when no profile has been written yet. `process-wrap init`
-# writes this file out as $XDG_CONFIG_HOME/process-wrap/profile/default.toml (or
-# ~/.config/process-wrap/profile/default.toml) and prints the path, so that you can read
+# kakoi starts with when no profile has been written yet. `kakoi init`
+# writes this file out as $XDG_CONFIG_HOME/kakoi/profile/default.toml (or
+# ~/.config/kakoi/profile/default.toml) and prints the path, so that you can read
 # it and adjust it to the tools you run.
 #
 # Paths are absolute, start with `~` (the real path of HOME), or start with one of the
@@ -11,14 +11,14 @@
 [mounts]
 # The work place: the workspace, the worktree it is in, and the shared .git of a linked
 # worktree or a submodule (skipped when the worktree is not under git). /tmp is hidden
-# below; /tmp/process-wrap is the one directory shared with the host, created by you or
-# by your shim (process-wrap never creates it; without it the item is skipped and /tmp
+# below; /tmp/kakoi is the one directory shared with the host, created by you or
+# by your shim (kakoi never creates it; without it the item is skipped and /tmp
 # stays empty).
 rw = [
     "${workspace}",
     "${worktree}",
     "${git_common_dir}",
-    "/tmp/process-wrap",
+    "/tmp/kakoi",
     # package caches
     "~/.cache",
     "~/.cargo/registry",
@@ -61,7 +61,7 @@ ro = [
 
 hide = [
     # /tmp holds the host's X11 and ssh-agent sockets under random names, so it cannot
-    # be hidden by name: it is replaced by an empty directory, and /tmp/process-wrap
+    # be hidden by name: it is replaced by an empty directory, and /tmp/kakoi
     # above is the shared place. /run/user holds the session's sockets (D-Bus, gpg-agent,
     # Wayland) the same way.
     "/tmp",

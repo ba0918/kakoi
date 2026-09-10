@@ -6,7 +6,7 @@ use. The fixed keys are the ones below; any other key is a `policy` error.
 
 ```toml
 [mounts]
-rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/process-wrap", "~/.cache"]
+rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/kakoi", "~/.cache"]
 rw-file = ["~/.claude.json"]
 ro      = ["~/.codex/AGENTS.md"]
 hide    = ["/tmp", "/run/user", "~/.ssh", "~/.aws", "/run/WSL"]
@@ -66,8 +66,8 @@ Everything not named by the policy is visible read-only. `/dev` and `/proc` are 
 own. A host UNIX socket that is visible read-only can be connected to; use `hide` to stop that.
 
 All directives apply to the real path after resolving symbolic links, and items are mounted
-ancestors first, so the narrower item wins: `hide = ["/tmp"]` with `rw = ["/tmp/process-wrap"]`
-gives an empty `/tmp` with only `/tmp/process-wrap` shared with the host.
+ancestors first, so the narrower item wins: `hide = ["/tmp"]` with `rw = ["/tmp/kakoi"]`
+gives an empty `/tmp` with only `/tmp/kakoi` shared with the host.
 
 ## Layers
 
@@ -84,7 +84,7 @@ replaces the lower.
 
 ## Generated items
 
-On top of the written layers, `process-wrap` generates `hide` items:
+On top of the written layers, `kakoi` generates `hide` items:
 
 - the files found by `mounts.scan`;
 - the mounts under `hide-mounts.under` whose file system type matches (never the work place
@@ -115,7 +115,7 @@ The environment inside the isolation is assembled in this order and handed to `b
 4. add the secrets;
 5. add the git rewrite;
 6. put `path-prepend` in front of `PATH`;
-7. set `PROCESS_WRAP=1`.
+7. set `KAKOI=1`.
 
 ## Secrets
 
@@ -138,7 +138,7 @@ appear in the plan, in warnings, or in diagnostics.
 has, so `git config --list` inside shows `url.<replacement>.insteadof=<prefix>` next to the
 host's own entries.
 
-## The work place, `/tmp`, and `/tmp/process-wrap`
+## The work place, `/tmp`, and `/tmp/kakoi`
 
 If no `rw` covers the workspace or the worktree, a warning is printed and the run continues. A
 worktree or workspace at `/`, at the home directory, or at an ancestor of it is refused, and so
@@ -146,8 +146,8 @@ is an `rw` or `rw-file` on any of those: nothing can make the whole home writabl
 a directory that ends up hidden is refused too, because `bwrap` could not change into it.
 
 `/tmp` is hidden by the bundled profile because the host's X11 and ssh-agent sockets live there
-under random names and cannot be hidden one by one. `/tmp/process-wrap` is the one directory
-shared with the host. You, or your shim, create it; `process-wrap` never does. When it does not
+under random names and cannot be hidden one by one. `/tmp/kakoi` is the one directory
+shared with the host. You, or your shim, create it; `kakoi` never does. When it does not
 exist the item is skipped and `/tmp` stays empty inside.
 
 ## Paths that are refused
@@ -193,7 +193,7 @@ that `ro` protects is only as much as [known gap 15](security.md#known-gaps) say
 Landing inside something hidden is refused too, whatever the item was written as: an `rw`,
 `rw-file`, or `ro` item whose path passes through a writable item and lands on or inside a
 `hide` (or, for `rw` and `rw-file`, on or inside an `ro`), including the `hide` items
-`process-wrap` generates for `secrets/` and for hidden mounts, would be mounted after the wider
+`kakoi` generates for `secrets/` and for hidden mounts, would be mounted after the wider
 item and show what it hid. And no item may land on `/`, `/dev`, or `/proc` or inside the latter
 two: the isolation mounts those itself, and an item there would cover its view (an `ro` over
 `/proc` shows the host's processes).
@@ -202,7 +202,7 @@ two: the isolation mounts those itself, and an item there would cover its view (
 
 The case that meets this most often is dotfiles: the configuration directory's real location is
 inside the dotfiles worktree, so `rw = ["${worktree}"]` would put the profile inside a writable
-area. Keeping it there is fine in itself. `process-wrap init` follows a link at the
+area. Keeping it there is fine in itself. `kakoi init` follows a link at the
 configuration directory and writes at its target, which is how the directory comes to live in
 dotfiles at all. What this check refuses is having that target inside a writable item of the
 same launch. Write the profile for that repository like this instead, and point `--workspace`
@@ -215,12 +215,12 @@ rw = ["${workspace}", "${git_common_dir}"]
 
 ```sh
 cd ~/dotfiles/ai
-process-wrap --workspace . -- codex
+kakoi --workspace . -- codex
 ```
 
 Two more rules follow from the same check:
 
-- When you name a subdirectory of an `rw` worktree with `--workspace`, start `process-wrap`
+- When you name a subdirectory of an `rw` worktree with `--workspace`, start `kakoi`
   from that directory. A `--workspace` that is the current directory is exempt from the check,
   since a process already there cannot be moved by a link swap.
 - A `--workspace` whose path goes through a symbolic link, given from somewhere else, is

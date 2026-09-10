@@ -1,6 +1,6 @@
 # Wrapping a command
 
-`process-wrap` knows nothing about the command it wraps. To make every invocation of a CLI go
+`kakoi` knows nothing about the command it wraps. To make every invocation of a CLI go
 through it, put a shim under the command's name on `PATH`. The repository ships a shim template,
 [`examples/shim/codex`](../examples/shim/codex), and an Agent Skill that fills it in for the CLIs
 on your machine.
@@ -13,15 +13,15 @@ executable:
 
 ```sh
 curl -fsSLo ~/.local/bin/codex \
-  https://raw.githubusercontent.com/ba0918/process-wrap/main/examples/shim/codex
+  https://raw.githubusercontent.com/ba0918/kakoi/main/examples/shim/codex
 chmod +x ~/.local/bin/codex
 ```
 
 With the repository cloned, `cp examples/shim/codex ~/.local/bin/codex` does the same thing.
 
-Every invocation of that name then goes through `process-wrap`. The shim finds the real command
-further down `PATH` (skipping itself), creates `/tmp/process-wrap` when it is missing, and hands
-the command's path to `process-wrap` with the arguments unchanged.
+Every invocation of that name then goes through `kakoi`. The shim finds the real command
+further down `PATH` (skipping itself), creates `/tmp/kakoi` when it is missing, and hands
+the command's path to `kakoi` with the arguments unchanged.
 
 The **tool section** is everything that depends on the command being wrapped:
 
@@ -30,11 +30,11 @@ The **tool section** is everything that depends on the command being wrapped:
 | `REAL_COMMAND` | the name of the executable to look for on `PATH` |
 | `BYPASS_FLAG` | the flag that turns the command's own sandbox off, inserted at the front of the argument list; empty if there is none |
 | `WORKSPACE_OPTIONS`, `RW_OPTIONS` | the command's options whose values are copied to `--workspace` and `--rw` |
-| `ALLOW_LIST` | subcommands passed straight to the real command, outside `process-wrap` |
-| `NO_FLAG_LIST` | subcommands that go through `process-wrap` without `BYPASS_FLAG` |
+| `ALLOW_LIST` | subcommands passed straight to the real command, outside `kakoi` |
+| `NO_FLAG_LIST` | subcommands that go through `kakoi` without `BYPASS_FLAG` |
 
 The body under it depends on none of them. The values shipped in the tool section are filled in
-for codex as an example of a command to wrap, not because `process-wrap` has anything to do with
+for codex as an example of a command to wrap, not because `kakoi` has anything to do with
 codex. Read the values for another command off its `--help`; the header of the template explains
 how each is read and the one misreading that widens the boundary.
 
@@ -45,9 +45,9 @@ decides otherwise, so a subcommand a newer version of the command adds is isolat
 rest. There are two ways out, and both are yours to open:
 
 - A subcommand in the shim's **allow list** is passed straight to the real command, outside
-  `process-wrap`. It is a whitelist you approve and answer for, and it is empty as shipped.
-- `PROCESS_WRAP_SHIM_OFF=1` runs the real command with your arguments unchanged, outside
-  `process-wrap`, whatever the lists say.
+  `kakoi`. It is a whitelist you approve and answer for, and it is empty as shipped.
+- `KAKOI_SHIM_OFF=1` runs the real command with your arguments unchanged, outside
+  `kakoi`, whatever the lists say.
 
 Add a name to a list only when something breaks, and only the name that broke:
 
@@ -74,17 +74,17 @@ you check about your copy are two different things.
 
 **What is checked here** runs with two directories at the front of `PATH`: the first holds the
 copy under the wrapped command's name, the second holds stand-ins for the wrapped command and
-for `process-wrap` that print their arguments and exit. The order matters, since a stand-in
+for `kakoi` that print their arguments and exit. The order matters, since a stand-in
 found before the copy would take the invocation instead of it. With both directories in place
 the real command never runs, on the paths that go straight to it either. The conditions:
 
 - an argument list starting with a subcommand, one starting with an option, and `--help` all
-  reach `process-wrap`;
+  reach `kakoi`;
 - the values of the copied options appear in its arguments;
 - a name put in a list temporarily takes effect only when it is the first word, an argument list
   starting with an option being isolated as usual;
-- a copy whose flag is empty still reaches `process-wrap`;
-- with `PROCESS_WRAP_SHIM_OFF=1` the `process-wrap` stand-in is not started, and the stand-in
+- a copy whose flag is empty still reaches `kakoi`;
+- with `KAKOI_SHIM_OFF=1` the `kakoi` stand-in is not started, and the stand-in
   for the wrapped command is reached with the arguments unchanged.
 
 One condition needs the real command: that the flag put in front reaches it, which for codex is
@@ -95,7 +95,7 @@ that subcommand executes.
 
 ## The setup skill
 
-[`skills/process-wrap-setup`](../skills/process-wrap-setup) is an Agent Skill that fits an
+[`skills/kakoi-setup`](../skills/kakoi-setup) is an Agent Skill that fits an
 installation to the machine it is on. It asks first whether your profile, and later the shim in
 the directory you pick, are kept elsewhere — generated, synced, or linked from a dotfiles
 repository — and if so proposes the lines or the file for you to put in place instead of writing
@@ -116,11 +116,11 @@ It puts a `--print-plan` from before a change next to one from after. Install it
 own means, such as:
 
 ```sh
-gh skill install ba0918/process-wrap process-wrap-setup
+gh skill install ba0918/kakoi kakoi-setup
 ```
 
-Run it **outside the isolation**: before the shim is on `PATH`, with `PROCESS_WRAP_SHIM_OFF=1`,
-or from a CLI not started through `process-wrap`. The configuration directory may not sit inside
+Run it **outside the isolation**: before the shim is on `PATH`, with `KAKOI_SHIM_OFF=1`,
+or from a CLI not started through `kakoi`. The configuration directory may not sit inside
 a writable mount item, so an isolated agent cannot edit its own profile. The agent is therefore
 not isolated while the skill runs. Run your CLI in a mode that asks before writing, and check
 the skill for yourself: that each of its "What to keep to" items is written there as an

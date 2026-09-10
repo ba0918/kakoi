@@ -1,12 +1,12 @@
-# process-wrap
+# kakoi
 
-`process-wrap` runs a command inside a [bubblewrap](https://github.com/containers/bubblewrap)
+`kakoi` runs a command inside a [bubblewrap](https://github.com/containers/bubblewrap)
 mount namespace shaped by a small TOML policy, and returns the command's exit code unchanged.
 It is built for one job: running an LLM CLI (Codex, Claude Code, opencode) against one
 repository without handing it the rest of your home directory, your credentials, or the sockets
 that carry them.
 
-> **Not a replacement for a container or a VM.** `process-wrap` shares the host's kernel, trusts
+> **Not a replacement for a container or a VM.** `kakoi` shares the host's kernel, trusts
 > the host it is started from, and sets no resource limits. It narrows what an agent can see and
 > touch during everyday work; it does not make an untrusted program safe to run. See
 > [Security model](#security-model).
@@ -14,7 +14,7 @@ that carry them.
 ## Why
 
 - **The boundary sits outside the CLI.** An agent CLI's own sandbox is a setting of the CLI: it
-  changes with its version, its configuration, and the flags it was started with. `process-wrap`
+  changes with its version, its configuration, and the flags it was started with. `kakoi`
   wraps the whole process from the outside, so the boundary is yours and stays the same whatever
   the CLI decides.
 - **Light enough for every launch.** One binary, one `bwrap` call, no daemon, no image, no
@@ -35,32 +35,32 @@ that carry them.
 ## Install
 
 ```sh
-mise use -g github:ba0918/process-wrap
+mise use -g github:ba0918/kakoi
 ```
 
 Every release carries a statically linked binary for Linux on x86_64: nothing to build, and no
 library it has to find on your machine. Without `mise`, take the archive from the
-[latest release](https://github.com/ba0918/process-wrap/releases/latest), check it against the
-`.sha256` beside it, and put `process-wrap` on your `PATH`. To build from source instead:
+[latest release](https://github.com/ba0918/kakoi/releases/latest), check it against the
+`.sha256` beside it, and put `kakoi` on your `PATH`. To build from source instead:
 
 ```sh
-cargo install --git https://github.com/ba0918/process-wrap --locked
+cargo install --git https://github.com/ba0918/kakoi --locked
 ```
 
-That is the whole installation. With no profile written anywhere, `process-wrap -- COMMAND`
+That is the whole installation. With no profile written anywhere, `kakoi -- COMMAND`
 starts on the built-in default, a profile written for WSL2 and compiled into the binary.
 
 ## Quick start
 
 ```sh
 cd ~/work/project
-process-wrap -- codex               # run codex inside the isolation, on the built-in default
-$EDITOR "$(process-wrap init)"      # write the default profile out and edit it
-process-wrap --print-plan -- codex  # show what would be mounted, hidden, and set; run nothing
+kakoi -- codex               # run codex inside the isolation, on the built-in default
+$EDITOR "$(kakoi init)"      # write the default profile out and edit it
+kakoi --print-plan -- codex  # show what would be mounted, hidden, and set; run nothing
 ```
 
 Two things are empty right after installing: `/tmp` is replaced by an empty directory (only
-`/tmp/process-wrap` is shared with the host, and you or your shim create it), and `~/.config/gh`
+`/tmp/kakoi` is shared with the host, and you or your shim create it), and `~/.config/gh`
 is hidden, so `gh` inside the isolation is not authenticated. [Getting started](docs/getting-started.md)
 covers both, along with the configuration directory and how to pass a GitHub token.
 
@@ -107,7 +107,7 @@ The merged policy names mount items with four directives:
 | `hide` | a directory becomes an empty directory; a file reads as empty |
 
 Everything the policy does not name is visible read-only. The narrower item wins, so
-`hide = ["/tmp"]` with `rw = ["/tmp/process-wrap"]` gives an empty `/tmp` with one shared
+`hide = ["/tmp"]` with `rw = ["/tmp/kakoi"]` gives an empty `/tmp` with one shared
 directory inside it. Paths can use `~` and the variables `${workspace}`, `${worktree}`,
 `${git_common_dir}`, and `${config_dir}`.
 
@@ -116,7 +116,7 @@ directory inside it. Paths can use `~` and the variables `${workspace}`, `${work
 - **Network** is either shared with the host (`host`) or cut (`none`); there is nothing in
   between.
 - **Environment** is inherited or cleared, then shaped by `unset` patterns, `set`, secrets, and
-  `path-prepend`. `PROCESS_WRAP=1` marks the inside.
+  `path-prepend`. `KAKOI=1` marks the inside.
 
 The process ID, IPC, UTS, cgroup, and user namespaces are always unshared. `--print-plan` shows
 every mount item with the reason it was applied or skipped and how the environment differs from
@@ -126,28 +126,28 @@ LLM agents and tools.
 
 ## Wrapping an LLM CLI
 
-`process-wrap` knows nothing about the command it wraps. A shim on `PATH` does the wrapping:
+`kakoi` knows nothing about the command it wraps. A shim on `PATH` does the wrapping:
 
 ```sh
 # ~/.local/bin has to come before the real codex on PATH
 curl -fsSLo ~/.local/bin/codex \
-  https://raw.githubusercontent.com/ba0918/process-wrap/main/examples/shim/codex
+  https://raw.githubusercontent.com/ba0918/kakoi/main/examples/shim/codex
 chmod +x ~/.local/bin/codex
-codex   # now every invocation goes through process-wrap
+codex   # now every invocation goes through kakoi
 ```
 
 The shim finds the real `codex` further down `PATH`, copies its `--cd` and `--add-dir` values to
 `--workspace` and `--rw`, and puts `--dangerously-bypass-approvals-and-sandbox` in front, since
-the boundary is `process-wrap`'s and not the CLI's. `PROCESS_WRAP_SHIM_OFF=1` runs the real
-command outside `process-wrap`. To wrap another CLI, copy the template and fill in the tool
+the boundary is `kakoi`'s and not the CLI's. `KAKOI_SHIM_OFF=1` runs the real
+command outside `kakoi`. To wrap another CLI, copy the template and fill in the tool
 section at the top of the file. [Wrapping a command](docs/shim.md) has the details and the
 conditions to check on your copy.
 
-The [`process-wrap-setup`](skills/process-wrap-setup) Agent Skill fits the profile and the shim
+The [`kakoi-setup`](skills/kakoi-setup) Agent Skill fits the profile and the shim
 to the CLIs installed on your machine:
 
 ```sh
-gh skill install ba0918/process-wrap process-wrap-setup
+gh skill install ba0918/kakoi kakoi-setup
 ```
 
 Run it outside the isolation, in a mode where your CLI asks before writing; it proposes each
@@ -155,7 +155,7 @@ change as a diff.
 
 ## Security model
 
-What `process-wrap` guarantees, when the launch is not refused:
+What `kakoi` guarantees, when the launch is not refused:
 
 - the process sees the file system the policy describes, and nothing it hides;
 - `rw` and `rw-file` are the only places it can write;
@@ -165,7 +165,7 @@ What `process-wrap` guarantees, when the launch is not refused:
 
 What it does not guarantee:
 
-- anything about the host: `process-wrap` trusts `HOME`, `PATH`, the current directory, and the
+- anything about the host: `kakoi` trusts `HOME`, `PATH`, the current directory, and the
   environment it starts in;
 - resource limits (no cgroups), per-domain network rules, or kernel isolation;
 - that an `rw` area stays harmless afterwards: `.git/hooks` and `.git/config` in a repository
@@ -183,7 +183,7 @@ and the fifteen known gaps are in [Security model](docs/security.md).
   paths that are refused.
 - [Wrapping a command](docs/shim.md): the shim template and the setup skill.
 - [Security model](docs/security.md): trust boundary, known gaps, and what 0.1 leaves out.
-- [Specification](docs/spec/process-wrap.md) (Japanese): the complete behaviour;
+- [Specification](docs/spec/kakoi.md) (Japanese): the complete behaviour;
   [`CONTEXT.md`](CONTEXT.md) is the glossary.
 
 ## Status
