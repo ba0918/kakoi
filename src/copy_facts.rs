@@ -179,9 +179,8 @@ fn read_file(
         .map_err(|error| unreadable(item, path, error))?;
     if !metadata.file_type().is_file() {
         return Err(Diagnostic::path(format!(
-            "the `rw-copy` item `{}` at {} covers {}, which is not a regular file, a \
-             directory, or a symbolic link; `rw-copy` starts from a copy of the content and \
-             one of those has none",
+            "the `rw-copy` item `{}` at {} cannot be copied: {} is not a regular file or a \
+             directory, so there is no content to copy; use `rw-file` for a socket or a FIFO",
             item.written,
             item.real.display(),
             path.display()
