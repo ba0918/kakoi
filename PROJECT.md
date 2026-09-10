@@ -47,5 +47,5 @@ lefthook install
 
 - The specification's section 14 is authoritative for runtime boundaries: no persistent state,
   no files written, no external command other than `bwrap`.
-- The specification's section 18 is authoritative for features excluded from version 0.1.
+- The specification's section 18 is authoritative for features excluded from version 0.2.
 - The version lives in `Cargo.toml` only (specification section 17).

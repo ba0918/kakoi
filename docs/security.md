@@ -110,7 +110,7 @@ When the launch is not refused:
     changes what the next launch reads. What `ro` guarantees is that the content the agent reads
     is not changed under it, not that the agent cannot be steered into reading something else.
 
-## Not in 0.1
+## Not in 0.2
 
 - cgroup limits on CPU or memory
 - a per-domain network allowance
@@ -127,5 +127,5 @@ When the launch is not refused:
 - an installer for the setup skill (use your agent CLI's own means, such as
   `gh skill install ba0918/kakoi kakoi-setup`)
 
-The specification's [section 18](spec/kakoi.md#18-01-で作らないもの) is authoritative for
+The specification's [section 18](spec/kakoi.md#18-02-で作らないもの) is authoritative for
 this list.

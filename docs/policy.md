@@ -167,7 +167,7 @@ than miss a mount.
 ## Network
 
 `network.mode` is `host` (the host's network, the default) or `none` (no network at all). There
-is no per-domain allowance in 0.1; combine `host` with an external proxy if you need one.
+is no per-domain allowance in 0.2; combine `host` with an external proxy if you need one.
 
 ## Environment
 
