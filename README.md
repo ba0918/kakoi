@@ -26,7 +26,8 @@ that carry them.
 ## Requirements
 
 - Linux on x86_64, including WSL2 (no aarch64 in 0.2)
-- `bwrap` 0.9.0 or later on `PATH` (the `bubblewrap` package on Debian and Ubuntu)
+- `bwrap` 0.9.0 or later on `PATH`, installed as a normal (non-setuid) binary and run as a user
+  other than root (the `bubblewrap` package on Debian and Ubuntu is such an installation)
 - On Ubuntu 24.04 and later, permission for `bwrap` to use a user namespace: the restriction is
   on by default, and every launch needs the namespace. See
   [Allowing the user namespace](docs/getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
@@ -130,7 +131,9 @@ directory inside it. Paths can use `~` and the variables `${workspace}`, `${work
 - **Environment** is inherited or cleared, then shaped by `unset` patterns, `set`, secrets, and
   `path-prepend`. `KAKOI=1` marks the inside.
 
-The process ID, IPC, UTS, cgroup, and user namespaces are always unshared. `--print-plan` shows
+The process ID, IPC, UTS, and user namespaces are always unshared: a launch is refused where the
+kernel cannot create a user namespace. The cgroup namespace is unshared too, except where the
+kernel does not support it. `--print-plan` shows
 every mount item with the reason it was applied or skipped and how the environment differs from
 the host's; `--print-plan=full` adds the merged policy, the final environment with secret values
 masked, and the `bwrap` argument list, and `--print-plan=json` is the same as one line of JSON, for

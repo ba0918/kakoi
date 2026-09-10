@@ -19,7 +19,10 @@ The isolation has four dimensions:
 - **environment**: what is inherited, dropped, and added;
 - **credentials**: files hidden and secrets injected.
 
-The process ID, IPC, UTS, cgroup, and user namespaces are always unshared. A seccomp filter
+The process ID, IPC, UTS, and user namespaces are always unshared, and a launch is refused on a
+machine that cannot create a user namespace. The cgroup namespace is unshared as well, except
+where the kernel does not support it. What this model covers is the non-setuid `bwrap`, run as a
+user other than root. A seccomp filter
 fails `ioctl(TIOCSTI)` with `EPERM` and ends any process that makes a system call for another
 architecture or with the x32 bit set. The boundary is assembled once at start-up and does not
 change afterwards.
