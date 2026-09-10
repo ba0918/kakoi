@@ -92,7 +92,7 @@ jobs:
       # check is here rather than left to whoever edits one of them.
       - name: The skill's copy of the shim template matches the original
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: diff examples/shim/codex skills/process-wrap-setup/assets/shim/codex
+        run: diff examples/shim/codex skills/kakoi-setup/assets/shim/codex
 
   msrv:
     # Cargo.toml declares rust-version = "1.85"; this job is what makes that claim true.
@@ -178,9 +178,9 @@ jobs:
         if: steps.decide.outputs.release == 'true'
         run: |
           cargo build --release --locked --target "$PUBLISHED_TARGET"
-          binary="target/$PUBLISHED_TARGET/release/process-wrap"
+          binary="target/$PUBLISHED_TARGET/release/kakoi"
           printed=$("$binary" --version)
-          expected="process-wrap ${{ steps.decide.outputs.version }}"
+          expected="kakoi ${{ steps.decide.outputs.version }}"
           if [ "$printed" != "$expected" ]; then
             echo "--version prints '$printed', the manifest says '$expected'"
             exit 1
@@ -196,10 +196,10 @@ jobs:
         if: steps.decide.outputs.release == 'true'
         run: |
           version=${{ steps.decide.outputs.version }}
-          name="process-wrap-v$version-$PUBLISHED_TARGET"
+          name="kakoi-v$version-$PUBLISHED_TARGET"
           mkdir -p dist
-          cp "target/$PUBLISHED_TARGET/release/process-wrap" dist/
-          tar -czf "$name.tar.gz" -C dist process-wrap
+          cp "target/$PUBLISHED_TARGET/release/kakoi" dist/
+          tar -czf "$name.tar.gz" -C dist kakoi
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
           tar -tzf "$name.tar.gz"
           cat "$name.tar.gz.sha256"
