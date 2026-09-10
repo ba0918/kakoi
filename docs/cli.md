@@ -145,7 +145,8 @@ the values the policy set.
 A failure of `kakoi` itself is one line on standard error of the form
 `kakoi: <kind>: <description>`, and the exit code is 125. Two exceptions: a command that
 cannot be found exits 127, and, in a nested run, a command that was found but cannot be executed
-(a script whose interpreter does not exist) exits 126.
+(a script whose interpreter does not exist, or, in the published build, a file of a format the
+kernel cannot run) exits 126.
 
 The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`, and
 `command not executable`. Warnings are one line each starting with `kakoi: warning: ` and
