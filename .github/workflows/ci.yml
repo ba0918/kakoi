@@ -74,18 +74,18 @@ jobs:
           fi
 
       - name: cargo build
-        run: cargo build --locked --target ${{ matrix.target }}
+        run: cargo build --workspace --locked --target ${{ matrix.target }}
 
       - name: cargo test
-        run: cargo test --all-targets --locked --target ${{ matrix.target }}
+        run: cargo test --workspace --all-targets --locked --target ${{ matrix.target }}
 
       # Formatting does not depend on the target, so one of the two runs it.
       - name: cargo fmt
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: cargo clippy
-        run: cargo clippy --all-targets --locked --target ${{ matrix.target }} -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked --target ${{ matrix.target }} -- -D warnings
 
       # The setup skill carries its own copy of the shim template, because a skill
       # installed on its own has no source tree beside it. Two copies can drift, so the
@@ -107,7 +107,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo build on the minimum supported Rust version
-        run: cargo build --locked
+        run: cargo build --workspace --locked
 
   release:
     # The tag confirms the checks passed; it never starts them, so this job waits for

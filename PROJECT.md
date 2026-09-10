@@ -14,16 +14,18 @@ canonical source for product, implementation, verification, and release requirem
 ## Implementation and verification
 
 The project is implemented in Rust 2021 with a minimum supported Rust version of 1.85. The
-package manifest and locked dependency graph are in `Cargo.toml` and `Cargo.lock`; the
-implementation is in `src/`, with behavior coverage in `tests/`.
+workspace manifest and locked dependency graph are in `Cargo.toml` and `Cargo.lock`; the
+implementation is in `src/` (the `kakoi` binary: the command line, the start-up, and the
+plan's text forms) and `crates/kakoi-core/src/` (the library `kakoi-core`: everything else,
+usable from Rust without the command line), with behavior coverage in `tests/`.
 
 Run the locally reproducible checks with the repository's locked dependencies:
 
 ```text
-cargo build --locked
-cargo test --all-targets --locked
-cargo fmt --check
-cargo clippy --all-targets --locked -- -D warnings
+cargo build --workspace --locked
+cargo test --workspace --all-targets --locked
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on

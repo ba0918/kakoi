@@ -5,7 +5,7 @@ pre-commit:
   commands:
     fmt:
       glob: "*.rs"
-      run: run-if-present path Cargo.toml -- cargo fmt --check
+      run: run-if-present path Cargo.toml -- cargo fmt --all --check
     clippy:
       glob: "{*.rs,Cargo.toml,Cargo.lock}"
-      run: run-if-present path Cargo.toml -- cargo clippy --all-targets --locked -- -D warnings
+      run: run-if-present path Cargo.toml -- cargo clippy --workspace --all-targets --locked -- -D warnings
