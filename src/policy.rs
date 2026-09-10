@@ -113,6 +113,7 @@ pub struct PolicyFile {
 pub struct Mounts {
     pub rw: Vec<PolicyPath>,
     pub rw_file: Vec<PolicyPath>,
+    pub rw_copy: Vec<PolicyPath>,
     pub ro: Vec<PolicyPath>,
     pub hide: Vec<PolicyPath>,
     pub scan: Vec<Scan>,

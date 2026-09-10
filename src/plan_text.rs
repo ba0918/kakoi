@@ -161,8 +161,9 @@ fn render_full(text: &mut String, plan: &Plan) {
     }
 }
 
-/// The scan hits left visible and the scan roots, `hide-mounts` `under`s, and
-/// `path-prepend` entries skipped, each with the reason. The same in both forms.
+/// The scan hits left visible, the entries no `rw-copy` could take, and the scan roots,
+/// `hide-mounts` `under`s, and `path-prepend` entries skipped, each with the reason, then
+/// the note that says what an `rw-copy` item does. The same in both forms.
 fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
     for left in &plan.mounts.left_visible {
         let _ = writeln!(
@@ -183,6 +184,32 @@ fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
             "  skipped {role} `{}`: {}",
             escape_control(&skipped.written),
             escape_control(&skipped.reason)
+        );
+    }
+    for entry in &plan.not_copied {
+        let _ = writeln!(
+            text,
+            "  not copied {} into the rw-copy item {}: {}",
+            shown(&entry.path),
+            shown(&entry.item),
+            escape_control(&entry.reason)
+        );
+    }
+    render_copy_note(text, plan);
+}
+
+/// The one line that says what `rw-copy` means, printed only when an item uses it: the
+/// directive is the one whose name does not say on its own where the writing goes.
+fn render_copy_note(text: &mut String, plan: &Plan) {
+    let uses_copy = plan
+        .mounts
+        .items
+        .iter()
+        .any(|item| item.directive == Directive::RwCopy);
+    if uses_copy {
+        text.push_str(
+            "  (rw-copy starts from a copy of the host\'s content and is writable inside; \
+             nothing written there reaches the host, and it is gone when the command ends)\n",
         );
     }
 }
@@ -276,6 +303,7 @@ fn directive(directive: Directive) -> &'static str {
     match directive {
         Directive::Rw => "rw",
         Directive::RwFile => "rw-file",
+        Directive::RwCopy => "rw-copy",
         Directive::Ro => "ro",
         Directive::Hide => "hide",
     }
@@ -352,6 +380,9 @@ fn argument_text(argument: &Argument) -> String {
         Argument::Literal(text) => shown(text),
         Argument::EmptyFile => "<fd: empty file>".to_string(),
         Argument::Seccomp => "<fd: seccomp filter>".to_string(),
+        Argument::CopiedFile(content) => {
+            format!("<fd: copied file, {} bytes>", content.bytes().len())
+        }
     }
 }
 

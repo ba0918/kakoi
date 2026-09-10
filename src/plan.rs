@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
+use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
 use crate::isolated_env::{
@@ -137,6 +138,8 @@ pub struct Plan {
     pub home: PathBuf,
     pub mounts: ResolvedMounts,
     pub skipped_paths: Vec<SkippedPath>,
+    /// The entries an `rw-copy` item could not take from the host, with the reason.
+    pub not_copied: Vec<NotCopied>,
     pub environment: Environment,
     /// How `environment` differs from the host's.
     pub environment_changes: EnvironmentChanges,
@@ -147,10 +150,13 @@ pub struct Plan {
     pub arguments: Vec<Argument>,
 }
 
-/// The plan of `isolation` with `bwrap` at `bwrap` and the command as given and resolved.
+/// The plan of `isolation`, with what each `rw-copy` item starts from in `copies`, `bwrap`
+/// at `bwrap`, and the command as given and resolved. `copies` is taken by value: its file
+/// content moves into the arguments rather than being held a second time.
 pub fn plan(
     inputs: &Inputs,
     isolation: Isolation,
+    copies: CopySources,
     bwrap: PathBuf,
     command: Option<ResolvedCommand>,
 ) -> Plan {
@@ -158,6 +164,7 @@ pub fn plan(
         inputs.policy.network_mode,
         inputs.current_dir,
         &isolation.mounts.items,
+        &copies,
         command.as_ref(),
     );
     let environment_changes =
@@ -170,6 +177,7 @@ pub fn plan(
         home: inputs.home.path().to_path_buf(),
         mounts: isolation.mounts,
         skipped_paths: isolation.skipped_paths,
+        not_copied: copies.not_copied,
         environment: isolation.environment,
         environment_changes,
         warnings: isolation.warnings,
@@ -204,6 +212,8 @@ pub enum Argument {
     EmptyFile,
     /// The descriptor the seccomp filter is read from.
     Seccomp,
+    /// The descriptor one file of an `rw-copy` item is filled from.
+    CopiedFile(FileContent),
 }
 
 impl Argument {
@@ -223,6 +233,7 @@ pub fn bwrap_arguments(
     network_mode: NetworkMode,
     current_dir: &Path,
     items: &[ResolvedItem],
+    copies: &CopySources,
     command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
     let mut arguments = vec![
@@ -260,6 +271,9 @@ pub fn bwrap_arguments(
             (Directive::Ro, _) => {
                 arguments.extend([Argument::text("--ro-bind"), real.clone(), real]);
             }
+            (Directive::RwCopy, _) => {
+                arguments.extend(copy_arguments(item, copies.sources.get(&item.real)));
+            }
             (Directive::Hide, EntryKind::Directory) => {
                 arguments.extend([Argument::text("--tmpfs"), real]);
             }
@@ -274,4 +288,66 @@ pub fn bwrap_arguments(
         arguments.extend(command.arguments.iter().map(Argument::text));
     }
     arguments
+}
+
+/// The arguments of one `rw-copy` item. A directory is a tmpfs of its own, filled from
+/// `source` entry by entry: the tmpfs holds what the isolation writes and is gone with the
+/// mount namespace, and each entry is made inside it, so `--file` writes into that tmpfs
+/// and never through to the host. A regular file is `--bind-data`, which puts the bytes in
+/// a file of bwrap's own and binds that over the host's, rather than `--file`, which would
+/// write the copy at the path itself and reach the host whenever an `rw` item covers the
+/// directory it sits in (measured with bwrap 0.9.0).
+///
+/// Every item that applies has a source: `copy_facts` reads one for each of them. Without
+/// one there is nothing of the host to start from, and the item falls back to what `hide`
+/// does, so a mistake leaves the place empty rather than showing the host's own.
+fn copy_arguments(item: &ResolvedItem, source: Option<&CopySource>) -> Vec<Argument> {
+    let real = || Argument::text(item.real.as_os_str());
+    match (source, item.kind) {
+        (Some(CopySource::File { mode, content }), _) => vec![
+            Argument::text("--perms"),
+            Argument::text(octal(*mode)),
+            Argument::text("--bind-data"),
+            Argument::CopiedFile(content.clone()),
+            real(),
+        ],
+        (Some(CopySource::Directory(entries)), _) => {
+            let mut arguments = vec![Argument::text("--tmpfs"), real()];
+            for entry in entries {
+                let destination = Argument::text(item.real.join(entry.relative()).into_os_string());
+                match entry {
+                    CopiedEntry::Directory { mode, .. } => arguments.extend([
+                        Argument::text("--perms"),
+                        Argument::text(octal(*mode)),
+                        Argument::text("--dir"),
+                        destination,
+                    ]),
+                    CopiedEntry::File { mode, content, .. } => arguments.extend([
+                        Argument::text("--perms"),
+                        Argument::text(octal(*mode)),
+                        Argument::text("--file"),
+                        Argument::CopiedFile(content.clone()),
+                        destination,
+                    ]),
+                    CopiedEntry::Symlink { target, .. } => arguments.extend([
+                        Argument::text("--symlink"),
+                        Argument::text(target.as_os_str()),
+                        destination,
+                    ]),
+                }
+            }
+            arguments
+        }
+        (None, EntryKind::Directory) => vec![Argument::text("--tmpfs"), real()],
+        (None, EntryKind::NotDirectory) => vec![
+            Argument::text("--ro-bind-data"),
+            Argument::EmptyFile,
+            real(),
+        ],
+    }
+}
+
+/// A mode as bwrap's `--perms` takes it.
+fn octal(mode: u32) -> String {
+    format!("{mode:04o}")
 }

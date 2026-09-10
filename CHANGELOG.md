@@ -1,5 +1,34 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- A fifth mount directive, `rw-copy`, for a path the command must be free to write and whose
+  writing must not outlive the run. It takes a directory or a regular file, like `ro`: the
+  isolation starts from the host's content — a directory as a tmpfs of its own filled with the
+  tree at the real path (permission bits and the execute bit carried, empty directories kept,
+  symbolic links reproduced as links), a regular file as a copy of its bytes bound over it —
+  writes it freely, and leaves the host's own untouched. It follows the same rules as the other
+  four: it is skipped when the path does not exist, the narrower item still wins, and it appears
+  in `--print-plan` in every form, where the summary also names what the directive does.
+
+  Because nothing written inside one reaches the host, an `rw-copy` area is not a writable place
+  for the placement checks: a policy file, the configuration directory, or a secret file inside
+  one is allowed, since the next launch reads what this one read. What is still refused is an
+  `rw-copy` that could be redirected onto a `hide`, which would show what was hidden, and an
+  `rw` or `rw-file` that could be redirected onto an `rw-copy`, which would let the writing
+  through.
+
+  One item carries at most 4096 entries and 64 MiB of file content, since the content is held in
+  memory twice over; past either limit the launch stops with `path`. A source that cannot be read
+  stops the launch with `path` rather than starting from less than the host has, and an entry no
+  mount argument can recreate in a tmpfs (a socket, a FIFO, a device node) is left out and named
+  in the plan.
+
+  `--print-plan=json` gains a `not_copied` key and a `{"kind": "copied-file", "bytes": ...}`
+  argument kind; `format_version` stays `1`, as both are additions.
+
 ## [0.2.0] - 2026-09-10
 
 ### Changed
@@ -70,6 +99,7 @@ layered policy, and returns the command's exit code unchanged.
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
 
+[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/ba0918/kakoi/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/ba0918/process-wrap/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ba0918/process-wrap/releases/tag/v0.1.0

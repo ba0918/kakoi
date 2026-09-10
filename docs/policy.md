@@ -8,6 +8,7 @@ use. The fixed keys are the ones below; any other key is a `policy` error.
 [mounts]
 rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/kakoi", "~/.cache"]
 rw-file = ["~/.claude.json"]
+rw-copy = ["~/.gitconfig"]
 ro      = ["~/.codex/AGENTS.md"]
 hide    = ["/tmp", "/run/user", "~/.ssh", "~/.aws", "/run/WSL"]
 
@@ -59,6 +60,7 @@ skipped in the plan. Nothing is mounted on a path that does not exist.
 | --- | --- | --- |
 | `rw` | a directory | readable and writable |
 | `rw-file` | a non-directory (regular file, socket, FIFO) | writable in place; a replace via temporary file and `rename` fails |
+| `rw-copy` | a directory or a regular file | a writable copy of the host's content; nothing written there reaches the host, and the copy is gone when the command ends |
 | `ro` | a directory or a file | read-only |
 | `hide` | a directory or a file | a directory becomes an empty directory whose contents vanish at exit; a file reads as empty |
 
@@ -68,6 +70,65 @@ own. A host UNIX socket that is visible read-only can be connected to; use `hide
 All directives apply to the real path after resolving symbolic links, and items are mounted
 ancestors first, so the narrower item wins: `hide = ["/tmp"]` with `rw = ["/tmp/kakoi"]`
 gives an empty `/tmp` with only `/tmp/kakoi` shared with the host.
+
+## `rw-copy`: writable inside, unchanged outside
+
+`rw-copy` is for a file or a directory the command must be free to write, whose writing must
+not outlive the run. Set beside `hide`, the difference is only what it starts with:
+
+| Directive | Starts as | Writable inside | After the run |
+| --- | --- | --- | --- |
+| `ro` | the host's content | no | the host is unchanged |
+| `hide` | empty | a hidden directory is, a hidden file is not | the host is unchanged |
+| `rw-copy` | the host's content | yes | the host is unchanged, and what was written inside is gone |
+
+The use it was written for is a configuration file an agent rewrites for itself:
+
+```toml
+[mounts]
+rw-copy = ["~/.gitconfig", "~/.claude/settings.json"]
+```
+
+The CLI inside reads what you have, edits it, and reads back what it edited; the file on the
+host is the one you left there.
+
+A directory becomes a tmpfs of its own, filled at start-up from the real path: files with their
+content and their permission bits, the execute bit included, subdirectories with theirs, empty
+directories, and symbolic links reproduced as links with the same target text. A regular file
+becomes a copy of its bytes bound over the host's file. Both live in memory, inside the mount
+namespace of the run, and go with it.
+
+What follows from that:
+
+- The narrower item still wins. `rw-copy = ["~/.config/gh"]` under `rw = ["~/.config"]` gives a
+  `gh` whose writing stops at the boundary while the rest of `~/.config` goes through, and
+  `rw = ["~/.config/gh/state"]` under `rw-copy = ["~/.config/gh"]` puts that one directory back
+  on the host.
+- The copy is a copy: owner, timestamps, and hard links are not carried. Inside it a file can be
+  renamed, deleted, or replaced, none of which the host sees. (An `rw-file` cannot be replaced by
+  `rename`; a file in an `rw-copy` directory can.)
+- A symbolic link inside the copied tree is not followed when the copy is made, so no copy
+  expands through one or meets a loop. Inside the isolation it resolves like any other path: one
+  pointing out of the copy reaches whatever the policy makes of its target, read-only unless some
+  item makes it writable, exactly as it would from anywhere else inside.
+- A path that does not exist is skipped, as with every directive: the plan says so, and nothing
+  is created on the host.
+- Work written there is lost. An `rw-copy` over the workspace or the worktree still leaves the
+  warning that no `rw` covers the work place, which is the warning you want.
+
+The limits, and what a failure does:
+
+- One item carries at most 4096 entries and 64 MiB of file content. The content is held in memory
+  twice over, once for the descriptors handed to `bwrap` and once in the tmpfs, so a path that
+  reaches past either limit stops the launch with `path`. Name something smaller, or use `ro` to
+  show it without copying it.
+- A source that cannot be read — a directory that cannot be listed, a file that cannot be opened —
+  stops the launch with `path`, naming the item and the entry. Starting from less than the host
+  has, without a word, is the one outcome `rw-copy` does not have.
+- An entry no mount argument can recreate in a tmpfs — a socket, a FIFO, a device node — is left
+  out and named in the plan with the reason, and the run goes on.
+- The item itself must be a directory or a regular file. A socket or a FIFO at the path is a
+  `path` diagnostic: there is no content to copy. Use `rw-file` for those.
 
 ## Layers
 
@@ -154,7 +215,10 @@ exist the item is skipped and `/tmp` stays empty inside.
 
 A policy file, the configuration directory, a secret file, or a `path-prepend` entry must not
 be inside an `rw` or `rw-file` item, and resolving its path must not pass through a symbolic
-link or a directory inside one. A configuration directory or a secret file that is not there
+link or a directory inside one. An `rw-copy` item is not such a place: what is written there
+never reaches the host, so neither a policy file's content nor a name on the way to one can be
+changed from inside, and the next launch reads what this one read. Keeping a profile inside an
+`rw-copy` area is allowed. A configuration directory or a secret file that is not there
 yet is held to the same rule: the missing name itself carries nothing to protect, but its
 deepest existing ancestor is checked, because what is missing can be created from inside the
 isolation and read on the next launch.
@@ -172,6 +236,9 @@ naming the path, the `rw` item it passed through, and the reason. Three rules re
 - A written `ro` item is not held to it. Re-pointing or deleting an `ro` link only moves a
   read-only place or lifts it; the one thing it could newly show, landing on a `hide`, is caught
   separately. So a dotfiles link written as `ro` passes.
+- A written `rw-copy` item is not held to it either, for the same reason: it writes nowhere on
+  the host, so re-pointing it only moves a copy, and the one thing a moved copy could newly
+  show — landing on a `hide` — is again caught separately.
 - A written `hide`, a scan `root`, or a `hide-mounts` `under` whose path follows a symbolic link
   inside an `rw` item is refused wherever it lands, even on the mount point of another `rw`
   item, from the first launch: deleting that link from inside makes the next launch skip the
@@ -191,10 +258,11 @@ inside. Write the link's real target instead. The same link written as `ro` pass
 that `ro` protects is only as much as [known gap 15](security.md#known-gaps) says.
 
 Landing inside something hidden is refused too, whatever the item was written as: an `rw`,
-`rw-file`, or `ro` item whose path passes through a writable item and lands on or inside a
-`hide` (or, for `rw` and `rw-file`, on or inside an `ro`), including the `hide` items
-`kakoi` generates for `secrets/` and for hidden mounts, would be mounted after the wider
-item and show what it hid. And no item may land on `/`, `/dev`, or `/proc` or inside the latter
+`rw-file`, `rw-copy`, or `ro` item whose path passes through a writable item and lands on or
+inside a `hide` (or, for `rw` and `rw-file`, on or inside an `ro` or an `rw-copy`), including
+the `hide` items `kakoi` generates for `secrets/` and for hidden mounts, would be mounted after
+the wider item and show what it hid, or, over an `rw-copy`, let writing through to the host
+that the policy meant to keep inside. And no item may land on `/`, `/dev`, or `/proc` or inside the latter
 two: the isolation mounts those itself, and an item there would cover its view (an `ro` over
 `/proc` shows the host's processes).
 

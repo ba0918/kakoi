@@ -1,5 +1,6 @@
 //! The start of bwrap (specification section 14): the empty file each `hide` of a file is
-//! bound from and the seccomp filter are handed over as file descriptors, the symbols of
+//! bound from, the content of each file an `rw-copy` item starts the isolation with, and
+//! the seccomp filter are handed over as file descriptors, the symbols of
 //! the plan are replaced by their numbers, and `bwrap` is executed in place with the
 //! plan's arguments (the command and its arguments included) and the assembled
 //! environment. The outer layer; nothing here decides what the plan contains.
@@ -79,6 +80,12 @@ fn numbered_arguments(
             }
             Argument::Seccomp => {
                 let fd = memory_file("kakoi-seccomp", &filter_bytes())?;
+                let number = OsString::from(fd.as_raw_fd().to_string());
+                descriptors.push(fd);
+                number
+            }
+            Argument::CopiedFile(content) => {
+                let fd = memory_file("kakoi-copy", content.bytes())?;
                 let number = OsString::from(fd.as_raw_fd().to_string());
                 descriptors.push(fd);
                 number

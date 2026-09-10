@@ -29,7 +29,9 @@ change afterwards.
 When the launch is not refused:
 
 - the process sees the file system the policy describes, and nothing the policy hides;
-- `rw` and `rw-file` items are the only places it can write;
+- `rw` and `rw-file` items are the only places whose writes reach the host; an `rw-copy` item is
+  writable from inside, and everything written there lives in the isolation's own tmpfs and goes
+  with it;
 - the secrets the policy names, the files they come from, and the configuration directory's
   `secrets/` are not readable from inside;
 - a policy file, the configuration directory, a secret file, or a `path-prepend` entry that

@@ -235,7 +235,10 @@ pub fn swappable_ro_items(
         .collect()
 }
 
-/// The writable items (`rw` and `rw-file`) among `items`.
+/// The writable items (`rw` and `rw-file`) among `items`: the ones whose writes reach the
+/// host. An `rw-copy` item is not one. Everything written there stays in the isolation's
+/// own tmpfs and is gone with it, so nothing inside one can change what the next start
+/// reads: neither a policy file's content, nor the name a path resolves through.
 fn writable_items(items: &[ResolvedItem]) -> Vec<&ResolvedItem> {
     items
         .iter()
@@ -317,7 +320,10 @@ fn check_protected_paths(
 /// must itself resolve inside a root item, since what it referenced could be re-pointed
 /// from inside the isolation and the next start would apply the directive to any host
 /// path. A written `ro` is exempt: re-pointing or removing it only moves or lifts a
-/// read-only place, and what it could newly show is caught by the exposing pairs alone.
+/// read-only place, and what it could newly show is caught by the exposing pairs alone. A
+/// written `rw-copy` is exempt for the same reason: it writes nowhere on the host, so
+/// re-pointing it only moves a copy, and what a moved copy could newly show is again the
+/// exposing pairs' to catch.
 /// A written `hide` is first held to the link rule (`check_hide_links`), whose diagnostic
 /// wins when both apply. The items are taken in the order of section 6.4, then the
 /// workspace. An item that resolves to nothing has nothing to bind. An item that landed is
@@ -362,7 +368,7 @@ fn check_written_paths(
         if item.directive == Directive::Hide {
             check_hide_links(&role, item, writable, facts)?;
         }
-        if item.directive != Directive::Ro {
+        if !matches!(item.directive, Directive::Ro | Directive::RwCopy) {
             check_landing(&role, reference, &real, &roots)?;
         }
         let lower = &written.items[..index];
@@ -489,13 +495,18 @@ fn check_replacement(
 }
 
 /// The exposing pairs of specification section 5.6: a written item with `item` as its
-/// directive invalidating a `hide` or `ro` item with `partner` as its directive makes
-/// something newly readable or writable. A `hide` exposes nothing, and `ro` over `ro`
-/// shows nothing new.
+/// directive invalidating an item with `partner` as its directive makes something newly
+/// readable or writable. A `hide` exposes nothing, and `ro` over `ro` shows nothing new.
+/// An `rw-copy` reads like `ro`: it shows the host's content, so it empties a `hide`, but
+/// over an `ro` it shows the same bytes and writes none of them back. As the partner it is
+/// what `rw` and `rw-file` take away: the user asked for a place whose writes end with the
+/// run, and a writable item over it lets them through to the host.
 fn exposes(item: Directive, partner: Directive) -> bool {
     match item {
-        Directive::Rw | Directive::RwFile => matches!(partner, Directive::Hide | Directive::Ro),
-        Directive::Ro => partner == Directive::Hide,
+        Directive::Rw | Directive::RwFile => {
+            matches!(partner, Directive::Hide | Directive::Ro | Directive::RwCopy)
+        }
+        Directive::Ro | Directive::RwCopy => partner == Directive::Hide,
         Directive::Hide => false,
     }
 }
@@ -821,6 +832,7 @@ fn directive_name(directive: Directive) -> &'static str {
     match directive {
         Directive::Rw => "rw",
         Directive::RwFile => "rw-file",
+        Directive::RwCopy => "rw-copy",
         Directive::Ro => "ro",
         Directive::Hide => "hide",
     }

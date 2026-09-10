@@ -70,9 +70,10 @@ A policy file is TOML. Every section is optional, and an empty file is a valid p
 
 ```toml
 [mounts]
-rw   = ["${worktree}", "${git_common_dir}", "~/.cache"]    # writable
-ro   = ["~/.codex/AGENTS.md"]                              # read-only
-hide = ["~/.ssh", "~/.aws", "/tmp"]                        # empty inside
+rw      = ["${worktree}", "${git_common_dir}", "~/.cache"] # writable
+rw-copy = ["~/.gitconfig"]                                 # writable inside, unchanged outside
+ro      = ["~/.codex/AGENTS.md"]                           # read-only
+hide    = ["~/.ssh", "~/.aws", "/tmp"]                     # empty inside
 
 [[mounts.scan]]                       # hide .env files anywhere in the worktree
 root  = "${worktree}"
@@ -97,12 +98,13 @@ Up to three layers are merged, lowest first, and the upper layer wins:
 2. a **policy file** given with `--policy-file PATH`;
 3. the **command line**: `--rw PATH` and `--hide PATH`.
 
-The merged policy names mount items with four directives:
+The merged policy names mount items with five directives:
 
 | Directive | Inside the isolation |
 | --- | --- |
 | `rw` | a directory, readable and writable |
 | `rw-file` | a single file, writable in place |
+| `rw-copy` | a directory or a file, starting from the host's content and writable, with nothing written reaching the host |
 | `ro` | a directory or a file, read-only |
 | `hide` | a directory becomes an empty directory; a file reads as empty |
 
@@ -111,6 +113,9 @@ Everything the policy does not name is visible read-only. The narrower item wins
 directory inside it. Paths can use `~` and the variables `${workspace}`, `${worktree}`,
 `${git_common_dir}`, and `${config_dir}`.
 
+- **`rw-copy`** is the one to reach for when a tool has to write its own configuration and you
+  do not want the result on your machine: the isolation gets a copy of what is at the path,
+  writes it freely, and the copy goes when the command ends.
 - **Secrets** are read from files, injected as environment variables, and the files are hidden
   inside. The configuration directory's `secrets/` is always hidden.
 - **Network** is either shared with the host (`host`) or cut (`none`); there is nothing in
@@ -158,7 +163,8 @@ change as a diff.
 What `kakoi` guarantees, when the launch is not refused:
 
 - the process sees the file system the policy describes, and nothing it hides;
-- `rw` and `rw-file` are the only places it can write;
+- `rw` and `rw-file` are the only places whose writes the host keeps (an `rw-copy` is writable
+  too, and what is written there goes when the command ends);
 - the secrets and the credential files the policy names are not readable from inside;
 - `ioctl(TIOCSTI)` is blocked, so keystrokes cannot be pushed into your terminal that way;
 - the exit code you get is the command's own.
