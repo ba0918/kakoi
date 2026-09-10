@@ -154,7 +154,9 @@ replaces the lower.
 
 On top of the written layers, `kakoi` generates `hide` items:
 
-- the files found by `mounts.scan`;
+- the entries `mounts.scan` matches under its root: a matching name is hidden unless it is a
+  directory or a symbolic link that resolves to a directory, the policy files read are left
+  alone, and a match that resolves to no real path is skipped;
 - the mounts under `hide-mounts.under` whose file system type matches (never the work place
   itself);
 - each secret file that exists;
@@ -169,8 +171,11 @@ than miss a mount.
 
 ## Network
 
-`network.mode` is `host` (the host's network, the default) or `none` (no network at all). There
-is no per-domain allowance in 0.2; combine `host` with an external proxy if you need one.
+`network.mode` is `host` (the host's network, the default) or `none`, which cuts the network
+namespace and leaves only loopback. There is no per-domain allowance in 0.2. A proxy running
+outside can still be reached from a `none` run: pass its UNIX socket with `rw-file` and point
+the proxy's environment variable at it with `env.set`. That composition is unverified, and 0.2
+does not guarantee it.
 
 ## Environment
 
