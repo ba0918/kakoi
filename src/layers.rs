@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::cli::{Invocation, DEFAULT_PROFILE};
 use crate::diagnostic::Diagnostic;
 use crate::environment::PathState;
 use crate::policy::{parse_policy, EnvMode, HideMounts, NetworkMode, PolicyFile, PolicyPath, Scan};
@@ -13,6 +12,21 @@ use crate::workspace_facts::probe_path;
 /// The bundled profile compiled into the binary: the built-in default (specification
 /// section 2), what `kakoi init` writes out.
 pub const BUILT_IN_DEFAULT: &str = include_str!("../examples/profile/default.toml");
+
+/// The profile of the global scope when `--profile` is omitted (specification
+/// section 4.1). Only this name falls back to the built-in default (section 5.3).
+pub const DEFAULT_PROFILE: &str = "default";
+
+/// What the written layers are read from, as the command line selects them: the profile
+/// name, the `--policy-file` path, and the `--rw` and `--hide` paths of the command-line
+/// layer. The paths are absolute already; nothing here is interpreted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LayerSelection {
+    pub profile: String,
+    pub policy_file: Option<PathBuf>,
+    pub rw: Vec<PathBuf>,
+    pub hide: Vec<PathBuf>,
+}
 
 /// Where a written layer came from, lowest first: the profile (a file or the built-in
 /// default), the `--policy-file`, the command line.
@@ -49,15 +63,15 @@ pub struct Layer {
 
 impl Layer {
     /// The command-line layer: `--rw` and `--hide`, already absolute.
-    pub fn command_line(invocation: &Invocation) -> Self {
+    pub fn command_line(selection: &LayerSelection) -> Self {
         let mut policy = PolicyFile::default();
-        policy.mounts.rw = invocation
+        policy.mounts.rw = selection
             .rw
             .iter()
             .cloned()
             .map(PolicyPath::Absolute)
             .collect();
-        policy.mounts.hide = invocation
+        policy.mounts.hide = selection
             .hide
             .iter()
             .cloned()
@@ -175,20 +189,23 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
     Ok(policy)
 }
 
-/// Reads the profile and the `--policy-file` named by `invocation` and returns the written
+/// Reads the profile and the `--policy-file` named by `selection` and returns the written
 /// layers, lowest first. Reads nothing else.
-pub fn load_layers(invocation: &Invocation, config_dir: &Path) -> Result<Vec<Layer>, Diagnostic> {
+pub fn load_layers(
+    selection: &LayerSelection,
+    config_dir: &Path,
+) -> Result<Vec<Layer>, Diagnostic> {
     let profile_path = config_dir
         .join("profile")
-        .join(format!("{}.toml", invocation.profile));
-    let mut layers = vec![global_scope(invocation, &profile_path)?];
-    if let Some(path) = &invocation.policy_file {
+        .join(format!("{}.toml", selection.profile));
+    let mut layers = vec![global_scope(selection, &profile_path)?];
+    if let Some(path) = &selection.policy_file {
         layers.push(Layer {
             origin: LayerOrigin::PolicyFile(path.clone()),
             policy: read_policy_file(path, || "policy file".to_string())?,
         });
     }
-    layers.push(Layer::command_line(invocation));
+    layers.push(Layer::command_line(selection));
     Ok(layers)
 }
 
@@ -197,8 +214,8 @@ pub fn load_layers(invocation: &Invocation, config_dir: &Path) -> Result<Vec<Lay
 /// assembled path looked at from the root, the first failure being a name that does not
 /// exist; a broken link or a regular file in the way is read and stops the run, so a policy
 /// that broke is never replaced by the wider built-in default.
-fn global_scope(invocation: &Invocation, path: &Path) -> Result<Layer, Diagnostic> {
-    if invocation.profile == DEFAULT_PROFILE && probe_path(path) == PathState::Absent {
+fn global_scope(selection: &LayerSelection, path: &Path) -> Result<Layer, Diagnostic> {
+    if selection.profile == DEFAULT_PROFILE && probe_path(path) == PathState::Absent {
         return Ok(Layer {
             origin: LayerOrigin::BuiltInDefault,
             policy: parse_policy(BUILT_IN_DEFAULT, path)?,
@@ -206,7 +223,7 @@ fn global_scope(invocation: &Invocation, path: &Path) -> Result<Layer, Diagnosti
     }
     Ok(Layer {
         origin: LayerOrigin::Profile(path.to_path_buf()),
-        policy: read_policy_file(path, || format!("profile `{}`", invocation.profile))?,
+        policy: read_policy_file(path, || format!("profile `{}`", selection.profile))?,
     })
 }
 

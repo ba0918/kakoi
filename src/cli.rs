@@ -6,10 +6,7 @@ use std::path::{Path, PathBuf};
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser, ValueEnum};
 
 use crate::diagnostic::{is_control_character, Diagnostic};
-
-/// The profile of the global scope when `--profile` is omitted (specification
-/// section 4.1). Only this name falls back to the built-in default (section 5.3).
-pub const DEFAULT_PROFILE: &str = "default";
+use crate::layers::{LayerSelection, DEFAULT_PROFILE};
 
 /// The interpreted command line. Option paths are as written until `anchored` joins the
 /// relative ones to the current directory; `command` is passed through untouched.
@@ -109,6 +106,18 @@ impl Invocation {
             rw: anchor_all(self.rw, current_dir),
             hide: anchor_all(self.hide, current_dir),
             ..self
+        }
+    }
+
+    /// What the written layers are read from: the profile, the `--policy-file`, and the
+    /// command-line layer's `--rw` and `--hide`. Taken after `anchored`, so the paths are
+    /// absolute.
+    pub fn layer_selection(&self) -> LayerSelection {
+        LayerSelection {
+            profile: self.profile.clone(),
+            policy_file: self.policy_file.clone(),
+            rw: self.rw.clone(),
+            hide: self.hide.clone(),
         }
     }
 }

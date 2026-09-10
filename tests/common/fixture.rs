@@ -2,12 +2,10 @@
 //! under it, a worktree at `/home/u/proj`, and facts declared per test.
 
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use kakoi::cli::Invocation;
 use kakoi::environment::{HomeDirectory, HostEnvironment, RealEntry};
-use kakoi::layers::{merge, Layer, LayerOrigin, Policy};
+use kakoi::layers::{merge, Layer, LayerOrigin, LayerSelection, Policy};
 use kakoi::mounts::{Mount, MountFacts, ScanHit};
 use kakoi::policy::parse_policy;
 use kakoi::variables::Variables;
@@ -53,14 +51,11 @@ pub fn policy_file_layer(text: &str) -> Layer {
 }
 
 pub fn command_line_layer(rw: &[&str], hide: &[&str]) -> Layer {
-    Layer::command_line(&Invocation {
+    Layer::command_line(&LayerSelection {
         profile: "default".to_string(),
         policy_file: None,
-        workspace: None,
         rw: rw.iter().map(PathBuf::from).collect(),
         hide: hide.iter().map(PathBuf::from).collect(),
-        print_plan: None,
-        command: vec![OsString::from("true")],
     })
 }
 

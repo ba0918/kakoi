@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::TempDir;
-use kakoi::cli::Invocation;
 use kakoi::diagnostic::Kind;
 use kakoi::environment::{HomeDirectory, HostEnvironment};
-use kakoi::layers::{load_layers, merge, Directive, Layer, LayerOrigin, MountItem};
+use kakoi::layers::{load_layers, merge, Directive, Layer, LayerOrigin, LayerSelection, MountItem};
 use kakoi::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
 use kakoi::workspace_facts::real_entry;
 
@@ -30,15 +29,12 @@ fn absolute(path: &str) -> PolicyPath {
     PolicyPath::Absolute(PathBuf::from(path))
 }
 
-fn invocation(profile: &str, policy_file: Option<&str>) -> Invocation {
-    Invocation {
+fn selection(profile: &str, policy_file: Option<&str>) -> LayerSelection {
+    LayerSelection {
         profile: profile.to_string(),
         policy_file: policy_file.map(PathBuf::from),
-        workspace: None,
         rw: vec![PathBuf::from("/cli/rw")],
         hide: vec![],
-        print_plan: None,
-        command: vec![OsString::from("true")],
     }
 }
 
@@ -75,7 +71,7 @@ fn lists_concatenate_with_the_upper_layer_appended() {
          [[mounts.hide-mounts]]\nunder = \"/u\"\nfstype = [\"drvfs\"]\n\
          [env]\nunset = [\"U\"]",
     );
-    let command_line = Layer::command_line(&invocation("default", None));
+    let command_line = Layer::command_line(&selection("default", None));
 
     let policy = merge(&[lower.clone(), upper.clone(), command_line]).unwrap();
 
@@ -252,7 +248,7 @@ fn a_missing_profile_file_is_a_policy_diagnostic() {
     let config = config_dir(&home);
     home.write(".config/kakoi/profile/default.toml", "");
 
-    let diagnostic = load_layers(&invocation("missing", None), &config).unwrap_err();
+    let diagnostic = load_layers(&selection("missing", None), &config).unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
@@ -265,7 +261,7 @@ fn a_missing_policy_file_target_is_a_policy_diagnostic() {
     let target = home.path().join("absent.toml");
 
     let diagnostic = load_layers(
-        &invocation("default", Some(target.to_str().unwrap())),
+        &selection("default", Some(target.to_str().unwrap())),
         &config,
     )
     .unwrap_err();
@@ -282,13 +278,13 @@ fn an_explicit_default_profile_equals_the_omitted_form() {
         "[mounts]\nrw = [\"/d\"]",
     );
 
-    let explicit = load_layers(&invocation("default", None), &config).unwrap();
+    let explicit = load_layers(&selection("default", None), &config).unwrap();
     let omitted = load_layers(
         &kakoi::cli::interpret(["--", "true"].map(OsString::from))
             .map(|parsed| match parsed {
                 kakoi::cli::Parsed::Invocation(mut invocation) => {
                     invocation.rw = vec![PathBuf::from("/cli/rw")];
-                    invocation
+                    invocation.layer_selection()
                 }
                 _ => panic!("not an invocation"),
             })
@@ -319,7 +315,7 @@ fn a_named_profile_does_not_read_default_toml() {
     let policy_file = home.write("policy.toml", "[mounts]\nro = [\"/p\"]");
 
     let layers = load_layers(
-        &invocation("strict", Some(policy_file.to_str().unwrap())),
+        &selection("strict", Some(policy_file.to_str().unwrap())),
         &config,
     )
     .unwrap();
@@ -351,7 +347,7 @@ fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
         config,
         home.path().canonicalize().unwrap().join(".config/kakoi")
     );
-    let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
+    let diagnostic = load_layers(&selection("default", None), &config).unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
@@ -371,7 +367,7 @@ fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
         config,
         home.path().canonicalize().unwrap().join(".config/kakoi")
     );
-    let diagnostic = load_layers(&invocation("default", None), &config).unwrap_err();
+    let diagnostic = load_layers(&selection("default", None), &config).unwrap_err();
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
@@ -387,11 +383,8 @@ fn a_fifo_policy_file_is_a_policy_diagnostic() {
         .unwrap();
     assert!(status.success(), "mkfifo");
 
-    let diagnostic = load_layers(
-        &invocation("default", Some(fifo.to_str().unwrap())),
-        &config,
-    )
-    .unwrap_err();
+    let diagnostic =
+        load_layers(&selection("default", Some(fifo.to_str().unwrap())), &config).unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
@@ -408,13 +401,9 @@ fn an_oversized_policy_file_is_a_policy_diagnostic() {
     let fits = home.write("fits.toml", &exactly_one_mib);
     let oversized = home.write("oversized.toml", &one_byte_over);
 
-    load_layers(
-        &invocation("default", Some(fits.to_str().unwrap())),
-        &config,
-    )
-    .unwrap();
+    load_layers(&selection("default", Some(fits.to_str().unwrap())), &config).unwrap();
     let diagnostic = load_layers(
-        &invocation("default", Some(oversized.to_str().unwrap())),
+        &selection("default", Some(oversized.to_str().unwrap())),
         &config,
     )
     .unwrap_err();
@@ -431,11 +420,7 @@ fn a_policy_file_behind_a_symlink_is_read() {
     let link = home.path().join("policy.toml");
     std::os::unix::fs::symlink(&target, &link).unwrap();
 
-    let layers = load_layers(
-        &invocation("default", Some(link.to_str().unwrap())),
-        &config,
-    )
-    .unwrap();
+    let layers = load_layers(&selection("default", Some(link.to_str().unwrap())), &config).unwrap();
 
     assert_eq!(layers[1].policy.mounts.ro, [absolute("/p")]);
 }

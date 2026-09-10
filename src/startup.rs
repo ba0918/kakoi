@@ -107,7 +107,7 @@ where
     let env = HostEnvironment::from_process();
     let home = env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
     let config_dir = env.config_dir(&home);
-    let layers = load_layers(&invocation, &config_dir)?;
+    let layers = load_layers(&invocation.layer_selection(), &config_dir)?;
     let policy = merge(&layers)?;
     let workspace = invocation
         .workspace
