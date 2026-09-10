@@ -1,11 +1,12 @@
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::CommandExt;
+use std::path::Path;
 use std::process::{Command, ExitCode};
 
 use kakoi::diagnostic::{Diagnostic, Kind, Warning};
 use kakoi::init;
-use kakoi::launch;
+use kakoi::launch::{self, BwrapCommand};
 use kakoi::plan_text;
 use kakoi::startup::{self, Outcome};
 
@@ -52,11 +53,23 @@ fn main() -> ExitCode {
                 let _ = std::io::stdout().write_all(text.as_bytes());
                 return ExitCode::SUCCESS;
             }
-            // Returns only when bwrap could not be executed.
-            exit_with(launch::launch(&prepared))
+            match launch::assemble(&prepared.plan) {
+                Ok(bwrap) => exit_with(execute(bwrap)),
+                Err(diagnostic) => exit_with(diagnostic),
+            }
         }
         Err(diagnostic) => exit_with(diagnostic),
     }
+}
+
+/// Executes `bwrap` in place (specification section 13, stage 10). Returns only when the
+/// exec itself fails, with the `bwrap` diagnostic; the descriptors stay open until then.
+fn execute(mut bwrap: BwrapCommand) -> Diagnostic {
+    let error = bwrap.command.exec();
+    Diagnostic::bwrap(format!(
+        "{} could not be executed: {error}",
+        Path::new(bwrap.command.get_program()).display()
+    ))
 }
 
 /// The diagnostic on standard error and its exit code (specification section 13).

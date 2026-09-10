@@ -1,43 +1,51 @@
 //! The start of bwrap (specification section 14): the empty file each `hide` of a file is
 //! bound from, the content of each file an `rw-copy` item starts the isolation with, and
 //! the seccomp filter are handed over as file descriptors, the symbols of
-//! the plan are replaced by their numbers, and `bwrap` is executed in place with the
-//! plan's arguments (the command and its arguments included) and the assembled
-//! environment. The outer layer; nothing here decides what the plan contains.
+//! the plan are replaced by their numbers, and the `bwrap` command line is assembled with
+//! the plan's arguments (the command and its arguments included) and the assembled
+//! environment. Executing it in place is left to the caller. The outer layer; nothing
+//! here decides what the plan contains.
 
 use std::ffi::{CString, OsString};
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 use crate::diagnostic::Diagnostic;
-use crate::plan::Argument;
+use crate::plan::{Argument, Plan};
 use crate::seccomp::filter_bytes;
-use crate::startup::Prepared;
 
-/// Executes `bwrap` for `prepared`. Returns only when the exec itself fails.
-pub fn launch(prepared: &Prepared) -> Diagnostic {
-    let plan = &prepared.plan;
+/// The `bwrap` command line ready to be executed in place: the program at the plan's
+/// path, the arguments with each descriptor's number in place of its symbol, and the
+/// plan's environment in place of the host's. The descriptors stay open for as long as
+/// this value lives, so that the exec inherits them.
+#[derive(Debug)]
+pub struct BwrapCommand {
+    pub command: Command,
+    /// The memory files the arguments refer to by number. Held, never read.
+    pub descriptors: Vec<OwnedFd>,
+}
+
+/// Assembles the `bwrap` command line for `plan`, raising the soft limit on open files
+/// first and making a descriptor for every symbol. Fails when a descriptor cannot be
+/// made (the `bwrap` diagnostic of specification section 13).
+pub fn assemble(plan: &Plan) -> Result<BwrapCommand, Diagnostic> {
     raise_open_file_limit();
     let mut descriptors = Vec::new();
-    let arguments = match numbered_arguments(&plan.arguments, &mut descriptors) {
-        Ok(arguments) => arguments,
-        Err(error) => {
-            return Diagnostic::bwrap(format!(
-                "a file descriptor for bwrap could not be prepared: {error}"
-            ))
-        }
-    };
-    let error = Command::new(&plan.bwrap)
+    let arguments = numbered_arguments(&plan.arguments, &mut descriptors).map_err(|error| {
+        Diagnostic::bwrap(format!(
+            "a file descriptor for bwrap could not be prepared: {error}"
+        ))
+    })?;
+    let mut command = Command::new(&plan.bwrap);
+    command
         .args(arguments)
         .env_clear()
-        .envs(plan.environment.values())
-        .exec();
-    Diagnostic::bwrap(format!(
-        "{} could not be executed: {error}",
-        plan.bwrap.display()
-    ))
+        .envs(plan.environment.values());
+    Ok(BwrapCommand {
+        command,
+        descriptors,
+    })
 }
 
 /// Raises the soft limit on open files to the hard limit before any descriptor is made
@@ -63,7 +71,8 @@ fn raise_open_file_limit() {
 
 /// The arguments with each symbol replaced by the number of a descriptor made for it.
 /// bwrap closes a data descriptor after reading it, so every occurrence gets its own.
-/// The descriptors are kept in `descriptors` until the exec, which inherits them.
+/// The descriptors are kept in `descriptors` for the caller to hold until the exec, which
+/// inherits them.
 fn numbered_arguments(
     arguments: &[Argument],
     descriptors: &mut Vec<OwnedFd>,
