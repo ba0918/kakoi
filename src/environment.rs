@@ -2,6 +2,8 @@
 //! section 14), the home directory checked from them (section 2), and the configuration
 //! directory derived from both.
 
+use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
@@ -59,11 +61,14 @@ impl HomeDirectory {
 }
 
 impl HostEnvironment {
-    /// Reads `HOME` and `XDG_CONFIG_HOME` from the process environment.
-    pub fn from_process() -> Self {
+    /// Takes `HOME` and `XDG_CONFIG_HOME` from `variables`, a copy of the environment
+    /// the process was started with.
+    pub fn from_variables(variables: &BTreeMap<OsString, OsString>) -> Self {
         Self {
-            home: std::env::var_os("HOME").map(PathBuf::from),
-            xdg_config_home: std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
+            home: variables.get(OsStr::new("HOME")).map(PathBuf::from),
+            xdg_config_home: variables
+                .get(OsStr::new("XDG_CONFIG_HOME"))
+                .map(PathBuf::from),
         }
     }
 
