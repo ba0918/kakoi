@@ -51,5 +51,5 @@ lefthook install
   no external command other than `bwrap`. A launch that wraps a command (including
   `--print-plan`) writes no files; `init` is the only form that writes files, and only within
   the paths section 14 allows.
-- The specification's section 18 is authoritative for features excluded from version 0.2.
+- The specification's section 18 is authoritative for features excluded from version 0.3.
 - The version lives in `Cargo.toml` only (specification section 17).

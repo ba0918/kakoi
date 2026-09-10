@@ -25,7 +25,7 @@ that carry them.
 
 ## Requirements
 
-- Linux on x86_64, including WSL2 (no aarch64 in 0.2)
+- Linux on x86_64, including WSL2 (no aarch64 in 0.3)
 - `bwrap` 0.9.0 or later on `PATH`, installed as a normal (non-setuid) binary and run as a user
   other than root (the `bubblewrap` package on Debian and Ubuntu is such an installation)
 - On Ubuntu 24.04 and later, permission for `bwrap` to use a user namespace: the restriction is
@@ -198,16 +198,16 @@ and the fifteen known gaps are in [Security model](docs/security.md).
 - [Writing a policy](docs/policy.md): every key, paths and variables, layers, secrets, and the
   paths that are refused.
 - [Wrapping a command](docs/shim.md): the shim template and the setup skill.
-- [Security model](docs/security.md): trust boundary, known gaps, and what 0.2 leaves out.
+- [Security model](docs/security.md): trust boundary, known gaps, and what 0.3 leaves out.
 - [Specification](docs/spec/kakoi.md) (Japanese): the complete behaviour;
   [`CONTEXT.md`](CONTEXT.md) is the glossary.
 
 ## Status
 
-0.2 is the current version. Among the things it does not do: no cgroup limits, no per-domain
+0.3 is the current version. Among the things it does not do: no cgroup limits, no per-domain
 network allowance, no aarch64, no protection of `.git/hooks` and `.git/config`, and no shipped
 tool-section values for any CLI other than codex. The complete list is in
-[Not in 0.2](docs/security.md#not-in-02).
+[Not in 0.3](docs/security.md#not-in-03).
 
 ## License
 

@@ -113,7 +113,7 @@ When the launch is not refused:
     changes what the next launch reads. What `ro` guarantees is that the content the agent reads
     is not changed under it, not that the agent cannot be steered into reading something else.
 
-## Not in 0.2
+## Not in 0.3
 
 - cgroup limits on CPU or memory
 - a per-domain network allowance

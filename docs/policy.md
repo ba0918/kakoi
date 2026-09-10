@@ -172,9 +172,9 @@ than miss a mount.
 ## Network
 
 `network.mode` is `host` (the host's network, the default) or `none`, which cuts the network
-namespace and leaves only loopback. There is no per-domain allowance in 0.2. A proxy running
+namespace and leaves only loopback. There is no per-domain allowance in 0.3. A proxy running
 outside can still be reached from a `none` run: pass its UNIX socket with `rw-file` and point
-the proxy's environment variable at it with `env.set`. That composition is unverified, and 0.2
+the proxy's environment variable at it with `env.set`. That composition is unverified, and 0.3
 does not guarantee it.
 
 ## Environment
