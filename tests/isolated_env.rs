@@ -7,11 +7,11 @@ mod common;
 
 use common::fixture::{layers, merged};
 use common::TempDir;
-use kakoi::diagnostic::{Diagnostic, Kind};
-use kakoi::isolated_env::{
+use kakoi_core::diagnostic::{Diagnostic, Kind};
+use kakoi_core::isolated_env::{
     assemble_environment, environment_changes, Assembled, EnvironmentChanges, SecretFile,
 };
-use kakoi::secret_facts::read_secret_file;
+use kakoi_core::secret_facts::read_secret_file;
 
 fn host(pairs: &[(&str, &str)]) -> BTreeMap<OsString, OsString> {
     pairs

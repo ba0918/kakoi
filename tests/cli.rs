@@ -9,7 +9,7 @@ use common::{
     run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir, RW_WORKSPACE,
 };
 use kakoi::cli::{interpret, Invocation, Parsed, PlanForm};
-use kakoi::diagnostic::Kind;
+use kakoi_core::diagnostic::Kind;
 
 /// A name for the failure message and the arrangement it makes under a temporary home.
 type Arrangement = (&'static str, fn(&Path));

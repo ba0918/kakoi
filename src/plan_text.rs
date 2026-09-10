@@ -12,12 +12,12 @@ use std::fmt::Write;
 use std::path::Path;
 
 use crate::cli::PlanForm;
-use crate::diagnostic::escape_control;
-use crate::layers::{Directive, LayerOrigin, Policy, PolicySource};
-use crate::mounts::{ItemOrigin, SkippedRole};
-use crate::plan::{Argument, Plan};
 use crate::plan_json;
-use crate::policy::{EnvMode, NetworkMode, PolicyPath};
+use kakoi_core::diagnostic::escape_control;
+use kakoi_core::layers::{Directive, LayerOrigin, Policy, PolicySource};
+use kakoi_core::mounts::{ItemOrigin, SkippedRole};
+use kakoi_core::plan::{Argument, Plan};
+use kakoi_core::policy::{EnvMode, NetworkMode, PolicyPath};
 
 /// The text of `plan` in `form`.
 pub fn render(plan: &Plan, form: PlanForm) -> String {

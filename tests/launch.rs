@@ -1167,7 +1167,7 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is
     // refused before the start rather than paged in.
     let (home, workspace) = home_with_workspace();
-    for index in 0..=kakoi::copies::ENTRY_LIMIT {
+    for index in 0..=kakoi_core::copies::ENTRY_LIMIT {
         home.write(format!("conf/f{index}"), "x\n");
     }
     profile(
@@ -1180,7 +1180,10 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     let diagnostic = assert_diagnostic(&output, 125, "path");
     assert!(diagnostic.contains("~/conf"), "{diagnostic}");
     assert!(
-        diagnostic.contains(&format!("more than {} entries", kakoi::copies::ENTRY_LIMIT)),
+        diagnostic.contains(&format!(
+            "more than {} entries",
+            kakoi_core::copies::ENTRY_LIMIT
+        )),
         "{diagnostic}"
     );
 }

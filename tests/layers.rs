@@ -5,11 +5,13 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::TempDir;
-use kakoi::diagnostic::Kind;
-use kakoi::environment::{HomeDirectory, HostEnvironment};
-use kakoi::layers::{load_layers, merge, Directive, Layer, LayerOrigin, LayerSelection, MountItem};
-use kakoi::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
-use kakoi::workspace_facts::real_entry;
+use kakoi_core::diagnostic::Kind;
+use kakoi_core::environment::{HomeDirectory, HostEnvironment};
+use kakoi_core::layers::{
+    load_layers, merge, Directive, Layer, LayerOrigin, LayerSelection, MountItem,
+};
+use kakoi_core::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
+use kakoi_core::workspace_facts::real_entry;
 
 fn profile(text: &str) -> Layer {
     Layer {

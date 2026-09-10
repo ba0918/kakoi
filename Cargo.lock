@@ -143,9 +143,18 @@ name = "kakoi"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "kakoi-core",
  "libc",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kakoi-core"
+version = "0.3.0"
+dependencies = [
+ "libc",
+ "serde",
  "toml",
 ]
 

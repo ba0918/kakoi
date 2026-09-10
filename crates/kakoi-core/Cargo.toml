@@ -1,0 +1,15 @@
+[package]
+name = "kakoi-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The policy, plan, and bwrap command line of kakoi, without the command-line interface."
+license.workspace = true
+repository.workspace = true
+# Not on crates.io yet: the public interface is not declared stable.
+publish = false
+
+[dependencies]
+libc.workspace = true
+serde.workspace = true
+toml.workspace = true

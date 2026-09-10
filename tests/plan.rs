@@ -10,19 +10,21 @@ use common::fixture::{
     Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
-use kakoi::command::{command_candidates, resolve_command};
-use kakoi::copies::CopySources;
-use kakoi::diagnostic::{Diagnostic, Kind};
-use kakoi::executables::first_executable;
-use kakoi::isolated_env::SecretFile;
-use kakoi::layers::{Directive, LayerOrigin};
-use kakoi::mounts::{candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole};
-use kakoi::plan::{
+use kakoi_core::command::{command_candidates, resolve_command};
+use kakoi_core::copies::CopySources;
+use kakoi_core::diagnostic::{Diagnostic, Kind};
+use kakoi_core::executables::first_executable;
+use kakoi_core::isolated_env::SecretFile;
+use kakoi_core::layers::{Directive, LayerOrigin};
+use kakoi_core::mounts::{
+    candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole,
+};
+use kakoi_core::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
     ResolvedCommand,
 };
-use kakoi::policy::NetworkMode;
-use kakoi::variables::Variables;
+use kakoi_core::policy::NetworkMode;
+use kakoi_core::variables::Variables;
 
 /// Writes an executable script at `relative` under `dir`.
 fn executable(dir: &TempDir, relative: &str) -> PathBuf {
@@ -255,7 +257,7 @@ fn isolation(
 /// `isolation` with the variables given.
 fn isolation_with(
     profile: &str,
-    variables: &kakoi::variables::Variables,
+    variables: &kakoi_core::variables::Variables,
     facts: Facts,
     secrets: &[(&str, SecretFile)],
 ) -> Result<Isolation, Diagnostic> {

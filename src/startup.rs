@@ -9,11 +9,11 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use crate::cli::{self, Invocation, Parsed};
-use crate::diagnostic::{Diagnostic, Warning};
-use crate::environment::{HostEnvironment, RealEntry};
-use crate::plan::{is_nested, Plan};
-use crate::planning::{locate_command, plan_for, Request};
-use crate::workspace_facts::real_entry;
+use kakoi_core::diagnostic::{Diagnostic, Warning};
+use kakoi_core::environment::{HostEnvironment, RealEntry};
+use kakoi_core::plan::{is_nested, Plan};
+use kakoi_core::planning::{locate_command, plan_for, Request};
+use kakoi_core::workspace_facts::real_entry;
 
 /// What the start-up ends with: text to print (the usage or the version), a nested run
 /// that goes straight to the command, or everything the start needs.

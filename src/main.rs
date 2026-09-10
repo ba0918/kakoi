@@ -4,11 +4,11 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, ExitCode};
 
-use kakoi::diagnostic::{Diagnostic, Kind, Warning};
 use kakoi::init;
-use kakoi::launch::{self, BwrapCommand};
 use kakoi::plan_text;
 use kakoi::startup::{self, Outcome};
+use kakoi_core::diagnostic::{Diagnostic, Kind, Warning};
+use kakoi_core::launch::{self, BwrapCommand};
 
 fn main() -> ExitCode {
     match startup::prepare(std::env::args_os().skip(1)) {

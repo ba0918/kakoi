@@ -10,10 +10,10 @@ use std::ffi::OsStr;
 
 use serde::Serialize;
 
-use crate::layers::{Directive, LayerOrigin, Policy, PolicySource};
-use crate::mounts::{EntryKind, ItemOrigin, SkippedRole};
-use crate::plan::{Argument, Plan};
-use crate::policy::{EnvMode, NetworkMode, PolicyPath};
+use kakoi_core::layers::{Directive, LayerOrigin, Policy, PolicySource};
+use kakoi_core::mounts::{EntryKind, ItemOrigin, SkippedRole};
+use kakoi_core::plan::{Argument, Plan};
+use kakoi_core::policy::{EnvMode, NetworkMode, PolicyPath};
 
 /// The version of the shape: bumped when a key is removed or changes its meaning.
 pub const FORMAT_VERSION: u32 = 1;

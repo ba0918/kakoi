@@ -8,11 +8,11 @@ use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
-use crate::diagnostic::Diagnostic;
-use crate::environment::PathState;
-use crate::layers::BUILT_IN_DEFAULT;
 use crate::startup::InitRequest;
-use crate::workspace_facts::entry_state;
+use kakoi_core::diagnostic::Diagnostic;
+use kakoi_core::environment::PathState;
+use kakoi_core::layers::BUILT_IN_DEFAULT;
+use kakoi_core::workspace_facts::entry_state;
 
 /// The mode `secrets/` is made with (specification section 4.1): its owner alone reads it.
 const SECRETS_MODE: u32 = 0o700;

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser, ValueEnum};
 
-use crate::diagnostic::{is_control_character, Diagnostic};
-use crate::layers::{LayerSelection, DEFAULT_PROFILE};
+use kakoi_core::diagnostic::{is_control_character, Diagnostic};
+use kakoi_core::layers::{LayerSelection, DEFAULT_PROFILE};
 
 /// The interpreted command line. Option paths are as written until `anchored` joins the
 /// relative ones to the current directory; `command` is passed through untouched.

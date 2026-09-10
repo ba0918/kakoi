@@ -8,14 +8,14 @@ use common::fixture::{
     command_line_layer, home, layers, merged, variables, xdg_profile_layer, xdg_variables, Facts,
     CONFIG_DIR, POLICY_FILE, WORKTREE, XDG_CONFIG_DIR, XDG_PROFILE,
 };
-use kakoi::diagnostic::{Diagnostic, Kind, Warning};
-use kakoi::layers::{Layer, LayerOrigin};
-use kakoi::mounts::{expand_policy, generate, resolve_written};
-use kakoi::placement::{
+use kakoi_core::diagnostic::{Diagnostic, Kind, Warning};
+use kakoi_core::layers::{Layer, LayerOrigin};
+use kakoi_core::mounts::{expand_policy, generate, resolve_written};
+use kakoi_core::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
 };
-use kakoi::policy::parse_policy;
-use kakoi::variables::Variables;
+use kakoi_core::policy::parse_policy;
+use kakoi_core::variables::Variables;
 
 /// Resolves the mounts of the written layers against `facts` and checks their placement
 /// with the current directory at `current_dir`, the configuration directory at

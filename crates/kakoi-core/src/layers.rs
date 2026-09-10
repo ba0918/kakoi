@@ -11,7 +11,7 @@ use crate::workspace_facts::probe_path;
 
 /// The bundled profile compiled into the binary: the built-in default (specification
 /// section 2), what `kakoi init` writes out.
-pub const BUILT_IN_DEFAULT: &str = include_str!("../examples/profile/default.toml");
+pub const BUILT_IN_DEFAULT: &str = include_str!("../../../examples/profile/default.toml");
 
 /// The profile of the global scope when `--profile` is omitted (specification
 /// section 4.1). Only this name falls back to the built-in default (section 5.3).

@@ -8,18 +8,18 @@ use common::fixture::{
     home, layers, merged, variables, variables_without_git, Facts, CONFIG_DIR, POLICY_FILE, PROFILE,
 };
 use common::TempDir;
-use kakoi::diagnostic::{Diagnostic, Kind};
-use kakoi::environment::{HostEnvironment, RealEntry};
-use kakoi::layers::{Directive, Layer, LayerOrigin};
-use kakoi::mount_facts::collect_mount_facts;
-use kakoi::mount_list::read_mount_list;
-use kakoi::mounts::{
+use kakoi_core::diagnostic::{Diagnostic, Kind};
+use kakoi_core::environment::{HostEnvironment, RealEntry};
+use kakoi_core::layers::{Directive, Layer, LayerOrigin};
+use kakoi_core::mount_facts::collect_mount_facts;
+use kakoi_core::mount_list::read_mount_list;
+use kakoi_core::mounts::{
     candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
     MountFacts, ResolvedMounts, ScanHit, ScanRequest,
 };
-use kakoi::scan::scan;
-use kakoi::variables::Variables;
-use kakoi::wildcard::matches;
+use kakoi_core::scan::scan;
+use kakoi_core::variables::Variables;
+use kakoi_core::wildcard::matches;
 
 /// Resolves the mount items of the written layers against `facts` and applies the
 /// generated items, with no `ro` item held to be swappable (the placement rules that

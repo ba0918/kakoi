@@ -131,12 +131,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # Specification section 17: Cargo.toml is the only place the version lives.
+      # Specification section 17: Cargo.toml is the only place the version lives, under
+      # `[workspace.package]`, from which both packages inherit it.
       - name: Decide whether this commit is a release
         id: decide
         run: |
           version=$(awk -F'"' '
-            /^\[package\]/ { p = 1; next }
+            /^\[workspace\.package\]/ { p = 1; next }
             /^\[/          { p = 0 }
             p && /^version[ \t]*=/ { print $2; exit }
           ' Cargo.toml)
