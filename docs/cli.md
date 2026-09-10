@@ -164,7 +164,8 @@ fresh machine meets first is a user namespace the kernel will not let `bwrap` cr
 `kakoi` sets `KAKOI=1` inside the isolation. When it finds that variable already
 set, it does not isolate again: it prints a nesting warning and executes the command itself,
 without `bwrap`. With `--print-plan`, it reads the policy and prints the plan instead, runs
-nothing, and prints no warning; the plan starts with a `nested:` line (the JSON form carries
+nothing, and prints no nesting warning (warnings from the policy can still precede the plan);
+the plan starts with a `nested:` line (the JSON form carries
 `nested` instead). Nesting is detected only through that variable
 ([known gap 8](security.md#known-gaps)).
 
