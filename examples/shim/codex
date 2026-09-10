@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# A shim template for process-wrap (specification section 16).
+# A shim template for kakoi (specification section 16).
 #
 # Copy it to a directory that comes before the wrapped command on your PATH,
 # name the copy after that command, fill in the tool section below, and make it
-# executable. Every invocation of that name then goes through process-wrap,
+# executable. Every invocation of that name then goes through kakoi,
 # which builds the boundary from your profile. The body below the tool section
 # does not depend on the command being wrapped; the values shipped in the tool
 # section are an example, filled in for the Codex CLI.
@@ -14,9 +14,9 @@
 # subcommand that a newer version of the wrapped command adds is isolated like
 # any other. There are two ways out, and both are yours to open:
 #
-#   - PROCESS_WRAP_SHIM_OFF=1 execs the real command with your arguments
-#     unchanged and no flag inserted, outside process-wrap. It takes nothing
-#     away that you did not already have: process-wrap trusts the host it is
+#   - KAKOI_SHIM_OFF=1 execs the real command with your arguments
+#     unchanged and no flag inserted, outside kakoi. It takes nothing
+#     away that you did not already have: kakoi trusts the host it is
 #     started from.
 #   - a subcommand in the allow list is passed straight through, with its
 #     arguments unchanged and no flag inserted. Nothing is created in /tmp on
@@ -46,10 +46,10 @@
 # Filling in the tool section for another command: REAL_COMMAND is the name of
 # the executable to look for on PATH. BYPASS_FLAG is the flag that turns the
 # command's own sandbox off, or empty if it has none — the boundary is
-# process-wrap's, and a sandbox of the command's own would only narrow it in
+# kakoi's, and a sandbox of the command's own would only narrow it in
 # ways that change from turn to turn. WORKSPACE_OPTIONS and RW_OPTIONS are the
 # options whose values name a directory the command works in, which become
-# process-wrap's --workspace and --rw. Read all of these off the command's
+# kakoi's --workspace and --rw. Read all of these off the command's
 # `--help`. A value is read when it is written as the following word, attached
 # with `=`, or, for a one-letter option, attached to the option; an option
 # whose value is written in some other way is not copied, and then the command
@@ -58,24 +58,24 @@
 # command's other options take a value, so a word equal to a copied option's
 # name is read as that option wherever it stands — the value of another
 # option, or a positional argument — and --workspace or --rw widens to what
-# follows it. `codex -m --cd /etc exec` sends process-wrap `--workspace /etc`.
+# follows it. `codex -m --cd /etc exec` sends kakoi `--workspace /etc`.
 # Nothing after `--` is read.
 #
 # Checking a copy of this template without running the real command: put two
 # directories at the front of PATH, one holding your copy under the wrapped
 # command's name, the other holding stand-ins for the wrapped command and for
-# process-wrap that print their arguments and exit 0. The copy finds the
+# kakoi that print their arguments and exit 0. The copy finds the
 # stand-in as the real command, and what the stand-ins print is the whole of
 # what this shim decided. Point SHARED_DIR somewhere writable of your own while
-# you do that. To see what process-wrap makes of an isolated invocation, run it
+# you do that. To see what kakoi makes of an isolated invocation, run it
 # by hand with --print-plan in front of the `--`:
-#     process-wrap --workspace "$PWD" --print-plan -- codex ...
+#     kakoi --workspace "$PWD" --print-plan -- codex ...
 # The plan shows the mount items, the variables, and the bwrap arguments.
 
 # ---------------------------------------------------------------------------
 # Tool section: the values for the command being wrapped. Shipped filled in for
 # codex, which is an example of a command to wrap, not a requirement of
-# process-wrap.
+# kakoi.
 # ---------------------------------------------------------------------------
 
 # The name of the real executable to look for on PATH.
@@ -86,17 +86,17 @@ readonly REAL_COMMAND=codex
 # if the command has no such flag; nothing is inserted then.
 readonly BYPASS_FLAG=--dangerously-bypass-approvals-and-sandbox
 
-# The options whose value is a directory to copy to process-wrap's --workspace
+# The options whose value is a directory to copy to kakoi's --workspace
 # and --rw. The last --workspace wins; every --rw is passed on.
 readonly WORKSPACE_OPTIONS=(--cd -C)
 readonly RW_OPTIONS=(--add-dir)
 
 # Subcommands passed straight through to the real command, outside
-# process-wrap. Empty as shipped: put a name here only after checking that no
+# kakoi. Empty as shipped: put a name here only after checking that no
 # model runs while it executes.
 readonly ALLOW_LIST=()
 
-# Subcommands that go through process-wrap but without BYPASS_FLAG in front.
+# Subcommands that go through kakoi but without BYPASS_FLAG in front.
 # Empty as shipped: put a name here when the command refuses the flag or takes
 # it without effect.
 readonly NO_FLAG_LIST=()
@@ -107,12 +107,12 @@ readonly NO_FLAG_LIST=()
 
 set -euo pipefail
 
-readonly SHARED_DIR=/tmp/process-wrap
+readonly SHARED_DIR=/tmp/kakoi
 
 self=$(realpath "${BASH_SOURCE[0]}")
 
 fail() {
-	printf '%s (process-wrap shim): %s\n' "${REAL_COMMAND}" "$*" >&2
+	printf '%s (kakoi shim): %s\n' "${REAL_COMMAND}" "$*" >&2
 	exit 127
 }
 
@@ -185,7 +185,7 @@ read_option_value() {
 first_word=${1-}
 real_command=$(resolve_real_command)
 
-if [ "${PROCESS_WRAP_SHIM_OFF:-}" = 1 ] ||
+if [ "${KAKOI_SHIM_OFF:-}" = 1 ] ||
 	in_list "${first_word}" ${ALLOW_LIST[@]+"${ALLOW_LIST[@]}"}; then
 	exec "${real_command}" "$@"
 fi
@@ -196,7 +196,7 @@ if [ -n "${BYPASS_FLAG}" ] &&
 	command_args=("${BYPASS_FLAG}" "$@")
 fi
 
-# The place the command works in should be the place process-wrap opens for
+# The place the command works in should be the place kakoi opens for
 # writing. The command keeps its own copies of these options; nothing is
 # removed from what it is given.
 workspace=${PWD}
@@ -239,7 +239,7 @@ while [ "${index}" -lt "${#arguments[@]}" ]; do
 done
 
 # mkdir -p takes a symbolic link to a directory for the directory itself, and
-# process-wrap resolves the rw item to its real path. On a host where another
+# kakoi resolves the rw item to its real path. On a host where another
 # local user can win the name, a link left here would make its target writable
 # inside the isolation, and the boundary would not catch it: /tmp is hidden, not
 # writable, so nothing on the way is inside a writable item.
@@ -248,11 +248,11 @@ if [ -L "${SHARED_DIR}" ]; then
 fi
 mkdir -p "${SHARED_DIR}"
 
-process_wrap_args=(--workspace "${workspace}")
+kakoi_args=(--workspace "${workspace}")
 for dir in ${rw_dirs[@]+"${rw_dirs[@]}"}; do
-	process_wrap_args+=(--rw "${dir}")
+	kakoi_args+=(--rw "${dir}")
 done
 
-# Nesting is not this shim's business: process-wrap detects PROCESS_WRAP=1
+# Nesting is not this shim's business: kakoi detects KAKOI=1
 # itself and warns.
-exec process-wrap "${process_wrap_args[@]}" -- "${real_command}" ${command_args[@]+"${command_args[@]}"}
+exec kakoi "${kakoi_args[@]}" -- "${real_command}" ${command_args[@]+"${command_args[@]}"}

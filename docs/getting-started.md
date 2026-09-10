@@ -7,34 +7,34 @@ reference.
 ## Install
 
 ```sh
-mise use -g github:ba0918/process-wrap
+mise use -g github:ba0918/kakoi
 ```
 
 Every release carries a statically linked binary for Linux on x86_64, so this needs no Rust
 toolchain and nothing on the machine for the binary to link against. Without `mise`, take the
-archive from the [latest release](https://github.com/ba0918/process-wrap/releases/latest), check
-it against the `.sha256` beside it, and put `process-wrap` on your `PATH`. Building from source
+archive from the [latest release](https://github.com/ba0918/kakoi/releases/latest), check
+it against the `.sha256` beside it, and put `kakoi` on your `PATH`. Building from source
 instead needs a Rust toolchain (1.85 or later):
 
 ```sh
-cargo install --git https://github.com/ba0918/process-wrap --locked
+cargo install --git https://github.com/ba0918/kakoi --locked
 ```
 
 `bwrap` 0.9.0 or later must be on `PATH`; on Debian and Ubuntu it is the `bubblewrap` package.
-`process-wrap` runs on Linux on x86_64, including WSL2.
+`kakoi` runs on Linux on x86_64, including WSL2.
 
-That is the whole installation. With no profile written anywhere, `process-wrap -- COMMAND`
+That is the whole installation. With no profile written anywhere, `kakoi -- COMMAND`
 starts on the built-in default: the bundled
 [`examples/profile/default.toml`](../examples/profile/default.toml), compiled into the binary.
-Where the plan would name the profile file, it says `process-wrap init` instead.
+Where the plan would name the profile file, it says `kakoi init` instead.
 
 ## Allowing the user namespace on Ubuntu 24.04 and later
 
-`process-wrap` always unshares a user namespace, so every launch depends on being allowed to
+`kakoi` always unshares a user namespace, so every launch depends on being allowed to
 create one. Ubuntu 24.04 restricts that by default: an unconfined program may create a user
 namespace, but the capabilities inside it are denied, and setting the mounts up is the next
 thing `bwrap` does. The launch then fails with `bwrap`'s own message and exit code rather than
-a `process-wrap` diagnostic, commonly `bwrap: setting up uid map: Permission denied`.
+a `kakoi` diagnostic, commonly `bwrap: setting up uid map: Permission denied`.
 
 Whether the restriction applies:
 
@@ -73,16 +73,16 @@ Ubuntu describes the restriction in the
 
 Two things are empty on a machine you have just installed on:
 
-- `/tmp` is replaced by an empty directory, and the shared `/tmp/process-wrap` does not exist
+- `/tmp` is replaced by an empty directory, and the shared `/tmp/kakoi` does not exist
   yet. Nothing passes through `/tmp` until you or your shim creates that directory;
-  `process-wrap` never does.
+  `kakoi` never does.
 - `~/.config/gh` is hidden, so a `gh` inside the isolation is not authenticated. See
   [Pass a GitHub token](#pass-a-github-token) below.
 
 ## The configuration directory
 
-The configuration directory is `$XDG_CONFIG_HOME/process-wrap` when that variable holds an
-absolute path, and `~/.config/process-wrap` otherwise. It holds two things:
+The configuration directory is `$XDG_CONFIG_HOME/kakoi` when that variable holds an
+absolute path, and `~/.config/kakoi` otherwise. It holds two things:
 
 - `profile/NAME.toml`, the profiles `--profile NAME` selects (`default` when the option is left
   out);
@@ -97,16 +97,16 @@ either.
 
 ## Write the boundary out and edit it
 
-`process-wrap init` writes the built-in default to `<configuration directory>/profile/default.toml`,
+`kakoi init` writes the built-in default to `<configuration directory>/profile/default.toml`,
 creates `profile/` and `secrets/` (mode 0700) and any missing ancestor, and prints the path of
 the file it wrote:
 
 ```sh
-$EDITOR "$(process-wrap init)"
+$EDITOR "$(kakoi init)"
 ```
 
 It refuses to replace anything already at that name and has no `--force`: remove the file first
-if you want it back. `process-wrap init NAME` writes `profile/NAME.toml`, which `--profile NAME`
+if you want it back. `kakoi init NAME` writes `profile/NAME.toml`, which `--profile NAME`
 then selects.
 
 ## Read what the default gives you
@@ -117,7 +117,7 @@ writing; and drops the credential-shaped environment variables. Read the file `i
 run
 
 ```sh
-process-wrap --print-plan -- true
+kakoi --print-plan -- true
 ```
 
 to see what it makes of the machine you are on: what is writable, read-only, or hidden, and
@@ -143,9 +143,9 @@ for the file.
 ## Next steps
 
 - **Wrap a command** so that every invocation of `codex` (or another CLI) goes through
-  `process-wrap`: see [Wrapping a command](shim.md).
+  `kakoi`: see [Wrapping a command](shim.md).
 - **Let an agent fit the profile to this machine** with the
-  [`process-wrap-setup`](../skills/process-wrap-setup) skill: see
+  [`kakoi-setup`](../skills/kakoi-setup) skill: see
   [the setup skill](shim.md#the-setup-skill).
 - **Read the placement rules** before moving the configuration directory into dotfiles: see
   [Paths that are refused](policy.md#paths-that-are-refused).

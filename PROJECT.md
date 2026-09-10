@@ -2,11 +2,11 @@
 
 ## Purpose
 
-`process-wrap` runs a command inside a bubblewrap (`bwrap`) mount namespace shaped by a
+`kakoi` runs a command inside a bubblewrap (`bwrap`) mount namespace shaped by a
 layered policy, and returns the command's exit code unchanged. It is a Rust command-line tool
 for Linux on x86_64.
 
-The approved specification, [`docs/spec/process-wrap.md`](docs/spec/process-wrap.md), is the
+The approved specification, [`docs/spec/kakoi.md`](docs/spec/kakoi.md), is the
 canonical source for product, implementation, verification, and release requirements.
 [`CONTEXT.md`](CONTEXT.md) is the glossary: the project's reading of terms such as "policy",
 "layer", "workspace", and "worktree", and the words not to use for them.

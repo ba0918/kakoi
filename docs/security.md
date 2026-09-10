@@ -1,14 +1,14 @@
 # Security model
 
-`process-wrap` narrows what a process can see and touch. It is not a replacement for a
+`kakoi` narrows what a process can see and touch. It is not a replacement for a
 container or a VM: it shares the host's kernel, trusts the host it is started from, and sets no
 resource limits. This page states the boundary, what it guarantees, and where it is known to
 leak.
 
 ## The trust boundary
 
-The host is the trusted side; the isolated process is not. `process-wrap` trusts the environment
-it starts in (`HOME`, `XDG_CONFIG_HOME`, `PATH`, `PROCESS_WRAP`, and the current directory),
+The host is the trusted side; the isolated process is not. `kakoi` trusts the environment
+it starts in (`HOME`, `XDG_CONFIG_HOME`, `PATH`, `KAKOI`, and the current directory),
 the policy files it reads, and the `bwrap` it finds on `PATH`. Everything the host does, your
 shell, your `git`, the files you open afterwards, is outside the boundary.
 
@@ -68,13 +68,13 @@ When the launch is not refused:
 7. Only `TIOCSTI` is blocked by the seccomp filter. `TIOCLINUX`, injection through terminal
    responses, and input synthesis through a display server's socket are not; the bundled profile
    cuts the socket paths with `hide` and the variables with `unset`.
-8. Nesting is detected only through `PROCESS_WRAP=1`. Clearing the environment inside the
-   isolation and starting `process-wrap` again attempts a second isolation (no wider than the
+8. Nesting is detected only through `KAKOI=1`. Clearing the environment inside the
+   isolation and starting `kakoi` again attempts a second isolation (no wider than the
    first; a policy with secrets fails there because the outer isolation emptied the files).
-   Setting `PROCESS_WRAP=1` on the host runs the command without isolation, with the nesting
+   Setting `KAKOI=1` on the host runs the command without isolation, with the nesting
    warning on standard error.
-9. `process-wrap` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `PATH`,
-   `PROCESS_WRAP`, and the current directory. That includes the current directory: `cd` into a
+9. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `PATH`,
+   `KAKOI`, and the current directory. That includes the current directory: `cd` into a
    path that passes through an `rw` area, after a link there was swapped from inside, and the
    link's new target becomes the work place.
 10. An `rw` area is a place for anything the user later runs on the host. `.git/hooks` and
@@ -95,7 +95,7 @@ When the launch is not refused:
     when the item's own path is swapped for a link (`~/work/a/b` replaced, then
     `--workspace ~/work/a/b/inner` given from elsewhere on the next launch). Launched from the
     same worktree, both stop. Closing this would need remembering the previous launch, which
-    `process-wrap` does not do; write subdirectories of the worktree with variables.
+    `kakoi` does not do; write subdirectories of the worktree with variables.
 15. `ro` and `hide` items inside an `rw` area protect less than they seem to. An `ro` written as
     a link protects only the link's target: from inside, the link can be deleted and a regular
     file of the same name put in its place, and whatever reads that path in the same launch sees
@@ -123,7 +123,7 @@ When the launch is not refused:
   [`examples/shim/codex`](../examples/shim/codex))
 - `init --force` (remove the file first)
 - an installer for the setup skill (use your agent CLI's own means, such as
-  `gh skill install ba0918/process-wrap process-wrap-setup`)
+  `gh skill install ba0918/kakoi kakoi-setup`)
 
-The specification's [section 18](spec/process-wrap.md#18-01-で作らないもの) is authoritative for
+The specification's [section 18](spec/kakoi.md#18-01-で作らないもの) is authoritative for
 this list.

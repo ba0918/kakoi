@@ -1,18 +1,18 @@
 # Command line
 
 ```
-process-wrap [OPTIONS] -- COMMAND [ARGS]...
-process-wrap [OPTIONS] --print-plan[=FORM] [-- COMMAND [ARGS]...]
-process-wrap init [NAME]
-process-wrap --version
-process-wrap --help
+kakoi [OPTIONS] -- COMMAND [ARGS]...
+kakoi [OPTIONS] --print-plan[=FORM] [-- COMMAND [ARGS]...]
+kakoi init [NAME]
+kakoi --version
+kakoi --help
 ```
 
 ## Options
 
 | Option | Meaning |
 | --- | --- |
-| `--profile NAME` | The profile for the global scope: `$XDG_CONFIG_HOME/process-wrap/profile/NAME.toml` (or `~/.config/process-wrap/profile/NAME.toml`). Defaults to `default`. |
+| `--profile NAME` | The profile for the global scope: `$XDG_CONFIG_HOME/kakoi/profile/NAME.toml` (or `~/.config/kakoi/profile/NAME.toml`). Defaults to `default`. |
 | `--policy-file PATH` | A policy file for the process scope, merged on top of the profile. |
 | `--workspace PATH` | The workspace. Defaults to the current directory. |
 | `--rw PATH` | An `rw` directive on the command-line layer. Repeatable. |
@@ -21,7 +21,7 @@ process-wrap --help
 | `--version`, `--help` | Print the version or the usage. Each is used alone. |
 | `init [NAME]` | Write the built-in default to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. Used alone; see [Getting started](getting-started.md#write-the-boundary-out-and-edit-it). |
 
-Everything after `--` is the command and its arguments, passed through unchanged. `process-wrap`
+Everything after `--` is the command and its arguments, passed through unchanged. `kakoi`
 never rewrites them, and the command sees the name it was given as its `argv[0]` (`sh`, not
 `/usr/bin/sh`), inside the isolation and when nested.
 
@@ -34,7 +34,7 @@ A typical launch:
 
 ```sh
 cd ~/work/project
-process-wrap -- codex
+kakoi -- codex
 ```
 
 ## The plan
@@ -42,7 +42,7 @@ process-wrap -- codex
 To see what would happen without running anything:
 
 ```sh
-process-wrap --print-plan -- codex
+kakoi --print-plan -- codex
 ```
 
 The plan comes in three forms. The summary, which `--print-plan` prints by itself, is written
@@ -50,12 +50,12 @@ to be read:
 
 ```
 policy files:
-  /home/you/.config/process-wrap/profile/default.toml
+  /home/you/.config/kakoi/profile/default.toml
 variables:
   workspace = /home/you/work/project
   worktree = /home/you/work/project
   git_common_dir = /home/you/work/project/.git
-  config_dir = /home/you/.config/process-wrap
+  config_dir = /home/you/.config/kakoi
 network: host
 mounts (~ is /home/you):
   hide    ~/.ssh
@@ -64,8 +64,8 @@ mounts (~ is /home/you):
   skipped rw `~/.npm`: does not exist
 environment (inherit): 41 variables as on the host, and:
   unset  SSH_AUTH_SOCK
-  set    PATH=/home/you/.local/lib/process-wrap/bin:<the host's PATH>
-  set    PROCESS_WRAP=1
+  set    PATH=/home/you/.local/lib/kakoi/bin:<the host's PATH>
+  set    KAKOI=1
   secret GH_TOKEN (value not shown)
 command: /usr/bin/codex
 bwrap: /usr/bin/bwrap
@@ -97,8 +97,8 @@ form, plus the summary's environment changes, as a single line of JSON. Pipe it 
 at a part of it:
 
 ```sh
-process-wrap --print-plan=json -- codex | jq -r '.mounts[] | "\(.directive)\t\(.path)"'
-process-wrap --print-plan=json -- codex | jq '.environment_changes'
+kakoi --print-plan=json -- codex | jq -r '.mounts[] | "\(.directive)\t\(.path)"'
+kakoi --print-plan=json -- codex | jq '.environment_changes'
 ```
 
 Unlike the text forms, its shape is a contract: the top-level keys below stay and keep their
@@ -107,7 +107,7 @@ meaning while `format_version` is the same; keys may be added.
 | Key | Value |
 | --- | --- |
 | `format_version` | `1`. Raised when a key is removed or changes its meaning. |
-| `nested` | Whether the run is nested (`PROCESS_WRAP=1`). |
+| `nested` | Whether the run is nested (`KAKOI=1`). |
 | `policy_sources` | The policy files read, each `{"kind": "file", "path": ...}` or `{"kind": "built-in-default"}`. |
 | `variables` | `workspace`, `worktree`, `git_common_dir`, `config_dir`; `null` where a variable has no value. |
 | `home` | The home directory. |
@@ -136,26 +136,26 @@ the values the policy set.
 
 ## Exit codes and diagnostics
 
-A failure of `process-wrap` itself is one line on standard error of the form
-`process-wrap: <kind>: <description>`, and the exit code is 125. Two exceptions: a command that
+A failure of `kakoi` itself is one line on standard error of the form
+`kakoi: <kind>: <description>`, and the exit code is 125. Two exceptions: a command that
 cannot be found exits 127, and, in a nested run, a command that was found but cannot be executed
 (a script whose interpreter does not exist, a file of a format the kernel cannot run) exits 126.
 
 The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`, and
-`command not executable`. Warnings are one line each starting with `process-wrap: warning: ` and
+`command not executable`. Warnings are one line each starting with `kakoi: warning: ` and
 do not stop the run.
 
 When the command runs, its exit code is returned as it is; a command killed by signal `s` yields
-128 + `s`. `process-wrap` executes `bwrap` in place rather than waiting for it as a child, so a
+128 + `s`. `kakoi` executes `bwrap` in place rather than waiting for it as a child, so a
 failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
-own output and exit code. Only in a nested run, where `process-wrap` executes the command itself,
+own output and exit code. Only in a nested run, where `kakoi` executes the command itself,
 does a failed `exec` become the `command not executable` diagnostic above. The failure a
 fresh machine meets first is a user namespace the kernel will not let `bwrap` create; see
 [Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
 
 ## Nesting
 
-`process-wrap` sets `PROCESS_WRAP=1` inside the isolation. When it finds that variable already
+`kakoi` sets `KAKOI=1` inside the isolation. When it finds that variable already
 set, it does not isolate again: it prints a nesting warning and executes the command itself,
 without `bwrap`. Nesting is detected only through that variable
 ([known gap 8](security.md#known-gaps)).
@@ -163,7 +163,7 @@ without `bwrap`. Nesting is detected only through that variable
 ## Open files
 
 Before making the file descriptors it hands to `bwrap` (one per hidden file, plus the seccomp
-filter), `process-wrap` raises its soft limit on open files to the hard limit, always, so that a
+filter), `kakoi` raises its soft limit on open files to the hard limit, always, so that a
 scan hiding thousands of files starts under the usual limit of 1024 and the same input gives the
 same result. The command inherits the raised limit. A nested run makes no descriptors and leaves
 the limit alone.
