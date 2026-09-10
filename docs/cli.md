@@ -64,8 +64,8 @@ mounts (~ is /home/you):
   skipped rw `~/.npm`: does not exist
 environment (inherit): 41 variables as on the host, and:
   unset  SSH_AUTH_SOCK
-  set    PATH=/home/you/.local/lib/kakoi/bin:<the host's PATH>
   set    KAKOI=1
+  set    PATH=/home/you/.local/lib/kakoi/bin:<the host's PATH>
   secret GH_TOKEN (value not shown)
 command: /usr/bin/codex
 bwrap: /usr/bin/bwrap
