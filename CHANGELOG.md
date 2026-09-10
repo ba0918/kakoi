@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking**: the project is renamed from `process-wrap` to `kakoi`. The executable, the
+  environment variables (`KAKOI` and `KAKOI_SHIM_OFF`), the configuration directory
+  (`$XDG_CONFIG_HOME/kakoi/`), the shared directory (`/tmp/kakoi`), the diagnostic prefix, the setup
+  skill (`kakoi-setup`), the release archive
+  (`kakoi-v<version>-x86_64-unknown-linux-musl.tar.gz`), and the repository URL all use the new
+  name. There is no compatibility path from the old names: an existing configuration directory,
+  shim, or environment variable must be moved to the new names by hand.
+
 ## [0.1.1] - 2026-09-09
 
 ### Added
