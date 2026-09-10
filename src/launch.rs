@@ -72,13 +72,13 @@ fn numbered_arguments(
         let text = match argument {
             Argument::Literal(text) => text.clone(),
             Argument::EmptyFile => {
-                let fd = memory_file("process-wrap-empty", &[])?;
+                let fd = memory_file("kakoi-empty", &[])?;
                 let number = OsString::from(fd.as_raw_fd().to_string());
                 descriptors.push(fd);
                 number
             }
             Argument::Seccomp => {
-                let fd = memory_file("process-wrap-seccomp", &filter_bytes())?;
+                let fd = memory_file("kakoi-seccomp", &filter_bytes())?;
                 let number = OsString::from(fd.as_raw_fd().to_string());
                 descriptors.push(fd);
                 number

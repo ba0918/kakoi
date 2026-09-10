@@ -179,9 +179,9 @@ pub fn plan(
     }
 }
 
-/// Whether `host` marks a nested run: `PROCESS_WRAP` is `1` (specification section 12.1).
+/// Whether `host` marks a nested run: `KAKOI` is `1` (specification section 12.1).
 pub fn is_nested(host: &BTreeMap<OsString, OsString>) -> bool {
-    host.get(OsStr::new("PROCESS_WRAP"))
+    host.get(OsStr::new("KAKOI"))
         .is_some_and(|value| value == "1")
 }
 

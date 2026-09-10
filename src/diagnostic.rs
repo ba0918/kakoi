@@ -1,4 +1,4 @@
-//! A diagnostic: one line on standard error, `process-wrap: <kind>: <description>`, and the
+//! A diagnostic: one line on standard error, `kakoi: <kind>: <description>`, and the
 //! exit code that goes with it (specification section 13).
 
 use std::fmt;
@@ -116,16 +116,11 @@ impl Diagnostic {
 
 impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "process-wrap: {}: {}",
-            self.kind.as_str(),
-            self.description
-        )
+        write!(f, "kakoi: {}: {}", self.kind.as_str(), self.description)
     }
 }
 
-/// A warning: one line on standard error, `process-wrap: warning: <description>`, that
+/// A warning: one line on standard error, `kakoi: warning: <description>`, that
 /// does not stop the run (specification section 13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Warning(String);
@@ -143,6 +138,6 @@ impl Warning {
 
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "process-wrap: warning: {}", self.0)
+        write!(f, "kakoi: warning: {}", self.0)
     }
 }

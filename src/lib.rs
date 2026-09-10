@@ -1,8 +1,8 @@
-//! `process-wrap`: runs a command inside a bubblewrap mount namespace shaped by a layered
-//! policy. The specification is `docs/spec/process-wrap.md`.
+//! `kakoi`: runs a command inside a bubblewrap mount namespace shaped by a layered
+//! policy. The specification is `docs/spec/kakoi.md`.
 
 #[cfg(not(target_arch = "x86_64"))]
-compile_error!("process-wrap supports only x86_64 (specification section 3)");
+compile_error!("kakoi supports only x86_64 (specification section 3)");
 
 pub mod cli;
 pub mod command;

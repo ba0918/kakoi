@@ -4,12 +4,12 @@ use std::process::Command;
 mod common;
 
 use common::TempDir;
-use process_wrap::diagnostic::Kind;
-use process_wrap::environment::{HomeDirectory, HostEnvironment, PathState, RealEntry};
-use process_wrap::variables::{
+use kakoi::diagnostic::Kind;
+use kakoi::environment::{HomeDirectory, HostEnvironment, PathState, RealEntry};
+use kakoi::variables::{
     derive_variables, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
-use process_wrap::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
+use kakoi::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 
 /// The checked home directory `/home/u`.
 fn home() -> HomeDirectory {
@@ -23,7 +23,7 @@ fn home() -> HomeDirectory {
 
 /// The configuration directory under that home, as found on disk.
 fn config_dir() -> PathState {
-    PathState::Directory(PathBuf::from("/home/u/.config/process-wrap"))
+    PathState::Directory(PathBuf::from("/home/u/.config/kakoi"))
 }
 
 fn ancestor(path: &str, dot_git: GitEntry) -> Ancestor {
@@ -405,7 +405,7 @@ fn a_broken_configuration_directory_is_a_path_diagnostic() {
     );
     let broken_link = derive_variables(&PathState::Broken, &under_git).unwrap_err();
     let regular_file = derive_variables(
-        &PathState::NotDirectory(PathBuf::from("/home/u/.config/process-wrap")),
+        &PathState::NotDirectory(PathBuf::from("/home/u/.config/kakoi")),
         &under_git,
     )
     .unwrap_err();
@@ -421,14 +421,14 @@ fn the_config_dir_follows_xdg_config_home() {
         xdg_config_home: Some(PathBuf::from("/xdg")),
     }
     .config_dir(&home());
-    assert_eq!(with_xdg, Path::new("/xdg/process-wrap"));
+    assert_eq!(with_xdg, Path::new("/xdg/kakoi"));
 
     let without_xdg = HostEnvironment {
         home: Some(PathBuf::from("/home/u")),
         xdg_config_home: None,
     }
     .config_dir(&home());
-    assert_eq!(without_xdg, Path::new("/home/u/.config/process-wrap"));
+    assert_eq!(without_xdg, Path::new("/home/u/.config/kakoi"));
 
     let repository = facts(
         [
@@ -440,13 +440,13 @@ fn the_config_dir_follows_xdg_config_home() {
         None,
     );
     let variables = derive_variables(
-        &PathState::Directory(PathBuf::from("/real/xdg/process-wrap")),
+        &PathState::Directory(PathBuf::from("/real/xdg/kakoi")),
         &repository,
     )
     .unwrap();
     assert_eq!(
         variables.config_dir.as_deref(),
-        Some(Path::new("/real/xdg/process-wrap"))
+        Some(Path::new("/real/xdg/kakoi"))
     );
 }
 
@@ -472,7 +472,7 @@ fn git(cwd: &Path, arguments: &[&str]) {
 }
 
 fn real_config_dir(home: &TempDir) -> PathState {
-    let config_dir = home.path().join(".config/process-wrap");
+    let config_dir = home.path().join(".config/kakoi");
     std::fs::create_dir_all(&config_dir).unwrap();
     probe_path(&config_dir)
 }
@@ -584,7 +584,7 @@ fn a_fifo_under_the_named_gitdir_is_a_path_diagnostic() {
 fn the_config_dir_variable_is_the_real_path() {
     let home = TempDir::new();
     let real_home = home.path().canonicalize().unwrap();
-    std::fs::create_dir_all(real_home.join("dotfiles/config/process-wrap")).unwrap();
+    std::fs::create_dir_all(real_home.join("dotfiles/config/kakoi")).unwrap();
     std::os::unix::fs::symlink(real_home.join("dotfiles/config"), real_home.join("link")).unwrap();
     let workspace = real_home.join("ws");
     std::fs::create_dir(&workspace).unwrap();
@@ -594,7 +594,7 @@ fn the_config_dir_variable_is_the_real_path() {
     };
     let checked = env.home_directory(&real_entry(home.path())).unwrap();
     let config_dir = env.config_dir(&checked);
-    assert_eq!(config_dir, real_home.join("link/process-wrap"));
+    assert_eq!(config_dir, real_home.join("link/kakoi"));
 
     let variables = derive_variables(
         &probe_path(&config_dir),
@@ -604,7 +604,7 @@ fn the_config_dir_variable_is_the_real_path() {
 
     assert_eq!(
         variables.config_dir,
-        Some(real_home.join("dotfiles/config/process-wrap"))
+        Some(real_home.join("dotfiles/config/kakoi"))
     );
 }
 
