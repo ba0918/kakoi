@@ -7,6 +7,7 @@
 //! here decides what the plan contains.
 
 use std::ffi::{CString, OsString};
+use std::fmt;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::process::Command;
@@ -19,11 +20,26 @@ use crate::seccomp::filter_bytes;
 /// path, the arguments with each descriptor's number in place of its symbol, and the
 /// plan's environment in place of the host's. The descriptors stay open for as long as
 /// this value lives, so that the exec inherits them.
-#[derive(Debug)]
 pub struct BwrapCommand {
     pub command: Command,
     /// The memory files the arguments refer to by number. Held, never read.
     pub descriptors: Vec<OwnedFd>,
+}
+
+/// Written by hand rather than derived: the environment's values have been moved into
+/// the `Command`, whose `Debug` prints them, secrets included, so the masking of
+/// `Environment` does not reach here. Only the names of the variables are shown
+/// (specification section 9).
+impl fmt::Debug for BwrapCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let variables: Vec<_> = self.command.get_envs().map(|(name, _)| name).collect();
+        f.debug_struct("BwrapCommand")
+            .field("program", &self.command.get_program())
+            .field("arguments", &self.command.get_args().collect::<Vec<_>>())
+            .field("variables", &variables)
+            .field("descriptors", &self.descriptors)
+            .finish()
+    }
 }
 
 /// Assembles the `bwrap` command line for `plan`, raising the soft limit on open files
