@@ -21,7 +21,7 @@ With the repository cloned, `cp examples/shim/codex ~/.local/bin/codex` does the
 
 Every invocation of that name then goes through `kakoi`. The shim finds the real command
 further down `PATH` (skipping itself), creates `/tmp/kakoi` when it is missing, and hands
-the command's path to `kakoi` with the arguments unchanged.
+`kakoi` the command's path with the arguments unchanged, the tool-section flag in front.
 
 The **tool section** is everything that depends on the command being wrapped:
 
