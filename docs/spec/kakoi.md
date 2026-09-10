@@ -1,6 +1,6 @@
 # `kakoi` 0.2 仕様
 
-Status: Draft
+Status: Approved
 
 置き場所: `kakoi` を開発するソースツリーの `docs/spec/kakoi.md`。
 
