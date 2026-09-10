@@ -86,17 +86,24 @@ unset = ["SSH_AUTH_SOCK", "*_TOKEN", "*_API_KEY"]
 GH_TOKEN = "${config_dir}/secrets/gh-token"
 ```
 
-The bundled [`examples/profile/default.toml`](examples/profile/default.toml) shows every section
-in use, and [Writing a policy](docs/policy.md) explains each key.
+The bundled [`examples/profile/default.toml`](examples/profile/default.toml) is the WSL2-oriented
+built-in default, and [Writing a policy](docs/policy.md) explains each key. It uses `mounts`
+(`rw`, `rw-file`, `ro`, `hide`, `scan`, `hide-mounts`), `network.mode`, and `env.mode` and
+`env.unset`; `secrets` is a commented example, and `rw-copy`, `env.pass`, `env.set`,
+`env.path-prepend`, and `git.instead-of` are not used.
 
 ## How it works
 
-Up to three layers are merged, lowest first, and the upper layer wins:
+Up to three written layers are merged, lowest first, and the upper layer wins:
 
 1. the **profile**, `profile/NAME.toml` in the configuration directory (`--profile NAME`,
    default `default`);
 2. a **policy file** given with `--policy-file PATH`;
 3. the **command line**: `--rw PATH` and `--hide PATH`.
+
+On top of them is the generated layer: the `hide` items `kakoi` adds at start-up (scan hits,
+hidden mounts, existing secret files, and the configuration directory's `secrets/`). A
+generated item replaces a written item with the same real path.
 
 The merged policy names mount items with five directives:
 

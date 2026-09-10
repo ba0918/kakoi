@@ -1,8 +1,11 @@
 # Writing a policy
 
 A policy file is TOML. Every section is optional; an empty file is a valid policy. The bundled
-profile, [`examples/profile/default.toml`](../examples/profile/default.toml), shows all of it in
-use. The fixed keys are the ones below; any other key is a `policy` error.
+profile, [`examples/profile/default.toml`](../examples/profile/default.toml), is the built-in
+default: it uses `mounts` (`rw`, `rw-file`, `ro`, `hide`, `scan`, `hide-mounts`),
+`network.mode`, and `env.mode` and `env.unset`, with `secrets` present only as a comment, and
+it does not use `rw-copy`, `env.pass`, `env.set`, `env.path-prepend`, or `git.instead-of`. The
+fixed keys are the ones below; any other key is a `policy` error.
 
 ```toml
 [mounts]
