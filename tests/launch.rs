@@ -1302,3 +1302,43 @@ fn the_plan_shows_an_rw_copy_item_in_every_form() {
         "~/conf"
     );
 }
+
+#[test]
+fn a_copied_file_is_a_mount_point_but_an_entry_of_a_copied_directory_is_not() {
+    // The two forms differ where it shows: a copied regular file is one mount point laid
+    // over the host's, so `rename` over it and `unlink` fail as they do for `rw-file`; an
+    // entry inside a copied directory is an ordinary file of the tmpfs and takes both.
+    let (home, workspace) = home_with_workspace();
+    home.write("cfg.toml", "host\n");
+    home.write("d/inner.toml", "host\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/cfg.toml\", \"~/d\"]\n",
+    );
+    let before = tree_snapshot(home.path());
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "printf 'x\\n' > ~/d/t1; \
+         if mv ~/d/t1 ~/cfg.toml 2>/dev/null; then echo file-renamed; fi; \
+         if rm ~/cfg.toml 2>/dev/null; then echo file-removed; fi; \
+         printf 'appended\\n' >> ~/cfg.toml && echo file-appended; \
+         printf 'y\\n' > ~/d/t2 && mv ~/d/t2 ~/d/inner.toml && echo entry-renamed; \
+         rm ~/d/inner.toml && echo entry-removed",
+    );
+
+    assert_eq!(
+        assert_ran_clean(&output),
+        "file-appended\nentry-renamed\nentry-removed\n"
+    );
+    assert_eq!(tree_snapshot(home.path()), before);
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("cfg.toml")).unwrap(),
+        "host\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("d/inner.toml")).unwrap(),
+        "host\n"
+    );
+}

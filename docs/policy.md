@@ -104,9 +104,13 @@ What follows from that:
   `gh` whose writing stops at the boundary while the rest of `~/.config` goes through, and
   `rw = ["~/.config/gh/state"]` under `rw-copy = ["~/.config/gh"]` puts that one directory back
   on the host.
-- The copy is a copy: owner, timestamps, and hard links are not carried. Inside it a file can be
-  renamed, deleted, or replaced, none of which the host sees. (An `rw-file` cannot be replaced by
-  `rename`; a file in an `rw-copy` directory can.)
+- The copy is a copy: owner, timestamps, and hard links are not carried.
+- Whether a file can be renamed or deleted depends on which of the two forms you wrote. An entry
+  inside a copied **directory** is an ordinary file in the tmpfs, so it can be renamed, deleted,
+  or replaced by the write-a-temporary-file-and-`rename` dance — none of which the host sees. A
+  copied **regular file** is one mount point laid over the host's file, so, like `rw-file`, it
+  takes writes in place but refuses `rename` over it and refuses to be deleted. If the tool
+  writing that file replaces it rather than writing in place, name its parent directory instead.
 - A symbolic link inside the copied tree is not followed when the copy is made, so no copy
   expands through one or meets a loop. Inside the isolation it resolves like any other path: one
   pointing out of the copy reaches whatever the policy makes of its target, read-only unless some
