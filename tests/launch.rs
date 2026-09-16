@@ -13,6 +13,7 @@ use common::{
     RW_WORKSPACE,
 };
 
+// @kotowari[REQ-291]
 #[test]
 fn a_command_exit_code_passes_through() {
     let (home, workspace) = home_with_workspace();
@@ -71,6 +72,7 @@ fn assert_ran_clean(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).unwrap()
 }
 
+// @kotowari[REQ-293]
 #[test]
 fn adjacent_stages_yield_the_earlier_diagnostic() {
     // Stage 1 beside stage 2 has no input: `--help` beside any other argument is itself
@@ -153,6 +155,7 @@ fn adjacent_stages_yield_the_earlier_diagnostic() {
     assert_diagnostic(&output, 125, "bwrap");
 }
 
+// @kotowari[REQ-310]
 #[test]
 fn a_fifo_policy_file_ends_in_a_diagnostic_from_the_binary() {
     let (home, workspace) = home_with_workspace();
@@ -177,6 +180,7 @@ fn a_fifo_policy_file_ends_in_a_diagnostic_from_the_binary() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+// @kotowari[REQ-311]
 #[test]
 fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
     let (home, workspace) = home_with_workspace();
@@ -201,6 +205,7 @@ fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+// @kotowari[REQ-291]
 #[test]
 fn a_command_signal_passes_through_as_128_plus_s() {
     let (home, workspace) = home_with_workspace();
@@ -211,6 +216,7 @@ fn a_command_signal_passes_through_as_128_plus_s() {
     assert_eq!(output.status.code(), Some(128 + libc::SIGTERM), "{report}");
 }
 
+// @kotowari[REQ-250]
 #[test]
 fn command_arguments_arrive_unchanged() {
     let (home, workspace) = home_with_workspace();
@@ -246,6 +252,7 @@ fn command_arguments_arrive_unchanged() {
     assert_eq!(stdout, expected, "{}", output_report(&output));
 }
 
+// @kotowari[REQ-315]
 #[test]
 fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
     // Specification section 4.2: a COMMAND containing `/` is used as that path. A relative
@@ -273,6 +280,7 @@ fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
     assert_eq!(stdout, "ran\n", "{}", output_report(&output));
 }
 
+// @kotowari[REQ-263]
 #[test]
 fn the_command_sees_the_given_name_as_argv0() {
     // Specification sections 1 and 4.2: argv[0] is the `COMMAND` string as given, not the
@@ -356,6 +364,7 @@ fn run_script_under_soft_limit_1024(home: &TempDir, workspace: &Path, script: &s
     )
 }
 
+// @kotowari[REQ-309]
 #[test]
 fn a_scan_of_more_hidden_files_than_the_soft_limit_still_launches() {
     // Specification section 14: every hidden file needs a descriptor; with 1100 of them
@@ -367,6 +376,7 @@ fn a_scan_of_more_hidden_files_than_the_soft_limit_still_launches() {
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-309]
 #[test]
 fn the_isolated_process_inherits_the_raised_soft_limit() {
     // The limit is raised whether or not it is needed, so the same input gives the same
@@ -382,6 +392,7 @@ fn the_isolated_process_inherits_the_raised_soft_limit() {
     assert_ne!(lines[0], "1024", "{}", output_report(&output));
 }
 
+// @kotowari[REQ-264]
 #[test]
 fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
@@ -432,6 +443,7 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     assert_eq!(through_kakoi.stderr, bwrap_alone.stderr, "{report}");
 }
 
+// @kotowari[REQ-287]
 #[test]
 fn two_concurrent_launches_both_pass_their_status_through() {
     let (home, workspace) = home_with_workspace();
@@ -456,6 +468,7 @@ fn two_concurrent_launches_both_pass_their_status_through() {
     assert_eq!(second.wait().unwrap().code(), Some(6));
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn a_worktree_at_home_exits_125() {
     let (home, workspace) = home_with_workspace();
@@ -471,6 +484,7 @@ fn a_worktree_at_home_exits_125() {
     assert_diagnostic(&output, 125, "path");
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn a_cwd_inside_a_hide_exits_125() {
     let (home, workspace) = home_with_workspace();
@@ -522,6 +536,7 @@ fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String, u64)> {
     snapshot
 }
 
+// @kotowari[REQ-169]
 #[test]
 fn a_launch_leaves_the_host_tree_unchanged() {
     let (home, workspace) = home_with_workspace();
@@ -545,6 +560,7 @@ fn a_launch_leaves_the_host_tree_unchanged() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_hidden_ancestor_does_not_hide_the_rw_worktree() {
     // Scene 1 of specification section 6.4: `/mnt/c` hidden, the worktree in it `rw`.
@@ -573,6 +589,7 @@ fn a_hidden_ancestor_does_not_hide_the_rw_worktree() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn an_ro_file_inside_an_rw_directory_is_read_only() {
     // Scene 2: `~/.codex` rw, `~/.codex/AGENTS.md` ro.
@@ -601,6 +618,7 @@ fn an_ro_file_inside_an_rw_directory_is_read_only() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_scanned_env_file_reads_empty() {
     // Scene 3: the worktree rw, `.env` files found by the scan hidden. Two of them, so
@@ -629,6 +647,7 @@ fn a_scanned_env_file_reads_empty() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn the_shared_tmp_subdirectory_is_visible_inside_an_empty_tmp() {
     // Scene 4: `/tmp` hidden, one directory under it rw. The scene names `/tmp`, and
@@ -662,6 +681,7 @@ fn the_shared_tmp_subdirectory_is_visible_inside_an_empty_tmp() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_scanned_file_under_an_rw_cache_reads_empty() {
     // Scene 5: `~/.cache` rw, `~/.cache/x/.env` hidden by the scan.
@@ -682,6 +702,7 @@ fn a_scanned_file_under_an_rw_cache_reads_empty() {
     assert_eq!(assert_ran_clean(&output), "0\nnew\n");
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn rename_onto_an_rw_file_fails_but_in_place_writes_work() {
     let (home, workspace) = home_with_workspace();
@@ -706,6 +727,7 @@ fn rename_onto_an_rw_file_fails_but_in_place_writes_work() {
     );
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn a_host_socket_visible_read_only_is_connectable() {
     let (home, workspace) = home_with_workspace();
@@ -734,6 +756,7 @@ fn a_host_socket_visible_read_only_is_connectable() {
     server.join().unwrap();
 }
 
+// @kotowari[REQ-388]
 #[test]
 fn network_none_has_no_route() {
     let (home, workspace) = home_with_workspace();
@@ -755,6 +778,7 @@ fn network_none_has_no_route() {
     assert_eq!(assert_ran_clean(&output), "True\n");
 }
 
+// @kotowari[REQ-271]
 #[test]
 fn a_secret_is_readable_as_a_variable_and_the_file_is_empty() {
     let (home, workspace) = home_with_workspace();
@@ -789,6 +813,7 @@ fn a_secret_is_readable_as_a_variable_and_the_file_is_empty() {
     assert_eq!(assert_ran_clean(&output), format!("{value}\n0\ntoken\n"));
 }
 
+// @kotowari[REQ-271]
 #[test]
 fn a_secret_whose_file_is_missing_is_not_set_from_the_host() {
     let (home, workspace) = home_with_workspace();
@@ -818,6 +843,7 @@ fn a_secret_whose_file_is_missing_is_not_set_from_the_host() {
     assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }
 
+// @kotowari[REQ-276]
 #[test]
 fn instead_of_appears_in_git_config_inside_with_host_entries_kept() {
     let (home, workspace) = home_with_workspace();
@@ -864,6 +890,7 @@ fn raw_syscall_script(number: u64, arguments: &str) -> String {
     )
 }
 
+// @kotowari[REQ-282]
 #[test]
 fn tiocsti_is_denied_with_eperm() {
     let (home, workspace) = home_with_workspace();
@@ -883,6 +910,7 @@ fn tiocsti_is_denied_with_eperm() {
     assert_eq!(assert_ran_clean(&output), format!("-1 {}\n", libc::EPERM));
 }
 
+// @kotowari[REQ-282]
 #[test]
 fn tiocsti_with_high_bits_is_denied_with_eperm() {
     let (home, workspace) = home_with_workspace();
@@ -905,6 +933,7 @@ fn tiocsti_with_high_bits_is_denied_with_eperm() {
     assert_eq!(assert_ran_clean(&output), format!("-1 {}\n", libc::EPERM));
 }
 
+// @kotowari[REQ-281]
 #[test]
 fn an_x32_syscall_kills_the_process() {
     let (home, workspace) = home_with_workspace();
@@ -921,6 +950,7 @@ fn an_x32_syscall_kills_the_process() {
     assert!(output.stdout.is_empty(), "{report}");
 }
 
+// @kotowari[REQ-284]
 #[test]
 fn a_nested_launch_runs_under_the_outer_boundary() {
     let (home, workspace) = home_with_workspace();
@@ -971,6 +1001,7 @@ fn file(home: &TempDir, relative: &str, body: &str, mode: u32) -> PathBuf {
     path
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn an_rw_copy_file_is_written_inside_and_the_host_file_is_untouched() {
     let (home, workspace) = home_with_workspace();
@@ -1004,6 +1035,7 @@ fn an_rw_copy_file_is_written_inside_and_the_host_file_is_untouched() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn an_rw_copy_directory_carries_the_host_tree_and_keeps_every_change_inside() {
     let (home, workspace) = home_with_workspace();
@@ -1044,6 +1076,7 @@ fn an_rw_copy_directory_carries_the_host_tree_and_keeps_every_change_inside() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn an_rw_copy_directory_reproduces_a_symbolic_link_as_a_link() {
     // A link is copied as a link with the same target text, not followed: the isolation
@@ -1071,6 +1104,7 @@ fn an_rw_copy_directory_reproduces_a_symbolic_link_as_a_link() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
+// @kotowari[REQ-168]
 #[test]
 fn an_entry_an_rw_copy_cannot_reproduce_is_reported_in_the_plan_and_left_out() {
     // A socket is the host's own; a copy of one is not it, and no bwrap argument makes one
@@ -1108,6 +1142,7 @@ fn an_entry_an_rw_copy_cannot_reproduce_is_reported_in_the_plan_and_left_out() {
     assert_eq!(assert_ran_clean(&output), "host\nkeep.txt\n");
 }
 
+// @kotowari[REQ-169]
 #[test]
 fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {
     // Nothing is mounted on a path that does not exist (specification section 6.2): the
@@ -1141,6 +1176,7 @@ fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_path_diagnostic() {
     // A FIFO has no content to copy. The run stops rather than standing an empty regular
@@ -1162,6 +1198,7 @@ fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_p
     assert!(diagnostic.contains("not a regular file"), "{diagnostic}");
 }
 
+// @kotowari[REQ-168]
 #[test]
 fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is
@@ -1188,6 +1225,7 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_narrower_rw_inside_an_rw_copy_directory_still_reaches_the_host() {
     // The order of section 6.4 holds: the tmpfs is mounted at the `rw-copy` item and the
@@ -1217,6 +1255,7 @@ fn a_narrower_rw_inside_an_rw_copy_directory_still_reaches_the_host() {
     );
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_policy_file_inside_an_rw_copy_area_launches_and_the_host_profile_is_untouched() {
     // An `rw-copy` area is not a writable place for the placement rules: what is written
@@ -1243,6 +1282,7 @@ fn a_policy_file_inside_an_rw_copy_area_launches_and_the_host_profile_is_untouch
     );
 }
 
+// @kotowari[REQ-297]
 #[test]
 fn the_plan_shows_an_rw_copy_item_in_every_form() {
     let (home, workspace) = home_with_workspace();
@@ -1306,6 +1346,7 @@ fn the_plan_shows_an_rw_copy_item_in_every_form() {
     );
 }
 
+// @kotowari[REQ-168]
 #[test]
 fn a_copied_file_is_a_mount_point_but_an_entry_of_a_copied_directory_is_not() {
     // The two forms differ where it shows: a copied regular file is one mount point laid

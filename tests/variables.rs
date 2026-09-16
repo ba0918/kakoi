@@ -59,6 +59,7 @@ fn linked_worktree_links() -> GitFileLinks {
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_git_directory_is_the_common_dir() {
     let variables = derive_variables(
@@ -83,6 +84,7 @@ fn a_git_directory_is_the_common_dir() {
     );
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_linked_worktree_with_a_back_link_yields_the_common_dir() {
     let variables = derive_variables(
@@ -106,6 +108,7 @@ fn a_linked_worktree_with_a_back_link_yields_the_common_dir() {
     );
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_linked_worktree_whose_back_link_points_elsewhere_is_a_path_diagnostic() {
     let elsewhere = GitFileLinks {
@@ -140,6 +143,7 @@ fn a_linked_worktree_whose_back_link_points_elsewhere_is_a_path_diagnostic() {
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_linked_worktree_whose_common_dir_lacks_a_regular_head_file_is_a_path_diagnostic() {
     // git creates `HEAD` in every repository it makes; a `worktrees/` layout without one
@@ -173,6 +177,7 @@ fn a_linked_worktree_whose_common_dir_lacks_a_regular_head_file_is_a_path_diagno
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_submodule_with_core_worktree_pointing_back_yields_its_gitdir() {
     let variables = derive_variables(
@@ -202,6 +207,7 @@ fn a_submodule_with_core_worktree_pointing_back_yields_its_gitdir() {
     );
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
     let no_links = GitFileLinks {
@@ -249,6 +255,7 @@ fn a_git_file_without_any_back_link_is_a_path_diagnostic() {
     }
 }
 
+// @kotowari[REQ-190]
 #[test]
 fn a_symlinked_dot_git_is_not_a_worktree_marker() {
     let outer_repo = derive_variables(
@@ -287,6 +294,7 @@ fn a_symlinked_dot_git_is_not_a_worktree_marker() {
     assert_eq!(no_repo.git_common_dir, None);
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn a_missing_workspace_is_a_path_diagnostic() {
     let diagnostic = derive_variables(
@@ -302,6 +310,7 @@ fn a_missing_workspace_is_a_path_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Path);
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn a_workspace_that_is_a_regular_file_is_a_path_diagnostic() {
     let diagnostic = derive_variables(
@@ -317,6 +326,7 @@ fn a_workspace_that_is_a_regular_file_is_a_path_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Path);
 }
 
+// @kotowari[REQ-183]
 #[test]
 fn a_missing_home_is_an_env_diagnostic() {
     let diagnostic = HostEnvironment {
@@ -329,6 +339,7 @@ fn a_missing_home_is_an_env_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Env);
 }
 
+// @kotowari[REQ-183]
 #[test]
 fn an_empty_home_is_an_env_diagnostic() {
     let diagnostic = HostEnvironment {
@@ -341,6 +352,7 @@ fn an_empty_home_is_an_env_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Env);
 }
 
+// @kotowari[REQ-183]
 #[test]
 fn a_relative_home_is_an_env_diagnostic() {
     let diagnostic = HostEnvironment {
@@ -353,6 +365,7 @@ fn a_relative_home_is_an_env_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Env);
 }
 
+// @kotowari[REQ-183]
 #[test]
 fn a_home_without_a_real_path_is_an_env_diagnostic() {
     let diagnostic = HostEnvironment {
@@ -365,6 +378,7 @@ fn a_home_without_a_real_path_is_an_env_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Env);
 }
 
+// @kotowari[REQ-183]
 #[test]
 fn a_home_that_is_a_regular_file_is_an_env_diagnostic() {
     let diagnostic = HostEnvironment {
@@ -377,6 +391,7 @@ fn a_home_that_is_a_regular_file_is_an_env_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Env);
 }
 
+// @kotowari[REQ-183]
 #[test]
 fn a_checked_home_is_the_real_path_of_home() {
     let home = HostEnvironment {
@@ -389,6 +404,7 @@ fn a_checked_home_is_the_real_path_of_home() {
     assert_eq!(home.path(), Path::new("/home/u"));
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_broken_configuration_directory_is_a_path_diagnostic() {
     // A configuration directory that exists but cannot be followed to a directory of its
@@ -414,6 +430,7 @@ fn a_broken_configuration_directory_is_a_path_diagnostic() {
     assert_eq!(regular_file.kind(), Kind::Path);
 }
 
+// @kotowari[REQ-184]
 #[test]
 fn the_config_dir_follows_xdg_config_home() {
     let with_xdg = HostEnvironment {
@@ -477,6 +494,7 @@ fn real_config_dir(home: &TempDir) -> PathState {
     probe_path(&config_dir)
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn raw_git_facts_are_read_from_a_real_linked_worktree() {
     let home = TempDir::new();
@@ -522,6 +540,7 @@ fn raw_git_facts_are_read_from_a_real_linked_worktree() {
     assert_eq!(variables.git_common_dir, Some(main.join(".git")));
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn raw_git_facts_are_read_from_a_real_submodule() {
     let home = TempDir::new();
@@ -559,6 +578,7 @@ fn raw_git_facts_are_read_from_a_real_submodule() {
     );
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_fifo_under_the_named_gitdir_is_a_path_diagnostic() {
     for name in ["commondir", "gitdir", "config"] {
@@ -580,6 +600,7 @@ fn a_fifo_under_the_named_gitdir_is_a_path_diagnostic() {
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn the_config_dir_variable_is_the_real_path() {
     let home = TempDir::new();
@@ -608,6 +629,7 @@ fn the_config_dir_variable_is_the_real_path() {
     );
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_symlinked_commondir_is_a_path_diagnostic() {
     let home = TempDir::new();
@@ -630,6 +652,7 @@ fn a_symlinked_commondir_is_a_path_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Path);
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_real_linked_worktree_whose_common_dir_lost_its_head_file_is_a_path_diagnostic() {
     for (name, replace_head) in [("deleted", None), ("a link to a copy", Some("HEAD-copy"))] {
@@ -655,6 +678,7 @@ fn a_real_linked_worktree_whose_common_dir_lost_its_head_file_is_a_path_diagnost
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_gitdir_reached_through_a_symlinked_directory_is_accepted() {
     let home = TempDir::new();

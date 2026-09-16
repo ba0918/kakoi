@@ -59,6 +59,7 @@ fn config_dir(home: &TempDir) -> PathBuf {
     .config_dir(&home_directory(home))
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn lists_concatenate_with_the_upper_layer_appended() {
     let lower = profile(
@@ -126,6 +127,7 @@ fn lists_concatenate_with_the_upper_layer_appended() {
     assert_eq!(policy.env_unset, ["L", "U"]);
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn path_prepend_puts_the_upper_layer_first() {
     let lower = profile("[env]\npath-prepend = [\"/l/bin\", \"/l/sbin\"]");
@@ -139,6 +141,7 @@ fn path_prepend_puts_the_upper_layer_first() {
     );
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn scalars_take_the_upper_layer() {
     let overridden = merge(&[
@@ -162,6 +165,7 @@ fn scalars_take_the_upper_layer() {
     assert_eq!(defaults.env_mode, EnvMode::Inherit);
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn tables_merge_by_key_with_the_upper_layer_winning() {
     let lower = profile(
@@ -203,6 +207,7 @@ fn tables_merge_by_key_with_the_upper_layer_winning() {
     );
 }
 
+// @kotowari[REQ-157]
 #[test]
 fn pass_under_inherit_is_a_policy_diagnostic_after_merge() {
     let single = merge(&[profile("[env]\npass = [\"X\"]")]).unwrap_err();
@@ -216,6 +221,7 @@ fn pass_under_inherit_is_a_policy_diagnostic_after_merge() {
     assert_eq!(reverted.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-157]
 #[test]
 fn lower_inherit_with_upper_clear_and_pass_is_accepted() {
     let policy = merge(&[
@@ -228,6 +234,7 @@ fn lower_inherit_with_upper_clear_and_pass_is_accepted() {
     assert_eq!(policy.env_pass, ["X", "Y"]);
 }
 
+// @kotowari[REQ-155]
 #[test]
 fn the_same_key_in_env_set_and_secrets_is_a_policy_diagnostic() {
     let across_layers = merge(&[
@@ -244,6 +251,7 @@ fn the_same_key_in_env_set_and_secrets_is_a_policy_diagnostic() {
     assert_eq!(within_one.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_missing_profile_file_is_a_policy_diagnostic() {
     let home = TempDir::new();
@@ -255,6 +263,7 @@ fn a_missing_profile_file_is_a_policy_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_missing_policy_file_target_is_a_policy_diagnostic() {
     let home = TempDir::new();
@@ -271,6 +280,7 @@ fn a_missing_policy_file_target_is_a_policy_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn an_explicit_default_profile_equals_the_omitted_form() {
     let home = TempDir::new();
@@ -305,6 +315,7 @@ fn an_explicit_default_profile_equals_the_omitted_form() {
     assert_eq!(explicit[1].origin, LayerOrigin::CommandLine);
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_named_profile_does_not_read_default_toml() {
     let home = TempDir::new();
@@ -334,6 +345,7 @@ fn a_named_profile_does_not_read_default_toml() {
     assert_eq!(layers[1].policy.mounts.ro, [absolute("/p")]);
 }
 
+// @kotowari[REQ-184]
 #[test]
 fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
     let home = TempDir::new();
@@ -353,6 +365,7 @@ fn an_empty_xdg_config_home_falls_back_to_the_home_config_dir() {
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-184]
 #[test]
 fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
     let home = TempDir::new();
@@ -373,6 +386,7 @@ fn a_relative_xdg_config_home_falls_back_to_the_home_config_dir() {
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-310]
 #[test]
 fn a_fifo_policy_file_is_a_policy_diagnostic() {
     let home = TempDir::new();
@@ -391,6 +405,7 @@ fn a_fifo_policy_file_is_a_policy_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-311]
 #[test]
 fn an_oversized_policy_file_is_a_policy_diagnostic() {
     let home = TempDir::new();
@@ -413,6 +428,7 @@ fn an_oversized_policy_file_is_a_policy_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Policy);
 }
 
+// @kotowari[REQ-312]
 #[test]
 fn a_policy_file_behind_a_symlink_is_read() {
     let home = TempDir::new();

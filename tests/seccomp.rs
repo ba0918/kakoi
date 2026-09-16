@@ -30,6 +30,7 @@ const RET_K: u16 = (libc::BPF_RET | libc::BPF_K) as u16;
 /// little-endian flags.
 const AUDIT_ARCH_X86_64: u32 = 0xC000_003E;
 
+// @kotowari[REQ-280]
 #[test]
 fn the_filter_begins_with_an_architecture_check_that_kills_the_process() {
     let program = decode(&filter_bytes());

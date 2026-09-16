@@ -33,6 +33,7 @@ fn executable(dir: &TempDir, relative: &str) -> PathBuf {
     path
 }
 
+// @kotowari[REQ-260]
 #[test]
 fn a_command_with_a_slash_must_exist_and_be_executable() {
     let dir = TempDir::new();
@@ -49,6 +50,7 @@ fn a_command_with_a_slash_must_exist_and_be_executable() {
     assert_eq!(first_executable(&candidates(dir.path())), None);
 }
 
+// @kotowari[REQ-260]
 #[test]
 fn a_command_is_searched_on_the_isolated_path() {
     let dir = TempDir::new();
@@ -73,6 +75,7 @@ fn a_command_is_searched_on_the_isolated_path() {
     assert!(command_candidates(OsStr::new("tool"), None).is_empty());
 }
 
+// @kotowari[REQ-260]
 #[test]
 fn an_unresolvable_command_is_a_command_not_found_diagnostic_naming_the_command() {
     let diagnostic = resolve_command(OsStr::new("no-such-tool"), None).unwrap_err();
@@ -108,6 +111,7 @@ fn sh_dash_c_echo() -> ResolvedCommand {
     }
 }
 
+// @kotowari[REQ-315]
 #[test]
 fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
     // Specification section 14: the fixed part ends with `--argv0 <COMMAND as given>`, the
@@ -182,6 +186,7 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
     );
 }
 
+// @kotowari[REQ-316]
 #[test]
 fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
     // `--print-plan` without a `COMMAND` resolves nothing; the plan's argument list then
@@ -205,6 +210,7 @@ fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
     assert_eq!(arguments.last(), Some(&literal("/home/u/proj")));
 }
 
+// @kotowari[REQ-315]
 #[test]
 fn share_net_is_present_only_for_host_mode() {
     let host = bwrap_arguments(
@@ -227,6 +233,7 @@ fn share_net_is_present_only_for_host_mode() {
     assert!(none.contains(&literal("--unshare-all")));
 }
 
+// @kotowari[REQ-269]
 #[test]
 fn the_argument_list_carries_no_environment_flags() {
     let items = [item(Directive::Rw, "/home/u/proj", EntryKind::Directory)];
@@ -289,6 +296,7 @@ fn isolation_with(
 
 const SCAN_ENV: &str = "[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env*\"]\n";
 
+// @kotowari[REQ-170]
 #[test]
 fn a_scan_link_into_an_unswappable_ro_item_is_left_visible_with_a_reason() {
     // `.env` in the worktree is a link to a file under `ro ~/.config/opencode`, which
@@ -348,6 +356,7 @@ fn env_links_into_claude_settings(links: &[&str]) -> Facts {
 const RW_CLAUDE_RO_SETTINGS: &str =
     "[mounts]\nrw = [\"${worktree}\", \"~/.claude\"]\nro = [\"~/.claude/settings.json\"]\n";
 
+// @kotowari[REQ-170]
 #[test]
 fn a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic() {
     // The `ro` item resolves through `rw ~/.claude`, so from inside the isolation it could
@@ -369,6 +378,7 @@ fn a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic() {
     }
 }
 
+// @kotowari[REQ-295]
 #[test]
 fn the_first_offending_scan_link_in_byte_order_is_named() {
     // Two such links, found in the order `.env.b` then `.env.a`: the one first in byte
@@ -401,6 +411,7 @@ fn skipped_written(isolation: &Isolation, role: SkippedRole) -> Vec<&str> {
         .collect()
 }
 
+// @kotowari[REQ-270]
 #[test]
 fn a_missing_path_prepend_entry_is_skipped_and_reported() {
     let isolation = isolation(
@@ -424,6 +435,7 @@ fn a_missing_path_prepend_entry_is_skipped_and_reported() {
     );
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn a_scan_root_or_hide_mounts_under_with_a_valueless_variable_is_skipped_and_reported() {
     // In a worktree without `.git`, `${git_common_dir}` has no value: neither the scan nor
@@ -463,6 +475,7 @@ fn a_scan_root_or_hide_mounts_under_with_a_valueless_variable_is_skipped_and_rep
     );
 }
 
+// @kotowari[REQ-294]
 #[test]
 fn stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order() {
     let host = Facts::new()
@@ -510,6 +523,7 @@ fn home_with_workspace() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
+// @kotowari[REQ-307]
 #[test]
 fn a_missing_bwrap_is_a_bwrap_diagnostic() {
     let (home, workspace) = home_with_workspace();
@@ -550,6 +564,7 @@ fn path_with_a_fake_bwrap() -> TempDir {
     bin
 }
 
+// @kotowari[REQ-261]
 #[test]
 fn print_plan_without_a_command_skips_resolution() {
     let (home, workspace) = home_with_workspace();
@@ -599,6 +614,7 @@ fn home_with_a_policy_file_behind_a_chain_of_links(profile: &str, policy_file: &
     home
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_policy_file_behind_a_link_inside_a_writable_area_is_a_path_diagnostic() {
     let rw_cache = "[mounts]\nrw = [\"~/cache\"]";
@@ -656,6 +672,7 @@ fn home_with_a_policy_file_behind_a_link_stepping_back_through(
     home
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_policy_file_behind_a_link_stepping_back_through_a_writable_area_is_a_path_diagnostic() {
     let rw_cache = "[mounts]\nrw = [\"~/cache\"]";
@@ -692,6 +709,7 @@ fn a_policy_file_behind_a_link_stepping_back_through_a_writable_area_is_a_path_d
     }
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_link_stepping_back_through_a_directory_outside_writable_areas_is_accepted() {
     let home = home_with_a_policy_file_behind_a_link_stepping_back_through(
@@ -744,6 +762,7 @@ fn run_with_workspace(home: &TempDir, workspace: &Path) -> std::process::Output 
 
 const NESTED_RW: &str = "[mounts]\nrw = [\"~/cache\", \"~/cache/pip/http\"]";
 
+// @kotowari[REQ-159]
 #[test]
 fn a_nested_item_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
     let home = home_with_a_rewired_cache(NESTED_RW, "victim");
@@ -762,6 +781,7 @@ fn a_nested_item_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
     }
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_nested_item_that_is_a_real_directory_is_accepted() {
     let (home, workspace) = home_with_workspace();
@@ -773,6 +793,7 @@ fn a_nested_item_that_is_a_real_directory_is_accepted() {
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_nested_item_rewired_into_another_writable_item_is_accepted() {
     let home = home_with_a_rewired_cache(
@@ -786,6 +807,7 @@ fn a_nested_item_rewired_into_another_writable_item_is_accepted() {
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_workspace_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
     let (home, _) = home_with_workspace();
@@ -825,6 +847,7 @@ fn rewire_the_project_to_the_victim(home: &TempDir) {
     std::os::unix::fs::symlink(home.path().join("victim"), home.path().join("cache/proj")).unwrap();
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_workspace_under_an_rw_cache_given_from_elsewhere_is_accepted_until_rewired() {
     let home = home_with_a_project_under_the_cache(RW_WORKTREE_AND_CACHE);
@@ -846,6 +869,7 @@ fn a_workspace_under_an_rw_cache_given_from_elsewhere_is_accepted_until_rewired(
     }
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
     let home = TempDir::new();
@@ -878,6 +902,7 @@ fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
     assert_diagnostic(&from_elsewhere, 125, "path");
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_naming_the_link() {
     // After `proj/sub` is replaced by a link to `victim`, `--workspace proj/sub/inner` from
@@ -922,6 +947,7 @@ fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_na
     }
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_rewired_workspace_is_not_vouched_for_by_a_literal_form_merging_into_the_same_item() {
     // `rw = ["${worktree}", "~/proj/sub"]` after `proj/sub` was replaced by a link to
@@ -948,6 +974,7 @@ fn a_rewired_workspace_is_not_vouched_for_by_a_literal_form_merging_into_the_sam
     assert_diagnostic(&output, 125, "path");
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_workspace_behind_a_link_landing_in_an_rw_item_written_by_path_is_accepted() {
     let home = TempDir::new();
@@ -973,6 +1000,7 @@ fn a_workspace_behind_a_link_landing_in_an_rw_item_written_by_path_is_accepted()
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn an_ro_reached_through_a_link_between_two_rw_items_stays_accepted_when_the_link_moves() {
     // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a` and lands
@@ -997,6 +1025,7 @@ fn an_ro_reached_through_a_link_between_two_rw_items_stays_accepted_when_the_lin
     assert_eq!(moved.status.code(), Some(0), "{}", output_report(&moved));
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_workspace_resolved_only_through_places_that_are_no_item_is_accepted() {
     let home = home_with_a_project_under_the_cache("[mounts]\nrw = [\"${worktree}\"]");
@@ -1006,6 +1035,7 @@ fn a_workspace_resolved_only_through_places_that_are_no_item_is_accepted() {
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
     for (name, directive) in [("hide", "hide"), ("rw-file", "rw-file")] {
@@ -1041,6 +1071,7 @@ fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
     }
 }
 
+// @kotowari[REQ-294]
 #[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     let (home, _) = home_with_workspace();
@@ -1074,6 +1105,7 @@ fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
     assert_diagnostic(&home_alone, 125, "path");
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn a_missing_configuration_directory_leaves_config_dir_valueless() {
     // Nothing exists at the configuration directory, so `${config_dir}` has no value: the

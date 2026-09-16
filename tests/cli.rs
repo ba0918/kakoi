@@ -25,6 +25,7 @@ fn invocation_anchored_at(arguments: &[&str], current_dir: &Path) -> Invocation 
     invocation.anchored(current_dir)
 }
 
+// @kotowari[REQ-250]
 #[test]
 fn unknown_option_is_a_usage_diagnostic_with_exit_125() {
     let home = TempDir::new();
@@ -34,6 +35,7 @@ fn unknown_option_is_a_usage_diagnostic_with_exit_125() {
     assert_diagnostic(&output, 125, "usage");
 }
 
+// @kotowari[REQ-250]
 #[test]
 fn missing_command_without_print_plan_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -43,6 +45,7 @@ fn missing_command_without_print_plan_is_a_usage_diagnostic() {
     assert_diagnostic(&output, 125, "usage");
 }
 
+// @kotowari[REQ-250]
 #[test]
 fn empty_command_after_dashes_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -54,6 +57,7 @@ fn empty_command_after_dashes_is_a_usage_diagnostic() {
     }
 }
 
+// @kotowari[REQ-255]
 #[test]
 fn help_or_version_beside_an_invalid_command_line_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -69,6 +73,7 @@ fn help_or_version_beside_an_invalid_command_line_is_a_usage_diagnostic() {
     }
 }
 
+// @kotowari[REQ-255]
 #[test]
 fn help_prints_to_stdout_and_exits_zero() {
     let home = TempDir::new();
@@ -93,6 +98,7 @@ fn help_prints_to_stdout_and_exits_zero() {
     }
 }
 
+// @kotowari[REQ-255]
 #[test]
 fn version_prints_the_cargo_version_and_exits_zero() {
     let home = TempDir::new();
@@ -109,6 +115,7 @@ fn version_prints_the_cargo_version_and_exits_zero() {
     );
 }
 
+// @kotowari[REQ-253]
 #[test]
 fn print_plan_form_parses_without_a_command() {
     let Parsed::Invocation(invocation) = interpret_ok(&["--print-plan"]) else {
@@ -119,6 +126,7 @@ fn print_plan_form_parses_without_a_command() {
     assert!(invocation.command.is_empty());
 }
 
+// @kotowari[REQ-253]
 #[test]
 fn print_plan_takes_its_form_after_an_equals_sign() {
     // The value is written with `=` only: separated, `full` would be taken for a command
@@ -147,6 +155,7 @@ fn print_plan_takes_its_form_after_an_equals_sign() {
     }
 }
 
+// @kotowari[REQ-254]
 #[test]
 fn relative_option_paths_are_resolved_against_the_current_directory() {
     let invocation = invocation_anchored_at(
@@ -179,6 +188,7 @@ fn relative_option_paths_are_resolved_against_the_current_directory() {
     assert_eq!(invocation.hide, [PathBuf::from("/cwd/~/b")]);
 }
 
+// @kotowari[REQ-250]
 #[test]
 fn command_is_passed_through_unresolved() {
     let invocation = invocation_anchored_at(
@@ -193,6 +203,7 @@ fn command_is_passed_through_unresolved() {
     assert!(invocation.rw.is_empty());
 }
 
+// @kotowari[REQ-251]
 #[test]
 fn a_profile_name_that_is_not_a_single_path_component_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -204,6 +215,7 @@ fn a_profile_name_that_is_not_a_single_path_component_is_a_usage_diagnostic() {
     }
 }
 
+// @kotowari[REQ-255]
 #[test]
 fn help_beside_a_valid_option_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -219,6 +231,7 @@ fn help_beside_a_valid_option_is_a_usage_diagnostic() {
     }
 }
 
+// @kotowari[REQ-252]
 #[test]
 fn a_dash_led_option_value_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -233,6 +246,7 @@ fn a_dash_led_option_value_is_a_usage_diagnostic() {
     }
 }
 
+// @kotowari[REQ-252]
 #[test]
 fn an_empty_option_value_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -247,6 +261,7 @@ fn an_empty_option_value_is_a_usage_diagnostic() {
     }
 }
 
+// @kotowari[REQ-252]
 #[test]
 fn a_repeated_single_use_option_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -268,6 +283,7 @@ fn a_repeated_single_use_option_is_a_usage_diagnostic() {
     assert_eq!(invocation.rw, [PathBuf::from("/a"), PathBuf::from("/b")]);
 }
 
+// @kotowari[REQ-252]
 #[test]
 fn the_equals_form_means_the_same_as_the_separated_form() {
     let separated = interpret_ok(&[
@@ -302,6 +318,7 @@ fn the_equals_form_means_the_same_as_the_separated_form() {
     assert_eq!(invocation.workspace, Some(PathBuf::from("w")));
 }
 
+// @kotowari[REQ-255]
 #[test]
 fn help_from_a_deleted_current_directory_exits_zero() {
     let home = TempDir::new();
@@ -314,6 +331,7 @@ fn help_from_a_deleted_current_directory_exits_zero() {
     assert!(!output.stdout.is_empty(), "{report}");
 }
 
+// @kotowari[REQ-293]
 #[test]
 fn an_unknown_option_from_a_deleted_current_directory_is_a_usage_diagnostic() {
     let home = TempDir::new();
@@ -323,6 +341,7 @@ fn an_unknown_option_from_a_deleted_current_directory_is_a_usage_diagnostic() {
     assert_diagnostic(&output, 125, "usage");
 }
 
+// @kotowari[REQ-293]
 #[test]
 fn a_deleted_current_directory_is_a_path_diagnostic() {
     let home = TempDir::new();
@@ -341,6 +360,7 @@ fn a_deleted_current_directory_is_a_path_diagnostic() {
     assert_diagnostic(&output, 125, "path");
 }
 
+// @kotowari[REQ-293]
 #[test]
 fn a_bad_home_beside_a_broken_profile_is_an_env_diagnostic() {
     let home = TempDir::new();
@@ -356,6 +376,7 @@ fn a_bad_home_beside_a_broken_profile_is_an_env_diagnostic() {
     assert_diagnostic(&output, 125, "env");
 }
 
+// @kotowari[REQ-293]
 #[test]
 fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     let home = TempDir::new();
@@ -370,6 +391,7 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+// @kotowari[REQ-288, REQ-290]
 #[test]
 fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
     let (home, workspace) = home_with_workspace();
@@ -391,6 +413,7 @@ fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+// @kotowari[REQ-292]
 #[test]
 fn print_plan_with_a_diagnostic_prints_no_plan() {
     let (home, workspace) = home_with_workspace();
@@ -407,6 +430,7 @@ fn print_plan_with_a_diagnostic_prints_no_plan() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+// @kotowari[REQ-292]
 #[test]
 fn print_plan_exits_zero_and_prints_the_resolved_command() {
     let (home, workspace) = home_with_workspace();
@@ -433,6 +457,7 @@ fn print_plan_exits_zero_and_prints_the_resolved_command() {
     assert!(!plan.contains("--ro-bind"), "{report}");
 }
 
+// @kotowari[REQ-297, REQ-308]
 #[test]
 fn print_plan_full_adds_the_merged_policy_the_environment_and_the_bwrap_arguments() {
     let (home, workspace) = home_with_workspace();
@@ -471,6 +496,7 @@ fn print_plan_full_adds_the_merged_policy_the_environment_and_the_bwrap_argument
     );
 }
 
+// @kotowari[REQ-299, REQ-298, REQ-300, REQ-301]
 #[test]
 fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     // The JSON form is for tools: the keys of specification section 13, secret values as
@@ -611,6 +637,7 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     assert_eq!(plan["nested"], true, "{report}");
 }
 
+// @kotowari[REQ-296]
 #[test]
 fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
     // The summary shows how the environment differs from the host's rather than the whole
@@ -687,6 +714,7 @@ fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
     );
 }
 
+// @kotowari[REQ-289]
 #[test]
 fn a_control_character_in_a_warning_is_escaped() {
     let (home, workspace) = home_with_workspace();
@@ -720,6 +748,7 @@ fn nested(home: &TempDir, path: &Path) -> std::process::Command {
     command
 }
 
+// @kotowari[REQ-284]
 #[test]
 fn a_nested_launch_warns_and_runs_the_command_without_bwrap() {
     let home = TempDir::new();
@@ -742,6 +771,7 @@ fn a_nested_launch_warns_and_runs_the_command_without_bwrap() {
     assert_eq!(lines.collect::<Vec<_>>(), ["err"], "{report}");
 }
 
+// @kotowari[REQ-284]
 #[test]
 fn a_nested_launch_leaves_the_environment_unchanged() {
     let home = TempDir::new();
@@ -776,6 +806,7 @@ fn a_nested_launch_leaves_the_environment_unchanged() {
     assert_eq!(inside, expected, "{report}");
 }
 
+// @kotowari[REQ-261, REQ-290]
 #[test]
 fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_missing() {
     let home = TempDir::new();
@@ -808,6 +839,7 @@ fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_miss
     );
 }
 
+// @kotowari[REQ-263]
 #[test]
 fn a_nested_launch_passes_the_given_name_as_argv0() {
     // Specification sections 1 and 12.1: the nested run execs the command found on the
@@ -827,6 +859,7 @@ fn a_nested_launch_passes_the_given_name_as_argv0() {
     assert_eq!(output.stdout, b"sh\n", "{report}");
 }
 
+// @kotowari[REQ-262, REQ-290]
 #[test]
 fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
     // The command is found, but its exec fails (specification sections 4.2 and 12.1): one
@@ -854,6 +887,7 @@ fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
     );
 }
 
+// @kotowari[REQ-309]
 #[test]
 fn a_nested_launch_leaves_the_soft_limit_unchanged() {
     // A nested run makes no descriptors, so it does not raise the limit (specification
@@ -871,6 +905,7 @@ fn a_nested_launch_leaves_the_soft_limit_unchanged() {
     assert_eq!(output.stdout, b"1024\n", "{report}");
 }
 
+// @kotowari[REQ-285]
 #[test]
 fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     let home = TempDir::new();
@@ -930,6 +965,7 @@ fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     assert!(summary.contains("\n  rw      ~/ws\n"), "{report}");
 }
 
+// @kotowari[REQ-274]
 #[test]
 fn secret_values_never_reach_stdout_or_stderr() {
     let (home, workspace) = home_with_workspace();
@@ -978,6 +1014,7 @@ fn secret_values_never_reach_stdout_or_stderr() {
     }
 }
 
+// @kotowari[REQ-305]
 #[test]
 fn print_plan_is_identical_across_two_runs() {
     let (home, workspace) = home_with_workspace();
@@ -1024,6 +1061,7 @@ fn home_without_a_configuration_directory() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn the_built_in_default_is_used_when_default_toml_is_absent() {
     // The state of a new machine: nothing has been written to the configuration directory,
@@ -1054,6 +1092,7 @@ fn the_built_in_default_is_used_when_default_toml_is_absent() {
     }
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_missing_configuration_directory_inside_a_writable_item_is_refused() {
     // The built-in default makes the workspace writable, so a configuration directory named
@@ -1078,6 +1117,7 @@ fn a_missing_configuration_directory_inside_a_writable_item_is_refused() {
     assert_diagnostic(&output, 125, "path");
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_named_profile_never_falls_back_to_the_built_in_default() {
     // A user who names a profile means that file; falling back would run a wider policy
@@ -1093,6 +1133,7 @@ fn a_named_profile_never_falls_back_to_the_built_in_default() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_broken_default_toml_or_configuration_directory_is_a_policy_diagnostic() {
     // Only a name that is not there falls back: a `default.toml` or a configuration
@@ -1150,6 +1191,7 @@ impl Drop for RestoredMode {
     }
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn an_unsearchable_configuration_directory_is_not_taken_for_an_absent_one() {
     // A configuration directory whose search bit an installer or an archive left off is
@@ -1176,6 +1218,7 @@ fn an_unsearchable_configuration_directory_is_not_taken_for_an_absent_one() {
     );
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_policy_file_overlays_the_built_in_default() {
     // The built-in default adds no layer: `--policy-file` stacks on it as it would on a
@@ -1204,6 +1247,7 @@ fn a_policy_file_overlays_the_built_in_default() {
     assert!(plan.contains("kakoi init"), "{report}");
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn a_present_default_toml_replaces_the_built_in_default() {
     // Once `default.toml` is there it is the whole global scope; the built-in default is
@@ -1253,6 +1297,7 @@ fn bundled_profile() -> Vec<u8> {
     .unwrap()
 }
 
+// @kotowari[REQ-256]
 #[test]
 fn init_writes_the_built_in_default_and_prints_its_path() {
     let home = TempDir::new();
@@ -1303,6 +1348,7 @@ fn init_writes_the_built_in_default_and_prints_its_path() {
     assert_eq!(shared.symlink_metadata().is_ok(), shared_before, "{report}");
 }
 
+// @kotowari[REQ-256]
 #[test]
 fn init_takes_a_profile_name() {
     let home = TempDir::new();
@@ -1324,6 +1370,7 @@ fn init_takes_a_profile_name() {
     );
 }
 
+// @kotowari[REQ-257]
 #[test]
 fn init_narrows_an_existing_secrets_directory_to_0700() {
     // The install instructions before `init` had the user make the directory by hand, where
@@ -1346,6 +1393,7 @@ fn init_narrows_an_existing_secrets_directory_to_0700() {
     );
 }
 
+// @kotowari[REQ-259]
 #[test]
 fn init_rejects_a_bad_name_or_extra_arguments() {
     // `init` takes at most a NAME, and the NAME is one path component without a control
@@ -1363,6 +1411,7 @@ fn init_rejects_a_bad_name_or_extra_arguments() {
     }
 }
 
+// @kotowari[REQ-258]
 #[test]
 fn init_refuses_to_overwrite_an_existing_profile() {
     // There is no `--force`: the boundary the user wrote is never replaced by the product,
@@ -1380,6 +1429,7 @@ fn init_refuses_to_overwrite_an_existing_profile() {
     assert_eq!(std::fs::read_to_string(&written).unwrap(), "# mine\n");
 }
 
+// @kotowari[REQ-258]
 #[test]
 fn init_refuses_a_broken_link_or_a_regular_file_in_the_way() {
     // The name written to is not followed, so a broken link there is something that already
@@ -1420,6 +1470,7 @@ fn init_refuses_a_broken_link_or_a_regular_file_in_the_way() {
     }
 }
 
+// @kotowari[REQ-258]
 #[test]
 fn init_follows_a_linked_configuration_directory_and_prints_the_written_path() {
     // A user keeps the configuration directory in dotfiles behind a link: the file lands at
@@ -1453,6 +1504,7 @@ fn init_follows_a_linked_configuration_directory_and_prints_the_written_path() {
     );
 }
 
+// @kotowari[REQ-256]
 #[test]
 fn init_creates_missing_ancestors_of_the_configuration_directory() {
     // A new machine has no `~/.config` either; the ancestors of the place the user's own
@@ -1480,6 +1532,7 @@ fn init_creates_missing_ancestors_of_the_configuration_directory() {
     );
 }
 
+// @kotowari[REQ-259]
 #[test]
 fn init_ignores_nesting_the_current_directory_and_bwrap() {
     // Inside an isolation, from a directory that is gone, and on a machine without `bwrap`,
@@ -1517,6 +1570,7 @@ fn init_ignores_nesting_the_current_directory_and_bwrap() {
     );
 }
 
+// @kotowari[REQ-259]
 #[test]
 fn init_without_a_usable_home_is_an_env_diagnostic() {
     // The home directory is the one check `init` passes (specification section 13,
@@ -1532,6 +1586,7 @@ fn init_without_a_usable_home_is_an_env_diagnostic() {
     assert_diagnostic(&output, 125, "env");
 }
 
+// @kotowari[REQ-154]
 #[test]
 fn the_built_in_default_starts_without_a_warning() {
     // Someone running on the built-in default has placed no secret file yet, and must not

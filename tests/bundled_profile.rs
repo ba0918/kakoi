@@ -5,6 +5,7 @@ mod common;
 
 use common::{binary, output_report, TempDir};
 
+// @kotowari[REQ-151]
 #[test]
 fn the_bundled_default_profile_loads_and_passes_the_placement_checks() {
     let home = TempDir::new();

@@ -46,6 +46,7 @@ fn assert_policy_diagnostic(text: &str) {
     assert_eq!(diagnostic.kind(), Kind::Policy, "{text}");
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn the_example_policy_file_loads() {
     let policy = parse_policy(EXAMPLE, origin()).unwrap();
@@ -106,6 +107,7 @@ fn the_example_policy_file_loads() {
     );
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn an_empty_policy_file_is_valid() {
     let policy = parse_policy("", origin()).unwrap();
@@ -118,6 +120,7 @@ fn an_empty_policy_file_is_valid() {
     assert!(policy.git.instead_of.is_empty());
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn an_unknown_fixed_key_is_a_policy_diagnostic() {
     for text in [
@@ -135,11 +138,13 @@ fn an_unknown_fixed_key_is_a_policy_diagnostic() {
     }
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn unparsable_toml_is_a_policy_diagnostic() {
     assert_policy_diagnostic("[mounts\nrw = [");
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn scan_without_names_is_a_policy_diagnostic() {
     for text in [
@@ -151,6 +156,7 @@ fn scan_without_names_is_a_policy_diagnostic() {
     }
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn hide_mounts_with_empty_fstype_is_a_policy_diagnostic() {
     for text in [
@@ -162,6 +168,7 @@ fn hide_mounts_with_empty_fstype_is_a_policy_diagnostic() {
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn a_relative_path_is_a_policy_diagnostic() {
     for text in [
@@ -178,6 +185,7 @@ fn a_relative_path_is_a_policy_diagnostic() {
     }
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn the_tilde_user_form_is_a_policy_diagnostic() {
     for text in [
@@ -189,6 +197,7 @@ fn the_tilde_user_form_is_a_policy_diagnostic() {
     }
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn an_unknown_variable_is_a_policy_diagnostic() {
     for text in [
@@ -201,6 +210,7 @@ fn an_unknown_variable_is_a_policy_diagnostic() {
     }
 }
 
+// @kotowari[REQ-289]
 #[test]
 fn a_newline_in_a_variable_name_keeps_the_diagnostic_on_one_line() {
     let diagnostic = parse_policy("[mounts]\nrw = [\"${a\\nb}\"]", origin()).unwrap_err();
@@ -210,6 +220,7 @@ fn a_newline_in_a_variable_name_keeps_the_diagnostic_on_one_line() {
     assert_eq!(rendered.matches('\n').count(), 0, "{rendered:?}");
 }
 
+// @kotowari[REQ-151]
 #[test]
 fn env_set_secrets_and_instead_of_accept_any_key_name() {
     let policy = parse_policy(
@@ -242,6 +253,7 @@ fn env_set_secrets_and_instead_of_accept_any_key_name() {
     );
 }
 
+// @kotowari[REQ-289]
 #[test]
 fn a_control_character_in_a_variable_name_is_escaped_in_the_diagnostic() {
     let diagnostic = parse_policy("[mounts]\nrw = [\"${x\\u001bMARKER}\"]", origin()).unwrap_err();

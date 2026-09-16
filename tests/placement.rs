@@ -99,6 +99,7 @@ fn assert_path_diagnostic(diagnostic: &Diagnostic, mentions: &[&str]) {
     }
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_policy_file_inside_a_writable_area_is_rejected_with_the_three_reasons() {
     let diagnostic = check(
@@ -112,6 +113,7 @@ fn a_policy_file_inside_a_writable_area_is_rejected_with_the_three_reasons() {
     assert_path_diagnostic(&diagnostic, &[POLICY_FILE, "/home/u/policies"]);
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_policy_file_reached_through_a_symlink_in_a_writable_area_is_rejected() {
     let diagnostic = check(
@@ -127,6 +129,7 @@ fn a_policy_file_reached_through_a_symlink_in_a_writable_area_is_rejected() {
     assert_path_diagnostic(&diagnostic, &[POLICY_FILE, WORKTREE]);
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_symlink_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
     // `/home/u/policies` points at `/home/u/cache/link/pol` and `/home/u/cache/link` at
@@ -157,6 +160,7 @@ fn a_symlink_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
     }
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_directory_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
     // `/home/u/policies` points at `/home/u/cache/x/../../real/pol` with `/home/u/cache/x`
@@ -188,6 +192,7 @@ fn a_directory_on_the_resolution_chain_inside_a_writable_area_is_rejected() {
     }
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn the_config_dir_inside_a_writable_area_is_rejected() {
     let diagnostic = check(
@@ -201,6 +206,7 @@ fn the_config_dir_inside_a_writable_area_is_rejected() {
     assert_path_diagnostic(&diagnostic, &[CONFIG_DIR, "/home/u/.config"]);
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_secret_file_inside_a_writable_area_is_rejected() {
     let diagnostic = check(
@@ -219,6 +225,7 @@ fn a_secret_file_inside_a_writable_area_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/proj/token", WORKTREE]);
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_missing_secret_file_under_a_writable_area_is_rejected() {
     let diagnostic = check(
@@ -237,6 +244,7 @@ fn a_missing_secret_file_under_a_writable_area_is_rejected() {
     assert_path_diagnostic(&diagnostic, &[WORKTREE]);
 }
 
+// @kotowari[REQ-295]
 #[test]
 fn the_first_placement_violation_follows_the_specified_order() {
     let diagnostic = check(
@@ -259,6 +267,7 @@ fn the_first_placement_violation_follows_the_specified_order() {
     assert!(!diagnostic.description().contains("token"), "{diagnostic}");
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn path_prepend_inside_a_writable_area_is_rejected() {
     let diagnostic = check(
@@ -303,6 +312,7 @@ fn rewired_through_cache(facts: Facts, target: &str, target_is_dir: bool) -> Fac
         )
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_written_item_resolving_through_a_writable_item_to_outside_every_writable_item_is_rejected() {
     // The `rw` and `rw-file` rows are held to the root items and the diagnostic names the
@@ -348,6 +358,7 @@ fn a_written_item_resolving_through_a_writable_item_to_outside_every_writable_it
     }
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_workspace_resolving_through_a_writable_item_to_outside_every_writable_item_is_rejected() {
     // `--workspace ~/cache/ws` with `cache/ws` a link to `~/victim`: the workspace's real
@@ -401,6 +412,7 @@ fn workspace_rewired_through_cache() -> (Variables, Facts) {
     (redirected, facts)
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn an_item_expanded_from_a_workspace_variable_inherits_what_the_workspace_referenced() {
     // `rw ${worktree}` expands to the real path `/home/u/victim`, which on its own
@@ -426,6 +438,7 @@ fn an_item_expanded_from_a_workspace_variable_inherits_what_the_workspace_refere
     assert_path_diagnostic(&diagnostic, &["/home/u/victim", "/home/u/cache"]);
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn an_explicit_workspace_at_the_current_directory_is_exempt_and_hands_down_no_reference() {
     // `--workspace ~/proj/sub` under `rw ${worktree}` resolves through the worktree itself.
@@ -468,6 +481,7 @@ fn an_explicit_workspace_at_the_current_directory_is_exempt_and_hands_down_no_re
     assert_path_diagnostic(&from_elsewhere, &[WORKTREE]);
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_workspace_reached_through_a_link_must_land_in_a_root_not_derived_from_itself() {
     // `rw = ["${worktree}"]` after `~/proj/sub` was replaced by a link to `~/victim`:
@@ -512,6 +526,7 @@ fn a_workspace_reached_through_a_link_must_land_in_a_root_not_derived_from_itsel
     );
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_workspace_reached_through_a_link_landing_in_a_root_written_by_path_is_accepted() {
     // `rw = ["~/work"]` with `~/work` itself a link to `~/data/work`: `--workspace
@@ -546,6 +561,7 @@ fn a_workspace_reached_through_a_link_landing_in_a_root_written_by_path_is_accep
     assert!(warnings.is_empty(), "{warnings:?}");
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn two_nested_items_redirected_to_the_same_outside_place_do_not_vouch_for_each_other() {
     let facts = rewired_through_cache(host().dir("/home/u/victim"), "/home/u/victim", true)
@@ -578,6 +594,7 @@ fn two_nested_items_redirected_to_the_same_outside_place_do_not_vouch_for_each_o
     assert_path_diagnostic(&diagnostic, &["/home/u/cache"]);
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_nested_item_resolving_inside_the_writable_item_it_passes_through_is_accepted() {
     let warnings = check(
@@ -610,6 +627,7 @@ fn a_nested_item_resolving_inside_the_writable_item_it_passes_through_is_accepte
 const RW_WITH_A_NESTED_ITEM_AND_ANOTHER: &str =
     "[mounts]\nrw = [\"${worktree}\", \"~/cache\", \"~/cache/pip/http\", \"~/other\"]";
 
+// @kotowari[REQ-198]
 #[test]
 fn a_writable_item_whose_own_resolution_passes_through_its_inside_is_not_a_root() {
     // `~/cache/sub/..` resolves to `~/cache` by looking `..` up in `cache/sub`, a directory
@@ -654,6 +672,7 @@ fn a_writable_item_whose_own_resolution_passes_through_its_inside_is_not_a_root(
     assert_path_diagnostic(&diagnostic, &["/home/u/cache"]);
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_written_item_redirected_under_another_root_item_is_accepted() {
     let warnings = check(
@@ -671,6 +690,7 @@ fn a_written_item_redirected_under_another_root_item_is_accepted() {
     assert!(warnings.is_empty(), "{warnings:?}");
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn a_writable_item_one_of_whose_written_forms_was_redirected_onto_it_is_not_a_root() {
     // `~/other` is written honestly, but `~/cache/pip/http` now resolves to the same real
@@ -687,6 +707,7 @@ fn a_writable_item_one_of_whose_written_forms_was_redirected_onto_it_is_not_a_ro
     assert_path_diagnostic(&diagnostic, &["/home/u/cache/pip/http", "/home/u/cache"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_item_replacing_a_lower_layer_hide_is_rejected() {
     // `--rw ~/a/link` resolves through `~/a`, a root item. Pointing at `~/a/real` it lands
@@ -722,6 +743,7 @@ fn a_referenced_item_replacing_a_lower_layer_hide_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_item_replacing_a_lower_layer_ro_is_rejected() {
     // The same shape with `ro` in the lower layer: replacing it would make the read-only
@@ -747,6 +769,7 @@ fn a_referenced_item_replacing_a_lower_layer_ro_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_item_landing_inside_a_lower_layer_hide_is_rejected() {
     // Re-pointed at `~/b/creds/sub`, `--rw ~/a/link` replaces nothing by the identity of
@@ -774,6 +797,7 @@ fn a_referenced_item_landing_inside_a_lower_layer_hide_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_lower_layer_rw_written_as_the_real_path_shields_the_hide_it_replaced() {
     // The policy file's `rw ~/b/creds`, written as the real path, replaces the profile's
@@ -800,6 +824,7 @@ fn a_lower_layer_rw_written_as_the_real_path_shields_the_hide_it_replaced() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_item_merging_with_an_ro_of_its_own_layer_is_accepted() {
     // Two `ro` forms of one layer that resolve to the same place merge into one item
@@ -826,6 +851,7 @@ fn a_referenced_item_merging_with_an_ro_of_its_own_layer_is_accepted() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_lower_layer_rw_landing_inside_an_upper_layer_hide_is_rejected() {
     // The profile's `rw ~/a/link` resolves through `~/a` and lands in `~/b/creds/sub`;
@@ -854,6 +880,7 @@ fn a_referenced_lower_layer_rw_landing_inside_an_upper_layer_hide_is_rejected() 
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_rw_landing_inside_a_hide_of_its_own_layer_is_rejected() {
     // The same shape with the `hide` written in the profile itself: the layer makes no
@@ -881,6 +908,7 @@ fn a_referenced_rw_landing_inside_a_hide_of_its_own_layer_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_hide_restating_or_narrowing_a_lower_layer_hide_is_accepted() {
     // `~/b/creds` and `~/b/creds/sub` resolve through the profile's `rw ~/b`, so a `--hide`
@@ -908,6 +936,7 @@ fn a_referenced_hide_restating_or_narrowing_a_lower_layer_hide_is_accepted() {
     }
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_ro_replacing_a_lower_layer_ro_is_accepted() {
     // The policy file's `ro ~/a/link`, re-pointed at `~/b/creds`, replaces the profile's
@@ -933,6 +962,7 @@ fn a_referenced_ro_replacing_a_lower_layer_ro_is_accepted() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_ro_landing_inside_a_lower_layer_hide_is_rejected() {
     // Re-pointed at `~/b/creds/sub`, the policy file's `ro ~/a/link` lands inside the
@@ -975,6 +1005,7 @@ fn a_l_pointing_at(facts: Facts, target: &str) -> Facts {
         .directories_visited(given, &["/", "/home", "/home/u", "/home/u/a", target])
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn an_ro_written_through_a_writable_link_is_accepted_wherever_it_lands_outside_hide_and_ro() {
     // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a`. Wherever
@@ -998,6 +1029,7 @@ fn an_ro_written_through_a_writable_link_is_accepted_wherever_it_lands_outside_h
     }
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn an_ro_written_through_a_writable_link_landing_inside_a_hide_is_rejected() {
     // The same `ro ~/a/l/y` with `l` pointed into the profile's `hide ~/b/creds`: the
@@ -1018,6 +1050,7 @@ fn an_ro_written_through_a_writable_link_landing_inside_a_hide_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/l/y", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_hide_whose_resolution_follows_a_link_inside_a_writable_item_is_rejected_wherever_it_lands() {
     // A `hide` written as a link inside `rw` is skipped by the next start once the link is
@@ -1064,6 +1097,7 @@ fn a_hide_whose_resolution_follows_a_link_inside_a_writable_item_is_rejected_whe
     }
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_hide_written_by_real_path_inside_an_rw_item_is_accepted() {
     // `rw = ["~/cache"]` with `hide = ["~/cache/x"]`, `x` a real directory: the resolution
@@ -1090,6 +1124,7 @@ fn a_hide_written_by_real_path_inside_an_rw_item_is_accepted() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_hide_that_fails_both_rules_names_the_followed_link() {
     // `hide = ["~/x"]` with `~/x -> ~/proj/link/y` and `~/proj/link -> ~/vault`: the item
@@ -1122,6 +1157,7 @@ fn a_hide_that_fails_both_rules_names_the_followed_link() {
     assert_path_diagnostic(&diagnostic, &[given, "/home/u/proj/link"]);
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_hide_written_with_a_workspace_variable_does_not_count_inherited_references() {
     // `rw = ["${worktree}", "~/cache"]` with `hide = ["${worktree}/x"]`, `x` a real path,
@@ -1171,6 +1207,7 @@ fn a_hide_written_with_a_workspace_variable_does_not_count_inherited_references(
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn an_item_landing_inside_a_generated_hide_is_rejected_as_an_exposing_pair() {
     // `ro ~/a/link` resolves through `rw ~/a` and lands inside a `hide` the generation
@@ -1218,6 +1255,7 @@ fn an_item_landing_inside_a_generated_hide_is_rejected_as_an_exposing_pair() {
     }
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn an_item_landing_on_the_fixed_mount_targets_is_rejected() {
     // The fixed part of the bwrap arguments mounts `/`, `/dev`, and `/proc` itself
@@ -1268,6 +1306,7 @@ fn an_item_landing_on_the_fixed_mount_targets_is_rejected() {
     }
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn an_item_under_root_but_outside_dev_and_proc_is_accepted() {
     let result = check(
@@ -1280,6 +1319,7 @@ fn an_item_under_root_but_outside_dev_and_proc_is_accepted() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point() {
     // A scan root is not mounted, so a root below an `rw` item can be renamed from inside
@@ -1333,6 +1373,7 @@ fn a_scan_root_resolving_through_a_writable_item_must_be_a_writable_mount_point(
     }
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_scan_origin_following_a_link_inside_a_writable_item_is_rejected_wherever_it_lands() {
     // A scan `root` or a `hide-mounts` `under` written as a link inside `rw` is skipped by
@@ -1410,6 +1451,7 @@ fn a_scan_origin_following_a_link_inside_a_writable_item_is_rejected_wherever_it
     }
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_scan_origin_that_fails_both_rules_names_the_followed_link() {
     // `root = "~/x"` with `~/x -> ~/a/link/y` and `~/a/link -> ~/vault`: the root lands
@@ -1443,6 +1485,7 @@ fn a_scan_origin_that_fails_both_rules_names_the_followed_link() {
     assert_path_diagnostic(&diagnostic, &[given, "/home/u/a/link"]);
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_hide_mounts_under_resolving_through_a_writable_item_must_be_a_writable_mount_point() {
     // The same rule for the `under` of `hide-mounts`: below `rw ~/b` it could be renamed
@@ -1475,6 +1518,7 @@ fn a_hide_mounts_under_resolving_through_a_writable_item_must_be_a_writable_moun
     assert!(at_the_mount_point.is_ok(), "{at_the_mount_point:?}");
 }
 
+// @kotowari[REQ-159]
 #[test]
 fn a_scan_root_is_judged_against_the_writable_items_before_generation() {
     // `hide-mounts` hides `~/b`, a 9p mount, and that generated `hide` replaces `rw ~/b`
@@ -1503,6 +1547,7 @@ fn a_scan_root_is_judged_against_the_writable_items_before_generation() {
     assert_path_diagnostic(&diagnostic, &["/home/u/b/tree", "/home/u/b"]);
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_scan_root_diagnostic_precedes_a_written_item_diagnostic() {
     // `rw ~/cache/pip/http` rewired to outside every writable item and `root = "~/b/tree"`
@@ -1532,6 +1577,7 @@ fn a_scan_root_diagnostic_precedes_a_written_item_diagnostic() {
     );
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_scan_root_diagnostic_precedes_a_hide_mounts_under_diagnostic() {
     // Both origins lie below `rw ~/b`; the roots come before the `under`s.
@@ -1563,6 +1609,7 @@ fn a_scan_root_diagnostic_precedes_a_hide_mounts_under_diagnostic() {
     );
 }
 
+// @kotowari[REQ-160]
 #[test]
 fn a_scan_root_written_with_a_workspace_variable_inherits_the_workspace_references() {
     // `rw = ["~/cache"]` with `root = "${worktree}"` and `--workspace ~/cache/proj` given
@@ -1595,6 +1642,7 @@ fn a_scan_root_written_with_a_workspace_variable_inherits_the_workspace_referenc
     );
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn rw_on_home_is_rejected_from_any_layer() {
     // With the configuration directory outside the home, no protected path has the home
@@ -1655,6 +1703,7 @@ fn rw_on_home_is_rejected_from_any_layer() {
     assert_eq!(diagnostic.kind(), Kind::Path, "--rw /: {diagnostic}");
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn a_worktree_at_home_is_a_path_diagnostic() {
     let at_home = Variables {
@@ -1669,6 +1718,7 @@ fn a_worktree_at_home_is_a_path_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn a_worktree_or_workspace_at_an_ancestor_of_home_is_a_path_diagnostic() {
     for (name, variables) in [
@@ -1706,6 +1756,7 @@ fn a_worktree_or_workspace_at_an_ancestor_of_home_is_a_path_diagnostic() {
     }
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn a_cwd_under_a_hide_is_rejected() {
     let diagnostic = check(
@@ -1724,6 +1775,7 @@ fn a_cwd_under_a_hide_is_rejected() {
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn a_cwd_re_exposed_by_a_descendant_rw_is_accepted() {
     let warnings = check(
@@ -1742,6 +1794,7 @@ fn a_cwd_re_exposed_by_a_descendant_rw_is_accepted() {
     assert!(warnings.is_empty(), "{warnings:?}");
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn no_rw_over_the_workspace_yields_a_warning() {
     let warnings = check(
@@ -1759,6 +1812,7 @@ fn no_rw_over_the_workspace_yields_a_warning() {
     );
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn rw_over_the_workspace_alone_yields_no_warning() {
     for profile in [
@@ -1786,6 +1840,7 @@ fn rw_over_the_workspace_alone_yields_no_warning() {
 // same reason `ro` is. What it can still do is show the host's content where a `hide`
 // covered it, and what an `rw` can still do to it is let the writes through.
 
+// @kotowari[REQ-158]
 #[test]
 fn a_policy_file_inside_an_rw_copy_area_is_accepted() {
     // The policy file's own place is protected because a writable item there lets the next
@@ -1807,6 +1862,7 @@ fn a_policy_file_inside_an_rw_copy_area_is_accepted() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn the_configuration_directory_and_a_secret_file_inside_an_rw_copy_area_are_accepted() {
     let result = check(
@@ -1825,6 +1881,7 @@ fn the_configuration_directory_and_a_secret_file_inside_an_rw_copy_area_are_acce
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_rw_copy_landing_inside_a_hide_is_rejected() {
     // `rw-copy ~/a/link` resolves through the `rw ~/a` and lands on the hidden `~/b/creds`.
@@ -1852,6 +1909,7 @@ fn a_referenced_rw_copy_landing_inside_a_hide_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_rw_copy_landing_inside_an_ro_is_accepted() {
     // The same shape over an `ro`: the copy shows the bytes the `ro` already showed and
@@ -1878,6 +1936,7 @@ fn a_referenced_rw_copy_landing_inside_an_ro_is_accepted() {
     assert!(result.is_ok(), "{result:?}");
 }
 
+// @kotowari[REQ-161]
 #[test]
 fn a_referenced_rw_landing_inside_an_rw_copy_is_rejected() {
     // The other direction: the user asked for a place whose writes end with the run, and a
@@ -1905,6 +1964,7 @@ fn a_referenced_rw_landing_inside_an_rw_copy_is_rejected() {
     assert_path_diagnostic(&diagnostic, &["/home/u/a/link", "/home/u/b/creds"]);
 }
 
+// @kotowari[REQ-173]
 #[test]
 fn an_rw_copy_over_the_work_place_still_warns_that_no_rw_covers_it() {
     // The warning of section 6.5 is about work that survives the run. An `rw-copy` over the

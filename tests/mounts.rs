@@ -64,6 +64,7 @@ fn dir_at(path: &str) -> RealEntry {
     RealEntry::Directory(PathBuf::from(path))
 }
 
+// @kotowari[REQ-152]
 #[test]
 fn tilde_expands_to_the_real_home_directory() {
     let home_behind_a_link = HostEnvironment {
@@ -91,6 +92,7 @@ fn tilde_expands_to_the_real_home_directory() {
     );
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn variables_expand_only_in_path_values() {
     let policy = merged(&layers(
@@ -121,6 +123,7 @@ fn variables_expand_only_in_path_values() {
     assert_eq!(policy.env_set["X"], "${worktree}");
 }
 
+// @kotowari[REQ-153]
 #[test]
 fn an_item_with_a_valueless_variable_is_skipped() {
     let resolved = resolve(
@@ -136,6 +139,7 @@ fn an_item_with_a_valueless_variable_is_skipped() {
     assert!(!resolved.skipped[0].reason.is_empty());
 }
 
+// @kotowari[REQ-169]
 #[test]
 fn a_missing_real_path_is_skipped_with_a_reason() {
     let resolved = resolve(
@@ -151,6 +155,7 @@ fn a_missing_real_path_is_skipped_with_a_reason() {
     assert!(!resolved.skipped[0].reason.is_empty());
 }
 
+// @kotowari[REQ-156]
 #[test]
 fn a_missing_path_written_two_ways_merges_by_its_expanded_text() {
     // Nothing exists at `~/x`, so there is no real path to merge on; the two forms merge
@@ -166,6 +171,7 @@ fn a_missing_path_written_two_ways_merges_by_its_expanded_text() {
     assert_eq!(resolved.skipped.len(), 1, "{resolved:?}");
 }
 
+// @kotowari[REQ-156]
 #[test]
 fn the_same_directive_twice_in_one_layer_collapses() {
     let resolved = resolve(
@@ -186,6 +192,7 @@ fn the_same_directive_twice_in_one_layer_collapses() {
     assert!(resolved.skipped.is_empty(), "{resolved:?}");
 }
 
+// @kotowari[REQ-156]
 #[test]
 fn conflicting_directives_in_one_layer_are_a_policy_diagnostic() {
     let diagnostic = resolve(
@@ -205,6 +212,7 @@ fn conflicting_directives_in_one_layer_are_a_policy_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Policy, "{diagnostic}");
 }
 
+// @kotowari[REQ-156]
 #[test]
 fn conflicting_directives_on_the_command_line_are_a_usage_diagnostic() {
     let diagnostic = resolve(
@@ -217,6 +225,7 @@ fn conflicting_directives_on_the_command_line_are_a_usage_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Usage, "{diagnostic}");
 }
 
+// @kotowari[REQ-295]
 #[test]
 fn the_first_conflict_in_mount_order_is_reported_whatever_layer_wrote_it() {
     let diagnostic = resolve(
@@ -234,6 +243,7 @@ fn the_first_conflict_in_mount_order_is_reported_whatever_layer_wrote_it() {
     assert_eq!(diagnostic.kind(), Kind::Usage, "{diagnostic}");
 }
 
+// @kotowari[REQ-156]
 #[test]
 fn an_upper_layer_directive_replaces_the_same_real_path() {
     let resolved = resolve(
@@ -256,6 +266,7 @@ fn an_upper_layer_directive_replaces_the_same_real_path() {
     );
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn rw_on_a_regular_file_is_a_path_diagnostic_naming_rw_file() {
     let diagnostic = resolve(
@@ -269,6 +280,7 @@ fn rw_on_a_regular_file_is_a_path_diagnostic_naming_rw_file() {
     assert!(diagnostic.description().contains("rw-file"), "{diagnostic}");
 }
 
+// @kotowari[REQ-167]
 #[test]
 fn rw_file_on_a_directory_is_a_path_diagnostic() {
     let diagnostic = resolve(
@@ -290,6 +302,7 @@ fn order(resolved: &ResolvedMounts) -> Vec<(Directive, &Path)> {
         .collect()
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn ancestors_come_before_descendants() {
     let resolved = resolve(
@@ -317,6 +330,7 @@ fn ancestors_come_before_descendants() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn siblings_are_ordered_by_bytes() {
     let resolved = resolve(
@@ -346,6 +360,7 @@ fn siblings_are_ordered_by_bytes() {
 
 const SCAN_ENV: &str = "[[mounts.scan]]\nroot = \"${worktree}\"\nnames = [\".env*\"]";
 
+// @kotowari[REQ-170]
 #[test]
 fn scan_hides_matching_non_directory_entries() {
     let resolved = resolve_with(
@@ -370,6 +385,7 @@ fn scan_hides_matching_non_directory_entries() {
     assert_eq!(resolved.items[0].origin, ItemOrigin::Scan);
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn scan_skips_loaded_policy_files() {
     let resolved = resolve_with(
@@ -406,6 +422,7 @@ fn scan_skips_loaded_policy_files() {
     );
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn scan_hides_the_target_of_a_matching_symlink() {
     // The link points outside every `ro` item; a link into an `ro` item is another matter
@@ -428,6 +445,7 @@ fn scan_hides_the_target_of_a_matching_symlink() {
     );
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn scan_skips_a_matching_symlink_to_a_directory() {
     let resolved = resolve_with(
@@ -457,6 +475,7 @@ fn hits(mut found: Vec<ScanHit>) -> Vec<(PathBuf, RealEntry)> {
         .collect()
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn scan_walks_a_real_tree_with_prune_and_exclude() {
     let tree = TempDir::new();
@@ -493,6 +512,7 @@ fn scan_walks_a_real_tree_with_prune_and_exclude() {
     );
 }
 
+// @kotowari[REQ-155]
 #[test]
 fn a_star_matches_a_leading_dot_and_brackets_are_literal() {
     // The wildcard meaning of specification section 5.3: `*` covers a name's leading `.`
@@ -527,6 +547,7 @@ fn a_name_the_isolation_planted_cannot_stall_a_pattern_with_many_stars() {
     assert_eq!(matched, Ok(false));
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn scan_does_not_enter_symlinked_directories() {
     let tree = TempDir::new();
@@ -549,6 +570,7 @@ fn mount(target: &str, fstype: &str) -> Mount {
 
 const HIDE_MNT: &str = "[[mounts.hide-mounts]]\nunder = \"/mnt\"\nfstype = [\"9p\", \"drvfs\"]";
 
+// @kotowari[REQ-170]
 #[test]
 fn hide_mounts_hides_each_matching_mount_target() {
     let resolved = resolve_with(
@@ -585,6 +607,7 @@ fn hide_mounts_hides_each_matching_mount_target() {
     assert_eq!(resolved.items[0].origin, ItemOrigin::HideMounts);
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn hide_mounts_leaves_the_workspace_worktree_and_common_dir_alone() {
     let variables = Variables {
@@ -622,6 +645,7 @@ fn hide_mounts_leaves_the_workspace_worktree_and_common_dir_alone() {
     );
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic() {
     // A mount to hide might be there unseen (a `/proc` restricted by another sandbox), so
@@ -636,6 +660,7 @@ fn an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
 }
 
+// @kotowari[REQ-306]
 #[test]
 fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
     let copy = TempDir::new();
@@ -685,6 +710,7 @@ fn a_mount_point_with_a_byte_that_is_not_utf8_does_not_empty_the_mount_list() {
     );
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn existing_secret_files_are_hidden() {
     let resolved = resolve(
@@ -715,6 +741,7 @@ fn existing_secret_files_are_hidden() {
     assert!(resolved.skipped.is_empty(), "{resolved:?}");
 }
 
+// @kotowari[REQ-170]
 #[test]
 fn the_config_secrets_directory_is_hidden() {
     let resolved = resolve(
@@ -734,6 +761,7 @@ fn the_config_secrets_directory_is_hidden() {
     assert!(without.items.is_empty(), "{without:?}");
 }
 
+// @kotowari[REQ-171]
 #[test]
 fn generated_items_replace_written_items() {
     let resolved = resolve_with(
@@ -763,6 +791,7 @@ fn generated_items_replace_written_items() {
     assert_eq!(resolved.items[0].origin, ItemOrigin::Scan);
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_hidden_ancestor_does_not_hide_an_rw_worktree() {
     let variables = Variables {
@@ -792,6 +821,7 @@ fn a_hidden_ancestor_does_not_hide_an_rw_worktree() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn an_ro_file_inside_an_rw_directory_stays_read_only() {
     let resolved = resolve(
@@ -817,6 +847,7 @@ fn an_ro_file_inside_an_rw_directory_stays_read_only() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_scanned_env_file_inside_an_rw_worktree_is_hidden() {
     let resolved = resolve_with(
@@ -848,6 +879,7 @@ fn a_scanned_env_file_inside_an_rw_worktree_is_hidden() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn an_rw_subdirectory_shows_through_a_hidden_tmp() {
     let resolved = resolve(
@@ -871,6 +903,7 @@ fn an_rw_subdirectory_shows_through_a_hidden_tmp() {
     );
 }
 
+// @kotowari[REQ-172]
 #[test]
 fn a_scanned_env_file_under_an_rw_cache_is_hidden() {
     let resolved = resolve_with(
@@ -902,6 +935,7 @@ fn a_scanned_env_file_under_an_rw_cache_is_hidden() {
     );
 }
 
+// @kotowari[REQ-158]
 #[test]
 fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_ones() {
     let layers = layers(
@@ -976,6 +1010,7 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
     }
 }
 
+// @kotowari[REQ-197]
 #[test]
 fn the_links_a_resolution_passes_through_are_reported_by_their_place() {
     let tree = TempDir::new();
@@ -1003,6 +1038,7 @@ fn the_links_a_resolution_passes_through_are_reported_by_their_place() {
     assert!(facts.traversed_links(&policy_file).is_empty());
 }
 
+// @kotowari[REQ-197]
 #[test]
 fn the_directories_a_resolution_passes_through_are_reported_by_their_real_path() {
     let tree = TempDir::new();
@@ -1035,6 +1071,7 @@ fn the_directories_a_resolution_passes_through_are_reported_by_their_real_path()
         .contains(&root));
 }
 
+// @kotowari[REQ-169]
 #[test]
 fn mount_facts_are_collected_from_the_file_system() {
     let tree = TempDir::new();

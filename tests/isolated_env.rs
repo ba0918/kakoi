@@ -40,6 +40,7 @@ fn assemble(
     assemble_environment(&policy, host, secrets, &path_prepend)
 }
 
+// @kotowari[REQ-268, REQ-278]
 #[test]
 fn the_environment_is_assembled_in_the_seven_stages() {
     let assembled = assemble(
@@ -90,6 +91,7 @@ fn names(assembled: &Assembled) -> Vec<&str> {
         .collect()
 }
 
+// @kotowari[REQ-268, REQ-275]
 #[test]
 fn unset_accepts_wildcards() {
     let assembled = assemble(
@@ -103,6 +105,7 @@ fn unset_accepts_wildcards() {
     assert_eq!(names(&assembled), ["ABC", "KAKOI", "TOKEN"]);
 }
 
+// @kotowari[REQ-268]
 #[test]
 fn unset_with_brackets_removes_only_the_literal_name() {
     let assembled = assemble(
@@ -116,6 +119,7 @@ fn unset_with_brackets_removes_only_the_literal_name() {
     assert_eq!(names(&assembled), ["KAKOI", "a"]);
 }
 
+// @kotowari[REQ-270]
 #[test]
 fn clear_without_path_leaves_path_absent() {
     let without_prepend = assemble(
@@ -143,6 +147,7 @@ fn clear_without_path_leaves_path_absent() {
 
 const SECRET: &str = "[secrets]\nS = \"/home/u/tokens/s\"";
 
+// @kotowari[REQ-271]
 #[test]
 fn a_secret_removes_the_host_value_before_injecting() {
     let injected = assemble(
@@ -169,6 +174,7 @@ fn a_secret_removes_the_host_value_before_injecting() {
     assert!(!names(&absent).contains(&"S"), "{:?}", names(&absent));
 }
 
+// @kotowari[REQ-272]
 #[test]
 fn a_secret_strips_one_trailing_lf_or_crlf() {
     // One trailing newline is removed, whether LF or CR LF (a file saved by a Windows
@@ -189,6 +195,7 @@ fn a_secret_strips_one_trailing_lf_or_crlf() {
     }
 }
 
+// @kotowari[REQ-273]
 #[test]
 fn an_empty_secret_file_is_a_secret_diagnostic() {
     for bytes in [&b""[..], b"\n"] {
@@ -198,6 +205,7 @@ fn an_empty_secret_file_is_a_secret_diagnostic() {
     }
 }
 
+// @kotowari[REQ-273]
 #[test]
 fn a_secret_with_nul_is_a_secret_diagnostic() {
     let diagnostic =
@@ -206,6 +214,7 @@ fn a_secret_with_nul_is_a_secret_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
 
+// @kotowari[REQ-273]
 #[test]
 fn an_oversized_secret_value_is_a_secret_diagnostic() {
     let limit = 64 * 1024;
@@ -225,6 +234,7 @@ fn an_oversized_secret_value_is_a_secret_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
 
+// @kotowari[REQ-271]
 #[test]
 fn a_missing_secret_file_is_a_warning_without_the_variable() {
     let assembled = assemble(
@@ -248,6 +258,7 @@ fn a_missing_secret_file_is_a_warning_without_the_variable() {
     );
 }
 
+// @kotowari[REQ-273]
 #[test]
 fn an_unusable_secret_file_is_a_secret_diagnostic() {
     let diagnostic = assemble(
@@ -269,6 +280,7 @@ fn an_unusable_secret_file_is_a_secret_diagnostic() {
 const INSTEAD_OF: &str =
     "[git.instead-of]\n\"git@x:\" = \"https://x/\"\n\"git@y:\" = \"https://y/\"";
 
+// @kotowari[REQ-276]
 #[test]
 fn instead_of_entries_continue_the_git_config_count() {
     let assembled = assemble(
@@ -304,6 +316,7 @@ fn instead_of_entries_continue_the_git_config_count() {
     assert_eq!(actual, expected);
 }
 
+// @kotowari[REQ-276]
 #[test]
 fn instead_of_starts_at_zero_when_the_count_is_absent() {
     let assembled = assemble(INSTEAD_OF, &host(&[]), &BTreeMap::new(), &[]).unwrap();
@@ -318,6 +331,7 @@ fn instead_of_starts_at_zero_when_the_count_is_absent() {
     );
 }
 
+// @kotowari[REQ-277]
 #[test]
 fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
     let bogus = host(&[("GIT_CONFIG_COUNT", "abc")]);
@@ -332,6 +346,7 @@ fn a_non_numeric_git_config_count_is_an_env_diagnostic_only_with_entries() {
     );
 }
 
+// @kotowari[REQ-277]
 #[test]
 fn an_empty_git_config_count_is_an_env_diagnostic_with_entries() {
     // git itself reads an empty count as 0, but the host handing over a broken value is
@@ -348,6 +363,7 @@ fn an_empty_git_config_count_is_an_env_diagnostic_with_entries() {
     );
 }
 
+// @kotowari[REQ-277]
 #[test]
 fn a_git_config_count_too_large_to_number_the_entries_is_an_env_diagnostic() {
     let at_the_limit = host(&[("GIT_CONFIG_COUNT", "18446744073709551615")]);
@@ -357,6 +373,7 @@ fn a_git_config_count_too_large_to_number_the_entries_is_an_env_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Env, "{diagnostic}");
 }
 
+// @kotowari[REQ-274]
 #[test]
 fn a_secret_git_config_count_that_is_not_a_number_is_reported_without_its_value() {
     let diagnostic = assemble(
@@ -372,6 +389,7 @@ fn a_secret_git_config_count_that_is_not_a_number_is_reported_without_its_value(
     assert!(!diagnostic.to_string().contains("hunter2"), "{diagnostic}");
 }
 
+// @kotowari[REQ-274]
 #[test]
 fn secret_values_never_appear_in_the_plan_or_its_warnings() {
     let assembled = assemble(
@@ -412,6 +430,7 @@ fn assemble_from_file(path: &std::path::Path) -> Result<Assembled, Diagnostic> {
     assemble(SECRET, &host(&[]), &secrets, &[])
 }
 
+// @kotowari[REQ-296]
 #[test]
 fn the_changes_against_the_host_name_what_was_unset_set_and_kept() {
     // The summary of the plan shows the environment as its difference from the host's
@@ -458,6 +477,7 @@ fn the_changes_against_the_host_name_what_was_unset_set_and_kept() {
     );
 }
 
+// @kotowari[REQ-296]
 #[test]
 fn the_changes_against_a_cleared_host_count_the_passed_variables_and_name_no_unset() {
     // With the host cleared, every variable not passed is gone, which the mode says by
@@ -481,6 +501,7 @@ fn the_changes_against_a_cleared_host_count_the_passed_variables_and_name_no_uns
     );
 }
 
+// @kotowari[REQ-310]
 #[test]
 fn a_fifo_secret_file_is_a_secret_diagnostic() {
     let dir = TempDir::new();
@@ -496,6 +517,7 @@ fn a_fifo_secret_file_is_a_secret_diagnostic() {
     assert_eq!(diagnostic.kind(), Kind::Secret, "{diagnostic}");
 }
 
+// @kotowari[REQ-312]
 #[test]
 fn a_secret_file_behind_a_symlink_is_read() {
     let dir = TempDir::new();
@@ -511,6 +533,7 @@ fn a_secret_file_behind_a_symlink_is_read() {
     );
 }
 
+// @kotowari[REQ-273]
 #[test]
 fn an_unreadable_secret_file_is_a_secret_diagnostic() {
     let dir = TempDir::new();

@@ -6,8 +6,12 @@
 layered policy, and returns the command's exit code unchanged. It is a Rust command-line tool
 for Linux on x86_64.
 
-The approved specification, [`docs/spec/kakoi.md`](docs/spec/kakoi.md), is the
-canonical source for product, implementation, verification, and release requirements.
+The specification index, [`docs/spec/kakoi.md`](docs/spec/kakoi.md), and its linked
+responsibility-specific documents under `docs/spec/kakoi/` are the canonical source
+for product, implementation, verification, and release requirements. The kakoi-net responsibility-specific specification has been approved in the conversation.
+The core IR extraction and test annotations were also approved on 2026-09-16.
+Further prose editing is deferred; product behavior remains unchanged. The next priority is
+kakoi-net implementation, starting with the agreed feasibility gate.
 [`CONTEXT.md`](CONTEXT.md) is the glossary: the project's reading of terms such as "policy",
 "layer", "workspace", and "worktree", and the words not to use for them.
 
@@ -49,8 +53,9 @@ lefthook install
 
 ## Project constraints
 
-- The specification's section 14 is authoritative for runtime boundaries: no persistent state,
-  no external command other than `bwrap`. A launch that wraps a command (including
+- The specification's section 14 is authoritative for runtime boundaries: no persistent state.
+  Host/none retain the `bwrap`-only execution boundary. Filtered dependencies and their
+  supported environment must pass `docs/spec/kakoi/proof-gate.md` before product implementation. A launch that wraps a command (including
   `--print-plan`) writes no files; `init` is the only form that writes files, and only within
   the paths section 14 allows.
 - The specification's section 18 is authoritative for features excluded from version 0.3.
