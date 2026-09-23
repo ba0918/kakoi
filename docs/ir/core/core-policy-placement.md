@@ -2,12 +2,12 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-158: 保護対象と参照経路の検査
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 この節は、起動時に実体へ解決するパスについて、隔離の中からの書き換えで解決の結果を変えられないことを求める。「解決が参照するもの」と「根の項目」は第 2 節の用語である。「合成後の "rw" または "rw-file" の項目」は、第 6.3 節の生成の段が書かれた項目を置き換えた後の集合を指す。生成された項目は毎回の起動で事実から作り直すので、参照するものを持たず、根の判定の対象にもならない。
 
@@ -34,9 +34,9 @@
 存在しない成分、読めない成分、先を読めないリンクに至ったら解決をそこで打ち切り、そこまでに参照したもの（先を読めないリンクはその置き場）を検査する。複数の参照が同時に当たるとき、どれを診断に名指すかは第 20 節で委譲する。
 
 ### REQ-159: 根への着地と隠し先・起点のリンク
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 それ以外の解決されるパス（根の項目の検査）。 書かれた "rw"、"rw-file"、"hide" のマウント項目（どの段のものも、コマンドラインのものも）、"--workspace" で与えたパス、走査の "root"、"hide-mounts" の"under" について、その解決が合成後の "rw" または "rw-file" の項目の中にあるものを参照するなら、そのパス自身の実体はいずれかの根の項目の中になければならない。
 
@@ -57,9 +57,9 @@
 書かれた"hide" や起点が根の項目の検査（起点については下のマウント点の規則を含む）とこの規則の両方に当たるときは、この規則の診断を出す（辿ったリンクが利用者の直す場所を直接指すため。明示の "--workspace" の先例とは逆）。走査の "root" と "hide-mounts" の "under" は、さらに、その解決が書き込める項目の中を参照するなら、その実体が書き込める項目の実体と同一（"rw" のマウント点そのもの）でなければ種類 "path" の診断で終わる。
 
 ### REQ-160: 起点のマウント点とワークスペースの例外
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 起点はマウントされないので、"rw" の下位を起点にすると隔離の中で改名や向け直しができ、次の起動が空の木を走査して隠すべき ".env" が丸ごと隠れなくなる（2026-09-06 に bwrap 0.9.0 で実測）。"rw" のマウント点そのものは改名できず、走査はそこから再帰するので外れない（マウント点へリンク越しに書いた起点は、そのリンクを消せるので上のリンクの規則に当たる）。
 
@@ -76,9 +76,9 @@
 リンクを辿る "--workspace" の診断では2 つ目の要素は辿ったリンクのパスとする。検査の順は、走査の "root" を合成後の並び順で、次に"hide-mounts" の "under" を合成後の並び順で（この 2 つは第 13 節の段階 7 で生成の前に先に見る）、次に書かれた項目を第 6.4 節の順序で、次に "--workspace"。
 
 ### REQ-161: 再露出・固定マウント・広すぎる書き込みの拒否
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 露出する組の検査。 解決が書き込める項目の中を参照した書かれた項目（指令を問わない）は、次のどちらかで "hide"、"ro"、または "rw-copy" の項目と露出する組（第 2 節。項目が "rw" または "rw-file" で無効にする先が "hide"、"ro"、または "rw-copy" のとき、および項目が "ro" または "rw-copy" で無効にする先が "hide" のとき）になるとき、種類 "path" の診断で終わる。
 
@@ -99,9 +99,9 @@
 ホーム全体を書けるようにする指定は、どの段からも受け付けない。"rw-copy" はこの拒否の対象にしない。ホスト側のホームは書けるようにならないためである。ホーム全体を "rw-copy" にする指定は、第 6.1 節の複製の上限に当たって種類 "path" で止まる。第 13 節の段階 7 の中では、走査の "root" と "hide-mounts" の "under" の根の項目の検査（生成の前）、生成、保護対象のパス、書かれた項目と "--workspace" の根の項目の検査と露出する組の検査（書かれた項目ごとにこの順。項目をまたぐ交互の順は第 20 節で委譲）、固定部分への着地の拒否、広さの拒否の順に検査する。
 
 ### REQ-162: 根の項目と露出する組の根拠
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 なぜ根の項目という考え方が要るか。書き込める項目の中にあるものを参照して解決されるパスは、隔離の中からその参照先を書き換えることで、次の起動に別の実体を読ませたり、別の実体へ指令を適用させたりできる。前置きの実体だけを見ると、前置きではない場所にあるリンク（"~/policies" が "~/cache/link/pol"を指し、"~/cache/link" が "rw" の中）を張り替えられる。
 
@@ -124,9 +124,9 @@
 "hide" が "rw" の中にあるなら、実体のパスで書いてもその "rw" を参照するので、"rw" も "rw-file" も "ro" も通らない（規則 2）。そこでは項目を "hide" の中に置く配置そのものを諦める。
 
 ### REQ-163: 残る配置上の隙間と受け入れる形
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 "rw" の中の "hide"・"ro" の項目は着地先を変えられると元の対象を隠せなくなるが、それは下の「読み取り専用で重ねるだけでは足りない理由」のとおり祖先の改名でも起きることで、この規則の穴ではない。入れ子を禁じないのは、第 6.4 節の表にある "rw" の中の "ro" のような形を残すためである。
 
@@ -137,16 +137,16 @@
 秘密ファイルを保護対象にするのは、"rw" の中の秘密ファイルを隔離の中からホストの任意のファイルへのシンボリックリンクに差し替えると、次の起動がその内容を環境変数として隔離に持ち込むためである。
 
 ### REQ-164: 読み取り専用で重ねる保護の限界
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 読み取り専用で重ねるだけでは足りない理由: 重ねたファイル自体は動かせないが、その祖先ディレクトリの改名は許され、同じパスに別のファイルを置けば次回の起動がそれを読む（2026-09-03 に bwrap 0.9.0 で実測）。
 
 ### REQ-165: 配置保護の受け入れ例と拒否例
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 成功の観測条件: 上の表の規則で合成した結果が "--print-plan=full" に表示され、削除の演算子に相当する書き方はどの段でも読み込み失敗になり、ワークツリーの中に置いたポリシーファイルを "--policy-file" で指すと理由付きの診断で止まり、"rw" の中を指す "secrets" の値も同じ診断で止まり、"rw" の外にあるポリシーファイルを "rw" の中に置いたシンボリックリンク越しに指しても同じ診断で止まり、リンク先が ".." で"rw" の中のディレクトリを通り抜ける形でも同じ診断で止まる。
 
@@ -167,9 +167,9 @@
 "rw-copy" については次の対が観測される: "rw-copy = ["~/policies"]" の中にポリシーファイルを置いた起動は通り（保護対象のパスの検査の対象にならない）、同じ配置を "rw" にすると "path" で止まる。
 
 ### REQ-166: 複製・生成・起点に関する境界例
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 "rw = ["~/a", "~/b"]" と "hide = ["~/b/creds"]" のプロファイルに、"~/a/link" を "~/b/creds" へ向けた"--policy-file" の "rw-copy = ["~/a/link"]" は "path" で止まり、同じ形で相手が "ro = ["~/b/creds"]" なら通る。
 
@@ -181,7 +181,7 @@
 
 反例: 上の段の "rw" が下の段の"hide" と同じパスを指したとき、どちらが勝つかが段の順序以外で決まる。差し替えた飛び先が別の差し替えた項目によって正当化される。"ro" のリンクを "secrets/" の中へ向けると次の起動で秘密ファイルが読める。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-364 @about=REQ-158 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

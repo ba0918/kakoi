@@ -2,33 +2,33 @@
 
 CNAMEの参照と、許可できるIP・できないIPが混在するDNS応答の扱いを定義する草案。拒否応答はnetwork/dns-protocol/network-dns-error-response.md、処理上限はnetwork/dns-work-limits/network-dns-cname-limit.mdとnetwork/dns-work-limits/network-dns-timeout.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-019: CNAMEの参照先の解決
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A22
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A22
+- verification: unit
 
 許可したDNS名がCNAMEで別の名前を指している場合、参照先名の追加指定なしで辿り、最終IPを検査する。許可するTCP/UDP・ポートは元のルールの範囲に限る。
 
 ### REQ-020: 混在した応答の選別
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A23, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A24
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A23, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A24
+- verification: unit
 
 DNS応答に許可できるIPと許可できないIPが混在する場合、許可できるIPだけをアプリに返して通す。別途明示許可していない内部IPは除外する。ただし署名付きの混在応答は加工せずアプリに返し、通信段階で禁止IPを拒否する。
 
 ### REQ-021: 応答の全IPが禁止の場合の拒否
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A25, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A26
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A25, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A26
+- verification: unit
 
 DNS応答で返されたIPのうち、許可できるIPが1つもない場合は、ポリシーによる拒否として名前解決を失敗させる。署名付きの応答にも適用する。IPを含まない成功応答にはしない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-030 @about=REQ-019 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A22

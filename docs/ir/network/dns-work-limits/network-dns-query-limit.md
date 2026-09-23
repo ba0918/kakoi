@@ -2,25 +2,25 @@
 
 kakoi-net自身が送る問い合わせの回数上限を定義する草案。名前解決1件の境界と、その他の資源上限は未決。
 
-## 要求
+## Requirements
 
 ### REQ-121: 上流問い合わせ回数の上限を設定できる
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124
+- verification: unit
 
 名前解決1件あたりの上流問い合わせ回数は既定64回とし、"network.dns-max-upstream-queries" で1〜4096の整数に変更できる。0・無制限・小数は認めない。上位指定優先・省略時継承とし、どの段にも指定がなければ64回とする。
 
 ### REQ-122: 再試行も含め上流への送信を数える
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124
+- verification: unit
 
 kakoi-net自身が上流へ送るDNS問い合わせを1送信ごとに数える。別候補への切替、CNAME参照、再送、通信方式を変えての再問い合わせ、設定変更によるやり直しも含め、回数をリセットしない。上流DNS内部の処理と通信層のパケット再送は数えない。上限ちょうどまで送信でき、さらに送信が必要なら解決失敗とする。時間と段数の上限も独立して適用する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-267 @about=REQ-121 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124

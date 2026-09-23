@@ -4,17 +4,17 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-070: 復帰時の以前の公開ポートの優先
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A75
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A75
+- verification: unit
 
 障害復帰時に同じ待受が継続している場合、以前のホスト公開番号が許可範囲内で使用可能なら優先して再利用する。使えなければ既存の選択規則で別の許可済みポートを選び、知らせる。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-134 @about=REQ-070 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A75

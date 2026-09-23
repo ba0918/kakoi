@@ -2,33 +2,33 @@
 
 終了猶予の設定位置を定義する草案。終了要求の具体的な機構と期限の起点は未決。
 
-## 要求
+## Requirements
 
 ### REQ-095: process内の終了猶予設定
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A100,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A68
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A100,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A68
+- verification: unit
 
 終了猶予設定はTOMLの "process" 内の "shutdown-grace-seconds" に置く。既定は5秒、指定範囲は1〜300秒の整数とする。
 
 ### REQ-096: 終了猶予をfilteredだけに適用する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A101
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A101
+- verification: unit
 
 新しい終了猶予は今回は "filtered" だけに適用し、"host"・"none" の終了方式は既存どおりとする。"host"・"none" に明示的な終了猶予設定が残っていれば、使われない旨を警告する。
 
 ### REQ-097: 終了猶予設定の合成と検査
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A102
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A102
+- verification: unit
 
 "process.shutdown-grace-seconds" は上位の明示値で上書きし、省略なら継承、全段省略なら5秒とする。"host"・"none" でも整数かつ1〜300秒の範囲を検査する。猶予設定がある場合は "network.mode" の明示を必須とし、別レイヤからの継承も認める。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-204 @about=REQ-095 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A100

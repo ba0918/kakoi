@@ -2,17 +2,17 @@
 
 同じ名前に対するアドレス種別ごとの上限を定義する草案。重複問い合わせの集約、開始時点の詳細、環境全体の同時処理数と総負荷の制限は未決。
 
-## 要求
+## Requirements
 
 ### REQ-124: IPv4用とIPv6用の名前解決に上限を独立して適用する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A126
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A126
+- verification: unit
 
 同じ名前に対するIPv4用とIPv6用の名前解決には、それぞれ独立した時間・CNAME段数・上流問い合わせ回数の上限を適用する。一方の上限消費で他方の残り時間や回数を減らさない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-278 @about=REQ-124 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A126

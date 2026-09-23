@@ -2,33 +2,33 @@
 
 filteredでのCtrl+Cの意味を定義する草案。シグナル配送の実現方式、外部からの終了要求の扱いは未決。
 
-## 要求
+## Requirements
 
 ### REQ-098: 対話中のCtrl+Cをアプリ側へ届ける
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A103
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A103
+- verification: unit
 
 "filtered" の対話中のCtrl+Cはアプリ側へ割り込みを届ける。アプリが操作をキャンセルして続行するなら隔離環境も継続し、主コマンドが終了したら決定済みの片付けを行う。
 
 ### REQ-099: 終了猶予中のCtrl+Cで待機を打ち切る
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A104
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A104
+- verification: unit
 
 "filtered" で主コマンド終了後の終了猶予中にCtrl+Cが来たら、残りの猶予を打ち切り、残った子プロセスを強制終了して片付けを進める。
 
 ### REQ-100: 猶予打切りで主コマンドの結果を変えない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A105
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A105
+- verification: unit
 
 主コマンド終了後の猶予をCtrl+Cで打ち切っても、確定済みの主コマンドの終了結果を維持する。猶予を打ち切ったことは通知する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-214 @about=REQ-098 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A103

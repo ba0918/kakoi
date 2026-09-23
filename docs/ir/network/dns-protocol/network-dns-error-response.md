@@ -2,17 +2,17 @@
 
 kakoi-netが返すDNS失敗応答を定義する草案。詳細理由の通知形式とその他の入力不正の応答は未決。
 
-## 要求
+## Requirements
 
 ### REQ-123: ポリシー拒否と解決失敗の応答を分ける
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A125
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A125
+- verification: unit
 
 未許可の名前や解決先IPの全件禁止というポリシー拒否はREFUSEDを返す。上流で解決できない場合、時間・段数・回数の上限超過、CNAME循環、変更後のホストDNS設定取得失敗はSERVFAILを返す。採用可能な上流のNXDOMAIN/NODATAは既存方針どおり維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-273 @about=REQ-123 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A125

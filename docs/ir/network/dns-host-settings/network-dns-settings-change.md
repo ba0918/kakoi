@@ -2,33 +2,33 @@
 
 ホストのDNS設定への追従を定義する草案。変更検知の機構と遅延は未決。変更後の設定取得失敗はnetwork-dns-settings-failure.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-107: ホストDNSの変更後に開始する問い合わせへ反映する
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A112
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A112
+- verification: unit
 
 ホストのDNS設定を使う場合、実行中も設定変更に追従し、変更を検知した後に開始する上流への問い合わせには新しい設定を使う。ポリシーで明示指定した上流はホストのDNS設定変更への追従の対象外とする。
 
 ### REQ-108: DNS設定変更時は古いキャッシュを破棄し既存許可を維持する
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A113
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A113
+- verification: unit
 
 ホストDNS設定変更を検知したら、kakoi-netが保存した古いDNS応答を破棄し、次の名前解決は新しい設定で行う。すでに与えたIP許可は元の期限まで維持し、確立済みTCPと継続中UDPは既存の継続規則で扱う。アプリ自身が保存した解決結果まで消す保証はしない。
 
 ### REQ-109: 旧設定の未完了問い合わせを新設定でやり直す
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A114
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A114
+- verification: unit
 
 ホストDNS設定変更の検知後に届く旧設定の問い合わせ応答は採用せず、新設定で問い合わせ直す。旧応答をアプリへ返さず、キャッシュやIP許可の追加・更新にも使わない。問い合わせ直す場合も元の解決処理の時間・作業量上限を引き継ぎ、設定変更が続いても無制限には延長しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-232 @about=REQ-107 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A112

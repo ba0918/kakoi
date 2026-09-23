@@ -2,65 +2,65 @@
 
 DNS応答のTTLとIP許可の寿命、TCP・UDPの継続中の通信の扱いを定義する草案。UDP設定はnetwork-udp-settings.md、更新の契機はnetwork-dns-refresh.mdで定義する。TTLゼロの具体値は合意済みで、機構の実証は別途必要。
 
-## 要求
+## Requirements
 
 ### REQ-014: DNS応答の期限に連動する許可
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A15, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A157
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A15, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A157
+- verification: unit
 
 DNS応答から得たIPを検査してからTTLの期間だけ許可する。TTLが0の場合はREQ-389の有限猶予を適用する。新しい応答を得たら再検査して許可を更新する。更新できず期限が切れたIPへの新規通信は、他の有効な許可がなければ拒否する。利用者が解決先IPを追いかけて書き換える操作を必要としない。
 
 ### REQ-015: 確立済みTCP接続の維持
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A16
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A16
+- verification: unit
 
 DNS由来のIP許可が期限切れになっても、すでに確立しているTCP接続は維持する。接続が続く間は古いIPと通信でき、TTLだけを理由に通信を中断しない。
 
 ### REQ-016: 継続中のUDP通信の維持
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A17
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A17
+- verification: unit
 
 DNS由来のIP許可が期限切れになっても、送信元・宛先のIPとポートが同じ継続中のUDP通信は、無通信期限まで維持する。通信が続く間は古いIPと通信できる。IPまたはポートが変わる通信は、新規通信として許可を再判定する。
 
 ### REQ-017: UDP無通信期限の変更
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A18, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A20
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A18, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A20
+- verification: unit
 
 UDPの無通信期限は最後に許可した送受信から既定120秒とし、ポリシーファイルの "network" の "udp-idle-timeout-seconds" で変更できる。指定は正の整数秒とし、0と無制限の指定は認めない。省略時は120秒。そのポリシーのUDP許可すべてに共通で適用する。期限後の通信は新規通信として有効な許可を再判定する。
 
 ### REQ-018: UDPの同じ組の再利用
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A19
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A19
+- verification: unit
 
 無通信期限内に同じ送受信IP・ポートを別の処理が再利用しても、同じ継続中のUDP通信として扱う。
 
 ### REQ-022: CNAME経由の許可期限
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A27, docs/decision/brainstorm/2026-09-15-kakoi-net.md#D8
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A27, docs/decision/brainstorm/2026-09-15-kakoi-net.md#D8
+- verification: unit
 
 CNAME経由の新規通信許可の期限は、参照経路のCNAMEと最終IP情報のうち最も早い失効時点までとする。TTLゼロの情報にはREQ-389の猶予を適用し、正のTTLの期限は延ばさない。
 
 ### REQ-389: TTLゼロの有限猶予
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A21, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A157, docs/decision/brainstorm/2026-09-15-kakoi-net.md#D8
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A21, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A157, docs/decision/brainstorm/2026-09-15-kakoi-net.md#D8
+- verification: unit
 
 TTLが0のDNS応答で検査を通ったIPへの新規通信には、応答の受信から既定1000ミリ秒の猶予を設ける。"network.dns-zero-ttl-grace-milliseconds" は100〜10000の整数ミリ秒で指定し、上位の明示値を優先、省略時は下位の値を引き継ぐ。検査・登録の遅れで期限を数え直さず、期限切れの候補を後から有効にしない。許可の更新は新たに検査を通った応答だけで行い、通常の通信では延長しない。TTLゼロの応答を後の問い合わせに再利用しない。猶予中に始まったTCP・UDPには既存の継続規則を適用する。CNAME経路ではTTLゼロの情報にのみ猶予を適用し、各情報の失効時点の最小値を使う。正のTTLの失効を猶予で延ばさない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-023 @about=REQ-014 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A15

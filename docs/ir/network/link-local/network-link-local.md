@@ -2,49 +2,49 @@
 
 IPv6リンクローカル宛先を個別に許可するときのネットワーク指定を定義する草案。接続口の名前変更、隔離環境からの経路、広いCIDRで含む場合は未決。
 
-## 要求
+## Requirements
 
 ### REQ-052: IPv6リンクローカル宛先の接続口の明示
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A57
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A57
+- verification: unit
 
 IPv6リンクローカル宛先を個別に許可する場合は、接続先が属するホスト側のインターフェースをポリシーで明示する。未指定は入力エラーにする。この必須指定はIPv6リンクローカル宛先の個別許可に限定し、通常のDNS名や一般のIP指定には求めない。
 
 ### REQ-053: ホスト側接続口の入力項目
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A58
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A58
+- verification: unit
 
 宛先指定の中で "ip" と "host-interface" を別フィールドにする。ホスト側のインターフェース名は "host-interface" に書き、IP欄への%接尾辞による併記は認めない。
 
 ### REQ-054: 起動時の接続口の存在確認
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A59
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A59
+- verification: unit
 
 指定したホスト側インターフェースが起動時に存在しない場合は起動エラーにする。該当ルールを無効化して起動したり、別の接続口へ自動置換したりしない。
 
 ### REQ-055: 接続口消失時の影響範囲
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A60
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A60
+- verification: unit
 
 起動後に指定した接続口が消失した場合は、その接続口に依存する通信を止めて通知する。隔離環境内の処理と他の通信は継続し、別の接続口へ自動で逃がさない。
 
 ### REQ-056: 同名の接続口の再出現時の復帰
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A61
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A61
+- verification: unit
 
 同じ名前の接続口が再出現した場合は、存在を再確認して該当ルールを自動的に有効へ戻す。名前が一致する別の接続口も対象とし、同じ物理機器である保証はしない。切れた接続自体の再試行はアプリ側に任せる。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-098 @about=REQ-052 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A57

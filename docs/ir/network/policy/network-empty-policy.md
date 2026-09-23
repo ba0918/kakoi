@@ -2,17 +2,17 @@
 
 明示的に選んだfilteredで許可・公開設定が空の場合を定義する草案。モード未指定で空配列や補助設定だけがある場合は未決。
 
-## 要求
+## Requirements
 
 ### REQ-085: 空のfiltered設定での起動
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A90
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A90
+- verification: unit
 
 "filtered" で通信許可・公開設定がどちらも空または未指定でも、有効な設定として起動する。アプリの外部通信・ホスト接続・待受公開は許可せず、隔離環境内ループバックは使える。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-175 @about=REQ-085 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A90

@@ -2,25 +2,25 @@
 
 実行中の通知先を定義する草案。詳細な表示形式、出力待ち・保持量の上限、出力先回復後の扱いは未決。
 
-## 要求
+## Requirements
 
 ### REQ-068: 標準エラーへのネットワーク通知
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73
+- verification: unit
 
 実行中のネットワーク通知は標準エラーへ1件1行で出し、kakoiの通知と分かる接頭辞を付ける。標準出力には通知を混ぜない。アプリの標準エラーと同じ出力先を使い、専用の受信設定を要求しない。
 
 ### REQ-069: 通知不能で通信制御を止めない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A74
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A74
+- verification: unit
 
 ネットワーク通知先が閉じている・読み手が滞っている場合は通知の欠落を許容する。通知出力待ちで通信制限・遮断・復帰・終了処理を止めず、制限を維持できる限りアプリを継続する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-129 @about=REQ-068 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73

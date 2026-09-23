@@ -2,37 +2,37 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-280: アーキテクチャの検査
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 bwrapの--seccompで渡すフィルタは最初にアーキテクチャを確認し、x86_64以外のシステムコールで全スレッドを含むプロセス全体を終了させる。
 
 ### REQ-281: x32の拒否
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 システムコール番号に0x40000000が立つx32呼び出しはプロセス全体を終了させる。32ビットとx32バイナリを隔離内で動かさない。
 
 ### REQ-282: TIOCSTIの拒否
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 ioctlの第2引数の下位32ビットがTIOCSTIならEPERMとする。上位ビットが立っていても拒否する。
 
 ### REQ-283: 端末保護の範囲
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 上記以外のシステムコールを許す。new-sessionは使わず制御端末を維持する。TIOCLINUX、端末応答を使う注入、表示サーバ経由の入力合成は対象外としてREADMEに記し、最後の経路は同梱プロファイルのhideとunsetで消す。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-516 @about=REQ-280 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

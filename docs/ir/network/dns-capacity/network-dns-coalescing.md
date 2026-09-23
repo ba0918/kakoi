@@ -2,17 +2,17 @@
 
 進行中の解決を共有する方針を定義する草案。解決条件の同一性判定の詳細は未決。応答待ち件数の上限はnetwork-dns-waiters.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-127: 同じ解決条件の問い合わせは進行中の解決を共有する
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A128
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A128
+- verification: unit
 
 同じ隔離環境で同じ名前・種類・解決条件の問い合わせが重なったら、進行中の解決を共有し、上流の処理と同時処理枠を1件にまとめる。後から参加しても元の期限や回数上限をリセットしない。異なる環境や解決条件は混ぜず、問い合わせ元ごとの許可確認は維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-286 @about=REQ-127 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A128

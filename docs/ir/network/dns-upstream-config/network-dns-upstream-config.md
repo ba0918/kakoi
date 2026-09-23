@@ -2,17 +2,17 @@
 
 今回合意した追加・改訂部分の草案。方式の実証は別途必要。
 
-## 要求
+## Requirements
 
 ### REQ-146: 明示上流の記法と合成
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A144
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A144
+- verification: unit
 
 明示DNS上流は "network.dns-upstream" 配列で指定し、下位から上位へ連結する。接続IPとTLSの証明書照合名を分ける。上流指定がなければホストDNSを使う。同じ候補一覧に平文とTLSを混在させない。空配列では下位を消さず、総入替えには別プロファイルを使う。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-324 @about=REQ-146 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A144

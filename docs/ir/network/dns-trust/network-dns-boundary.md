@@ -2,33 +2,33 @@
 
 CNAME解決の失敗、無関係なIPの扱い、DNSSEC検証の担当を定義する草案。上限値と設定はnetwork/dns-work-limits/network-dns-cname-limit.md、network/dns-work-limits/network-dns-timeout.md、network/dns-work-limits/network-dns-query-limit.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-023: 完了できないCNAME解決の失敗
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A28
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A28
+- verification: unit
 
 CNAMEの循環、参照回数または解決時間の上限超過時は名前解決を失敗させ、その不完全な結果から新しいIP許可を作らない。
 
 ### REQ-024: 無関係な追加IPの許可除外
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A29
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A29
+- verification: unit
 
 問い合わせた許可名から辿れる最終IPだけを許可候補とする。同じDNS応答に同梱された無関係な名前のIPは、その応答を根拠とした許可に加えない。
 
 ### REQ-025: DNSSEC検証の担当
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A30
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A30
+- verification: review
 
 DNSSECの署名検証は設定された問い合わせ先DNSサーバーに任せ、kakoi-net自身は暗号学的な署名検証を行わない。kakoi-netはIP・ポートの許可判定を担当する。DNSSECの保証は上流の検証設定と通信経路に依存し、非検証の上流を使う場合には保証しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-038 @about=REQ-023 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A28

@@ -2,25 +2,25 @@
 
 UDP無通信期限の入力上限とレイヤ間の合成を定義する草案。
 
-## 要求
+## Requirements
 
 ### REQ-093: UDP無通信期限の最大値
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A98
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A98
+- verification: unit
 
 UDP無通信期限の設定可能範囲は1〜86400秒とし、既定120秒を維持する。これは最後の通信から待つ時間の上限であり、通信が続くフローの総時間を1日に制限するものではない。
 
 ### REQ-094: UDP無通信期限の上位レイヤ優先
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A99
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A99
+- verification: unit
 
 UDP無通信期限は上の段で指定した値が上書きする。省略なら下の段の値を引き継ぎ、どこにも指定がなければ120秒とする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-198 @about=REQ-093 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A98

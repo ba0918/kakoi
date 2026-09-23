@@ -2,25 +2,25 @@
 
 環境ごとの同時処理上限と超過時の扱いを定義する草案。キャッシュ応答の計上方法は未決。重複集約はnetwork-dns-coalescing.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-125: 環境ごとのDNS同時処理上限を設定できる
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A127
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A127
+- verification: unit
 
 DNS同時処理上限は環境ごとに既定256件とし、"network.dns-max-concurrent-resolutions" で1〜4096の整数に変更できる。上位指定優先・省略時継承とし、どの段にも指定がなければ256件とする。0・無制限・小数は認めない。IPv4用とIPv6用は別件として数える。
 
 ### REQ-126: 処理枠を要する上限超過の問い合わせは待たせず失敗を返す
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A127
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A127
+- verification: unit
 
 新しい処理枠が必要な問い合わせを同時処理上限の超過で受けたら、待ち行列へ入れずSERVFAILを返す。進行中の処理と環境は維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-281 @about=REQ-125 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A127

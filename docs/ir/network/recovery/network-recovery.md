@@ -2,25 +2,25 @@
 
 安全な遮断を維持できている間の再試行を定義する草案。各試行の時間上限・設定可否・再発時の待ち時間リセット・通知形式と理由の同一性判定は未決。
 
-## 要求
+## Requirements
 
 ### REQ-066: 復帰失敗後の待ち時間と継続
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A71
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A71
+- verification: unit
 
 安全な遮断を維持できている場合、通信制限の再構築に失敗したら1・2・4・8・16秒、以降30秒待って再試行する。試行を重ねず、隔離環境が動く間は回数制限なく再試行する。再試行中も安全な遮断を維持する。
 
 ### REQ-067: 復帰再試行の状態変化を通知する
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A72
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A72
+- verification: unit
 
 復帰再試行中は遮断開始・失敗理由の変化・復帰成功を通知する。同じ理由で失敗し続けている間は同じ通知を繰り返さない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-123 @about=REQ-066 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A71

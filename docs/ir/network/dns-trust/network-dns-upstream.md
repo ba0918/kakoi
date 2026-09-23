@@ -2,33 +2,33 @@
 
 既定の問い合わせ先と変更可否、問い合わせ対象を定義する草案。名前別振り分けも引き継ぐ。ホスト設定の取得方法と対応環境、指定形式、設定変更の検知方式と遅延は未決。変更追従の方針はnetwork/dns-host-settings/network-dns-settings-change.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-026: 上流DNSの既定と変更
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A31
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A31
+- verification: unit
 
 上流DNSは既定でホストのDNS設定を利用し、ポリシーで問い合わせ先を変更できるようにする。
 
 ### REQ-027: 管理するDNS経路の問い合わせ対象
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A32
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A32
+- verification: unit
 
 kakoi-netが管理するDNS経路では、許可ルールに一致する名前の問い合わせだけを上流に送り、それ以外は上流へ送らず拒否する。許可名からCNAMEで辿る参照先は、追加の名前指定なしで解決する。
 
 ### REQ-106: ホストDNSの名前別振り分けを引き継ぐ
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A111
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A111
+- verification: unit
 
 上流DNSを明示指定せずホストのDNS設定を利用する場合、名前ごとに問い合わせ先を分けるホストの設定も初版から引き継ぐ。管理するDNS経路で問い合わせを許可する名前の境界は維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-042 @about=REQ-026 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A31

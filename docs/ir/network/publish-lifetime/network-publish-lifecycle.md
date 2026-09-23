@@ -4,41 +4,41 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-037: 公開ポート不足の影響範囲
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A42
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A42
+- verification: unit
 
 ホスト側の事前許可範囲に空きがなく公開ポートを確保できない場合は、該当サービスの公開だけを失敗として通知する。隔離環境内の処理と他の公開は継続する。許可範囲外への拡張や既存ホストサービスの停止は行わない。
 
 ### REQ-038: 公開ポート不足後の自動再試行
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A43
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A43
+- verification: unit
 
 公開ポート不足で失敗した場合、サービスの待受が続く間は間隔を置いて自動再試行し、成功時に公開先を通知する。
 
 ### REQ-039: TCP待受終了時の確立済み接続の維持
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A44
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A44
+- verification: unit
 
 TCPの待受終了を検出したら、その公開先からの新規接続の受付を停止する。待受終了だけを理由に確立済み接続を切断せず、最後の応答を送れるように維持する。
 
 ### REQ-071: 公開ポート不足の再試行間隔と通知
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A76
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A76
+- verification: unit
 
 公開ポート不足では失敗後1・2・4・8・16秒、以降30秒待って、待受が続く間だけ再試行する。通知は初回失敗・理由の変化・公開成功に絞り、同じ失敗は繰り返し通知しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-066 @about=REQ-037 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A42

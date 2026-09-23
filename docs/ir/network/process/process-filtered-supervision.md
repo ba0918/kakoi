@@ -2,17 +2,17 @@
 
 今回合意した追加・改訂部分の草案。方式の実証は別途必要。
 
-## 要求
+## Requirements
 
 ### REQ-148: filteredの監督プロセス
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146
+- verification: unit
 
 "filtered" では監督プロセスを残し、通信障害からの復帰と主コマンド終了後の子プロセス回収を担う。bwrapへのexec契約を "filtered" に限り改訂し、"host" と "none" は維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-328 @about=REQ-148 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146

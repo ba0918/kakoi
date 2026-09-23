@@ -4,17 +4,17 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-078: 待受終了後に再起動用の予約を残さない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A83
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A83
+- verification: unit
 
 待受終了後は再起動用のホスト公開番号の予約を残さず解放する。待受が再び現れたら新規公開として番号を選ぶ。待受終了時に新規受付を停止し、確立済みTCP接続は維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-152 @about=REQ-078 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A83

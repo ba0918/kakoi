@@ -2,49 +2,49 @@
 
 通信制限自体の失敗時の扱いを定義する草案。遮断を保証する機構・実証、復帰の再試行間隔・回数、通知形式と起動失敗時の終了コードは未決。
 
-## 要求
+## Requirements
 
 ### REQ-057: 通信制限を準備できない場合の起動拒否
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A62
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A62
+- verification: unit
 
 起動時に要求されたネットワーク制限を準備できない場合は、起動エラーにしてアプリを実行しない。通信なしの起動や無制限通信への自動移行はしない。
 
 ### REQ-058: 制限維持不能時の通信遮断と処理継続
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A63
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A63
+- verification: unit
 
 起動後に通信制限を維持できなくなった場合は、外向き通信・ホスト側サービスへの接続・待受公開の経路を確実に遮断できる場合に限り、通知して隔離環境内の処理を継続する。遮断を保証できなければ隔離環境を終了する。
 
 ### REQ-059: 制限を再構築してからの自動復帰
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A64
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A64
+- verification: unit
 
 障害により通信を遮断して隔離環境内の処理を継続した場合は、起動時のポリシーで通信制限を再構築し、正常に制限できると確認したら自動復帰して通知する。復帰途中は遮断を維持し、期限切れのDNS許可をそのまま戻さない。切れた接続の再試行はアプリ側に任せる。
 
 ### REQ-064: 制限と遮断を保証できない場合の終了結果
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A69
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A69
+- verification: unit
 
 通信制限を維持できず遮断も保証できないため隔離環境を終了する場合は、kakoi自身の失敗として終了コード125と理由を返す。通常終了時は主コマンドの終了コードをそのまま返す。
 
 ### REQ-065: 遮断不能時には終了猶予を適用しない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A70
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A70
+- verification: unit
 
 通信制限も遮断も保証できず隔離環境を終了する場合は、通常終了の猶予を適用せず直ちに強制終了する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-106 @about=REQ-057 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A62

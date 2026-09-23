@@ -2,33 +2,33 @@
 
 DNS名の完全一致、子孫名を指定するワイルドカード、比較時の表記の扱いを定義する草案。国際化名の入力と名前解決の手順は含まない。
 
-## 要求
+## Requirements
 
 ### REQ-003: DNS名の完全一致と子孫指定
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A6
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A6
+- verification: unit
 
 ワイルドカードのないDNS名の指定は、その名前だけに一致する。先頭の "*." を付けた指定は、深さを問わず子孫の名前に一致し、親自身には一致しない。
 
 ### REQ-004: ワイルドカードの位置制限
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A6, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A14
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A6, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A14
+- verification: unit
 
 DNS名の指定にワイルドカードを使う場合、入力時点で先頭の半角 "*." だけを認め、名前の部分を変換する。それ以外の位置や形で使った場合は入力エラーにする。全角の星は半角に変換して受け付けない。
 
 ### REQ-010: DNS名の比較と補完の禁止
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A11
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A11
+- verification: unit
 
 DNS名の比較では英字の大小文字を区別せず、末尾のドット1個は取り除く。末尾ドットの有無によらず、指定は完成した名前として扱い、ホストの検索用ドメインを補わない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-004 @about=REQ-003 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A6

@@ -2,25 +2,25 @@
 
 失敗時の再問い合わせ抑制を定義する草案。設定記法、キャッシュキー、否定応答・過負荷拒否との区別の細則は未決。
 
-## 要求
+## Requirements
 
 ### REQ-134: 解決失敗を既定5秒保持する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A133
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A133
+- verification: unit
 
 解決失敗は既定5秒保持し、その間は同じ解決条件の問い合わせに失敗を返して上流への再問い合わせを抑える。保持時間は1〜300秒で設定変更可能とする。
 
 ### REQ-135: 同じ上流と通信方式へ同じ問い合わせを繰り返さない
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A133,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A154
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A133,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A154
+- verification: unit
 
 1回の解決中、同じ解決条件では同じ上流・通信方式へ同じ問い合わせを繰り返し送らず、応答しなければ次の指定候補へ進む。ホストDNS設定の変更後は別の解決条件として、問い合わせ先IP・通信方式が同じでもやり直しを認める。元の時間・問い合わせ回数の上限は引き継ぎ、設定変更を繰り返してもリセットしない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-301 @about=REQ-134 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A133

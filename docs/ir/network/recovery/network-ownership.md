@@ -4,41 +4,41 @@
 
 終了猶予はfilteredだけに適用する。host・noneの終了方式は既存どおりとし、適用条件はnetwork/process/process-shutdown-config.mdに従う。
 
-## 要求
+## Requirements
 
 ### REQ-060: 隔離環境ごとの独立管理と回収
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A65
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A65
+- verification: unit
 
 ネットワーク状態と補助処理は隔離環境ごとに独立して管理する。環境終了時に、その環境のIP許可・公開ポート・補助プロセスを片付ける。他の稼働中の隔離環境の通信や公開には影響させない。
 
 ### REQ-061: 主コマンド終了時の環境終了
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A66
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A66
+- verification: unit
 
 主コマンドが終了したら隔離環境も終了する。残った子プロセスも終了し、公開ポートを片付ける。子プロセスが残っていることを理由に環境を維持しない。
 
 ### REQ-062: 残存プロセスへの有限の終了猶予
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A67
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A67
+- verification: unit
 
 主コマンド終了時は公開と外部通信を先に止め、残った子プロセスに終了を要求する。有限の猶予を与え、猶予後も残るプロセスは強制終了する。
 
 ### REQ-063: 終了猶予の既定値と共通期限
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A68
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A68
+- verification: unit
 
 終了猶予は既定5秒とし、設定で1〜300秒の整数に変更できる。残ったプロセス全体で共通の期限を使い、全員が終了したら期限を待たずに片付ける。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-112 @about=REQ-060 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A65

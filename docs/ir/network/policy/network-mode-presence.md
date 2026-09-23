@@ -2,17 +2,17 @@
 
 新しいネットワーク設定の使用時にモードを明示する条件を定義する草案。
 
-## 要求
+## Requirements
 
 ### REQ-087: 空配列と補助設定にもモード明示を要求する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A92
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A92
+- verification: unit
 
 今回追加するネットワーク設定を使う場合は、空の許可・公開配列や補助設定だけでも "mode" の明示を必須とする。別レイヤから継承した明示モードも認める。新設定を一切使わない既存設定の扱いは変えない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-179 @about=REQ-087 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A92

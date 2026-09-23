@@ -2,17 +2,17 @@
 
 filteredの終了猶予を定義する草案。猶予前の遮断処理の時間上限と停止機構の実証は未決。
 
-## 要求
+## Requirements
 
 ### REQ-105: 最初の終了要求から全体で1本の期限を使う
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A110
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A110
+- verification: unit
 
 "filtered" の終了処理で通信・公開を止めて最初の終了要求を送ったら、その時点から設定済みの猶予時間を計り、主コマンドと子プロセス全体で1本の期限を使う。主コマンドの途中の終了や新しい子プロセスの出現で期限を延長しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-227 @about=REQ-105 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A110

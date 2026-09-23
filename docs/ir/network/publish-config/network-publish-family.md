@@ -4,33 +4,33 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-072: 公開先のアドレス系統の選択
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A77
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A77
+- verification: unit
 
 ホストの公開先は公開ごとにIPv4・IPv6・両方を選択でき、既定はIPv4とする。IPv4は127.0.0.1、IPv6は::1を公開先とする。
 
 ### REQ-073: 両方指定時の同番号での公開成立
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A78
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A78
+- verification: unit
 
 ホスト公開先にIPv4とIPv6の両方を指定した場合、許可範囲内の同じポート番号を両方で確保してから公開する。共通の空きがなければその公開を失敗として通知・再試行し、アプリと他の公開は継続する。片方だけの公開には自動変更しない。
 
 ### REQ-074: 異なるIP系統間の待受公開
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A79
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A79
+- verification: unit
 
 待受公開ではホスト側と隔離環境側の異なるIP系統間も中継する。IPv6からIPv4、IPv4からIPv6の両方向をTCP・UDPとも初版の対象とする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-139 @about=REQ-072 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A77

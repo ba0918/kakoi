@@ -4,17 +4,17 @@ host・noneで使用しない公開設定同士の検査を定義する草案。
 
 後続の動的公開の入力検査。初版の固定公開の入力検査はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-086: 非使用の公開設定同士の競合拒否
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A91
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A91
+- verification: unit
 
 "host"・"none" で使わない公開設定同士の競合も検査し、競合があれば起動前エラーにする。使わない設定のDNS問い合わせ・インターフェース存在確認は引き続き省略する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-177 @about=REQ-086 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A91

@@ -2,33 +2,33 @@
 
 ホスト側のlocalhostを明示許可する記法を定義する草案。固定名の提供機構と中継経路は未決。
 
-## 要求
+## Requirements
 
 ### REQ-089: host-loopbackによる専用宛先の指定
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A94
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A94
+- verification: unit
 
 ホストlocalhost専用の宛先は "destination" 内に "host-loopback" を置き、"ipv4" または "ipv6" を指定する。前者はホストの127.0.0.1、後者はホストの::1を指す。両方を許可する場合は2件書く。"dns"・"ip"・"cidr" とは同時指定しない。
 
 ### REQ-090: アプリ向けのホスト接続専用名
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A95
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A95
+- verification: unit
 
 隔離環境内で "host-v4.kakoi.internal" と "host-v6.kakoi.internal" の固定名を提供し、それぞれホスト127.0.0.1と::1へ指定ポートで中継する。通常の "localhost" は隔離環境内を指すままとする。名前を知っていても、許可したTCP/UDP・ポート以外には接続できない。
 
 ### REQ-091: 専用名の通常DNS許可指定の拒否
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A96
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A96
+- verification: unit
 
 ホスト接続専用名を通常の "dns" 許可に完全一致で指定したら、"host-loopback" の使用を案内する設定エラーにする。通常DNSのワイルドカードからホストループバックの許可は追加しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-187 @about=REQ-089 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A94

@@ -4,33 +4,33 @@ UDP公開の対応範囲と対象を定義する草案。ソケットの検出�
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-040: UDP公開の初版対応
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A45
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A45
+- verification: unit
 
 初版からUDP公開を扱う。公開先はホストのlocalhostに限定し、TCPの公開許可だけでUDPを公開しない。
 
 ### REQ-041: 許可範囲内のUDPソケットの自動公開
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A45
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A45
+- verification: unit
 
 事前にUDP公開を許可した範囲内で、ローカルのアドレスとポートを割り当てられたソケットを検出したら、自動公開の対象とする。アプリ名や用途では区別せず、外向き通信の送信元ポートも範囲内なら対象とする。
 
 ### REQ-042: UDPソケットの寿命に連動する公開
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A46
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A46
+- verification: unit
 
 対象UDPソケットが開いている間は無通信でも公開を維持し、ソケットが閉じられたことを検出したら公開を止める。外向きUDP通信の無通信期限を公開自体の停止条件にしない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-071 @about=REQ-040 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A45

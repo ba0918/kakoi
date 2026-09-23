@@ -2,41 +2,41 @@
 
 filteredへのSIGTERMによる終了要求を定義する草案。猶予の起点はprocess-shutdown-deadline.mdで定義する。安全上の故障が重なる場合はprocess-safety-exit-priority.mdを優先する。停止機構とイベント順序の実証は未決。
 
-## 要求
+## Requirements
 
 ### REQ-101: SIGTERMによる環境全体の終了
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A106
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A106
+- verification: unit
 
 "filtered" で外部からkakoiへSIGTERMによる終了要求が届いたら、隔離環境全体の終了処理に入る。通信・公開を止め、主コマンドと子プロセスに終了を要求し、設定済みの猶予後も残るプロセスは強制終了する。
 
 ### REQ-102: 実行中のSIGTERMによる終了結果
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A107,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A140
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A107,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A140
+- verification: unit
 
 主コマンドの実行中にSIGTERMを受けて環境の終了処理を始めた場合、主コマンドが後処理後に0を返しても終了コード143を返す。ただし安全上の故障による125優先規則に該当する場合はそちらを優先する。
 
 ### REQ-103: 重複するSIGTERMで猶予を変更しない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A108
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A108
+- verification: unit
 
 SIGTERMで開始した終了猶予中に再度SIGTERMが来ても、最初の猶予期限を維持し、延長も短縮もしない。主コマンド終了後のCtrl+Cによる打切りは引き続き行う。
 
 ### REQ-104: 主コマンド終了後のSIGTERMで結果と期限を変えない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A109
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A109
+- verification: unit
 
 主コマンドの終了を確認して子プロセスの終了猶予に入った後にSIGTERMが来ても、確定済みの主コマンドの結果と既存の猶予期限を維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-219 @about=REQ-101 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A106

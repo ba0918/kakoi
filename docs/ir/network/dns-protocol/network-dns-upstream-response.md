@@ -2,25 +2,25 @@
 
 明示した上流DNSの応答を受けた際の扱いを定義する草案。その他のエラー・全候補失敗時の応答・失敗キャッシュ・通信失敗の詳細と待ち時間は未決。
 
-## 要求
+## Requirements
 
 ### REQ-114: 不存在応答を理由に次の上流を試さない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A119
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A119
+- verification: unit
 
 明示上流から採用可能なNXDOMAINまたはNODATA応答を得たら、その問い合わせの結果として採用し、それだけを理由に次の候補へ問い合わせない。応答の正当性確認を省略しない。
 
 ### REQ-115: 上流の処理失敗と拒否では次の指定済み候補を試す
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A120
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A120
+- verification: unit
 
 明示上流からSERVFAILまたはREFUSEDを受けた場合は次の指定済み候補を試し、問い合わせ全体の時間・作業量の上限を引き継ぐ。先の上流が独自の方針で拒否しても次の上流が回答すれば採用する。kakoi自身の通信許可や上流に求める信頼条件は緩めない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-248 @about=REQ-114 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A119

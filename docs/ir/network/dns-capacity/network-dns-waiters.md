@@ -2,25 +2,25 @@
 
 応答先として保持する問い合わせ件数を定義する草案。同一要求の再送識別と保持サイズの詳細は未決。
 
-## 要求
+## Requirements
 
 ### REQ-128: 解決ごとの応答待ち件数を設定できる
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A129
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A129
+- verification: unit
 
 共有する解決1件あたりの応答待ちは既定64件とし、"network.dns-max-waiters-per-resolution" で1〜1024の整数に変更できる。上位指定優先・省略時継承とし、どの段にも指定がなければ64件とする。最初の問い合わせも含め、個別に応答を返す問い合わせの数で数える。アプリ数では数えない。
 
 ### REQ-129: 応答待ちの上限を超える新しい問い合わせを拒む
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A129
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A129
+- verification: unit
 
 応答待ち件数を超過する新しい問い合わせにはSERVFAILを返し、既存の応答待ちと解決処理は維持する。別の解決を作って上限を迂回しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-291 @about=REQ-128 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A129

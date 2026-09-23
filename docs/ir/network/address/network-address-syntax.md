@@ -2,41 +2,41 @@
 
 IPv4の表記とCIDRプレフィックス長の入力を定義する草案。インターフェース指定の扱いは未決。
 
-## 要求
+## Requirements
 
 ### REQ-048: IPv4の10進数4区切りの入力
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A53
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A53
+- verification: unit
 
 IPv4入力は0〜255の10進数4個をドットで区切る形式に限る。各数値は0単独を除いて先頭ゼロを認めず、短縮形、16進数形式、1個の整数形式は入力エラーにする。IP欄、CIDRのアドレス部分、IPv4-mappedの末尾IPv4表記に共通適用する。
 
 ### REQ-049: CIDRプレフィックス長の範囲と書式
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A54
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A54
+- verification: unit
 
 CIDRプレフィックス長はIPv4が0〜32、IPv6が0〜128の10進整数とする。先頭ゼロ（0単独は可）、符号、空白、省略は入力エラーにする。IPv4の/32とIPv6の/128は単一IPの範囲として認める。
 
 ### REQ-050: IPv6の標準表記の同一判定
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A55
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A55
+- verification: unit
 
 IPv6の標準的な表記の違いは受け付け、数値として同じアドレスなら同じ許可判定とする。英字の大小、各16進数区切りの先頭ゼロ、規則に従う::省略を認める。IPv4の10進数部分の先頭ゼロ禁止とは区別する。
 
 ### REQ-051: IP欄とポート欄の分離
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A56
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A56
+- verification: unit
 
 IP欄はアドレス本体だけを受け付け、IPv4/IPv6共通で角括弧・ポート併記・URL・前後の空白を入力エラーにする。ポートは "ports" 欄で指定する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-088 @about=REQ-048 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A53

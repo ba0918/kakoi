@@ -2,33 +2,33 @@
 
 既存のhost・noneに加える通信制限モードを定義する草案。使わない設定の項目間整合検査、空の設定、既定モードとの整合は未決。
 
-## 要求
+## Requirements
 
 ### REQ-082: filteredモードの明示的な選択
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A87
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A87
+- verification: unit
 
 既存の "network.mode" の "host"・"none" を残し、新しい "filtered" の明示で今回の通信制限を有効にする。許可・公開設定を書いただけではモードを自動変更しない。
 
 ### REQ-083: 明示モードと残る許可・公開設定
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A88
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A88
+- verification: unit
 
 採用されたモードが利用者の設定レイヤで明示された "host" または "none" なら、残る通信許可・公開設定を無視する旨を警告し、指定モードで起動する。別レイヤから継承したモードも明示に含む。どのレイヤにもモード指定がなく、空でない通信許可・公開設定がある場合は起動前エラーにする。"filtered" の準備失敗から "host" へは自動移行しない。
 
 ### REQ-084: 非使用設定の入力形式検査と環境検査の省略
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A89
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A89
+- verification: unit
 
 "host"・"none" で使わない通信許可・公開設定も入力形式を検査し、必須欄の欠落や不正なポート番号は起動前エラーにする。使わない設定のDNS問い合わせやインターフェースの存在確認は行わない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-165 @about=REQ-082 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A87

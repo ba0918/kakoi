@@ -2,16 +2,16 @@
 
 追加のfiltered契約とは分け、以前から提供する二つのモードの動作を抽出する。
 
-## 要求
+## Requirements
 
 ### REQ-388: 従来のhostとnoneの通信範囲
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 hostはホストのネットワークをそのまま使う。noneはネットワーク名前空間を分離し、ループバックだけを残す。noneから外部アドレスへの接続は失敗する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-716 @about=REQ-388 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

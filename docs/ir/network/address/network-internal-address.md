@@ -2,13 +2,13 @@
 
 DNS名の許可だけでは到達を認めない内部範囲を定義する草案。その他の特殊用途アドレスとリンクローカルの接続経路は未決。
 
-## 要求
+## Requirements
 
 ### REQ-043: IPまたはCIDRの明示許可を要する内部範囲
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A47, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A5
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A47, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A5
+- verification: unit
 
 次の範囲はDNS名の許可だけでは通さず、対象IPまたはCIDRとTCP/UDP・ポートの明示許可を要求する。
 
@@ -19,7 +19,7 @@ IPv6内部利用向けはfc00::/7
 
 隔離環境内のlocalhostは既存のループバック許可の例外に従う。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-077 @about=REQ-043 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A47

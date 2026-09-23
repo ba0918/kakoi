@@ -2,25 +2,25 @@
 
 別名を辿る段数の上限と設定を定義する草案。再試行を含む総作業量は別途定義する。
 
-## 要求
+## Requirements
 
 ### REQ-119: CNAME参照の段数を設定できる
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A123
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A123
+- verification: unit
 
 CNAME参照は既定16段とし、"network.dns-max-cname-hops" で1〜128の整数に変更できる。0・無制限・小数は認めない。上位指定優先・省略時継承とし、どの段にも指定がなければ16段とする。
 
 ### REQ-120: 参照上限の超過と循環で解決を失敗させる
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A123
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A123
+- verification: unit
 
 名前から別名への1回の参照を1段と数える。上限ちょうどは許容し、さらに参照が必要なら解決失敗とする。循環を検出した場合は段数上限を待たず解決失敗とする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-261 @about=REQ-119 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A123

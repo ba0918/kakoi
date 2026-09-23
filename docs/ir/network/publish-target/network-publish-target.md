@@ -4,33 +4,33 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-075: 別々のIPv4とIPv6の待受の公開を分ける
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A80
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A80
+- verification: unit
 
 隔離環境内の同じTCP/UDP・ポート番号でIPv4とIPv6に別々の待受があり両方が公開対象の場合、別々のホスト公開ポートを許可範囲内で割り当て、各転送先との対応を知らせる。
 
 ### REQ-076: 待受ソケット単位の公開
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A81, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A82
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A81, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A82
+- verification: unit
 
 公開対象は待受ソケット単位で数える。単一ソケットがIPv4とIPv6の両方を受けるなら1件、同じプロセスでも別々のソケットなら別件として公開する。ただし、同じIP・TCP/UDP・ポートを共有する待受ソケット群は例外として1件にまとめる。
 
 ### REQ-077: 共有する受付先の公開と配送
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A82
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A82
+- verification: unit
 
 同じIP・TCP/UDP・ポートを複数の待受ソケットで共有する場合は、共有先を1件の公開にまとめ、各ソケットへの配送はOSに任せる。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-146 @about=REQ-075 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A80

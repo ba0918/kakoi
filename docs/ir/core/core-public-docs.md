@@ -2,51 +2,51 @@
 
 既存仕様から継承した本体・補助物の契約。正本は人間向け仕様文書群である。
 
-## 要求
+## Requirements
 
 ### REQ-358: 公開文書の導線
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 公開ドキュメントは英語のREADMEとREADMEから直接リンクするdocs以下の英語文書で構成する。READMEは目的、コンテナやVMの代替でないこと、対応環境、インストール、最短起動、最小ポリシー、仕組み、シム・スキル、保証と限界、詳細文書、対象外の代表例を短く載せる。詳細はgetting-started、cli、policy、shim、securityに責務分離する。
 
 ### REQ-359: 既知の隙間の公開
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 仕様第16節に継承する既知の隙間15件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。隠れたコマンドの探索、後発ファイル、Git追跡ファイル、別名経路、ホストからの秘密観測、環境の認証情報、端末経路、入れ子、起動環境への信頼、書込領域の後日実行、非対応ABI、Git導出変更、separate-git-dir、別起動の配置変更、ro/hideの限界を省かない。
 
 ### REQ-360: 配置保護の説明
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 "docs/policy.md"は祖先の改名で保護を迂回できる理由と拒否を説明する。dotfilesの設定実体がworktree内なら下位workspaceとrwのworkspace/git_common_dirを例示する。下位workspaceはそこで起動し、別場所からリンク越しに指定すると拒否されること、実体指定による回避を示す。rw内リンクのhide/root/underは着地先を問わず拒否、rw/rw-fileは根の外へ着地すれば拒否、roの許容と既知の隙間15も説明する。
 
 ### REQ-361: rw-copyと一時領域の説明
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 "docs/policy.md"はrw-copyとhideの初期内容の違い、設定変更をホストへ出さない用途、リンク・モードの保存、所有者・時刻・ハードリンク共有を保存しないこと、上限・失敗、内部のポリシーファイルが配置拒否されないことを説明する。秘密はconfigのsecrets配下へ案内し、/tmp/kakoiは利用者かシムが作る共有場所で、なければ飛ばされ/tmpは空であること、/tmpをhideするソケット上の理由を書く。
 
 ### REQ-362: インストールの説明順
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 READMEは配布実行ファイルのインストーラと手動書庫の手順をソースビルドより先に載せる。導入直後に組み込み既定で起動できること、initとprint-planを最短手順に示す。getting-startedとshimでは任意の調整としてinit、秘密、シムとgh skill installを案内する。READMEとgetting-started双方に初回は/tmpが空でghは未認証と書く。
 
 ### REQ-363: スキルの隔離外実行の案内
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 セットアップスキルは隔離外で動かすと説明する。シム導入前、KAKOI_SHIM_OFF=1、kakoiを経由しないCLIの経路を示し、その間は隔離されずスキルに差分承認を求めさせること、それを守るかはCLIに依存するためCLI側も承認を求めるモードにすることを案内する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-656 @about=REQ-358 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

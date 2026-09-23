@@ -4,41 +4,41 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-033: ホストのlocalhostへの待受公開
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A38
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A38
+- verification: unit
 
 初版から隔離環境内サービスの待受ポートを公開できるようにし、公開先はホストのlocalhostに限定する。隔離環境内で起動したkemiのレビュー画面をホストのブラウザーから開く用途を満たす。LAN等への公開は初版に含めない。
 
 ### REQ-034: 事前許可範囲内での動的ポート選択
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A39
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A39
+- verification: unit
 
 公開ポートは事前に許可した範囲内で空きポートを動的に選べるようにする。アプリの申告による事前定義外への拡張は認めない。
 
 ### REQ-035: 許可範囲内の待受の自動公開
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A40
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A40
+- verification: unit
 
 事前許可した範囲内でサービスの待受を検出したら、ホストのlocalhostへ自動公開する。アプリ固有の公開登録を必要としない。同じ許可範囲内で待ち受ける別のサービスも公開対象とする。
 
 ### REQ-036: 公開ポートの衝突回避
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A41, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A39, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A75
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A41, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A39, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A75
+- verification: unit
 
 障害復帰時に同じ待受が継続し以前の公開番号が使用可能な場合は、その番号を優先する。それ以外はホスト側の事前許可範囲内で、隔離環境側と同じポート番号を優先する。同じ番号が使用中なら範囲内で別の空きポートを選ぶ。同じ番号が範囲外の場合も、範囲内から選ぶ。実際の公開先をkakoiが知らせる。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-057 @about=REQ-033 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A38

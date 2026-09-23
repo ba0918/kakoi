@@ -2,17 +2,17 @@
 
 リンクローカルに必要な接続口指定を広いCIDRでも維持する草案。具体的な到達経路は実測待ち。
 
-## 要求
+## Requirements
 
 ### REQ-141: 広いIPv6 CIDRとリンクローカル
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A139
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A139
+- verification: unit
 
 IPv6の広いCIDRにリンクローカル範囲が含まれていても、接続口未指定のルールではIPv6リンクローカルを許可しない。広いCIDRの設定全体はエラーにせず、リンクローカルへの接続には "host-interface" 付きの別のIP/CIDRルールを必要とする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-314 @about=REQ-141 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A139

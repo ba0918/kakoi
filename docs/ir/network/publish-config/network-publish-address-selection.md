@@ -4,25 +4,25 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-136: ループバックと全インターフェースの待受を公開対象にする
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A134
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A134
+- verification: unit
 
 初版の公開対象は隔離環境内のループバック待受と全インターフェース待受とし、特定の非ループバックIPだけに待ち受けるサービスは対象外とする。ポート・TCP/UDPの許可範囲とホスト側localhost限定は維持する。
 
 ### REQ-137: 代替のホスト公開番号を小さい順に試す
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A135
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A135
+- verification: unit
 
 同番号優先でホスト公開ポートを割り当てられない場合、許可範囲内の空き番号を小さい順に試す。障害復帰時の以前の公開番号優先は維持する。競合状況によって番号は変わり得る。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-304 @about=REQ-136 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A134

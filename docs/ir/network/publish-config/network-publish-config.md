@@ -4,13 +4,13 @@
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
-## 要求
+## Requirements
 
 ### REQ-079: 公開設定の項目とポート範囲
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A84
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A84
+- verification: unit
 
 公開設定はTOMLの "[[network.publish]]" の各項目に記述する。"protocol" は "tcp" または "udp"、"ports" は隔離環境内の対象ポート範囲、"host-ports" はホスト側の割当許可範囲とし、この3項目は必須とする。"host-family" は "ipv4"・"ipv6"・"both" から選び、省略時は "ipv4" とする。
 
@@ -18,21 +18,21 @@
 
 ### REQ-080: 重なる公開設定の統合と競合拒否
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A85
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A85
+- verification: unit
 
 同じ待受に一致する公開設定が複数ある場合、ホスト側の許可範囲と "host-family" が同じなら重複をまとめる。異なれば起動前の設定エラーにする。同じ待受を設定ごとに複数箇所へ公開しない。
 
 ### REQ-081: 公開リストのレイヤ間連結
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A86
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A86
+- verification: unit
 
 "network.publish" はレイヤ間で連結し、上の段が追加する。空配列でも下の段の公開設定は消さない。合成後に公開設定の重複・競合を判定する。公開を減らしたい場合は別のプロファイルを使う。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-155 @about=REQ-079 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A84

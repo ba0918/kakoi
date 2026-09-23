@@ -2,33 +2,33 @@
 
 初版の明示指定の範囲を定義する草案。上流の切替条件・待ち時間・通信方式・具体的な記法は未決。
 
-## 要求
+## Requirements
 
 ### REQ-111: 明示指定は全問い合わせに共通とする
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A116
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A116
+- verification: unit
 
 初版のポリシーによる上流DNSの明示指定は、全問い合わせに共通の設定とする。ポリシー内で名前別の上流指定は提供しない。ホストDNS設定を利用する場合の名前別振り分けの継承は維持する。
 
 ### REQ-112: 明示した複数上流の範囲内で代替する
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A117
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A117
+- verification: unit
 
 共通の上流DNSは複数を明示指定でき、問い合わせ先が応答しない場合に指定済みの別候補を使えるようにする。列挙した全候補に同じ名前を問い合わせてよいという指定として扱い、指定外のDNSへは自動で切り替えない。
 
 ### REQ-113: 明示した上流を毎回記載順で試す
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A118
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A118
+- verification: unit
 
 明示した複数上流は、上流問い合わせが必要になるたびに記載順で試す。先の候補が応答しない場合等の切替条件に達したら次へ進む。ホストDNS設定を使う場合の上流選択方式はこの規則の対象外とする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-242 @about=REQ-111 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A116

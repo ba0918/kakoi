@@ -2,17 +2,17 @@
 
 問い合わせに応じて更新する方針を定義する草案。TTLゼロの有限猶予はnetwork-dns-lifetime.mdで定義し、安全な実行機構は実証で確認する。
 
-## 要求
+## Requirements
 
 ### REQ-133: 問い合わせ時に更新し旧許可は元の期限まで維持する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A132
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A132
+- verification: unit
 
 DNS情報はアプリからの問い合わせを契機に解決する。有効なキャッシュを使い、期限切れ後の次の問い合わせで取得し直す。問い合わせのない名前を定期的に先読み更新しない。古い応答によるIP許可は元の期限まで維持する。アプリが古いIPだけを保持して名前を再問い合わせしない場合、許可期限後の新規接続は拒否され得る。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-299 @about=REQ-133 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A132

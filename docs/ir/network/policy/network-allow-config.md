@@ -2,25 +2,25 @@
 
 一般宛先の許可の記法を定義する草案。ホストlocalhost専用の宛先はnetwork/host/network-host-loopback.mdを参照する。
 
-## 要求
+## Requirements
 
 ### REQ-088: 通信許可の項目と宛先の記法
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A93
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A93
+- verification: unit
 
 通信許可はTOMLの "[[network.allow]]" に "destination"・"protocol"・"ports" を記述し、3項目とも必須とする。一般宛先は "destination" 内の "dns"・"ip"・"cidr" のいずれか1つで指定する。"protocol" は "tcp" または "udp"、"ports" はnetwork-ports.mdで定める文字列配列を使う。IPv6リンクローカルの "host-interface" は "destination" 内に置く。
 
 ### REQ-092: 通信許可リストのレイヤ間連結
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
+- verification: unit
 
 "network.allow" はレイヤ間で追加して合成し、各許可のいずれかに一致する通信を許可する。重複はまとめ、空配列では元の許可を消さない。許可を減らす場合は元の設定を編集するか別プロファイルを使う。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-183 @about=REQ-088 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A93

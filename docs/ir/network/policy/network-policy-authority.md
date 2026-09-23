@@ -2,25 +2,25 @@
 
 起動時のポリシーと、実行中に得るDNS情報の役割を区別する草案。上流応答と問い合わせの具体的な照合方法、制御機構の保護方法は未決。
 
-## 要求
+## Requirements
 
 ### REQ-028: DNS由来の許可を作る情報源
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A33
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A33
+- verification: unit
 
 DNS由来のIP許可を作る情報源は、管理するDNS経路で送った問い合わせとの対応を確認できた上流応答に限る。アプリが別経路で取得した結果や申告したIPからは許可を追加しない。そのIPへの通信は既存の有効なIP・ポート許可で判定する。
 
 ### REQ-029: 起動時のポリシーを許可の正本とする
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A34
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A34
+- verification: unit
 
 許可の正本は起動時に確定したポリシーとする。アプリの申告を許可の根拠として信用せず、ポリシーを変更・拡張させない。DNS応答は許可済みの名前の現在のIPを求める入力として扱い、許可ルール自体を追加する根拠にはしない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-047 @about=REQ-028 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A33

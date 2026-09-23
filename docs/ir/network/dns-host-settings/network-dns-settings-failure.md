@@ -2,17 +2,17 @@
 
 実行中の設定変更を検知した後の取得・解釈失敗を定義する草案。設定取得の回復検知方法と具体的なDNS失敗応答は未決。単なる上流DNSの応答タイムアウトとは区別する。
 
-## 要求
+## Requirements
 
 ### REQ-110: 新しいホストDNS設定が使えない間は別の設定で問い合わせない
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A115
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A115
+- verification: unit
 
 ホストDNS設定の変更を検知しても新しい設定を取得・解釈できない間は、上流への問い合わせを失敗として扱い、旧設定や別のDNSへ自動で切り替えない。環境全体は終了せず、既存IP許可と継続中の通信には既存規則を適用する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-239 @about=REQ-110 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A115

@@ -2,49 +2,49 @@
 
 通信許可に書くポートの記法、有効範囲、重複と入力エラーの扱いを定義する草案。
 
-## 要求
+## Requirements
 
 ### REQ-005: ポートの明示指定
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A7, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A8
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A7, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A8
+- verification: unit
 
 ポートは "ports" の文字列配列で指定する。単一番号は "443"、範囲は "8000-8010" の形とし、番号と範囲を同じ配列に書ける。全ポートは "*" だけを要素とする配列で指定する。ポート指定を省略した場合は入力エラーにする。
 
 ### REQ-006: 空と全ポート混在の拒否
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A8
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A8
+- verification: unit
 
 ポートの配列が空の場合、または "*" に他の指定を混ぜた場合は入力エラーにする。
 
 ### REQ-007: ポート番号と範囲の境界
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A9
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A9
+- verification: unit
 
 ポート番号は1〜65535とし、"*" はこの範囲を表す。範囲指定は両端を含み、両端が同じ場合は単一番号と同じとする。開始番号が終了番号より大きい場合は入力エラーにする。
 
 ### REQ-008: 重複と重なりの許容
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A10
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A10
+- verification: unit
 
 番号の重複と範囲の重なりは受け付け、許可範囲は指定の和集合とする。
 
 ### REQ-009: ポートの表記と型の制限
 
-- 種類: event_driven
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A10
-- 検証: unit
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A10
+- verification: unit
 
 番号に先頭ゼロ・空白・プラス符号がある場合、サービス名で指定した場合、文字列でない数値を指定した場合は入力エラーにする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-008 @about=REQ-005 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A8

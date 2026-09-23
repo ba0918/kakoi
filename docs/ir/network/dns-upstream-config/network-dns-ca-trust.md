@@ -2,17 +2,17 @@
 
 今回合意した追加・改訂部分の草案。方式の実証は別途必要。
 
-## 要求
+## Requirements
 
 ### REQ-147: ホストOSのCAを起動時に採用
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A145
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A145
+- verification: unit
 
 TLSは起動時にホストOSのCA証明書を読み込む。独自CAはOS側へ登録する。初版は専用CAファイル指定と証明書検証無効化を設けない。起動後のCA変更は再起動で反映する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-326 @about=REQ-147 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A145

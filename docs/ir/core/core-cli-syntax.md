@@ -2,44 +2,44 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-250: 呼び出しの形
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 実行、計画表示、init、単独の--version、単独の--helpの5形式だけを受け付ける。実行は--とCOMMANDを必須とし、ARGSは省略でき、--以後をそのままコマンドに渡す。文法違反はusageで125。
 
 ### REQ-251: プロファイル名
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 --profileとinitのNAMEは有効なUTF-8の空でない1パス要素とし、/、0x00〜0x1F、0x7F、単独の.と..を拒否する。省略時はdefault。違反はusage。
 
 ### REQ-252: オプションの重複と値
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 --rwと--hideだけ繰り返しを許す。他のオプションの重複はusage。値は分離形または=形で、空を拒否し、分離形で-から始まる値は欠落としてusageにする。
 
 ### REQ-253: 計画表示の文法
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 --print-planはコマンドを実行しない。FORMはsummary、full、jsonだけを=形で受け付け、省略時summary。COMMAND省略を許すが、--を書いてCOMMANDが空ならusage。
 
 ### REQ-254: CLIのパス
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 --policy-file、--workspace、--rw、--hideの相対パスはカレントディレクトリ基準とし、~と変数を展開しない。--workspace省略時はカレントディレクトリ、--policy-fileは省略可能で指定先不在はpolicy。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-490 @about=REQ-250 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

@@ -2,12 +2,12 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-167: 五つの指令と複製の生成
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 指令と対象と隔離内の見え方：表 TBL-153 に従う。"rw" にディレクトリ以外を指定したら、種類 "path" の診断で終わり、"rw-file" を案内する。"rw-file" にディレクトリを指定した場合も種類 "path" の診断で終わる。"rw-copy" にディレクトリでも通常ファイルでもないもの（ソケット、FIFO、デバイスファイル）を指定した場合も種類 "path" の診断で終わり、"rw-file" を案内する。
 
@@ -24,9 +24,9 @@
 モードは複製元のものを引き継ぐ（実行ビットを含む。set-user-ID、set-group-ID、sticky も写すが、tmpfs は "nosuid" なので効かない）。所有者、時刻、ハードリンクの共有は引き継がない。
 
 ### REQ-168: 複製の改名・上限・読み取り失敗
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 改名と削除ができるかは 2 つの形で異なる。ディレクトリの複製の中のエントリは tmpfs の中の普通のファイルなので、改名も削除も一時ファイルからの置き換え（rename）もできる。通常ファイルの複製は実体の上に重ねた 1 つのマウント点なので、"rw-file" と同じく、その場での書き込みはできるが、rename での置き換えと削除は失敗する（2026-09-10 に bwrap 0.9.0 で実測）。
 
@@ -41,18 +41,18 @@
 作らないことで隔離の中から見えなくなるだけなので、新しく露出するものは無い。黙って飛ばさないことだけを求める。複製元の実体が存在しない項目は、第 6.2 節どおり飛ばす（空で始めない）。
 
 ### REQ-169: 存在しないマウント項目の飛ばし
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 すべての指令は、シンボリックリンクを解決した実体のパスにマウントする。実体が存在しない項目は飛ばす。飛ばした項目は計画に「飛ばした」と理由付きで表示する。起動のたびの警告は出さない。この規則は"rw-copy" にも例外なく効く。複製元が無いときに空の複製で始めることはしない。存在しないパスに何かを用意すれば、下の理由でホストに実体が残る。
 
 存在しないパスにマウントしない理由: bwrap はマウント先を作ろうとし、書ける領域では 0 バイトの実ファイルがホストに残る（2026-09-03 に実測）。帰結として、起動後に現れたファイルは隠れない。これは README に既知の隙間として書く。
 
 ### REQ-170: 走査・マウント・秘密からの hide 生成
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 ポリシーに書かれた項目に加えて、次の項目が生成の段に置かれる。
 
@@ -77,25 +77,25 @@
 設定ディレクトリの "secrets/": 存在すれば "hide" にする。参照されていない秘密ファイルを隔離の中から  読めなくするため。走査が一致したエントリを隠す先が "rw-copy" の項目の中であっても、上の "ro" のような別扱いはしない。隠すのは複製の中身であってホストのファイルではなく、隠さなければ複製に載った ".env" の中身が隔離の中で読めてしまうためである。第 6.4 節の順序で "hide" は複製が出来上がった後に乗る。
 
 ### REQ-171: 生成の優先順位と検査対象の確定
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 生成された項目には第 5.4 節の同一性判定を同じように適用し、生成された項目は書かれた項目を置き換える。生成された項目同士が同じパスを指したときは、同じ指令なら 1 つにまとめる。生成される指令は "hide"だけなので、違う指令の衝突は起きない。第 5.6 節、第 6.1 節、第 6.5 節の検査は、生成の段を適用した後の項目の集合に対して行う。
 
 例外は走査の "root" と "hide-mounts" の "under" の根の項目の検査（第 5.6 節。生成の前に行う）と、走査で一致したリンクの先の "ro" が差し替えられうるかの判定（上。走査の最中に行う）で、どちらも書かれた段だけに第 5.4 節の置き換えを適用した集合で見る。生成の4 つは、走査、"hide-mounts"、秘密ファイル、"secrets/" の順に行う。
 
 ### REQ-172: 祖先から子孫へ適用するマウント順
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 同一性判定を終えた項目を、実体のパスで、祖先が先、子孫が後の順にマウントする。互いに祖先でも子孫でもないパス同士は、実体のパスのバイト順に並べる。この規則により、狭いパスの指令が広いパスの指令に勝ち、同じ入力からは同じ順序が得られる。"rw-copy" の項目は、tmpfs とそれを埋める引数（第 6.1 節）をその項目の位置にまとめて置く。複製の中に着地する狭い項目は複製の後に乗り、狭い項目が勝つ規則は変わらない。表 TBL-155 に従う。
 
 ### REQ-173: 作業場所の警告・拒否と次回起動の隙間
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 合成と飛ばしを終えた項目のうち、ワークスペースかワークツリーかそれらの祖先を指す "rw" が 1 つも無いとき、"kakoi: warning:" で始まる 1 行を標準エラーに出す。起動は止めない。"rw-copy" はこの "rw" に数えない。作業場所を "rw-copy" にした起動では、隔離の中で書いた成果が終了時に消える。
 
@@ -107,10 +107,10 @@ bwrap がそこへ移れないためである。"hide" の中に"rw" で再露�
 
 反例: 設定ディレクトリの "secrets/" の "hide" より後に祖先のマウントが来て、本物の秘密ファイルが隔離の中から読める。
 
-## 決定表
+## Decision tables
 
 ### TBL-153: 指令の対象と効果
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 
 | 指令 | 対象 | 隔離の中での見え方 |
 |---|---|---|
@@ -121,7 +121,7 @@ bwrap がそこへ移れないためである。"hide" の中に"rw" で再露�
 | "hide" | ディレクトリまたはファイル | ディレクトリは空のディレクトリで、書けるが内容は終了時に消える。ファイルは空の読み取り専用ファイル |
 
 ### TBL-154: ホストへ書き戻さない指令の比較
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 
 | 指令 | 初期状態 | 書き込み | 終了後 |
 |---|---|---|---|
@@ -130,7 +130,7 @@ bwrap がそこへ移れないためである。"hide" の中に"rw" で再露�
 | "rw-copy" | ホストの内容 | 可 | ホストは不変。内側の変更は消える |
 
 ### TBL-155: 狭い項目を後に適用する例
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 
 | 場面 | 結果 |
 |---|---|
@@ -141,7 +141,7 @@ bwrap がそこへ移れないためである。"hide" の中に"rw" で再露�
 | "~/.cache" を "rw"、"~/.cache/x/.env" を走査で "hide" | ".env" は空 |
 | "~/.config" を "rw"、"~/.config/gh" を "rw-copy" | "gh" の中は書けるがホストに出ず、"~/.config" の他はホストと共有される |
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-346 @about=REQ-172 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

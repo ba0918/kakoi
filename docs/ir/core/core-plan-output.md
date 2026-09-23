@@ -2,65 +2,65 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-294: マウント段階内の順序
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 段階7は同一性、scan rootとhide-mounts underの事前検査、生成、種類検査、配置保護・根・露出組・固定部分・広さの検査、位置とcwd検査、秘密読込、Git COUNT、rw-copy読込の順に検査する。同一性はpolicyまたはCLIのusage、秘密はsecret、COUNTはenv、他はpath。
 
 ### REQ-295: 同段階の診断順序
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 同検査のマウントは適用順、環境と秘密は名前のバイト順で最初を診断する。保護対象はprofile、policy-file、設定ディレクトリ、秘密名順、合成後path-prepend順。scan rootがunderより先、生成前の検査が書かれた項目より先。根と露出組は項目順の後workspaceを見て、2検査の交互配置は委譲する。
 
 ### REQ-296: 要約の内容
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 要約はポリシーの実体パス、4変数、通信モード、マウント適否と理由、環境のホストとの差分、解決コマンドを表示する。組込み既定の欄にkakoi initを含め、マウントのHOMEを~に縮め、非グローバル由来だけ出所を添える。同値環境は件数、秘密は名前だけとする。
 
 ### REQ-297: 全量と共通表示
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 全量は合成後ポリシー、マウント実体パスと出所、秘密を伏せた全環境、解決コマンド、bwrap引数を示す。要約と全量は飛ばした項目と理由、複製できなかったエントリと理由、rw-copyがホスト内容で始まり書込みがホストに出ず終了時消える説明、入れ子の印を共通して持つ。
 
 ### REQ-298: JSONの外形と版
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 JSON計画は全量に環境差分を加えた1行1文書を末尾LF1個付きで出す。format_versionは整数1から始め、キー削除と意味変更で上げ、追加だけでは上げない。同じ版で既存キーと意味を保つ。
 
 ### REQ-299: JSONの主要キー
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 JSONはformat_version、nested、policy_sources、variables、home、policy、mounts、skipped_mounts、left_visible、skipped_paths、not_copied、environment、environment_changes、command、bwrap、bwrap_argumentsを持つ。variablesは4変数、不在値はnull。COMMAND省略時commandはnull。mountsは実体パス・種類・記述値・出所を持つ。
 
 ### REQ-300: JSONの秘密と記述子
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 JSONの秘密値はenvironmentでnullとし他のキーにも値を出さない。bwrap_argumentsはliteralとvalue、seccomp-filter、empty-file、copied-fileと長さbytesで表しコピー内容を出さない。not_copiedは項目実体パス・エントリパス・理由を持つ。
 
 ### REQ-301: JSONの出所と文字
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 JSONの項目の出所はprofile、built-in-default、policy-file、command-line、scan、hide-mounts、secret、config-secretsのkindを持ち、ファイルがあるものはpath、secretはnameを持つ。不正UTF-8は置換文字、制御文字はJSONエスケープとし生の制御文字を出さない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-530 @about=REQ-294 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

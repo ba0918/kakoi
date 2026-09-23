@@ -2,44 +2,44 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-260: コマンド探索
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 COMMANDに/があればそのパスの存在と実行可能性を調べる。それ以外は隔離へ渡すPATHを順に探し、PATHがなければ探索しない。見つからなければ名前を説明とするcommand not found、127。
 
 ### REQ-261: 計画と入れ子のコマンド探索
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 計画表示でCOMMAND省略時は解決を行わず該当欄を無しにする。入れ子は計画表示の有無によらず受け取ったホストPATHで探索し、PATH不在なら探索しない。
 
 ### REQ-262: exec失敗の違い
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 通常の起動でコマンドのexecが失敗すればbwrapの出力・終了コードを返す。入れ子でのexec失敗はパスとエラーを含むcommand not executableで126とする。
 
 ### REQ-263: argv0の保持
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 通常の起動と入れ子でargv[0]をCOMMANDに与えた文字列のまま渡す。解決済みパスは実行対象の指定だけに使い、bwrapには--argv0で名前を渡す。
 
 ### REQ-264: ホストでの探索の限界
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 コマンド探索はホストのファイルシステムで行い、hide配下で見つかったコマンドが後にbwrapのexecで失敗することを許容する。PATH要素がrw内かは検査しない。この隙間をREADMEへ記す。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-500 @about=REQ-260 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

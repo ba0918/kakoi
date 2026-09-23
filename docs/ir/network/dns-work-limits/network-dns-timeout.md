@@ -2,17 +2,17 @@
 
 待ち時間の既定値と変更可否を定義する草案。設定形式と範囲はnetwork/dns-upstream-config/network-dns-timeout-config.mdで定義する。通信方式ごとの時間計測の詳細は未決。既定値は製品の選択でありRFCの指定値や実測済み性能ではない。
 
-## 要求
+## Requirements
 
 ### REQ-116: 候補別と名前解決全体の期限を設定できる
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A121
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A121
+- verification: unit
 
 明示した上流DNSの1候補を待つ時間は既定2秒、名前解決全体の上限は既定10秒とし、どちらも設定で変更できる。別候補への切替、CNAME参照、ホストDNS設定変更によるやり直しで全体の期限を延長しない。ホストDNS利用時も全体上限を適用するが、ホスト内部の候補選択に1候補上限を直接適用する規則ではない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-252 @about=REQ-116 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A121

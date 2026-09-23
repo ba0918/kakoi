@@ -2,25 +2,25 @@
 
 初版の対応方式と将来拡張の境界を定義する草案。具体API、接続先記法、証明書の信頼元、依存の選定は未決。
 
-## 要求
+## Requirements
 
 ### REQ-131: 通常DNSとDNS over TLSを初版で扱う
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131
+- verification: unit
 
 初版の明示上流は通常のDNS（UDP/TCP）とDNS over TLSに対応し、DNS over HTTPSは含めない。TLS指定時は証明書を検査し、失敗時に平文へ自動で切り替えない。
 
 ### REQ-132: DoHを追加できるよう通信方式を許可判定から分離する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131
+- verification: review
 
 DNSの通信方式をDNS応答の検査・IP許可判定から分離し、将来DNS over HTTPSを追加できる設計とする。方式の追加で既存の許可モデルを作り直す構造にしない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-297 @about=REQ-131 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131

@@ -2,44 +2,44 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-284: 入れ子の実行
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 入れ子ではinitと計画表示を除き、ポリシー読込・bwrap起動・環境変更・cwdとHOMEの検査を行わず、内側プロファイルを適用しないwarningを1行出してコマンドを直接execする。
 
 ### REQ-285: 入れ子の計画
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 入れ子の計画表示はポリシーを読み計画に入れ子の印を付ける。計画のPATHは隔離環境の値、解決先はホストPATHによる値として区別する。
 
 ### REQ-286: 入れ子検出の限界
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 入れ子検出は環境変数だけに頼る。隔離内で環境を消すと二重隔離を試み、外側より広がらず、空にされた秘密はsecret診断になる。ホストKAKOI=1では隔離せず警告して実行する。両方をREADMEに記す。
 
 ### REQ-287: 並列起動
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 コマンドを包む並列起動は内部状態を共有せず、一方の終了で他方を停止しない。同じNAMEのinitの競合結果は保証しない。filteredの公開ポート競合は既存の公開割当・復帰仕様に従う。
 
 ### REQ-288: 診断と警告の形
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 診断は標準エラー1行のkakoi: <種類>: <説明>、警告はkakoi: warning: <説明>とする。種類は契約、説明は自由文。警告は終了結果に先行して出ることがある。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-520 @about=REQ-284 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

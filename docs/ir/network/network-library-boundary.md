@@ -2,17 +2,17 @@
 
 coreとnetの分担と、CLIを通さない利用の契約を定義する草案。
 
-## 要求
+## Requirements
 
 ### REQ-150: 計画と実行の責務を分ける
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153
+- verification: review
 
 kakoi-coreは設定の検査・合成・計画を担当し、環境へ直接アクセスしない。kakoi-netが通信の起動・監督・停止を担い、CLI以外のRustプログラムからも使える形にする。DNS応答の採否や許可期限の判断はOS操作と分けて検証できる構造にする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-332 @about=REQ-150 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153

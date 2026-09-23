@@ -1,4 +1,4 @@
-# 用語集
+# Glossary
 
-| 用語 | 意味 | 出典 |
+| Term | Meaning | Source |
 |---|---|---|

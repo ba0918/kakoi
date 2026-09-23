@@ -2,25 +2,25 @@
 
 DNS待ち時間の入力範囲と設定の合成を定義する草案。
 
-## 要求
+## Requirements
 
 ### REQ-117: DNS待ち時間を整数秒で指定する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A122
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A122
+- verification: unit
 
 "network.dns-server-timeout-seconds" は既定2で1〜300秒、"network.dns-resolution-timeout-seconds" は既定10で1〜3600秒の整数とする。0・無制限・小数は認めない。
 
 ### REQ-118: 合成後の候補別期限が全体期限を超えたら拒否する
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A122
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A122
+- verification: unit
 
 DNS待ち時間の各設定は上位の指定を優先し、省略時は下位を継承する。どの段にもなければ既定値を使う。合成後に1候補の待ち時間が全体上限を超えたら設定エラーとする。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-256 @about=REQ-117 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A122

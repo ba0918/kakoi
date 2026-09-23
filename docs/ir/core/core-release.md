@@ -2,23 +2,23 @@
 
 既存仕様から継承した本体・補助物の契約。正本は人間向け仕様文書群である。
 
-## 要求
+## Requirements
 
 ### REQ-386: 版の唯一の典拠
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 版の典拠はCargo.tomlだけに置く。リリースごとにCHANGELOG.mdへ項目を追加し、版にvを前置したタグを付ける。version出力・Cargo.toml・タグの版を一致させる。
 
 ### REQ-387: 配布物の契約
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 リリースにはLinux x86_64向け静的リンク実行ファイルを1つ平置きにしたkakoi-v<版>-x86_64-unknown-linux-musl.tar.gzと、その名前に.sha256を足したSHA-256ファイルを添える。インストーラが読む書庫名は契約である。CIと配布物の作成手順はこの仕様に含めない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-712 @about=REQ-386 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

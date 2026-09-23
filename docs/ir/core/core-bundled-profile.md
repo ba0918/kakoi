@@ -2,23 +2,23 @@
 
 既存仕様から継承した本体・補助物の契約。正本は人間向け仕様文書群である。
 
-## 要求
+## Requirements
 
 ### REQ-364: 同梱プロファイルの配置と内容
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 examples/profile/default.tomlはWSL2向けに既存codex jailのマウント表を転記し、パスはリンクを実体へ書き直さず元の記法を保つ。rwにworkspace/worktree/git_common_dirと/tmp/kakoi、hideに/tmpと/run/user、.env走査と/mnt以下の9p・drvfsのhide-mountsを含める。READMEから参照する。
 
 ### REQ-365: 同梱の認証情報と表示経路の除去
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: review
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: review
 
 同梱のenv.unsetはSSH_AUTH_SOCK、DISPLAY、WAYLAND_DISPLAY、XAUTHORITY、*_TOKEN、*_API_KEY、*_SECRET*、*_PASSWORD、AWS_*、GH_*、GITHUB_*を含む。secretsはconfig_dir/secrets配下を指すコメント1行だけで、有効な項目を含めない。利用者は秘密を渡すときにコメントを外す。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-668 @about=REQ-364 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1

@@ -2,17 +2,17 @@
 
 既存の個別規則以外の特殊用途範囲を定義する草案。参照分類表の版と使用不能宛先の細則は未決。
 
-## 要求
+## Requirements
 
 ### REQ-140: 特殊用途IPの明示許可
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A138
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A138
+- verification: unit
 
 既存の個別規則で扱っていないIANA特殊用途IPはDNS名の許可だけでは通さず、IP/CIDR・TCP/UDP・ポートの明示許可を必要とする。登録された一部の公開サービス用宛先も対象とする。既存のループバック規則と対象外通信の扱いは維持する。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-312 @about=REQ-140 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A138

@@ -2,17 +2,17 @@
 
 競合する終了結果の優先順位を定義する草案。故障検知と終了順序の実証は未了。
 
-## 要求
+## Requirements
 
 ### REQ-142: 安全上の故障時の終了結果優先
 
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A140
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A140
+- verification: unit
 
 通信制限と遮断の双方を保証できない安全上の故障で環境を終了する場合、主コマンドの成功・失敗やSIGTERMの143よりkakoiの終了コード125を優先し原因を通知する。通信制限を維持できている通常のDNS失敗にはこの優先規則を適用しない。
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-316 @about=REQ-142 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A140

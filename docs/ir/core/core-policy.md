@@ -2,12 +2,12 @@
 
 既存仕様から継承した本体の検査用表現。同じ責務を一文書にまとめ、見出しと要求IDで参照する。正本は責務別spec文書群。
 
-## 要求
+## Requirements
 
 ### REQ-151: 固定キー・TOML・必須値
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 TOML。固定キーは mounts の rw・rw-file・rw-copy・ro・hide・scan・hide-mounts、scan の root・names・exclude・prune、hide-mounts の under・fstype、env の mode・pass・set・unset・path-prepend、secrets、git.instead-of とする。
 
@@ -16,9 +16,9 @@ network と process の追加キーはネットワーク IR で定める。固�
 この例は形式を示すためのもので、値は例である。同梱する "examples/profile/default.toml" の値は第 16 節で定める。セクションは省略できる。空のファイルは有効なポリシーファイルである。"mounts.scan" の項目では"root" と "names" が、"mounts.hide-mounts" の項目では "under" と "fstype" が必須で、欠けているか空ならポリシー読み込み失敗。
 
 ### REQ-152: パス記法と Git の相互参照
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 ポリシーファイルに書くパスを取る値（"mounts" の 5 指令、"scan.root"、"hide-mounts.under"、"secrets" の値、"env.path-prepend"）は、絶対パス、"~" 単独、"~/" で始まるパス、変数で始まるパスのどれかで書く。相対パスと "~ユーザー名" の形はポリシー読み込み失敗。
 
@@ -39,9 +39,9 @@ network と process の追加キーはネットワーク IR で定める。固�
 通常ファイルでないものは相互リンクの不成立と同じく種類 "path" の診断で終わる。git 自身はこれらをシンボリックリンクで作らず、G は隔離の中から書ける領域にありうるためである。読む長さの上限は第 14 節。
 
 ### REQ-153: 変数を展開できない場合と対象外の値
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 値を持たない変数を含む項目は、存在しないパスと同じ扱いで飛ばす。マウント項目、走査の "root"、"hide-mounts" の "under"、"env.path-prepend" の項目のどれでも、飛ばしたことは計画に理由付きで表示する。"secrets" の値がそうなったときは、存在しない秘密ファイルとして第 9 節の警告になる。
 
@@ -50,9 +50,9 @@ network と process の追加キーはネットワーク IR で定める。固�
 反例: "${config_dir}" だけが "XDG_CONFIG_HOME" の字面で表示される。
 
 ### REQ-154: 選択するプロファイルと合成の優先順位
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 書かれた段は最大 3 つ。下から、"--profile"（省略時 "default"）、"--policy-file"、コマンドライン。"--profile" で "default" 以外を指定したとき "default.toml" は読まない。指定したプロファイルのファイルが無ければポリシー読み込み失敗。
 
@@ -73,34 +73,34 @@ network と process の追加キーはネットワーク IR で定める。固�
 "PATH" に足したとき、上の段の項目ほど前に置かれる。
 
 ### REQ-155: 削除を持たない合成とワイルドカード
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 削除の演算子は無い。下の段の項目を上の段で消すことはできない。テーブルのキーを「無し」に戻すこともできない。それが必要なら別のプロファイルを作る。合成後に "env.set" と "secrets" に同じキーがあれば、ポリシー読み込み失敗。"env.unset" の項目はシェルのワイルドカード（"*"、"?"）を使える。
 
 ワイルドカードの意味は本仕様の全体（"env.unset"、第 6.3 節の走査の "names"・"exclude"・"prune"）で共通で、"*" は 0 文字以上の任意の並び（名前の先頭の "." にも一致する）、"?" は任意の 1 バイト、それ以外の文字はすべて字面どおりに一致する。文字クラスやエスケープは無い。
 
 ### REQ-156: 実体による同一性と段ごとの競合
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 "mounts" の 5 指令の項目は、チルダと変数を展開し、シンボリックリンクを解決した実体のパスで同一性を判定する。実体が存在しないパスは、チルダと変数を展開した後の文字列で判定する（書いたままの字面ではない）。同じ段の中（同じポリシーファイルの中、またはコマンドラインの中）で、同じパスに同じ指令が 2 回現れたら 1 つにまとめる。
 
 同じパスに違う指令が現れたら、ポリシー読み込み失敗（コマンドラインなら種類 "usage"）。段をまたいで同じパスに指令が現れたら、上の段の指令が下の段の指令を置き換える。
 
 ### REQ-157: 合成後に効かない env.pass の拒否
-- 種類: ubiquitous
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- 検証: unit
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- verification: unit
 
 合成後の "env.mode" が "inherit" のとき "env.pass" が空でないなら、ポリシー読み込み失敗。下の段が"inherit" で、上の段が "clear" と "pass" を両方書く形は通る。
 
-## 決定表
+## Decision tables
 
 ### TBL-151: パス変数の値
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 
 | 変数 | 値 |
 |---|---|
@@ -110,7 +110,7 @@ network と process の追加キーはネットワーク IR で定める。固�
 | "${config_dir}" | 設定ディレクトリの実体のパス。設定ディレクトリが存在しなければ値を持たない |
 
 ### TBL-152: 段の合成
-- 出典: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 
 | 種類 | 対象 | 規則 |
 |---|---|---|
@@ -118,7 +118,7 @@ network と process の追加キーはネットワーク IR で定める。固�
 | スカラー | "network.mode"、"env.mode" | 上の段が上書き |
 | テーブル | "env.set"、"secrets"、"git.instead-of" | キー単位でマージ。同じキーは上の段が勝つ |
 
-## 具体例
+## Examples
 
 ```gherkin
 @id=EX-360 @about=REQ-156 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
