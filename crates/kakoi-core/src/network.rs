@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 mod ports;
 pub use ports::Ports;
 mod dns_name;
-pub use dns_name::DnsPattern;
+pub use dns_name::{reserved_host, DnsPattern};
 mod address;
 pub use address::{parse_ip, IpNetwork};
 mod allow;

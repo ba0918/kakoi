@@ -1,5 +1,10 @@
 use super::{DnsError, Message, Question, ResponseCode};
-use kakoi_core::network::{Allow, Destination};
+use crate::host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6};
+use hickory_proto::rr::{
+    rdata::{A, AAAA},
+    DNSClass, RData, Record, RecordType,
+};
+use kakoi_core::network::{reserved_host, Allow, Destination, IpFamily};
 
 /// Per-environment immutable authorization boundary. Host-reserved names are
 /// served separately by the controller and never sent to an upstream here.
@@ -56,7 +61,42 @@ impl DnsGate {
     }
 }
 
+/// Reserved host names always resolve to the same address in the environment.
+const RESERVED_HOST_TTL: u32 = 300;
+
 impl Question {
+    /// The environment's own answer for a reserved host name, if this is one.
+    pub(super) fn reserved_host_response(&self) -> Option<Result<Vec<u8>, DnsError>> {
+        let query = &self.message.queries[0];
+        let family = reserved_host(&query.name().to_ascii())?;
+        let mut response = Message::error_msg(
+            self.message.metadata.id,
+            self.message.metadata.op_code,
+            ResponseCode::NoError,
+        );
+        response.metadata.authoritative = true;
+        response.metadata.recursion_desired = self.message.metadata.recursion_desired;
+        response.metadata.checking_disabled = self.message.metadata.checking_disabled;
+        response.metadata.recursion_available = true;
+        response.queries = self.message.queries.clone();
+        let data = match (query.query_class(), family, query.query_type()) {
+            (DNSClass::IN, IpFamily::Ipv4, RecordType::A) => Some(RData::A(A(HOST_LOOPBACK_V4))),
+            (DNSClass::IN, IpFamily::Ipv6, RecordType::AAAA) => {
+                Some(RData::AAAA(AAAA(HOST_LOOPBACK_V6)))
+            }
+            // Other types of a reserved name have no data.
+            _ => None,
+        };
+        if let Some(data) = data {
+            response.answers.push(Record::from_rdata(
+                query.name().clone(),
+                RESERVED_HOST_TTL,
+                data,
+            ));
+        }
+        Some(response.to_vec().map_err(|_| DnsError::Malformed))
+    }
+
     pub(super) fn error_response(&self, code: ResponseCode) -> Result<Vec<u8>, DnsError> {
         let mut response = Message::error_msg(
             self.message.metadata.id,

@@ -61,6 +61,19 @@ jobs:
           python3 --version
           nft --version
 
+      # The filtered tests carry real traffic through pasta. Ubuntu's own package is older
+      # than the release the initial filtered support was verified with, so that Debian
+      # backports build is fetched, checked against its published digest, and unpacked
+      # (not installed). The tests find it through KAKOI_TEST_PASTA.
+      - name: Fetch the verified pasta
+        run: |
+          url=https://deb.debian.org/debian/pool/main/p/passt/passt_0.0~git20260728.f8df3f1-1~bpo13+1_amd64.deb
+          curl -fsSLo "$RUNNER_TEMP/passt.deb" "$url"
+          echo "c8ac47eb51979289f8bbb1761d9954cf1ee8dd1ac42ea5d2ce5136330099f43a  $RUNNER_TEMP/passt.deb" | sha256sum -c -
+          dpkg-deb -x "$RUNNER_TEMP/passt.deb" "$RUNNER_TEMP/passt"
+          "$RUNNER_TEMP/passt/usr/bin/pasta" --version
+          echo "KAKOI_TEST_PASTA=$RUNNER_TEMP/passt/usr/bin/pasta" >> "$GITHUB_ENV"
+
       # Ubuntu 23.10 and later set kernel.apparmor_restrict_unprivileged_userns=1, which
       # stops bwrap from creating the namespace ("setting up uid map: Permission denied").
       # The runner is a throwaway VM, so the restriction is lifted rather than replaced by

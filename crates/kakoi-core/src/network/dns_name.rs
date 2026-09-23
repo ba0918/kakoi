@@ -4,6 +4,16 @@ use serde::{Deserialize, Serialize};
 
 const HOST_NAMES: [&str; 2] = ["host-v4.kakoi.internal", "host-v6.kakoi.internal"];
 
+/// The host loopback family a reserved host name stands for, if `name` is one.
+/// These names are served by the environment itself, never by a DNS upstream.
+pub fn reserved_host(name: &str) -> Option<super::IpFamily> {
+    match normalize(name).ok()?.as_str() {
+        "host-v4.kakoi.internal" => Some(super::IpFamily::Ipv4),
+        "host-v6.kakoi.internal" => Some(super::IpFamily::Ipv6),
+        _ => None,
+    }
+}
+
 /// An absolute DNS name or its descendants, normalized once using UTS #46.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(try_from = "String")]

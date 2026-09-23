@@ -29,6 +29,8 @@ mod dns_workers;
 mod filter;
 #[path = "kakoi_net/health.rs"]
 mod health;
+#[path = "kakoi_net/host.rs"]
+mod host;
 #[path = "kakoi_net/leases.rs"]
 mod leases;
 #[path = "kakoi_net/limits.rs"]

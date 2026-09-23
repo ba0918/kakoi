@@ -1,5 +1,6 @@
 //! Foreground pasta ownership and its documented post-initialization PID handshake.
 
+use crate::host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6};
 use crate::{health::TRANSIT_INTERFACE, namespace::NetworkNamespace};
 use kakoi_core::network::{merge_publications, FixedPublication, IpFamily, Protocol};
 use std::io::{self, Read};
@@ -82,9 +83,18 @@ impl Pasta {
             .arg(format!("/proc/{target_pid}/ns/user"))
             .arg("--netns")
             .arg(format!("/proc/{target_pid}/ns/net"));
+        // Neither stage reads the gateway as the host: the inner stage would take it
+        // to the middle namespace's loopback. Only the outer stage maps the
+        // dedicated addresses to the host's loopback.
+        command.arg("--no-map-gw");
         match stage {
             PastaStage::Outer => {
                 command.args(["-I", TRANSIT_INTERFACE]);
+                command
+                    .arg("--map-host-loopback")
+                    .arg(HOST_LOOPBACK_V4.to_string())
+                    .arg("--map-host-loopback")
+                    .arg(HOST_LOOPBACK_V6.to_string());
             }
             PastaStage::Inner => {
                 command.args(["-i", TRANSIT_INTERFACE, "-I", "app0"]);

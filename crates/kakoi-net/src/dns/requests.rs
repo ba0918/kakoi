@@ -73,13 +73,19 @@ impl<W> DnsRequests<W> {
         recipient: W,
         now: Instant,
     ) -> Result<AcceptedRequest<W>, (DnsError, W)> {
-        let prepare = || {
-            let question = Question::parse(wire)?;
-            let key = question.resolution_key(self.generation)?;
-            Ok((question, key))
+        let question = match Question::parse(wire) {
+            Ok(question) => question,
+            Err(error) => return Err((error, recipient)),
         };
-        let (question, key) = match prepare() {
-            Ok(prepared) => prepared,
+        // Reserved host names never reach an upstream, whatever the policy allows.
+        if let Some(answer) = question.reserved_host_response() {
+            return match answer {
+                Ok(wire) => Ok(AcceptedRequest::Answer(DnsReply { recipient, wire })),
+                Err(error) => Err((error, recipient)),
+            };
+        }
+        let key = match question.resolution_key(self.generation) {
+            Ok(key) => key,
             Err(error) => return Err((error, recipient)),
         };
         // Check every requester before sharing a slot, even with an identical key.

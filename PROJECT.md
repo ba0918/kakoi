@@ -42,7 +42,10 @@ TLS transport tests use `/usr/bin/openssl` to generate temporary test certificat
 and Python's `ssl` module as an independent TLS server. OpenSSL is a test dependency;
 the product uses rustls and the host CA store.
 They run in private user/network namespaces and do not modify host rules. These kernel
-gate tests do not require TUN; product communication tests with pasta still do.
+gate tests do not require TUN. The tests that carry real traffic through pasta need
+`/dev/net/tun` and a pasta executable, taken from `KAKOI_TEST_PASTA` or else from `PATH`;
+they fail rather than skip without one. The verified build is Debian trixie-backports
+`passt 0.0~git20260728.f8df3f1-1~bpo13+1`, which CI fetches and checks by digest.
 
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on
 the machine; they fail rather than skip when any of them is missing. Inside the isolation they

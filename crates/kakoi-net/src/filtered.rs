@@ -2,11 +2,20 @@
 //! enforcement, then start the application inside it.
 
 use crate::{
-    dns_runtime::DnsRuntimeConfig, dns_transport::TlsClient, filter::FilterRule,
-    scope::AddressContext, session::Session, supervisor::Application, transport::Transport,
+    dns_runtime::DnsRuntimeConfig,
+    dns_transport::TlsClient,
+    filter::FilterRule,
+    host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
+    scope::AddressContext,
+    session::Session,
+    supervisor::Application,
+    transport::Transport,
 };
 use kakoi_core::{
-    diagnostic::Diagnostic, network::Destination, plan::Plan, planning::locate_command,
+    diagnostic::Diagnostic,
+    network::{Destination, IpFamily, IpNetwork},
+    plan::Plan,
+    planning::locate_command,
 };
 use std::{
     collections::BTreeMap,
@@ -63,11 +72,13 @@ pub fn start(
                 ports: allow.ports.clone(),
             }),
             Destination::Dns(_) => {}
+            Destination::HostLoopback(family) => rules.push(FilterRule {
+                network: host_loopback(*family),
+                protocol: allow.protocol,
+                ports: allow.ports.clone(),
+            }),
             Destination::Address { .. } => {
                 return Err(unsupported("`host-interface` destinations"))
-            }
-            Destination::HostLoopback(_) => {
-                return Err(unsupported("`host-loopback` destinations"))
             }
         }
     }
@@ -90,7 +101,11 @@ pub fn start(
         limits: policy.network_limits.clone(),
         trust,
         nft: tools.nft.clone(),
-        scope: AddressContext::default(),
+        scope: AddressContext {
+            host_loopback_v4: Some(HOST_LOOPBACK_V4),
+            host_loopback_v6: Some(HOST_LOOPBACK_V6),
+            ..AddressContext::default()
+        },
         generation: 0,
     };
     let transport = Transport::start_closed(
@@ -113,6 +128,16 @@ pub fn start(
         stdout,
     )?;
     Ok((session, application))
+}
+
+/// The single address that stands for the host's loopback of `family`.
+fn host_loopback(family: IpFamily) -> IpNetwork {
+    match family {
+        IpFamily::Ipv4 => format!("{HOST_LOOPBACK_V4}/32"),
+        IpFamily::Ipv6 => format!("{HOST_LOOPBACK_V6}/128"),
+    }
+    .parse()
+    .expect("the host loopback address is a valid network")
 }
 
 fn unsupported(what: &str) -> Diagnostic {
