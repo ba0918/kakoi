@@ -14,12 +14,16 @@ use crate::{
 };
 use kakoi_core::network::{Allow, DnsUpstream, NetworkLimits};
 use std::{
+    collections::{HashMap, HashSet},
     io,
     net::IpAddr,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
+
+/// How often the host's DNS configuration is read again while it is followed.
+const FOLLOW_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
 pub struct DnsRuntimeConfig {
@@ -30,11 +34,36 @@ pub struct DnsRuntimeConfig {
     pub nft: PathBuf,
     pub scope: AddressContext,
     pub generation: u64,
+    /// Upstreams that follow the host's DNS configuration rather than a policy.
+    pub host_dns: Option<HostDns>,
+}
+
+/// The host's DNS configuration and how it names upstreams. A change of its
+/// contents replaces `upstreams`; contents that cannot be read or give no
+/// upstream fail every question until they can, and never fall back.
+#[derive(Clone)]
+pub struct HostDns {
+    pub path: PathBuf,
+    pub parse: fn(&str) -> Result<Vec<DnsUpstream>, String>,
+}
+
+struct Following {
+    source: HostDns,
+    text: Option<String>,
+    next: Instant,
 }
 
 pub struct DnsRuntime {
     service: DnsService,
     resolver: Arc<ExplicitResolver>,
+    policy: Vec<Allow>,
+    limits: NetworkLimits,
+    trust: Option<TlsClient>,
+    following: Option<Following>,
+    // Questions handed to a worker, kept to ask again under new settings.
+    inflight: HashMap<ResolutionId, (Vec<u8>, Instant)>,
+    // Workers whose settings were replaced; their results are never used.
+    retired: HashSet<ResolutionId>,
     scope: Arc<AddressContext>,
     route: Arc<dyn Fn(IpAddr) -> Option<String> + Send + Sync>,
     workers: DnsWorkers<Result<PreparedAnswer, DnsError>>,
@@ -68,15 +97,27 @@ impl DnsRuntime {
         let resolver = Arc::new(ExplicitResolver::new(
             config.policy.clone(),
             config.upstreams,
-            config.limits,
-            config.trust,
+            config.limits.clone(),
+            config.trust.clone(),
         )?);
+        let following = config.host_dns.map(|source| Following {
+            text: std::fs::read_to_string(&source.path).ok(),
+            source,
+            next: Instant::now() + FOLLOW_INTERVAL,
+        });
+        let policy = config.policy.clone();
         let workers = DnsWorkers::new(limit).map_err(io::Error::other)?;
         let front = DnsFront::new(DnsSockets::bind(Arc::clone(&namespace))?, limit, timeout)?;
         let adoption = DnsAdoption::new(namespace, config.nft, config.policy, limit)?;
         Ok(Self {
             service: DnsService::new(front, requests),
             resolver,
+            policy,
+            limits: config.limits,
+            trust: config.trust,
+            following,
+            inflight: HashMap::new(),
+            retired: HashSet::new(),
             scope: Arc::new(config.scope),
             route: Arc::new(route),
             workers,
@@ -95,7 +136,75 @@ impl DnsRuntime {
         result
     }
 
+    /// Reads the host's DNS configuration when it is due. A changed content takes
+    /// effect for every question from now on, including those already asked.
+    fn follow(&mut self, now: Instant) -> io::Result<()> {
+        let Some(following) = &mut self.following else {
+            return Ok(());
+        };
+        if now < following.next {
+            return Ok(());
+        }
+        following.next = now + FOLLOW_INTERVAL;
+        let text = std::fs::read_to_string(&following.source.path).ok();
+        if text == following.text {
+            return Ok(());
+        }
+        let upstreams = text
+            .as_deref()
+            .and_then(|text| (following.source.parse)(text).ok())
+            .unwrap_or_default();
+        following.text = text;
+        self.resolver = Arc::new(ExplicitResolver::new(
+            self.policy.clone(),
+            upstreams,
+            self.limits.clone(),
+            self.trust.clone(),
+        )?);
+        self.service.advance_generation();
+        self.retired.extend(self.inflight.keys().copied());
+        self.workers.retire();
+        Ok(())
+    }
+
+    fn dispatch(
+        &mut self,
+        id: ResolutionId,
+        wire: Vec<u8>,
+        deadline: Instant,
+        now: Instant,
+    ) -> io::Result<()> {
+        if now >= deadline {
+            return self.fail_query(id, now);
+        }
+        let resolver = Arc::clone(&self.resolver);
+        let scope = Arc::clone(&self.scope);
+        let route = Arc::clone(&self.route);
+        let task = crate::dns::ResolutionTask {
+            id,
+            wire: wire.clone(),
+            deadline,
+        };
+        match self.workers.start(task, move |task, cancel| {
+            resolver.prepare_until(
+                &task.wire,
+                task.deadline,
+                Some(&cancel),
+                &scope,
+                |address| route(address),
+            )
+        }) {
+            Ok(()) => {
+                self.inflight.insert(id, (wire, deadline));
+                Ok(())
+            }
+            Err((_, error)) if error.kind() == io::ErrorKind::BrokenPipe => Err(error),
+            Err(_) => self.fail_query(id, now),
+        }
+    }
+
     fn poll_inner(&mut self, now: Instant) -> io::Result<()> {
+        self.follow(now)?;
         // Collect before admitting more work so physical slots are reclaimed
         // without confusing an expired request with a finished worker.
         for completed in self.adoption.poll()? {
@@ -112,6 +221,16 @@ impl DnsRuntime {
             return Err(io::Error::other("DNS permission executor faulted"));
         }
         for completed in self.workers.collect() {
+            let task = self.inflight.remove(&completed.id);
+            if self.retired.remove(&completed.id) && !self.stopping {
+                // Asked under replaced settings: ask again, within the same deadline.
+                if let (Some((wire, deadline)), false) =
+                    (task, matches!(completed.result, WorkResult::Panicked))
+                {
+                    self.dispatch(completed.id, wire, deadline, now)?;
+                    continue;
+                }
+            }
             let answer = match completed.result {
                 WorkResult::Finished(answer) => answer,
                 WorkResult::Cancelled => Err(DnsError::IncompleteResponse),
@@ -136,23 +255,7 @@ impl DnsRuntime {
         }
         if !self.stopping {
             for task in self.service.poll(now)? {
-                let resolver = Arc::clone(&self.resolver);
-                let scope = Arc::clone(&self.scope);
-                let route = Arc::clone(&self.route);
-                if let Err((id, error)) = self.workers.start(task, move |task, cancel| {
-                    resolver.prepare_until(
-                        &task.wire,
-                        task.deadline,
-                        Some(&cancel),
-                        &scope,
-                        |address| route(address),
-                    )
-                }) {
-                    if error.kind() == io::ErrorKind::BrokenPipe {
-                        return Err(error);
-                    }
-                    self.fail_query(id, now)?;
-                }
+                self.dispatch(task.id, task.wire, task.deadline, now)?;
             }
         }
         Ok(())

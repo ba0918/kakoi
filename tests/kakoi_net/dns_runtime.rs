@@ -68,6 +68,7 @@ fn runtime_stop_interrupts_pending_dns_and_kernel_fault_stops_further_work() {
                 trust: None,
                 scope: AddressContext::default(),
                 generation: 0,
+                host_dns: None,
             },
             |_| None,
         )

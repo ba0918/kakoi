@@ -2,7 +2,7 @@
 //! enforcement, then start the application inside it.
 
 use crate::{
-    dns_runtime::DnsRuntimeConfig,
+    dns_runtime::{DnsRuntimeConfig, HostDns},
     dns_transport::TlsClient,
     filter::FilterRule,
     host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
@@ -87,11 +87,16 @@ pub fn start(
         .network_allow
         .iter()
         .any(|allow| matches!(allow.destination, Destination::Dns(_)));
+    let mut following = None;
     let upstreams = if !policy.dns_upstream.is_empty() {
         policy.dns_upstream.clone()
     } else if names {
         let text = std::fs::read_to_string(host_dns::RESOLV_CONF)
             .map_err(|error| failure("read the host DNS configuration", error))?;
+        following = Some(HostDns {
+            path: host_dns::RESOLV_CONF.into(),
+            parse: host_dns::upstreams_from_resolv_conf,
+        });
         host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?
     } else {
         // Without DNS names the managed resolver refuses every name by itself.
@@ -120,6 +125,7 @@ pub fn start(
             ..AddressContext::default()
         },
         generation: 0,
+        host_dns: following,
     };
     let transport = Transport::start_closed(
         &tools.pasta,

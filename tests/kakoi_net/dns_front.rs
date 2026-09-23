@@ -247,6 +247,7 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
             nft: "/usr/sbin/nft".into(),
             scope: AddressContext::default(),
             generation: 0,
+            host_dns: None,
         },
         |_| None,
     )

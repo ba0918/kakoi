@@ -42,3 +42,220 @@ fn a_host_configuration_without_a_nameserver_asks_for_an_explicit_upstream() {
         assert!(error.contains("network.dns-upstream"), "{error}");
     }
 }
+
+mod following {
+    use crate::common::TempDir;
+    use kakoi_core::network::{Allow, Destination, DnsUpstream, NetworkLimits, Protocol};
+    use kakoi_net::{
+        dns_runtime::{DnsRuntime, DnsRuntimeConfig, HostDns},
+        filter,
+        namespace::NetworkNamespace,
+        nft,
+        scope::AddressContext,
+    };
+    use std::{
+        io::Read,
+        net::UdpSocket,
+        num::NonZeroU16,
+        path::Path,
+        process::{Child, Stdio},
+        sync::Arc,
+        time::{Duration, Instant},
+    };
+
+    const HANG: Duration = Duration::from_secs(30);
+
+    /// Test fixtures cannot listen on port 53: "upstream PORT" names a loopback
+    /// upstream on that port instead.
+    fn fixture_parse(text: &str) -> Result<Vec<DnsUpstream>, String> {
+        let ports: Vec<_> = text
+            .lines()
+            .filter_map(|line| line.strip_prefix("upstream ")?.trim().parse().ok())
+            .collect();
+        if ports.is_empty() {
+            return Err("no upstream".into());
+        }
+        Ok(ports
+            .into_iter()
+            .map(|port| {
+                DnsUpstream::plain("127.0.0.1".parse().unwrap(), NonZeroU16::new(port).unwrap())
+            })
+            .collect())
+    }
+
+    fn upstream() -> (UdpSocket, u16) {
+        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+        socket.set_nonblocking(true).unwrap();
+        let port = socket.local_addr().unwrap().port();
+        (socket, port)
+    }
+
+    fn runtime(file: &Path) -> (Arc<NetworkNamespace>, DnsRuntime) {
+        let ns = Arc::new(NetworkNamespace::create().unwrap());
+        assert!(ns
+            .command("/usr/sbin/ip")
+            .unwrap()
+            .args(["link", "set", "lo", "up"])
+            .status()
+            .unwrap()
+            .success());
+        nft::apply(
+            &ns,
+            Path::new("/usr/sbin/nft"),
+            &filter::compile_static(&[], 120).unwrap(),
+            Instant::now() + HANG,
+        )
+        .unwrap();
+        let host_dns = HostDns {
+            path: file.to_owned(),
+            parse: fixture_parse,
+        };
+        let runtime = DnsRuntime::new(
+            Arc::clone(&ns),
+            DnsRuntimeConfig {
+                policy: vec![Allow {
+                    destination: Destination::Dns("api.example.com".parse().unwrap()),
+                    protocol: Protocol::Tcp,
+                    ports: vec!["443".into()].try_into().unwrap(),
+                }],
+                upstreams: fixture_parse(&std::fs::read_to_string(file).unwrap()).unwrap(),
+                limits: NetworkLimits {
+                    dns_resolution_timeout_seconds: 30,
+                    dns_server_timeout_seconds: 30,
+                    ..NetworkLimits::default()
+                },
+                nft: "/usr/sbin/nft".into(),
+                trust: None,
+                scope: AddressContext::default(),
+                generation: 0,
+                host_dns: Some(host_dns),
+            },
+            |_| None,
+        )
+        .unwrap();
+        (ns, runtime)
+    }
+
+    /// An application's resolver query; it prints the answer's RCODE and addresses.
+    fn client(ns: &NetworkNamespace) -> Child {
+        ns.command("/usr/bin/python3")
+            .unwrap()
+            .args(["-c", r#"
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(25)
+s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x01', ('127.0.0.53', 53))
+data = s.recv(512)
+count = int.from_bytes(data[6:8], 'big')
+print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
+"#])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap()
+    }
+
+    fn received(socket: &UdpSocket, runtime: &mut DnsRuntime) -> (Vec<u8>, std::net::SocketAddr) {
+        let deadline = Instant::now() + HANG;
+        loop {
+            runtime.poll(Instant::now()).unwrap();
+            let mut bytes = [0; 512];
+            match socket.recv_from(&mut bytes) {
+                Ok((size, peer)) => return (bytes[..size].to_vec(), peer),
+                Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock),
+            }
+            assert!(Instant::now() < deadline, "no upstream query");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn answer(query: &[u8], address: [u8; 4]) -> Vec<u8> {
+        let mut answer = query.to_vec();
+        answer[2] |= 0x80;
+        answer[7] = 1;
+        answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4]);
+        answer.extend(address);
+        answer
+    }
+
+    fn finish(mut child: Child, runtime: &mut DnsRuntime) -> String {
+        let deadline = Instant::now() + HANG;
+        while child.try_wait().unwrap().is_none() {
+            runtime.poll(Instant::now()).unwrap();
+            assert!(Instant::now() < deadline, "the application got no answer");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let mut output = String::new();
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_string(&mut output)
+            .unwrap();
+        output
+    }
+
+    // @kotowari[EX-232, EX-237]
+    #[test]
+    fn a_host_dns_change_redoes_pending_queries_and_ignores_old_answers() {
+        let temp = TempDir::new();
+        let (old, old_port) = upstream();
+        let (new, new_port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+        let (ns, mut runtime) = runtime(&file);
+        let app = client(&ns);
+        let (stale_query, stale_peer) = received(&old, &mut runtime);
+        std::fs::write(&file, format!("upstream {new_port}\n")).unwrap();
+        // The pending query is sent again, to the new upstream only.
+        let (query, peer) = received(&new, &mut runtime);
+        old.send_to(&answer(&stale_query, [2, 2, 2, 2]), stale_peer)
+            .unwrap();
+        for _ in 0..20 {
+            runtime.poll(Instant::now()).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        new.send_to(&answer(&query, [1, 1, 1, 1]), peer).unwrap();
+        assert_eq!(finish(app, &mut runtime), "0 1.1.1.1\n");
+        let mut bytes = [0; 512];
+        assert!(
+            old.recv_from(&mut bytes).is_err(),
+            "the old upstream was asked again"
+        );
+        let rules = String::from_utf8(
+            nft::inspect(
+                &ns,
+                Path::new("/usr/sbin/nft"),
+                "kakoi_policy",
+                Instant::now() + HANG,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            !rules.contains("2.2.2.2"),
+            "an answer from before the change was adopted"
+        );
+    }
+
+    // @kotowari[EX-239, EX-240]
+    #[test]
+    fn an_unreadable_new_host_dns_fails_queries_without_falling_back() {
+        let temp = TempDir::new();
+        let (old, old_port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+        let (ns, mut runtime) = runtime(&file);
+        std::fs::write(&file, "nothing usable\n").unwrap();
+        // Let the change be noticed before the application asks.
+        let noticed = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < noticed {
+            runtime.poll(Instant::now()).unwrap();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let app = client(&ns);
+        assert_eq!(finish(app, &mut runtime), "2 -\n");
+        let mut bytes = [0; 512];
+        assert!(
+            old.recv_from(&mut bytes).is_err(),
+            "the old upstream was used as a fallback"
+        );
+    }
+}

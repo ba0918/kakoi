@@ -39,6 +39,10 @@ impl DnsService {
         Ok(tasks)
     }
 
+    pub fn advance_generation(&mut self) {
+        self.requests.advance_generation();
+    }
+
     /// Enforcement failures belong to the supervisor and must close traffic;
     /// callers must not turn uncertain kernel state into an ordinary DNS error.
     pub fn complete(

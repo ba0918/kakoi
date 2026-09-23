@@ -67,6 +67,12 @@ impl<W> DnsRequests<W> {
         })
     }
 
+    /// Questions accepted from now on belong to a new settings generation: they
+    /// never share a resolution started under the previous one.
+    pub fn advance_generation(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+    }
+
     pub fn accept(
         &mut self,
         wire: &[u8],

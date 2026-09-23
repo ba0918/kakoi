@@ -25,7 +25,7 @@ impl Question {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResolutionId(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

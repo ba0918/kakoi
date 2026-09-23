@@ -39,6 +39,7 @@ pub struct Completion<R> {
 struct Worker<R> {
     id: ResolutionId,
     handle: JoinHandle<R>,
+    cancellation: Cancellation,
 }
 
 /// Each worker computes a candidate result; kernel adoption belongs to the
@@ -47,7 +48,9 @@ struct Worker<R> {
 pub struct DnsWorkers<R> {
     workers: Vec<Worker<R>>,
     limit: usize,
+    // Shared by the workers started since the last `retire`.
     cancellation: Cancellation,
+    stopped: bool,
 }
 
 impl<R: Send + 'static> DnsWorkers<R> {
@@ -59,6 +62,7 @@ impl<R: Send + 'static> DnsWorkers<R> {
             workers: Vec::new(),
             limit,
             cancellation: Cancellation::new(),
+            stopped: false,
         })
     }
 
@@ -70,7 +74,7 @@ impl<R: Send + 'static> DnsWorkers<R> {
         run: impl FnOnce(ResolutionTask, Cancellation) -> R + Send + 'static,
     ) -> Result<(), (ResolutionId, io::Error)> {
         let id = task.id;
-        if self.cancellation.is_cancelled() {
+        if self.stopped {
             return Err((
                 id,
                 io::Error::new(io::ErrorKind::BrokenPipe, "DNS workers stopped"),
@@ -87,7 +91,11 @@ impl<R: Send + 'static> DnsWorkers<R> {
             .name("kakoi-dns".into())
             .spawn(move || run(task, cancellation))
             .map_err(|error| (id, error))?;
-        self.workers.push(Worker { id, handle });
+        self.workers.push(Worker {
+            id,
+            handle,
+            cancellation: self.cancellation.clone(),
+        });
         Ok(())
     }
 
@@ -102,7 +110,7 @@ impl<R: Send + 'static> DnsWorkers<R> {
             let worker = self.workers.swap_remove(index);
             let result = match worker.handle.join() {
                 Err(_) => WorkResult::Panicked,
-                Ok(_) if self.cancellation.is_cancelled() => WorkResult::Cancelled,
+                Ok(_) if worker.cancellation.is_cancelled() => WorkResult::Cancelled,
                 Ok(result) => WorkResult::Finished(result),
             };
             completed.push(Completion {
@@ -116,7 +124,14 @@ impl<R: Send + 'static> DnsWorkers<R> {
 
 impl<R> DnsWorkers<R> {
     pub fn stop(&mut self) {
+        self.stopped = true;
         self.cancellation.cancel();
+    }
+
+    /// Invalidates the results of every running worker; new workers still start.
+    pub fn retire(&mut self) {
+        self.cancellation.cancel();
+        self.cancellation = Cancellation::new();
     }
 
     pub fn is_idle(&self) -> bool {
