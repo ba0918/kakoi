@@ -23,7 +23,7 @@ pub(crate) fn pasta() -> PathBuf {
 
 /// Exchanges one message and reports the reply, or the kind of failure. Shared
 /// by the host side and the application.
-const CLIENT: &str = r#"
+pub(crate) const CLIENT: &str = r#"
 import socket
 
 def exchange(address, port, kind, wait, sock=None):

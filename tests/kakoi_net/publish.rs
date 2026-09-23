@@ -1,13 +1,15 @@
 use crate::fake_host::FakeHost;
 
-const TCP_V4: &str =
+pub(crate) const TCP_V4: &str =
     "\n[[network.publish]]\nmode = 'fixed'\nprotocol = 'tcp'\nport = 8000\nhost-port = 18000\n";
 const UDP_V6: &str = "\n[[network.publish]]\nmode = 'fixed'\nprotocol = 'udp'\nport = 8000\nhost-port = 18000\ntarget-family = 'ipv6'\nhost-family = 'ipv6'\n";
 
 /// The application's services, started and stopped by commands on its standard
 /// input (`tcp start`, `udp stop`, ...) and each acknowledged with `done`. A
 /// service answers with its name and how many times it has been started.
-const SERVICES: &str = r#"
+/// `resolve NAME` answers with the name's IPv4 address, and
+/// `remote ADDRESS permitted|refused` with an exchange with ADDRESS's TCP 8080.
+pub(crate) const SERVICES: &str = r#"
 import select, sys, threading
 endpoints = {'tcp': ('127.0.0.1', 8000), 'udp': ('::1', 8000), 'other': ('127.0.0.1', 8001)}
 running, starts = {}, {}
@@ -43,24 +45,41 @@ def start(name):
     running[name] = (stop, thread)
 
 for command in sys.stdin:
-    name, action = command.split()
-    if action == 'start':
+    name, action, *rest = command.split()
+    if name == 'resolve':
+        print(socket.getaddrinfo(action, 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0], flush=True)
+    elif name == 'remote':
+        print(exchange(action, 8080, 'tcp', PERMITTED if rest == ['permitted'] else REFUSED), flush=True)
+    elif action == 'start':
         start(name)
+        print('done', flush=True)
     else:
         stop, thread = running.pop(name)
         stop.set()
         thread.join()
-    print('done', flush=True)
+        print('done', flush=True)
 "#;
 
 /// Host-side helpers for a kakoi that runs [`SERVICES`].
-const CONTROL: &str = r#"
+pub(crate) const CONTROL: &str = r#"
 import errno
 
-def command(process, text):
+def ask(process, text):
+    """The application's answer to the command `text`."""
     process.stdin.write((text + '\n').encode())
     process.stdin.flush()
-    assert line(process.stdout) == 'done\n'
+    return line(process.stdout).strip()
+
+def command(process, text):
+    assert ask(process, text) == 'done'
+
+def until(process, text):
+    """Reads kakoi's standard error up to the next notice containing `text`."""
+    while True:
+        notice = line(process.stderr)
+        assert notice, f'kakoi ended before a notice with {text}'
+        if text in notice:
+            return notice
 
 def held(address, port, kind):
     """Whether the host's endpoint is taken, observed by binding it."""

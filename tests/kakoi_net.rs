@@ -27,6 +27,8 @@ mod dns_transport;
 mod dns_workers;
 #[path = "kakoi_net/fake_host.rs"]
 mod fake_host;
+#[path = "kakoi_net/faults.rs"]
+mod faults;
 #[path = "kakoi_net/filter.rs"]
 mod filter;
 #[path = "kakoi_net/health.rs"]
