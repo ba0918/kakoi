@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 mod common;
@@ -28,9 +27,7 @@ use kakoi_core::variables::Variables;
 
 /// Writes an executable script at `relative` under `dir`.
 fn executable(dir: &TempDir, relative: &str) -> PathBuf {
-    let path = dir.write(relative, "#!/bin/sh\n");
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    path
+    dir.write_executable(relative, "#!/bin/sh\n")
 }
 
 // @kotowari[REQ-260]

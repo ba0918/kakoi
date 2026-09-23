@@ -396,8 +396,7 @@ fn the_isolated_process_inherits_the_raised_soft_limit() {
 #[test]
 fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
-    let tool = home.write("hidden/tool", "#!/bin/sh\necho ran\n");
-    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let tool = home.write_executable("hidden/tool", "#!/bin/sh\necho ran\n");
     let hidden = home.path().join("hidden");
     profile(
         &home,

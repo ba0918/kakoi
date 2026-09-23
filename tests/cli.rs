@@ -811,8 +811,7 @@ fn a_nested_launch_leaves_the_environment_unchanged() {
 fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_missing() {
     let home = TempDir::new();
     let bin = TempDir::new();
-    let tool = bin.write("tool", "#!/bin/sh\nexit 7\n");
-    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    bin.write_executable("tool", "#!/bin/sh\nexit 7\n");
     let empty_path = TempDir::new();
 
     let found = nested(&home, bin.path())
@@ -865,8 +864,7 @@ fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
     // The command is found, but its exec fails (specification sections 4.2 and 12.1): one
     // warning line, then `command not executable`, exit code 126.
     let home = TempDir::new();
-    let script = home.write("tool", "#!/nonexistent/interpreter\n");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let script = home.write_executable("tool", "#!/nonexistent/interpreter\n");
 
     let output = nested(&home, Path::new("/nonexistent"))
         .arg("--")

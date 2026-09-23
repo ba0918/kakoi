@@ -175,6 +175,36 @@ impl TempDir {
         fs::write(&path, body).unwrap();
         path
     }
+
+    /// Writes an executable like [`write_executable`], creating parent directories.
+    #[allow(dead_code)]
+    pub fn write_executable(&self, relative: impl AsRef<Path>, body: impl AsRef<[u8]>) -> PathBuf {
+        let path = self.0.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        write_executable(&path, body);
+        path
+    }
+}
+
+/// Writes an executable through a child process. A descriptor open for writing in
+/// this multithreaded test process would be inherited by any process another test
+/// forks at that moment, and executing the file would then fail with ETXTBSY.
+#[allow(dead_code)]
+pub fn write_executable(path: &Path, body: impl AsRef<[u8]>) {
+    use std::io::Write;
+    let mut writer = std::process::Command::new("/bin/sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    writer
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(body.as_ref())
+        .unwrap();
+    assert!(writer.wait().unwrap().success());
 }
 
 impl Default for TempDir {
