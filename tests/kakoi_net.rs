@@ -4,6 +4,8 @@ mod address;
 mod allow;
 #[path = "kakoi_net/application.rs"]
 mod application;
+#[path = "kakoi_net/cli.rs"]
+mod cli;
 mod common;
 #[path = "kakoi_net/config.rs"]
 mod config;

@@ -1,0 +1,124 @@
+//! Starting a filtered plan: locate the tools, prepare and verify the network
+//! enforcement, then start the application inside it.
+
+use crate::{
+    dns_runtime::DnsRuntimeConfig, dns_transport::TlsClient, filter::FilterRule,
+    scope::AddressContext, session::Session, supervisor::Application, transport::Transport,
+};
+use kakoi_core::{
+    diagnostic::Diagnostic, network::Destination, plan::Plan, planning::locate_command,
+};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
+
+const PASTA_STARTUP: Duration = Duration::from_secs(10);
+
+/// The external programs a filtered run needs, found on the host's `PATH` the
+/// way `bwrap` is.
+pub struct Tools {
+    pub pasta: PathBuf,
+    pub nft: PathBuf,
+}
+
+impl Tools {
+    pub fn locate(host: &BTreeMap<OsString, OsString>) -> Result<Self, Diagnostic> {
+        let find = |name: &str| {
+            locate_command(name.as_ref(), host).map_err(|_| {
+                Diagnostic::bwrap(format!(
+                    "filtered network mode needs `{name}`, which is not on PATH"
+                ))
+            })
+        };
+        Ok(Self {
+            pasta: find("pasta")?,
+            nft: find("nft")?,
+        })
+    }
+}
+
+/// Prepares the network of `plan`, verifies that it is enforced, and only then
+/// starts the application. `init` is the executable that runs as the isolation's
+/// process 1 (see [`crate::init::run_if_requested`]).
+pub fn start(
+    plan: &Plan,
+    tools: &Tools,
+    init: &Path,
+    stdout: Stdio,
+) -> Result<(Session, Application), Diagnostic> {
+    let policy = &plan.policy;
+    let mut rules = Vec::new();
+    for allow in &policy.network_allow {
+        match &allow.destination {
+            Destination::Address {
+                network,
+                host_interface: None,
+            } => rules.push(FilterRule {
+                network: *network,
+                protocol: allow.protocol,
+                ports: allow.ports.clone(),
+            }),
+            Destination::Dns(_) => {}
+            Destination::Address { .. } => {
+                return Err(unsupported("`host-interface` destinations"))
+            }
+            Destination::HostLoopback(_) => {
+                return Err(unsupported("`host-loopback` destinations"))
+            }
+        }
+    }
+    if policy.dns_upstream.is_empty() {
+        return Err(unsupported(
+            "following the host DNS; set `network.dns-upstream`",
+        ));
+    }
+    let trust = if policy.dns_upstream[0].tls_name().is_some() {
+        Some(
+            TlsClient::from_host()
+                .map_err(|error| failure("load the host CA certificates", error))?,
+        )
+    } else {
+        None
+    };
+    let config = DnsRuntimeConfig {
+        policy: policy.network_allow.clone(),
+        upstreams: policy.dns_upstream.clone(),
+        limits: policy.network_limits.clone(),
+        trust,
+        nft: tools.nft.clone(),
+        scope: AddressContext::default(),
+        generation: 0,
+    };
+    let transport = Transport::start_closed(
+        &tools.pasta,
+        &tools.nft,
+        &policy.network_publish,
+        PASTA_STARTUP,
+    )
+    .map_err(|error| failure("start pasta", error))?;
+    let mut session = Session::prepare(transport, config, &rules, |_| None)
+        .map_err(|error| failure("prepare the network policy", error))?;
+    session
+        .activate()
+        .map_err(|error| failure("activate the network", error))?;
+    let application = Application::spawn(
+        plan,
+        session.namespace(),
+        init,
+        Duration::from_secs(policy.shutdown_grace_seconds.into()),
+        stdout,
+    )?;
+    Ok((session, application))
+}
+
+fn unsupported(what: &str) -> Diagnostic {
+    Diagnostic::bwrap(format!("filtered network mode does not support {what} yet"))
+}
+
+fn failure(what: &str, error: std::io::Error) -> Diagnostic {
+    Diagnostic::bwrap(format!("{what}: {error}"))
+}

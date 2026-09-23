@@ -73,25 +73,6 @@ fn inactive_network_settings_warn_without_starting_network_tools() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("allow tcp example.com ports 443"));
 }
 
-// @kotowari[REQ-390]
-#[test]
-fn filtered_launch_needs_a_prepared_network_session() {
-    let home = TempDir::new();
-    let work = home.path().join("project");
-    std::fs::create_dir(&work).unwrap();
-    home.write(".config/kakoi/profile/default.toml", profile("filtered"));
-    let output = binary(home.path())
-        .arg("--workspace")
-        .arg(&work)
-        .args(["--", "/bin/echo", "unexpected-app-start"])
-        .current_dir(&work)
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(125));
-    assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("kakoi-net"));
-}
-
 // @kotowari[REQ-013, REQ-394]
 #[test]
 fn full_plan_exposes_network_rules_and_effective_time_limits() {

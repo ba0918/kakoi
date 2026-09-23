@@ -4,6 +4,7 @@ use crate::{health::TRANSIT_INTERFACE, namespace::NetworkNamespace};
 use kakoi_core::network::{merge_publications, FixedPublication, IpFamily, Protocol};
 use std::io::{self, Read};
 use std::os::fd::AsRawFd;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, ChildStderr, ChildStdout, Command, Stdio};
 use std::sync::Arc;
@@ -57,7 +58,12 @@ impl Pasta {
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         let mut command = match source {
             Some(namespace) => namespace.command(executable)?,
-            None => Command::new(executable),
+            None => {
+                let mut command = Command::new(executable);
+                // As for the namespace's commands: the terminal's Ctrl+C is not pasta's.
+                command.process_group(0);
+                command
+            }
         };
         let target_pid = target.keeper_pid();
         command.args([

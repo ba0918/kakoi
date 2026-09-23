@@ -39,6 +39,14 @@ pub fn termination_on_sigterm() -> io::Result<&'static AtomicBool> {
     Ok(&TERMINATION)
 }
 
+/// For the CLI, once the application is started: Ctrl+C on the terminal is the
+/// application's, and the supervisor must survive it. The isolation's process 1
+/// ends the grace on Ctrl+C by itself.
+pub fn leave_interrupt_to_application() {
+    // SAFETY: changes this process's disposition of one signal.
+    unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+}
+
 /// Blocking first; the processes are asked to end only once it is confirmed.
 fn block(session: &mut Session, application: &mut Application, fault: &mut bool) -> bool {
     if session.close_until(Instant::now() + CLOSURE).is_err() {

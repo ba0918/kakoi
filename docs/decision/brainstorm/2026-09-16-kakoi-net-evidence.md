@@ -1207,3 +1207,23 @@ CPU数の3倍の負荷をかけて全体試験を3回実行し、4つの試験�
 
 Rust 1.88のGNU・musl各441件成功。負荷下でGNU 5回・musl 3回の全体実行が全て成功した。
 CLIのfiltered分岐、実端末でのCtrl+C・SIGTERM、実pastaでの統合は未実施である。
+
+## CLIからのfiltered実行（2026-09-24）
+
+CLIは、filteredの計画ではbwrapをその場で実行せず、`kakoi_net::filtered::start` で
+通信を準備・検証してからアプリを起動し、`kakoi_net::run` の終了コードで終わる。
+pastaとnftはbwrapと同じくホストの `PATH` から探し、見つからなければ種類 `bwrap` の
+診断（125）でアプリを起動せずに終わる。
+
+現時点で未対応の構成は、起動前に種類 `bwrap` の診断で止める。ホストDNSへの追従
+（`network.dns-upstream` の省略）、`host-loopback` と `host-interface` の宛先がこれに当たる。
+黙って別の経路へ切り替えたり、許可を広げたりはしない。
+
+PTYで実端末のCtrl+Cを試したところ、kakoiと同じプロセスグループにいたpastaの代役と
+名前空間の保持プロセスにもSIGINTが届き、通信が遮断・復旧された。pasta・nft・名前空間の
+保持プロセスを別のプロセスグループで起動するよう直した。修正後、Ctrl+Cはアプリだけに
+届き、アプリが操作を取り消して続ければ隔離環境も続き、猶予中のCtrl+Cは残りを止めて
+主コマンドの結果を保つ。kakoi自身がSIGINTを無視しない版では、両試験が失敗した。
+
+pastaは代役で、実pastaの通信経路はこの環境（TUNなし）では確かめていない。
+Rust 1.88のGNU・musl各445件成功、CPU数の3倍の負荷で全体3回成功。

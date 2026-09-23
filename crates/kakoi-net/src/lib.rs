@@ -12,6 +12,7 @@ pub mod dns_workers;
 pub mod dynamic;
 pub mod exit;
 pub mod filter;
+pub mod filtered;
 pub mod health;
 pub mod init;
 pub mod leases;

@@ -124,8 +124,10 @@ impl NetworkNamespace {
 
     /// Builds a trusted controller command. This is not an application launcher:
     /// the command receives the network administrator's user namespace.
+    /// It runs in a process group of its own, out of reach of the terminal's Ctrl+C.
     pub fn command(&self, program: impl AsRef<OsStr>) -> io::Result<Command> {
         let mut command = Command::new(program);
+        command.process_group(0);
         self.enter_before_exec(&mut command)?;
         Ok(command)
     }
@@ -180,6 +182,8 @@ unsafe fn hold_namespace(
     uid_map: &[u8],
     gid_map: &[u8],
 ) -> ! {
+    // Out of the caller's process group: the terminal's Ctrl+C is the application's.
+    libc::setpgid(0, 0);
     let mut result = 0_i32;
     if let Some((user, net)) = outer {
         if libc::setns(user, libc::CLONE_NEWUSER) != 0 || libc::setns(net, libc::CLONE_NEWNET) != 0

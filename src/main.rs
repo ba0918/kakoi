@@ -9,6 +9,13 @@ use kakoi::plan_text;
 use kakoi::startup::{self, Outcome};
 use kakoi_core::diagnostic::{Diagnostic, Kind, Warning};
 use kakoi_core::launch::{self, BwrapCommand};
+use kakoi_core::plan::Plan;
+use kakoi_core::policy::NetworkMode;
+use kakoi_net::{filtered, notification::NotificationWriter, run};
+use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::os::fd::AsFd;
+use std::process::Stdio;
 
 fn main() -> ExitCode {
     // The isolation's process 1 of a filtered run is this executable (kakoi-net).
@@ -55,6 +62,12 @@ fn main() -> ExitCode {
                 let _ = std::io::stdout().write_all(text.as_bytes());
                 return ExitCode::SUCCESS;
             }
+            if prepared.plan.policy.network_mode == NetworkMode::Filtered {
+                return match filtered(&prepared.plan) {
+                    Ok(code) => ExitCode::from(code),
+                    Err(diagnostic) => exit_with(diagnostic),
+                };
+            }
             match launch::assemble(&prepared.plan) {
                 Ok(bwrap) => exit_with(execute(bwrap)),
                 Err(diagnostic) => exit_with(diagnostic),
@@ -62,6 +75,26 @@ fn main() -> ExitCode {
         }
         Err(diagnostic) => exit_with(diagnostic),
     }
+}
+
+/// Runs a filtered plan under supervision: kakoi stays to keep the network
+/// controlled and returns the run's exit code once every process has ended.
+fn filtered(plan: &Plan) -> Result<u8, Diagnostic> {
+    let host: BTreeMap<OsString, OsString> = std::env::vars_os().collect();
+    let tools = filtered::Tools::locate(&host)?;
+    let terminate = run::termination_on_sigterm()
+        .map_err(|error| Diagnostic::bwrap(format!("handle SIGTERM: {error}")))?;
+    let (mut session, mut application) =
+        filtered::start(plan, &tools, Path::new("/proc/self/exe"), Stdio::inherit())?;
+    run::leave_interrupt_to_application();
+    let mut writer = NotificationWriter::new(std::io::stderr().as_fd())
+        .map_err(|error| Diagnostic::bwrap(format!("start the notification writer: {error}")))?;
+    Ok(run::run(
+        &mut session,
+        &mut application,
+        &mut writer,
+        terminate,
+    ))
 }
 
 /// Executes `bwrap` in place (specification section 13, stage 10). Returns only when the
