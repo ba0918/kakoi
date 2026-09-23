@@ -157,3 +157,69 @@ print('released', held('127.0.0.1', 18000, 'tcp'), 'pasta left', len(pastas()))
         "{output}"
     );
 }
+
+/// A main command that serves the published port and, on the termination
+/// request, reports whether it can still reach the remote service, then ends
+/// with 0 once a line arrives on its input.
+const TERMINATED: &str = r#"
+import os, signal, threading, time
+server = socket.socket()
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind(('127.0.0.1', 8000))
+server.listen()
+
+def serve():
+    while True:
+        connection, _ = server.accept()
+        with connection:
+            connection.sendall(b'main')
+threading.Thread(target=serve, daemon=True).start()
+
+def terminate(*_):
+    print('terminating', exchange('11.0.0.5', 8080, 'tcp', REFUSED).startswith('failed'), flush=True)
+    os.read(0, 16)
+    os._exit(0)
+signal.signal(signal.SIGTERM, terminate)
+print('ready', exchange('11.0.0.5', 8080, 'tcp', PERMITTED), flush=True)
+while True:
+    time.sleep(1)
+"#;
+
+// @kotowari[EX-219, EX-221]
+#[test]
+fn sigterm_blocks_before_asking_the_main_command_to_end() {
+    let host = FakeHost::new(
+        &format!(
+            "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
+             {TCP_V4}\n[process]\nshutdown-grace-seconds = 300\n"
+        ),
+        &["11.0.0.5/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+import signal, time
+serve('11.0.0.5', 8080, 'tcp', 'static')
+process = kakoi({TERMINATED:?}, stdin=subprocess.PIPE)
+until(process, 'published')
+print(line(process.stdout).strip(), exchange('127.0.0.1', 18000, 'tcp', PERMITTED))
+before = len(received)
+process.send_signal(signal.SIGTERM)
+print(line(process.stdout).strip())
+print('published', exchange('127.0.0.1', 18000, 'tcp', REFUSED).startswith('failed'), len(received) - before)
+started = time.monotonic()
+process.stdin.write(b'end\n')
+process.stdin.flush()
+print('exit', finish(process), 'within the grace', time.monotonic() - started < 60)
+print('released', held('127.0.0.1', 18000, 'tcp'), 'pasta left', len(pastas()))
+"#
+    ));
+    assert_eq!(
+        output,
+        "ready static main\n\
+         terminating True\n\
+         published True 0\n\
+         exit 143 within the grace True\n\
+         released free pasta left 0\n",
+        "{output}"
+    );
+}
