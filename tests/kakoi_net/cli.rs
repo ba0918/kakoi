@@ -254,3 +254,50 @@ fn ctrl_c_during_the_grace_ends_the_remaining_processes_and_keeps_the_result() {
     assert!(after < HANG, "{after:?}");
     assert!(output.contains("kakoi: grace interrupted"), "{output}");
 }
+
+// Neither pasta nor nft is on PATH: only what host and none always needed.
+// The unused filtered settings are reported and change nothing.
+// @kotowari[EX-166, EX-168, EX-730]
+#[test]
+fn host_and_none_need_neither_pasta_nor_nft() {
+    let bin = TempDir::new();
+    for tool in ["bwrap", "git"] {
+        let found = ["/usr/bin", "/bin", "/usr/local/bin"]
+            .iter()
+            .map(|directory| Path::new(directory).join(tool))
+            .find(|candidate| candidate.is_file())
+            .unwrap_or_else(|| panic!("the test needs {tool}"));
+        std::os::unix::fs::symlink(found, bin.path().join(tool)).unwrap();
+    }
+    for mode in ["host", "none"] {
+        let home = TempDir::new();
+        let workspace = home.path().join("ws");
+        std::fs::create_dir(&workspace).unwrap();
+        home.write(
+            ".config/kakoi/profile/default.toml",
+            format!(
+                "{RW_WORKSPACE}\n[network]\nmode = '{mode}'\n\n[[network.allow]]\ndestination = {{ dns = 'example.com' }}\nprotocol = 'tcp'\nports = ['443']\n\n[[network.publish]]\nmode = 'fixed'\nprotocol = 'tcp'\nport = 8000\nhost-port = 18000\n"
+            ),
+        );
+        let output = binary(home.path())
+            .env("PATH", bin.path())
+            .current_dir(&workspace)
+            .args(["--", "/bin/sh", "-c", "echo ran"])
+            .output()
+            .unwrap();
+        assert_eq!(
+            (
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+            (
+                Some(0),
+                "ran\n".into(),
+                "kakoi: warning: network/process settings are unused outside filtered mode\n"
+                    .into()
+            ),
+            "{mode}"
+        );
+    }
+}
