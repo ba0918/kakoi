@@ -9,6 +9,8 @@ mod cli;
 mod common;
 #[path = "kakoi_net/config.rs"]
 mod config;
+#[path = "kakoi_net/controllers.rs"]
+mod controllers;
 #[path = "kakoi_net/dns_adoption.rs"]
 mod dns_adoption;
 #[path = "kakoi_net/dns_front.rs"]

@@ -51,6 +51,18 @@ PERMITTED = 20
 REFUSED = 3
 "#;
 
+/// The namespace's process 1 reaps orphans as a host's init does, so that an
+/// ended process leaves no entry in `/proc`; the script runs in its child.
+const INIT: &str = r#"
+import os
+script = os.fork()
+if script:
+    while True:
+        pid, status = os.wait()
+        if pid == script:
+            os._exit(os.waitstatus_to_exitcode(status))
+"#;
+
 /// The host side's preparation and helpers. The addresses on `svc0` stand for
 /// remote services: pasta copies only the addresses of `probe0` into the
 /// sandbox, so these stay remote from inside it.
@@ -215,12 +227,17 @@ impl FakeHost {
         }
     }
 
+    /// Puts an executable ahead of the host's own on kakoi's `PATH`.
+    pub(crate) fn command(&self, name: &str, body: &str) {
+        self.bin.write_executable(name, body);
+    }
+
     /// Runs `script`, a Python program on the host side after the helpers, in
     /// a fresh namespace, and returns its output. A failure of the script fails
     /// the test.
     pub(crate) fn run(&self, script: &str) -> String {
         let program = format!(
-            "REMOTE = {:?}\nCLIENT = {CLIENT:?}\n{CLIENT}\n{HOST}\n{script}",
+            "{INIT}\nREMOTE = {:?}\nCLIENT = {CLIENT:?}\n{CLIENT}\n{HOST}\n{script}",
             self.remote
         );
         let mut child = Command::new("unshare")
