@@ -7,10 +7,11 @@ const UDP_V6: &str = "\n[[network.publish]]\nmode = 'fixed'\nprotocol = 'udp'\np
 /// The application's services, started and stopped by commands on its standard
 /// input (`tcp start`, `udp stop`, ...) and each acknowledged with `done`. A
 /// service answers with its name and how many times it has been started.
+/// `fill stderr` leaves a process that fills standard error,
 /// `resolve NAME` answers with the name's IPv4 address, and
 /// `remote ADDRESS permitted|refused` with an exchange with ADDRESS's TCP 8080.
 pub(crate) const SERVICES: &str = r#"
-import select, sys, threading
+import select, subprocess, sys, threading
 endpoints = {'tcp': ('127.0.0.1', 8000), 'udp': ('::1', 8000), 'other': ('127.0.0.1', 8001)}
 running, starts = {}, {}
 
@@ -46,7 +47,12 @@ def start(name):
 
 for command in sys.stdin:
     name, action, *rest = command.split()
-    if name == 'resolve':
+    if name == 'fill':
+        # Another process of the application writes much more to standard
+        # error than a pipe holds, and waits there for a reader.
+        subprocess.Popen([sys.executable, '-c', 'import sys; sys.stderr.write("x" * 1000000)'])
+        print('done', flush=True)
+    elif name == 'resolve':
         print(socket.getaddrinfo(action, 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0], flush=True)
     elif name == 'remote':
         print(exchange(action, 8080, 'tcp', PERMITTED if rest == ['permitted'] else REFUSED), flush=True)

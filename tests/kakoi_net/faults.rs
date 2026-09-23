@@ -223,3 +223,61 @@ print('released', held('127.0.0.1', 18000, 'tcp'), 'pasta left', len(pastas()))
         "{output}"
     );
 }
+
+// Nobody reads kakoi's standard error, and it is full: the block and the
+// recovery go on regardless, and the notices come once it is read again.
+// @kotowari[REQ-144]
+#[test]
+fn notification_backpressure_does_not_block_control() {
+    let host = FakeHost::new(
+        &format!(
+            "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
+             {TCP_V4}"
+        ),
+        &["11.0.0.5/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+{BREAK}
+import array, fcntl, termios, threading, time
+serve('11.0.0.5', 8080, 'tcp', 'static')
+process = kakoi({SERVICES:?}, stdin=subprocess.PIPE)
+until(process, 'published')
+command(process, 'tcp start')
+command(process, 'fill stderr')
+# Only guards against a hang.
+deadline = time.monotonic() + PERMITTED
+queued = array.array('i', [0])
+while True:
+    fcntl.ioctl(process.stderr.fileno(), termios.FIONREAD, queued)
+    if queued[0] >= 60000:
+        break
+    assert time.monotonic() < deadline, 'the pipe did not fill'
+    time.sleep(.05)
+break_transport()
+while exchange('127.0.0.1', 18000, 'tcp', REFUSED).startswith('inside'):
+    assert time.monotonic() < deadline + PERMITTED, 'the fault was not blocked'
+    time.sleep(.05)
+before = len(received)
+print('blocked', ask(process, 'remote 11.0.0.5 refused').startswith('failed'), len(received) - before)
+repair()
+deadline = time.monotonic() + 3 * PERMITTED
+while ask(process, 'remote 11.0.0.5 refused') != 'static':
+    assert time.monotonic() < deadline, 'the network was not restored'
+print('restored', exchange('127.0.0.1', 18000, 'tcp', PERMITTED))
+# Read again: what kakoi kept comes out.
+drained = []
+reader = threading.Thread(target=lambda: drained.append(process.stderr.read().decode(errors='replace')))
+reader.start()
+process.stdin.close()
+code = process.wait(timeout=60)
+reader.join()
+notices = drained[0].replace('x', '')
+print('exit', code, 'isolated', 'kakoi: network isolated' in notices, 'restored', 'kakoi: network running: restored' in notices)
+"#
+    ));
+    assert_eq!(
+        output, "blocked True 0\nrestored inside-tcp-1\nexit 0 isolated True restored True\n",
+        "{output}"
+    );
+}
