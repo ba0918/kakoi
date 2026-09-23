@@ -25,6 +25,8 @@ mod dns_runtime;
 mod dns_transport;
 #[path = "kakoi_net/dns_workers.rs"]
 mod dns_workers;
+#[path = "kakoi_net/fake_host.rs"]
+mod fake_host;
 #[path = "kakoi_net/filter.rs"]
 mod filter;
 #[path = "kakoi_net/health.rs"]
@@ -43,6 +45,8 @@ mod namespace;
 mod nft;
 #[path = "kakoi_net/notification.rs"]
 mod notification;
+#[path = "kakoi_net/outbound.rs"]
+mod outbound;
 #[path = "kakoi_net/pasta.rs"]
 mod pasta;
 #[path = "kakoi_net/plan.rs"]

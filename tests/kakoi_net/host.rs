@@ -1,4 +1,5 @@
 use crate::common::{binary, TempDir, RW_WORKSPACE};
+use crate::fake_host::pasta;
 use kakoi_net::{
     dns::{AcceptedRequest, DnsRequests},
     host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
@@ -81,18 +82,6 @@ fn reserved_host_names_are_answered_locally_whatever_the_policy() {
         panic!("an unauthorized name reached resolution");
     };
     assert_eq!(reply.wire[3] & 15, 5);
-}
-
-/// The real pasta, required: these tests observe the traffic it carries.
-fn pasta() -> PathBuf {
-    std::env::var_os("KAKOI_TEST_PASTA")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::split_paths(&std::env::var_os("PATH")?)
-                .map(|directory| directory.join("pasta"))
-                .find(|candidate| candidate.is_file())
-        })
-        .expect("the host-loopback tests need pasta: set KAKOI_TEST_PASTA or put it on PATH")
 }
 
 fn filtered(allow: &str) -> (TempDir, PathBuf, TempDir) {
