@@ -197,7 +197,7 @@ A163により、未修正pastaを2段にして中間の制御用ネットワー�
 | `docs/ir/network/address/network-internal-address.md#REQ-043` | 2・4 |
 | `docs/ir/network/network-library-boundary.md#REQ-150` | 3・9 |
 | `docs/ir/network/link-local/network-link-local-wide-cidr.md#REQ-141` | 2・4 |
-| `docs/ir/network/link-local/network-link-local.md#REQ-052`、`docs/ir/network/link-local/network-link-local.md#REQ-053`、`docs/ir/network/link-local/network-link-local.md#REQ-054`、`docs/ir/network/link-local/network-link-local.md#REQ-055`、`docs/ir/network/link-local/network-link-local.md#REQ-056` | 2・4 |
+| `docs/ir/network/link-local/network-link-local.md#REQ-052`、`docs/ir/network/link-local/network-link-local.md#REQ-053` | 2・4 |
 | `docs/ir/network/policy/network-mode-presence.md#REQ-087` | 2・4 |
 | `docs/ir/network/policy/network-mode.md#REQ-082`、`docs/ir/network/policy/network-mode.md#REQ-083`、`docs/ir/network/policy/network-mode.md#REQ-084` | 2・4 |
 | `docs/ir/network/notification/network-notification-buffer.md#REQ-144` | 8 |
@@ -218,6 +218,9 @@ A163により、未修正pastaを2段にして中間の制御用ネットワー�
 
 後続へ分ける要求（初版の合格判定から除外するが、削除・検証済み扱いにしない）:
 
+- `docs/ir/network/link-local/network-link-local.md#REQ-054`（A167により初版は `host-interface` を起動前に拒否するため観測できない。2026-09-24に利用者の承認で移した。次の2件も同じ）
+- `docs/ir/network/link-local/network-link-local.md#REQ-055`
+- `docs/ir/network/link-local/network-link-local.md#REQ-056`
 - `docs/ir/network/policy/network-inactive-validation.md#REQ-086`
 - `docs/ir/network/publish-config/network-publish-address-selection.md#REQ-136`
 - `docs/ir/network/publish-config/network-publish-address-selection.md#REQ-137`
