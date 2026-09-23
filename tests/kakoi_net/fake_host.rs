@@ -138,21 +138,29 @@ def kakoi(app, stdin=subprocess.DEVNULL):
     return subprocess.Popen(
         [os.environ['KAKOI'], '--', '/usr/bin/python3', '-c', CLIENT + app],
         cwd=os.environ['WORKSPACE'], stdin=stdin, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, text=True,
+        stderr=subprocess.PIPE, bufsize=0,
         env={'PATH': os.environ['BIN'] + ':/usr/sbin:/usr/bin:/bin',
              'HOME': os.environ['HOME_DIR'],
              'XDG_CONFIG_HOME': os.environ['HOME_DIR'] + '/.config'})
 
 def line(stream, wait=PERMITTED):
-    """The next line of `stream`; a hang ends the test."""
-    if not select.select([stream], [], [], wait)[0]:
-        raise AssertionError('no line within the wait')
-    return stream.readline()
+    """The next line of the unbuffered `stream`, or '' at its end; a hang ends
+    the test. Reads a byte at a time, so that no later line waits in a buffer
+    that select cannot see."""
+    text = b''
+    while not text.endswith(b'\n'):
+        if not select.select([stream], [], [], wait)[0]:
+            raise AssertionError('no line within the wait')
+        byte = stream.read(1)
+        if not byte:
+            break
+        text += byte
+    return text.decode()
 
 def finish(process):
     """Waits for kakoi and passes its standard error on for the report."""
     code = process.wait(timeout=60)
-    sys.stderr.write(process.stderr.read())
+    sys.stderr.write(process.stderr.read().decode())
     return code
 "#;
 

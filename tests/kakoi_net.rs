@@ -53,6 +53,8 @@ mod pasta;
 mod plan;
 #[path = "kakoi_net/ports.rs"]
 mod ports;
+#[path = "kakoi_net/publish.rs"]
+mod publish;
 #[path = "kakoi_net/recovery.rs"]
 mod recovery;
 #[path = "kakoi_net/resolution.rs"]

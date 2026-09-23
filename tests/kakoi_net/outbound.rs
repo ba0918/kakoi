@@ -53,7 +53,7 @@ for address, port, kind in [
         ('2a00:5::5', 8081, 'udp'), ('2a00:6::5', 8080, 'udp')]:
     serve(address, port, kind, f'{{address}}/{{kind}}/{{port}}')
 process = kakoi({app:?})
-print(process.stdout.read(), end='')
+print(process.stdout.read().decode(), end='')
 assert finish(process) == 0
 print('received', sorted(received))
 "#
@@ -111,7 +111,7 @@ dns({{('app.example', 1): [('11.0.0.5', {TTL})], ('app.example', 28): [('2a00:5:
 serve('11.0.0.5', 8080, 'tcp', 'v4-tcp')
 serve('2a00:5::5', 8080, 'udp', 'v6-udp')
 process = kakoi({app:?})
-print(process.stdout.read(), end='')
+print(process.stdout.read().decode(), end='')
 assert finish(process) == 0
 "#
     ));

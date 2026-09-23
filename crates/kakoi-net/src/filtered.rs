@@ -14,7 +14,7 @@ use crate::{
 };
 use kakoi_core::{
     diagnostic::Diagnostic,
-    network::{Destination, IpFamily, IpNetwork},
+    network::{Destination, FixedPublication, IpFamily, IpNetwork},
     plan::Plan,
     planning::locate_command,
 };
@@ -139,6 +139,9 @@ pub fn start(
     session
         .activate()
         .map_err(|error| failure("activate the network", error))?;
+    for publication in &policy.network_publish {
+        session.notice(&published(publication));
+    }
     let application = Application::spawn(
         plan,
         session.namespace(),
@@ -147,6 +150,18 @@ pub fn start(
         stdout,
     )?;
     Ok((session, application))
+}
+
+/// Where a fixed publication is reachable on the host, and where it leads.
+fn published(publication: &FixedPublication) -> String {
+    let loopback = match publication.family {
+        IpFamily::Ipv4 => "127.0.0.1",
+        IpFamily::Ipv6 => "[::1]",
+    };
+    format!(
+        "network published: {} {loopback}:{} -> sandbox {loopback}:{}",
+        publication.protocol, publication.host_port, publication.port
+    )
 }
 
 /// The single address that stands for the host's loopback of `family`.
