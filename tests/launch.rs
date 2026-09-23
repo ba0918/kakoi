@@ -262,7 +262,7 @@ fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
     let (home, workspace) = home_with_workspace();
     let tool = workspace.join("-x/tool");
     std::fs::create_dir(tool.parent().unwrap()).unwrap();
-    std::fs::copy("/bin/echo", &tool).unwrap();
+    common::copy_executable(Path::new("/bin/echo"), &tool);
 
     let output = binary(home.path())
         .current_dir(&workspace)
@@ -290,7 +290,7 @@ fn the_command_sees_the_given_name_as_argv0() {
     let (home, workspace) = home_with_workspace();
     let tool = workspace.join("-x/tool");
     std::fs::create_dir(tool.parent().unwrap()).unwrap();
-    std::fs::copy("/bin/cat", &tool).unwrap();
+    common::copy_executable(Path::new("/bin/cat"), &tool);
 
     let by_name = binary(home.path())
         .current_dir(&workspace)

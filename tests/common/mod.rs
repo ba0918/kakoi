@@ -186,6 +186,19 @@ impl TempDir {
     }
 }
 
+/// Copies an executable through a child process, for the reason given at
+/// [`write_executable`].
+#[allow(dead_code)]
+pub fn copy_executable(from: &Path, to: &Path) {
+    let status = std::process::Command::new("/bin/cp")
+        .arg("--")
+        .arg(from)
+        .arg(to)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
 /// Writes an executable through a child process. A descriptor open for writing in
 /// this multithreaded test process would be inherited by any process another test
 /// forks at that moment, and executing the file would then fail with ETXTBSY.

@@ -846,7 +846,7 @@ fn a_nested_launch_passes_the_given_name_as_argv0() {
     // argv[0] `sh` and the resolved path are told apart.
     let home = TempDir::new();
     let bin = TempDir::new();
-    std::fs::copy("/bin/sh", bin.path().join("sh")).unwrap();
+    common::copy_executable(Path::new("/bin/sh"), &bin.path().join("sh"));
 
     let output = nested(&home, bin.path())
         .args(["--", "sh", "-c", "echo \"$0\""])
