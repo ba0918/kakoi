@@ -72,6 +72,9 @@ impl Pasta {
             "--pid",
             "/proc/self/fd/1",
             "--config-net",
+            // Only errors: the rest describes the host's network, which a
+            // failed start would otherwise repeat in its diagnostic.
+            "--quiet",
             "--host-lo-to-ns-lo",
             "-T",
             "none",
