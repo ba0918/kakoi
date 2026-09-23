@@ -49,7 +49,10 @@ pub fn leave_interrupt_to_application() {
 
 /// Blocking first; the processes are asked to end only once it is confirmed.
 fn block(session: &mut Session, application: &mut Application, fault: &mut bool) -> bool {
-    if session.close_until(Instant::now() + CLOSURE).is_err() {
+    if let Err(error) = session.close_until(Instant::now() + CLOSURE) {
+        session.report_failure(&io::Error::other(format!(
+            "transit closure unconfirmed: {error}"
+        )));
         *fault = true;
         application.kill();
         false

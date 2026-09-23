@@ -200,7 +200,7 @@ impl Session {
         error
     }
 
-    fn report_failure(&mut self, error: &io::Error) {
+    pub(crate) fn report_failure(&mut self, error: &io::Error) {
         let state = if self.state == SessionState::Unsafe {
             NetworkState::Unsafe
         } else {
