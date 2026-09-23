@@ -9,13 +9,15 @@ leak.
 
 The host is the trusted side; the isolated process is not. `kakoi` trusts the environment
 it starts in (`HOME`, `XDG_CONFIG_HOME`, `PATH`, `KAKOI`, and the current directory),
-the policy files it reads, and the `bwrap` it finds on `PATH`. Everything the host does, your
+the policy files it reads, and the `bwrap` it finds on `PATH` (and, in `filtered` mode, the
+`pasta` and `nft`). Everything the host does, your
 shell, your `git`, the files you open afterwards, is outside the boundary.
 
 The isolation has four dimensions:
 
 - **file system**: what is visible and what is writable, as the policy's mount items say;
-- **network**: shared with the host or cut;
+- **network**: shared with the host, cut, or `filtered` to the destinations and ports the
+  policy allows;
 - **environment**: what is inherited, dropped, and added;
 - **credentials**: files hidden and secrets injected.
 
@@ -25,7 +27,8 @@ where the kernel does not support it. What this model covers is the non-setuid `
 user other than root. A seccomp filter
 fails `ioctl(TIOCSTI)` with `EPERM` and ends any process that makes a system call for another
 architecture or with the x32 bit set. The boundary is assembled once at start-up and does not
-change afterwards.
+change afterwards, except that a `filtered` network follows the DNS answers for the names it
+allows.
 
 ## What is guaranteed
 
@@ -48,11 +51,42 @@ When the launch is not refused:
 - Anything about the host. A compromised host, a swapped `bwrap`, or a `cd` through a link an
   earlier session re-pointed is outside the model.
 - Resource limits: no cgroup limits on CPU or memory.
-- Network policy finer than on or off.
+- Anything about traffic `filtered` allows: an allowed destination can carry whatever the
+  process sends it.
 - Kernel isolation: the process shares the host's kernel, as with any namespace-based sandbox.
 - That an `rw` area stays harmless afterwards. What the process writes there (`.git/hooks`,
   `.git/config`, build scripts) is read by whatever you later run on the host.
 - Complete protection of `ro` and `hide` items placed inside an `rw` area; see known gap 15.
+
+## The `filtered` network
+
+In `filtered` mode `kakoi` stays running as a supervisor instead of handing the process to
+`bwrap`. The rules live in the kernel (nftables) of network namespaces the isolated process
+cannot administer, and the traffic is carried by two `pasta` processes outside it. What holds:
+
+- a new connection leaves only when its destination, protocol, and port match an allow rule;
+  an address learned by DNS counts only when the answer came through `kakoi`'s own resolver,
+  and only until the answer's time to live runs out;
+- the host's loopback is reachable only through `host-loopback` rules, and a port is published
+  to the host only when a `[[network.publish]]` names it;
+- when the enforcement fails while running (a `pasta` process, the supervisor, or its watchdog
+  stops), all traffic in and out is blocked, the process keeps running, and `kakoi` rebuilds
+  the same rules behind the block before opening again. Addresses whose DNS answers expired
+  meanwhile are not restored. A kernel lease that the supervisor renews every second closes the
+  path by itself when neither the supervisor nor the watchdog can act. When even the block
+  cannot be confirmed, every process is killed at once and `kakoi` exits 125;
+- when the main command ends, traffic and publications stop before the processes left behind
+  are asked to end.
+
+Limits of `filtered`, as it stands:
+
+- `pasta` gives each UDP flow a host-side socket with the same port number the process sent
+  from. When that number is already taken on the host, the flow cannot be made and its
+  datagrams are dropped without notice; the process sees a timeout. Sending again from another
+  port is a new flow. This is `pasta`'s behaviour and is accepted.
+- IPv6 link-local destinations (`host-interface`) are refused, and publications are fixed:
+  nothing is published because something inside started listening.
+- The resolver does not cache answers yet.
 
 ## Known gaps
 
@@ -116,7 +150,8 @@ When the launch is not refused:
 ## Not in 0.3
 
 - cgroup limits on CPU or memory
-- a per-domain network allowance
+- multicast and broadcast traffic from the isolation
+- DNS over HTTPS as the resolver's upstream
 - a removal operator in the layer merge
 - an automatic merge of `default.toml` under another profile
 - policy files found from the current directory

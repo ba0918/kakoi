@@ -78,7 +78,10 @@ It shows:
 - the policy files read (when the built-in default stands in for `profile/default.toml`, the
   field shows the string `kakoi init`);
 - the four variables (`${workspace}`, `${worktree}`, `${git_common_dir}`, `${config_dir}`);
-- the network mode;
+- the network mode, and in `filtered` mode each allow rule, planned publication, and DNS
+  upstream, as `allow tcp api.example.com ports 443`,
+  `planned publication: tcp ipv4 host:18000 -> sandbox:8000`, and
+  `DNS upstream: 192.0.2.53 port 853 TLS name=resolver.example.com`;
 - every mount item, applied or skipped with the reason, in the order they are applied. The
   home directory is shortened to `~`, and an item is annotated with where it came from only
   when that is not the profile: `(--policy-file)`, `(command line)`, `(scan)`,
@@ -116,7 +119,7 @@ meaning while `format_version` is the same; keys may be added.
 | `policy_sources` | The policy files read, each `{"kind": "file", "path": ...}` or `{"kind": "built-in-default"}`. |
 | `variables` | `workspace`, `worktree`, `git_common_dir`, `config_dir`; `null` where a variable has no value. |
 | `home` | The home directory. |
-| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`. |
+| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`. |
 | `mounts` | The items applied, in order: `directive`, `path` (real), `kind` (`directory` or `not-directory`), `written`, `origin`. |
 | `skipped_mounts` | Written items skipped: `directive`, `written`, `origin`, `reason`. |
 | `left_visible` | Scan hits left visible: `link`, `reason`. |
@@ -159,6 +162,31 @@ own output and exit code. Only in a nested run, where `kakoi` executes the comma
 does a failed `exec` become the `command not executable` diagnostic above. The failure a
 fresh machine meets first is a user namespace the kernel will not let `bwrap` create; see
 [Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
+
+### In `filtered` mode
+
+A `filtered` run does not hand itself to `bwrap`: `kakoi` stays as the supervisor of the
+network, starts the command through `bwrap`, and returns the command's exit code when it ends.
+Its own messages go to standard error, one line each, starting with `kakoi: `:
+
+- `kakoi: network running: ready` when the network is in force, and one
+  `kakoi: network published: ...` line per published port;
+- `kakoi: network isolated: <reason>` when enforcement failed and all traffic is blocked while
+  it is rebuilt, and `kakoi: network running: restored` when it is back;
+- `kakoi: network unsafe: <reason>` when even the block could not be confirmed.
+
+These lines are dropped rather than wait when standard error is not read; the network control
+never stops for them. The exit code differs from the command's own in these cases:
+
+- `kakoi` receives `SIGTERM` while the command runs: the network is blocked, the command and
+  its children are asked to end and given the grace, and the exit code is 143;
+- the block cannot be confirmed: every process is killed at once, without the grace, and the
+  exit code is 125;
+- the start fails (a missing `pasta` or `nft`, a published port already taken): 125 with a
+  `kakoi: bwrap: ...` diagnostic, and the command does not run.
+
+Ctrl+C on the terminal reaches the command, not `kakoi`; the command decides whether to end.
+Pressed while the processes left behind are in their grace, it ends them at once.
 
 ## Nesting
 

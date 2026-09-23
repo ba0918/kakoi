@@ -31,6 +31,9 @@ that carry them.
 - On Ubuntu 24.04 and later, permission for `bwrap` to use a user namespace: the restriction is
   on by default, and every launch needs the namespace. See
   [Allowing the user namespace](docs/getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
+- For the `filtered` network mode only: `pasta` (the `passt` package; tested with Debian
+  trixie-backports `0.0~git20260728.f8df3f1-1~bpo13+1`), `nft` (nftables), and `/dev/net/tun`.
+  `host` and `none` need none of them.
 - A Rust toolchain, 1.88 or later, only to build from source
 
 ## Install
@@ -126,8 +129,10 @@ directory inside it. Paths can use `~` and the variables `${workspace}`, `${work
   writes it freely, and the copy goes when the command ends.
 - **Secrets** are read from files, injected as environment variables, and the files are hidden
   inside. The configuration directory's `secrets/` is always hidden.
-- **Network** is either shared with the host (`host`) or cut (`none`); there is nothing in
-  between.
+- **Network** is shared with the host (`host`), cut (`none`), or `filtered`: new connections
+  leave only for the destinations, protocols, and ports you allow (by IP, CIDR, or DNS name),
+  the host's loopback is reached only through rules you write, and ports are published to the
+  host's loopback only when you name them. See [Network](docs/policy.md#network).
 - **Environment** is inherited or cleared, then shaped by `unset` patterns, `set`, secrets, and
   `path-prepend`. `KAKOI=1` marks the inside.
 
@@ -177,13 +182,16 @@ What `kakoi` guarantees, when the launch is not refused:
   too, and what is written there goes when the command ends);
 - the secrets and the credential files the policy names are not readable from inside;
 - `ioctl(TIOCSTI)` is blocked, so keystrokes cannot be pushed into your terminal that way;
+- in `filtered` mode, new connections leave only for what the policy allows, and a failure of
+  the enforcement blocks all traffic rather than letting it through;
 - the exit code you get is the command's own.
 
 What it does not guarantee:
 
 - anything about the host: `kakoi` trusts `HOME`, `PATH`, the current directory, and the
   environment it starts in;
-- resource limits (no cgroups), per-domain network rules, or kernel isolation;
+- resource limits (no cgroups) or kernel isolation;
+- what an allowed network destination does with the traffic it receives;
 - that an `rw` area stays harmless afterwards: `.git/hooks` and `.git/config` in a repository
   you later use on the host are yours to review.
 
@@ -204,8 +212,8 @@ and the fifteen known gaps are in [Security model](docs/security.md).
 
 ## Status
 
-0.3 is the current version. Among the things it does not do: no cgroup limits, no per-domain
-network allowance, no aarch64, no protection of `.git/hooks` and `.git/config`, and no shipped
+0.3 is the current version. Among the things it does not do: no cgroup limits, no multicast or
+broadcast from the isolation, no aarch64, no protection of `.git/hooks` and `.git/config`, and no shipped
 tool-section values for any CLI other than codex. The complete list is in
 [Not in 0.3](docs/security.md#not-in-03).
 

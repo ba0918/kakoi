@@ -69,6 +69,11 @@ Two ways to allow the namespace, and they are not interchangeable:
 Ubuntu describes the restriction in the
 [24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/).
 
+In `filtered` network mode `kakoi` itself and `pasta` create user namespaces too, outside
+`bwrap`, so the `bwrap` profile alone does not cover them. That combination has not been tried
+on a machine with the restriction on; the one `filtered` has been run on so far (WSL2) does not
+carry it.
+
 ## The first launch
 
 Two things are empty on a machine you have just installed on:

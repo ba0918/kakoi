@@ -26,7 +26,7 @@ under  = "/mnt"                        # required
 fstype = ["9p", "drvfs"]               # required, not empty
 
 [network]
-mode = "host"            # "host" | "none"; default "host"
+mode = "host"            # "host" | "none" | "filtered"; default "host"
 
 [env]
 mode         = "inherit" # "inherit" | "clear"; default "inherit"
@@ -171,11 +171,130 @@ than miss a mount.
 
 ## Network
 
-`network.mode` is `host` (the host's network, the default) or `none`, which cuts the network
-namespace and leaves only loopback. There is no per-domain allowance in 0.3. A proxy running
-outside can still be reached from a `none` run: pass its UNIX socket with `rw-file` and point
-the proxy's environment variable at it with `env.set`. That composition is unverified, and 0.3
-does not guarantee it.
+`network.mode` is one of:
+
+- `host`, the default: the host's network, unchanged;
+- `none`: the network namespace is cut and only loopback is left. A proxy running outside can
+  still be reached from a `none` run: pass its UNIX socket with `rw-file` and point the proxy's
+  environment variable at it with `env.set`. That composition is unverified, and `kakoi` does
+  not guarantee it;
+- `filtered`: new connections leave only when they match an allow rule, and ports are
+  published to the host only when you name them. It needs `pasta` (from the `passt` package)
+  and `nft` (nftables) on `PATH`; `host` and `none` need neither.
+
+`filtered` has to be written. Writing allow rules or publications never switches the mode by
+itself: with `mode` written nowhere and such settings present, the launch stops. With `host` or
+`none` chosen, leftover `filtered` settings are still checked for their form, then ignored with a
+warning.
+
+### Allow rules
+
+```toml
+[network]
+mode = "filtered"
+
+[[network.allow]]
+destination = { dns = "api.example.com" }   # or { ip = "..." }, { cidr = "..." }
+protocol = "tcp"                            # "tcp" | "udp"
+ports = ["443"]
+```
+
+Every rule has `destination`, `protocol`, and `ports`. A new connection goes out only when its
+destination, protocol, and port match a rule; the reply traffic of an allowed connection comes
+back. Loopback inside the isolation is always open on every port, and it is not the host's
+loopback.
+
+- **`ip` and `cidr`** allow an address or a network, IPv4 or IPv6.
+- **`dns`** allows the addresses the name resolves to. `example.com` is that name alone;
+  `*.example.com` is every name below it, at any depth, and not `example.com` itself. Case and
+  one trailing dot do not matter, and internationalised names are accepted and converted to
+  ASCII. The application resolves through a resolver `kakoi` runs; an address it answers is
+  allowed until the answer's time to live runs out (1 second for a time to live of 0, set with
+  `network.dns-zero-ttl-grace-milliseconds`). A connection already established stays up after
+  that, as does a UDP exchange that keeps going (`network.udp-idle-timeout-seconds`, default
+  120). Loopback, private, and other special addresses in an answer are not allowed by a
+  `dns` rule alone; allow them with `ip` or `cidr`.
+- **`ports`** is a list of strings: `"443"`, a range `"8000-8010"`, or `"*"` for every port
+  alone. Numbers are 1 to 65535, without leading zeros, signs, or spaces; service names and
+  bare integers are refused.
+
+To reach a service on the host's own loopback, allow `host-loopback` and connect to
+`host-v4.kakoi.internal` (the host's `127.0.0.1`) or `host-v6.kakoi.internal` (`::1`). Inside,
+`localhost` stays the isolation's own.
+
+```toml
+[[network.allow]]
+destination = { host-loopback = "ipv4" }    # "ipv4" | "ipv6"
+protocol = "tcp"
+ports = ["8080"]
+```
+
+IPv6 link-local destinations (`host-interface`) are not available yet: a rule with one is
+refused before the launch.
+
+### DNS upstream
+
+With no `[[network.dns-upstream]]`, the resolver asks the `nameserver`s of the host's
+`/etc/resolv.conf`, in order, and follows the file when it changes. (A file naming only
+systemd-resolved's stub `127.0.0.53` is read as `127.0.0.54`.) To name the upstream instead:
+
+```toml
+[[network.dns-upstream]]
+transport = "tls"               # "plain" | "tls"
+ip = "192.0.2.53"
+port = 853
+tls-name = "resolver.example.com"   # required for "tls", refused for "plain"
+```
+
+Several upstreams are tried in order; plain and TLS are not mixed. TLS verifies the server with
+the host's CA certificates. The waits are `network.dns-server-timeout-seconds` (default 2) and
+`network.dns-resolution-timeout-seconds` (default 10).
+
+### Publishing a port
+
+```toml
+[[network.publish]]
+mode = "fixed"
+protocol = "tcp"          # "tcp" | "udp"
+port = 8000               # inside the isolation
+host-port = 18000         # on the host
+# target-family = "ipv4"  # "ipv4" | "ipv6"; default "ipv4"
+# host-family = "ipv4"    # must equal target-family
+```
+
+The host listens on `127.0.0.1` (or `::1`) only, and forwards to the same family's loopback
+inside. The port is taken before the command starts and held until the isolation ends,
+whether or not anything listens inside yet. When it cannot be taken, the launch fails with 125
+and the command does not run; `kakoi` never picks another number. Each published port is
+announced on standard error when the run starts:
+
+```
+kakoi: network published: tcp 127.0.0.1:18000 -> sandbox 127.0.0.1:8000
+```
+
+### The end of a run
+
+When the main command ends, the network and the publications are stopped first; then the
+processes it left behind are asked to end and given a common grace, `process.shutdown-grace-seconds`
+(default 5, 1 to 300), before they are killed. See
+[Exit codes and diagnostics](cli.md#exit-codes-and-diagnostics) for what a `filtered` run
+returns.
+
+```toml
+[process]
+shutdown-grace-seconds = 5
+```
+
+### Layers
+
+`network.allow`, `network.dns-upstream`, and `network.publish` add up across the layers; an
+empty list removes nothing. Two publications that give the same endpoint different
+counterparts are an error. The numeric settings take the upper layer.
+
+The other numeric settings, all under `[network]`, bound the resolver's work and are seldom
+needed: `dns-max-cname-hops` (16), `dns-max-upstream-queries` (64),
+`dns-max-concurrent-resolutions` (256), `dns-max-waiters-per-resolution` (64),
+`dns-failure-cache-seconds` (5), and `recovery-attempt-timeout-seconds` (10).
 
 ## Environment
 
