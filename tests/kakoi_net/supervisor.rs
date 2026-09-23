@@ -256,3 +256,35 @@ fn exit_priority_is_safety_fault_then_external_termination_then_main_result() {
         assert_eq!(exit_code(fault, terminated, main), expected);
     }
 }
+
+// @kotowari[REQ-060]
+#[test]
+fn another_environment_prepared_at_the_same_time_leaks_no_descriptor() {
+    let script = r#"
+import os
+for fd in os.listdir('/proc/self/fd'):
+    try:
+        target = os.readlink('/proc/self/fd/' + fd)
+    except FileNotFoundError:
+        continue
+    assert 'memfd:kakoi-' not in target, target
+print('independent', flush=True)
+"#;
+    let (_other_home, _other_workspace, other) = filtered_plan("print('other')");
+    let other_namespace = NetworkNamespace::create().unwrap();
+    // Held open across the spawn below, as a concurrent caller's launch would be.
+    let pending = kakoi_net::application::prepare(&other, &other_namespace).unwrap();
+    assert!(!pending.descriptors.is_empty());
+    let (_home, _workspace, plan) = filtered_plan(script);
+    let (mut application, _namespace) = spawn(&plan, Duration::from_secs(1));
+    let output = read_until_all_exit(application.take_stdout().unwrap());
+    assert_eq!(
+        next_event(&mut application, HANG),
+        ApplicationEvent::MainExited(0)
+    );
+    application.begin_grace().unwrap();
+    assert_eq!(finish(&mut application, HANG), Some(0));
+    let (text, _) = output.recv_timeout(HANG).unwrap();
+    assert_eq!(text, "independent\n");
+    drop(pending);
+}

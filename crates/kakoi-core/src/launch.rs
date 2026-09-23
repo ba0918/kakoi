@@ -10,6 +10,7 @@ use std::ffi::{CString, OsString};
 use std::fmt;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 use crate::diagnostic::Diagnostic;
@@ -90,6 +91,20 @@ fn assemble_with_prefix(plan: &Plan, prefix: &[OsString]) -> Result<BwrapCommand
         .args(arguments)
         .env_clear()
         .envs(plan.environment.values());
+    // Close-on-exec is cleared only in this command's own child, so another launch
+    // prepared at the same time in this process never inherits these files.
+    let inherited: Vec<_> = descriptors.iter().map(AsRawFd::as_raw_fd).collect();
+    // SAFETY: only `fcntl`, which is async-signal-safe, runs between fork and exec.
+    unsafe {
+        command.pre_exec(move || {
+            for &fd in &inherited {
+                if libc::fcntl(fd, libc::F_SETFD, 0) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        });
+    }
     Ok(BwrapCommand {
         command,
         descriptors,
@@ -153,13 +168,13 @@ fn numbered_arguments(
     Ok(numbered)
 }
 
-/// A file in memory holding `content`, positioned at its start, that survives the exec
-/// (no close-on-exec flag).
+/// A file in memory holding `content`, positioned at its start. It is created
+/// close-on-exec; only the `bwrap` command it was made for clears the flag.
 fn memory_file(name: &str, content: &[u8]) -> io::Result<OwnedFd> {
     let name = CString::new(name).expect("the name has no NUL");
     // SAFETY: `memfd_create` reads the NUL-terminated name and creates a descriptor
     // that nothing else holds.
-    let raw = unsafe { libc::memfd_create(name.as_ptr(), 0) };
+    let raw = unsafe { libc::memfd_create(name.as_ptr(), libc::MFD_CLOEXEC) };
     if raw < 0 {
         return Err(io::Error::last_os_error());
     }
