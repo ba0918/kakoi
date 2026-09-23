@@ -22,6 +22,22 @@ DNS over TLSでは、接続するIPと証明書で照合する名前を分けて
 
 明示した複数上流は、上流問い合わせが必要になるたびに記載順で試す。先の候補が応答しない場合等の切替条件に達したら次へ進む。ホストDNS設定を使う場合の上流選択方式はこの規則の対象外とする。
 
+## 明示上流の記法
+
+```toml
+[network]
+mode = "filtered"
+
+[[network.dns-upstream]]
+transport = "tls"
+ip = "192.0.2.53"
+port = 853
+tls-name = "resolver.example.com"
+```
+
+説明用の接続先であり、実際のDNSサーバーに置き換える。
+`transport`、`ip`、`port`は必須。`transport`は通常DNSの`plain`または`tls`、`ip`はIP本体、`port`は1〜65535の整数。`tls`では証明書照合用の`tls-name`も必須とし、国際化名をASCIIへ正規化する。ワイルドカードは指定できない。`plain`に`tls-name`を書くと設定エラーになる。候補の記載順と重複を保持する。
+
 ## TLSの証明書を検証する
 
 TLSは起動時にホストOSのCA証明書を読み込む。独自CAはOS側へ登録する。初版は専用CAファイル指定と証明書検証無効化を設けない。起動後のCA変更は再起動で反映する。

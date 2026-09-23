@@ -11,7 +11,8 @@ responsibility-specific documents under `docs/spec/kakoi/` are the canonical sou
 for product, implementation, verification, and release requirements. The kakoi-net responsibility-specific specification has been approved in the conversation.
 The core IR extraction and test annotations were also approved on 2026-09-16.
 Further prose editing is deferred; product behavior remains unchanged. The next priority is
-kakoi-net implementation, starting with the agreed feasibility gate.
+kakoi-net implementation, starting with the initial-release feasibility gate; see the reviewed scope in
+`docs/spec/kakoi/network/initial-release.md`.
 [`CONTEXT.md`](CONTEXT.md) is the glossary: the project's reading of terms such as "policy",
 "layer", "workspace", and "worktree", and the words not to use for them.
 
@@ -55,7 +56,9 @@ lefthook install
 
 - The specification's section 14 is authoritative for runtime boundaries: no persistent state.
   Host/none retain the `bwrap`-only execution boundary. Filtered dependencies and their
-  supported environment must pass `docs/spec/kakoi/proof-gate.md` before product implementation. A launch that wraps a command (including
+  supported environment must pass the implementation-entry conditions in
+  `docs/spec/kakoi/proof-gate.md` before product implementation. Product integration checks
+  in that document remain mandatory before the initial filtered release. A launch that wraps a command (including
   `--print-plan`) writes no files; `init` is the only form that writes files, and only within
   the paths section 14 allows.
 - The specification's section 18 is authoritative for features excluded from version 0.3.
