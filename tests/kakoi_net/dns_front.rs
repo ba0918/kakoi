@@ -178,7 +178,7 @@ with socket.create_connection(('127.0.0.53', 53), timeout=2) as new:
     assert!(saw_udp && saw_new);
 }
 
-// @kotowari[REQ-027, REQ-116, REQ-127, REQ-130, REQ-131]
+// @kotowari[REQ-027, REQ-116, REQ-127, REQ-130, REQ-131, EX-043, EX-286]
 #[test]
 fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
     use kakoi_core::{

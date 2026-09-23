@@ -35,7 +35,7 @@ fn answer(wire: &mut Vec<u8>, owner: &str, kind: u16, ttl: u32, data: &[u8]) {
     wire.extend(data);
 }
 
-// @kotowari[REQ-019, REQ-022, REQ-024, REQ-389]
+// @kotowari[REQ-019, REQ-022, REQ-024, REQ-389, EX-041]
 #[test]
 fn cname_candidates_exclude_unrelated_answers_and_keep_deadlines_across_responses() {
     let question = Question::parse(&query(1)).unwrap();
@@ -144,7 +144,7 @@ fn additional_addresses_and_negative_or_truncated_answers_do_not_grant_candidate
         .is_err());
 }
 
-// @kotowari[REQ-023, REQ-120, REQ-024]
+// @kotowari[REQ-023, REQ-120, REQ-024, EX-038, EX-039]
 #[test]
 fn cyclic_or_conflicting_aliases_never_leave_partial_candidates_or_chain_state() {
     let question = Question::parse(&query(1)).unwrap();
@@ -265,7 +265,7 @@ fn response_envelope_matches_the_original_question_before_selecting_an_upstream_
     );
 }
 
-// @kotowari[REQ-149]
+// @kotowari[REQ-149, EX-330]
 #[test]
 fn ordinary_unknown_record_data_is_preserved_without_becoming_an_ip_permission() {
     let question = Question::parse(&query(65280)).unwrap();
@@ -298,7 +298,7 @@ fn update_transfer_any_and_multiple_questions_are_not_ordinary_read_queries() {
     assert!(Question::parse(&many).is_err());
 }
 
-// @kotowari[REQ-020, REQ-021, REQ-025]
+// @kotowari[REQ-020, REQ-021, REQ-025, EX-032, EX-034, EX-035]
 #[test]
 fn mixed_answers_filter_unsigned_data_preserve_signatures_and_refuse_all_denied() {
     let question = Question::parse(&query(1)).unwrap();

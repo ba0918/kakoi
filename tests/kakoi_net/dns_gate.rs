@@ -21,7 +21,7 @@ fn rule(pattern: &str) -> Allow {
     }
 }
 
-// @kotowari[REQ-027, REQ-003, REQ-010, REQ-130, REQ-149]
+// @kotowari[REQ-027, REQ-003, REQ-010, REQ-130, REQ-149, EX-273, EX-295, EX-044, EX-046, EX-231]
 #[test]
 fn only_authorized_names_reach_the_resolver_with_the_original_rule_indices() {
     let gate = DnsGate::new(vec![
@@ -93,7 +93,7 @@ fn gate_distinguishes_policy_refusal_from_resolution_failure_and_rejects_wrong_a
     assert_eq!(answer[3] & 15, 2);
 }
 
-// @kotowari[REQ-125, REQ-126, REQ-127, REQ-128, REQ-129]
+// @kotowari[REQ-125, REQ-126, REQ-127, REQ-128, REQ-129, EX-291, EX-293]
 #[test]
 fn resolution_slots_and_waiter_limits_are_independent_and_completion_releases_a_slot() {
     use kakoi_net::dns::{Admission, CapacityError, ResolutionPool};
@@ -171,7 +171,7 @@ fn resolution_keys_share_case_and_client_ids_but_separate_dns_conditions() {
     );
 }
 
-// @kotowari[REQ-027, REQ-019, REQ-020, REQ-014, REQ-123]
+// @kotowari[REQ-027, REQ-019, REQ-020, REQ-014, REQ-123, EX-030, EX-031, EX-045]
 #[test]
 fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
     use kakoi_core::{network::NetworkLimits, policy::parse_policy};
@@ -278,7 +278,7 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
     }
 }
 
-// @kotowari[REQ-027, REQ-123, REQ-125, REQ-126, REQ-127, REQ-128, REQ-129]
+// @kotowari[REQ-027, REQ-123, REQ-125, REQ-126, REQ-127, REQ-128, REQ-129, EX-284]
 #[test]
 fn authorized_requests_share_work_and_return_individual_answers_without_resetting_deadlines() {
     use kakoi_net::dns::{AcceptedRequest, DnsRequests};
@@ -343,7 +343,7 @@ fn authorized_requests_share_work_and_return_individual_answers_without_resettin
     assert!(requests.complete(next.id, Ok(first), now).is_empty());
 }
 
-// @kotowari[REQ-021, REQ-123, REQ-127]
+// @kotowari[REQ-021, REQ-123, REQ-127, EX-289]
 #[test]
 fn shared_resolution_rejects_wrong_or_late_answers_and_keeps_dns_conditions_separate() {
     use kakoi_net::dns::{AcceptedRequest, DnsRequests};

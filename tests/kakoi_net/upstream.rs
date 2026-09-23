@@ -45,7 +45,7 @@ fn upstream_configuration_separates_connection_address_from_tls_identity() {
     }
 }
 
-// @kotowari[REQ-146, REQ-087]
+// @kotowari[REQ-146, REQ-087, EX-324, EX-325]
 #[test]
 fn upstream_layers_append_preserving_order_and_reject_mixed_transport() {
     let mode = layer("[network]\nmode='host'");

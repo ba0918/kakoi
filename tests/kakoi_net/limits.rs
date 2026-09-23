@@ -38,7 +38,7 @@ fn shutdown_grace_has_a_bounded_default_and_requires_explicit_network_mode() {
     assert_eq!(merged.shutdown_grace_seconds, 20);
 }
 
-// @kotowari[REQ-093, REQ-117, REQ-119, REQ-121, REQ-125, REQ-128, REQ-134, REQ-143, REQ-389]
+// @kotowari[REQ-093, REQ-117, REQ-119, REQ-121, REQ-125, REQ-128, REQ-134, REQ-143, REQ-389, EX-281, EX-282, EX-257, EX-261, EX-262, EX-267, EX-268]
 #[test]
 fn every_network_limit_rejects_out_of_range_and_noninteger_values() {
     for (key, min, max) in [
@@ -77,7 +77,7 @@ fn every_network_limit_rejects_out_of_range_and_noninteger_values() {
     }
 }
 
-// @kotowari[REQ-094, REQ-117, REQ-118, REQ-087]
+// @kotowari[REQ-094, REQ-117, REQ-118, REQ-087, EX-258, EX-259, EX-260]
 #[test]
 fn limits_inherit_then_override_and_validate_the_merged_dns_deadline() {
     let defaults = merge(&[]).unwrap().network_limits;

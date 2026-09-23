@@ -1,6 +1,6 @@
 use kakoi_core::network::DnsPattern;
 
-// @kotowari[REQ-003, REQ-010]
+// @kotowari[REQ-003, REQ-010, EX-004, EX-005, EX-006, EX-017, EX-018, EX-019]
 #[test]
 fn dns_patterns_match_complete_names_at_label_boundaries() {
     let exact: DnsPattern = "EXAMPLE.com.".parse().unwrap();
@@ -17,9 +17,12 @@ fn dns_patterns_match_complete_names_at_label_boundaries() {
         assert_eq!(exact.matches(name), exact_match, "{name}");
         assert_eq!(children.matches(name), child_match, "{name}");
     }
+    // No search domain completes a short name.
+    let short: DnsPattern = "api".parse().unwrap();
+    assert!(!short.matches("api.example.com"));
 }
 
-// @kotowari[REQ-011]
+// @kotowari[REQ-011, EX-021]
 #[test]
 fn international_names_use_nontransitional_idna() {
     for (name, ascii) in [
@@ -34,7 +37,7 @@ fn international_names_use_nontransitional_idna() {
     }
 }
 
-// @kotowari[REQ-004, REQ-011]
+// @kotowari[REQ-004, REQ-011, EX-007, EX-020, EX-022]
 #[test]
 fn invalid_names_and_nonleading_wildcards_are_rejected() {
     for name in [

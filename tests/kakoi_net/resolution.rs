@@ -3,7 +3,7 @@ use kakoi_net::resolution::{CnameChain, CnameError};
 use kakoi_net::resolution::{ResolutionBudget, ResolutionLimit, UpstreamWait};
 use std::time::{Duration, Instant};
 
-// @kotowari[REQ-120, REQ-014, REQ-389]
+// @kotowari[REQ-120, REQ-014, REQ-389, EX-264, EX-265, EX-266]
 #[test]
 fn cname_chain_limits_hops_detects_case_insensitive_cycles_and_keeps_earliest_expiry() {
     let start = Instant::now();
@@ -65,7 +65,7 @@ fn retries_share_the_original_deadline_and_send_budget() {
     );
 }
 
-// @kotowari[REQ-116, REQ-122]
+// @kotowari[REQ-116, REQ-122, EX-272]
 #[test]
 fn host_dns_uses_the_whole_deadline_and_separate_resolutions_have_separate_budgets() {
     let start = Instant::now();

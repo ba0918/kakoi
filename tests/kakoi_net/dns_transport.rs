@@ -126,7 +126,7 @@ fn stalled_and_trickling_servers_cannot_extend_the_absolute_deadline() {
     server.join().unwrap();
 }
 
-// @kotowari[REQ-114, REQ-115, REQ-113, REQ-135]
+// @kotowari[REQ-114, REQ-115, REQ-113, REQ-135, EX-248, EX-246]
 #[test]
 fn candidates_follow_order_skip_duplicates_and_stop_on_negative_answers() {
     use kakoi_core::network::NetworkLimits;
