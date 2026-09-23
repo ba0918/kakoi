@@ -9,7 +9,7 @@ fn layer(text: &str) -> Layer {
     }
 }
 
-// @kotowari[REQ-095, REQ-097]
+// @kotowari[REQ-095, REQ-097, EX-204, EX-205, EX-206, EX-210, EX-211, EX-213, EX-119, EX-212]
 #[test]
 fn shutdown_grace_has_a_bounded_default_and_requires_explicit_network_mode() {
     assert_eq!(merge(&[]).unwrap().shutdown_grace_seconds, 5);
@@ -21,11 +21,13 @@ fn shutdown_grace_has_a_bounded_default_and_requires_explicit_network_mode() {
         assert_eq!(merged.shutdown_grace_seconds, value);
     }
     for value in ["0", "301", "-1", "1.5", "'5'"] {
-        assert!(parse_policy(
-            &format!("[process]\nshutdown-grace-seconds={value}"),
-            Path::new("limits.toml")
-        )
-        .is_err());
+        for mode in ["", "[network]\nmode='host'\n"] {
+            assert!(parse_policy(
+                &format!("{mode}[process]\nshutdown-grace-seconds={value}"),
+                Path::new("limits.toml")
+            )
+            .is_err());
+        }
     }
     let merged = merge(&[
         layer("[network]\nmode='none'\n[process]\nshutdown-grace-seconds=10"),

@@ -94,7 +94,7 @@ fn a_policy_without_dns_names_needs_no_dns_upstream() {
     assert_eq!(output.stdout, b"ran\n");
 }
 
-// @kotowari[REQ-057]
+// @kotowari[REQ-057, EX-106]
 #[test]
 fn a_missing_pasta_ends_the_start_before_the_application_runs() {
     let filtered = Filtered::new("");
@@ -235,24 +235,45 @@ fn ctrl_c_reaches_the_application_which_may_continue() {
     assert!(!output.contains("kakoi: network isolated"), "{output}");
 }
 
-// @kotowari[EX-216, EX-217]
+// @kotowari[EX-216, EX-217, EX-218]
 #[test]
 fn ctrl_c_during_the_grace_ends_the_remaining_processes_and_keeps_the_result() {
     let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 300\n");
-    let (code, output, after) = on_terminal(
+    for result in [0, 7] {
+        let (code, output, after) = on_terminal(
+            filtered.with_pasta(&[
+                "/usr/bin/python3",
+                "-c",
+                // The remaining child reports the grace's termination request and stays.
+                &format!("import subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', 'import signal, time; signal.signal(signal.SIGTERM, lambda *_: print(\"term-received\", flush=True)); print(\"child-ready\", flush=True); time.sleep(600)'], start_new_session=True)\ntime.sleep(0.5)\nsys.exit({result})"),
+            ]),
+            "term-received",
+            0.0,
+        );
+        assert_eq!(code, result, "{output}");
+        // Far below the 300 second grace.
+        assert!(after < HANG, "{after:?}");
+        assert!(output.contains("kakoi: grace interrupted"), "{output}");
+    }
+}
+
+// The main command ends on Ctrl+C: the environment ends as after any main
+// exit, the remaining child being asked to end.
+// @kotowari[EX-215]
+#[test]
+fn a_main_command_ended_by_ctrl_c_is_cleaned_up_like_any_main_exit() {
+    let filtered = Filtered::new("");
+    let (code, output, _) = on_terminal(
         filtered.with_pasta(&[
             "/usr/bin/python3",
             "-c",
-            // The remaining child reports the grace's termination request and stays.
-            "import subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', 'import signal, time; signal.signal(signal.SIGTERM, lambda *_: print(\"term-received\", flush=True)); print(\"child-ready\", flush=True); time.sleep(600)'], start_new_session=True)\ntime.sleep(0.5)",
+            "import subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', 'import signal, sys, time; signal.signal(signal.SIGTERM, lambda *_: (print(\"term-received\", flush=True), sys.exit(0))); time.sleep(600)'], start_new_session=True)\nprint('app-ready', flush=True)\ntime.sleep(600)",
         ]),
-        "term-received",
+        "app-ready",
         0.0,
     );
-    assert_eq!(code, 0, "{output}");
-    // Far below the 300 second grace.
-    assert!(after < HANG, "{after:?}");
-    assert!(output.contains("kakoi: grace interrupted"), "{output}");
+    assert_eq!(code, 130, "{output}");
+    assert!(output.contains("term-received"), "{output}");
 }
 
 // Neither pasta nor nft is on PATH: only what host and none always needed.
@@ -297,6 +318,251 @@ fn host_and_none_need_neither_pasta_nor_nft() {
                 "kakoi: warning: network/process settings are unused outside filtered mode\n"
                     .into()
             ),
+            "{mode}"
+        );
+    }
+}
+
+/// A main command for timing tests: it ignores termination requests, leaves
+/// `children` more processes that ignore them too, prints `ready`, and then
+/// either keeps running or, given an exit code, ends with it.
+fn stubborn(children: usize, exit: Option<i32>) -> String {
+    let mut script = String::from("trap '' TERM\n");
+    for _ in 0..children {
+        script.push_str("(trap '' TERM; while :; do sleep 0.1; done) &\n");
+    }
+    script.push_str("echo ready\n");
+    match exit {
+        Some(code) => script.push_str(&format!("exit {code}\n")),
+        None => script.push_str("while :; do sleep 0.1; done\n"),
+    }
+    script
+}
+
+/// Starts `script` under kakoi and waits for its `ready`.
+fn started(filtered: &Filtered, script: &str) -> (std::process::Child, Instant) {
+    let mut child = filtered
+        .with_pasta(&["/bin/sh", "-c", script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    assert_eq!(lines.next().unwrap().unwrap(), "ready");
+    (child, Instant::now())
+}
+
+fn sigterm(child: &std::process::Child) {
+    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGTERM) }, 0);
+}
+
+/// Waits for kakoi's end and returns its exit code and when it came.
+fn ended(child: &mut std::process::Child) -> (i32, Instant) {
+    let deadline = Instant::now() + HANG;
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return (status.code().unwrap(), Instant::now());
+        }
+        assert!(Instant::now() < deadline, "kakoi did not end");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+// A main command that ignores the request is killed when the grace ends,
+// and the result is still the termination request's.
+// @kotowari[EX-222]
+#[test]
+fn a_main_command_killed_after_sigterm_still_ends_with_143() {
+    let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 1\n");
+    let (mut child, _) = started(&filtered, &stubborn(0, None));
+    sigterm(&child);
+    assert_eq!(ended(&mut child).0, 143);
+}
+
+// The grace is 6 seconds from the first request. A second request 3 seconds
+// in neither restarts it (it would end at 9) nor cuts it (at 3).
+// @kotowari[REQ-103, EX-223, EX-224]
+#[test]
+fn a_repeated_sigterm_keeps_the_first_deadline() {
+    let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 6\n");
+    let (mut child, _) = started(&filtered, &stubborn(1, None));
+    sigterm(&child);
+    let first = Instant::now();
+    std::thread::sleep(Duration::from_secs(3));
+    sigterm(&child);
+    let (code, at) = ended(&mut child);
+    let after = at - first;
+    assert_eq!(code, 143);
+    assert!(
+        (Duration::from_millis(4500)..Duration::from_secs(8)).contains(&after),
+        "{after:?}"
+    );
+}
+
+// The main command has ended with its result, and the grace of 6 seconds
+// runs; a SIGTERM a second in changes neither the result nor the deadline.
+// @kotowari[REQ-104, EX-225, EX-226]
+#[test]
+fn a_sigterm_after_the_main_exit_keeps_the_result_and_the_deadline() {
+    let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 6\n");
+    for result in [0, 7] {
+        let (mut child, exited) = started(&filtered, &stubborn(1, Some(result)));
+        std::thread::sleep(Duration::from_secs(1));
+        sigterm(&child);
+        let (code, at) = ended(&mut child);
+        let after = at - exited;
+        assert_eq!(code, result);
+        assert!(
+            (Duration::from_millis(4500)..Duration::from_millis(8500)).contains(&after),
+            "{after:?}"
+        );
+    }
+}
+
+// The grace starts with the request; the main command ending 3 seconds later
+// does not start another for the child left (it would end at 9).
+// @kotowari[EX-227]
+#[test]
+fn a_main_exit_during_the_sigterm_grace_does_not_restart_it() {
+    let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 6\n");
+    let script = "(trap '' TERM; while :; do sleep 0.1; done) &\ntrap 'sleep 3; exit 0' TERM\necho ready\nwhile :; do sleep 0.1; done\n";
+    let (mut child, _) = started(&filtered, script);
+    sigterm(&child);
+    let first = Instant::now();
+    let (code, at) = ended(&mut child);
+    let after = at - first;
+    assert_eq!(code, 143);
+    assert!(
+        (Duration::from_millis(4500)..Duration::from_secs(8)).contains(&after),
+        "{after:?}"
+    );
+}
+
+// Three processes left, no grace written: one common deadline of 5 seconds,
+// not one per process (15).
+// @kotowari[EX-117]
+#[test]
+fn three_remaining_processes_share_the_default_grace() {
+    let filtered = Filtered::new("");
+    let (mut child, exited) = started(&filtered, &stubborn(3, Some(0)));
+    let (code, at) = ended(&mut child);
+    let after = at - exited;
+    assert_eq!(code, 0);
+    assert!(
+        (Duration::from_secs(4)..Duration::from_secs(9)).contains(&after),
+        "{after:?}"
+    );
+}
+
+// The written grace of 10 seconds applies, not the default 5.
+// @kotowari[EX-207]
+#[test]
+fn a_written_grace_applies_in_filtered_mode() {
+    let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 10\n");
+    let (mut child, exited) = started(&filtered, &stubborn(1, Some(0)));
+    let (code, at) = ended(&mut child);
+    let after = at - exited;
+    assert_eq!(code, 0);
+    assert!(
+        (Duration::from_millis(8500)..Duration::from_secs(14)).contains(&after),
+        "{after:?}"
+    );
+}
+
+// The block cannot be confirmed when the termination request comes: the
+// safety fault's 125 wins over the request's 143, with its cause.
+// @kotowari[EX-316]
+#[test]
+fn a_safety_fault_during_sigterm_ends_with_125_and_its_cause() {
+    let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 300\n");
+    let flag = filtered.bin.path().join("nft-broken");
+    filtered.bin.write_executable(
+        "nft",
+        "#!/bin/sh\n[ -e \"${0%/*}/nft-broken\" ] && exit 1\nexec /usr/sbin/nft \"$@\"\n",
+    );
+    let mut child = filtered
+        .with_pasta(&["/bin/sh", "-c", "echo ready; while :; do sleep 0.1; done"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    assert_eq!(lines.next().unwrap().unwrap(), "ready");
+    std::fs::write(&flag, "").unwrap();
+    sigterm(&child);
+    let (code, _) = ended(&mut child);
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    assert_eq!(code, 125, "{stderr}");
+    assert!(stderr.contains("kakoi: network unsafe: "), "{stderr}");
+}
+
+// A name that fails to resolve is not a safety fault: the main result stays.
+// @kotowari[EX-317]
+#[test]
+fn a_dns_failure_alone_does_not_replace_the_main_result() {
+    let filtered = Filtered::new(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example.com' }\nprotocol = 'tcp'\nports = ['443']\n",
+    );
+    let output = filtered
+        .with_pasta(&[
+            "/usr/bin/python3",
+            "-c",
+            "import socket\ntry:\n    socket.getaddrinfo('app.example.com', 443)\n    print('resolved')\nexcept OSError:\n    print('failed')\n",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        ),
+        (Some(0), "failed\n".into()),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+// host and none still hand the process over to bwrap, whatever the written
+// grace: kakoi becomes bwrap, and the processes left end with the command.
+// @kotowari[EX-329, EX-208, EX-209]
+#[test]
+fn host_and_none_keep_the_exec_contract_and_ignore_the_grace() {
+    for mode in ["host", "none"] {
+        let home = TempDir::new();
+        let workspace = home.path().join("ws");
+        std::fs::create_dir(&workspace).unwrap();
+        home.write(
+            ".config/kakoi/profile/default.toml",
+            format!("{RW_WORKSPACE}\n[network]\nmode = '{mode}'\n\n[process]\nshutdown-grace-seconds = 10\n"),
+        );
+        let mut child = binary(home.path())
+            .current_dir(&workspace)
+            .args([
+                "--",
+                "/bin/sh",
+                "-c",
+                "(trap '' TERM; while :; do sleep 0.1; done) &\necho ready\nread line\nexit 0\n",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+        assert_eq!(lines.next().unwrap().unwrap(), "ready");
+        let exe = std::fs::read_link(format!("/proc/{}/exe", child.id())).unwrap();
+        assert_eq!(exe.file_name().unwrap(), "bwrap", "{mode}");
+        drop(child.stdin.take());
+        let exited = Instant::now();
+        let (code, at) = ended(&mut child);
+        let mut stderr = String::new();
+        std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+        assert_eq!(code, 0, "{mode}: {stderr}");
+        // No grace: the child left ends with the command, well before 10 seconds.
+        assert!(at - exited < Duration::from_secs(5), "{mode}");
+        assert_eq!(
+            stderr, "kakoi: warning: network/process settings are unused outside filtered mode\n",
             "{mode}"
         );
     }

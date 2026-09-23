@@ -572,7 +572,7 @@ sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).re
     assert!(timely, "cancelled rebuild waited for nft timeout");
 }
 
-// @kotowari[REQ-058, REQ-066, REQ-067, REQ-143]
+// @kotowari[REQ-058, REQ-066, REQ-067, REQ-143, EX-123]
 #[test]
 fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     let directory = TempDir::new();
@@ -613,6 +613,8 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
         );
         std::thread::sleep(Duration::from_millis(2));
     }
+    // Still blocked while waiting for the next attempt.
+    assert_transit(original[0].1, false);
     while session.state() != SessionState::Running {
         session.poll().unwrap();
         assert!(Instant::now() < deadline);
@@ -728,4 +730,54 @@ fn blocked_notification_output_does_not_delay_isolation_recovery_or_shutdown() {
     drop(session);
     drop(output);
     assert!(start.elapsed() < Duration::from_secs(1));
+}
+
+// The rebuild stalls: the transit stays blocked while it is pending, and the
+// attempt is cut at the default 10 seconds, not before, still blocked.
+// @kotowari[EX-110, EX-318]
+#[test]
+fn a_stalled_rebuild_stays_blocked_and_is_cut_at_the_default_attempt_timeout() {
+    let directory = TempDir::new();
+    let (transport, original) = transport(&directory);
+    let mut session = Session::prepare(transport, config("/usr/sbin/nft"), &[], |_| None).unwrap();
+    session.activate().unwrap();
+    let executable = directory.path().join("pasta");
+    let script = std::fs::read_to_string(&executable).unwrap();
+    crate::common::write_executable(
+        &executable,
+        script.replace(
+            "print(os.getpid(), flush=True)",
+            "time.sleep(60)\nprint(os.getpid(), flush=True)",
+        ),
+    );
+    assert_eq!(unsafe { libc::kill(original[1].0, libc::SIGKILL) }, 0);
+    // Only guards against a hang.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let (stalled, started) = loop {
+        let _ = session.poll();
+        let records = std::fs::read_to_string(directory.path().join("processes")).unwrap();
+        if let Some(line) = records.lines().nth(2) {
+            let pid: i32 = line.split_whitespace().next().unwrap().parse().unwrap();
+            break (pid, Instant::now());
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    };
+    assert_eq!(session.state(), SessionState::Isolated);
+    assert_transit(original[0].1, false);
+    while Path::new(&format!("/proc/{stalled}")).exists() {
+        let _ = session.poll();
+        assert!(
+            Instant::now() < deadline,
+            "the stalled attempt was never cut"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let cut = started.elapsed();
+    assert!(cut >= Duration::from_millis(9500), "{cut:?}");
+    assert_eq!(session.state(), SessionState::Isolated);
+    assert_transit(original[0].1, false);
+    session
+        .close_until(Instant::now() + Duration::from_secs(1))
+        .unwrap();
 }

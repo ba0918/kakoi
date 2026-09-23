@@ -1,7 +1,7 @@
 use kakoi_net::recovery::{Recovery, RecoveryAction};
 use std::time::{Duration, Instant};
 
-// @kotowari[REQ-066, REQ-143]
+// @kotowari[REQ-066, REQ-143, EX-124, EX-125, EX-319]
 #[test]
 fn recovery_waits_without_overlap_and_resets_after_success() {
     let mut clock = Instant::now();

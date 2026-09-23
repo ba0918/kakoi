@@ -1,6 +1,6 @@
 use kakoi_net::notification::{NetworkState, Notifications};
 
-// @kotowari[REQ-067]
+// @kotowari[REQ-067, EX-126, EX-127]
 #[test]
 fn network_notices_report_changes_without_repeating_the_same_failure() {
     let mut notices = Notifications::default();
