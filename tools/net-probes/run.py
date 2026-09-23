@@ -33,7 +33,7 @@ PROBES += tuple('watchdog-' + fault + '-' + family for fault in ('stop', 'kill')
 PROBES += tuple('fixed-' + host + '-' + target for host in ('ipv4', 'ipv6') for target in ('ipv4', 'ipv6'))
 PROBES += ('fixed-conflict-ipv4', 'fixed-conflict-ipv6')
 PROBES += ('dual-guard-ipv4', 'dual-guard-ipv6')
-PROBES += ('host-loopback-ipv4', 'host-loopback-ipv6')
+PROBES += ('host-loopback-ipv4', 'host-loopback-ipv6', 'link-local')
 
 INITIAL_RUNTIME_PROBES = (
     'boundary-ipv4', 'boundary-ipv6',
@@ -68,7 +68,7 @@ def main():
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
-    names = (INITIAL_RUNTIME_PROBES if args.initial_runtime else args.only) or [name for name in PROBES if not name.startswith(('dynamic-', 'lease-', 'recovery-', 'watchdog-', 'process-', 'resume-', 'dns-', 'health-', 'fixed-', 'dual-', 'host-')) and name != 'control-isolation']
+    names = (INITIAL_RUNTIME_PROBES if args.initial_runtime else args.only) or [name for name in PROBES if not name.startswith(('dynamic-', 'lease-', 'recovery-', 'watchdog-', 'process-', 'resume-', 'dns-', 'health-', 'fixed-', 'dual-', 'host-', 'link-')) and name != 'control-isolation']
     required = ["unshare", "ip", "nft"]
     if any(name.startswith('process-') for name in names):
         required.append('bwrap')
@@ -150,7 +150,7 @@ def main():
     print("Results:", out, flush=True)
     try:
         for name in names:
-            if name.startswith(("pasta-", "hooks-", "boundary-", "dynamic-", "recovery-", "watchdog-", "resume-", "health-", "fixed-", "dual-", "host-")) and not pasta:
+            if name.startswith(("pasta-", "hooks-", "boundary-", "dynamic-", "recovery-", "watchdog-", "resume-", "health-", "fixed-", "dual-", "host-", "link-")) and not pasta:
                 report["probes"].append({"name": name, "status": "BLOCKED", "reason": "pasta not specified/found"})
                 print(name + ": BLOCKED (pasta not found)", flush=True)
                 save()
