@@ -15,6 +15,7 @@ pub mod filter;
 pub mod filtered;
 pub mod health;
 pub mod host;
+pub mod host_dns;
 pub mod init;
 pub mod leases;
 pub mod namespace;

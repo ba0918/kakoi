@@ -31,6 +31,8 @@ mod filter;
 mod health;
 #[path = "kakoi_net/host.rs"]
 mod host;
+#[path = "kakoi_net/host_dns.rs"]
+mod host_dns;
 #[path = "kakoi_net/leases.rs"]
 mod leases;
 #[path = "kakoi_net/limits.rs"]

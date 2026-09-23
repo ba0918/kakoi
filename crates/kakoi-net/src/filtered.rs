@@ -6,6 +6,7 @@ use crate::{
     dns_transport::TlsClient,
     filter::FilterRule,
     host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
+    host_dns,
     scope::AddressContext,
     session::Session,
     supervisor::Application,
@@ -82,12 +83,24 @@ pub fn start(
             }
         }
     }
-    if policy.dns_upstream.is_empty() {
-        return Err(unsupported(
-            "following the host DNS; set `network.dns-upstream`",
-        ));
-    }
-    let trust = if policy.dns_upstream[0].tls_name().is_some() {
+    let names = policy
+        .network_allow
+        .iter()
+        .any(|allow| matches!(allow.destination, Destination::Dns(_)));
+    let upstreams = if !policy.dns_upstream.is_empty() {
+        policy.dns_upstream.clone()
+    } else if names {
+        let text = std::fs::read_to_string("/etc/resolv.conf")
+            .map_err(|error| failure("read the host DNS configuration", error))?;
+        host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?
+    } else {
+        // Without DNS names the managed resolver refuses every name by itself.
+        Vec::new()
+    };
+    let trust = if upstreams
+        .first()
+        .is_some_and(|first| first.tls_name().is_some())
+    {
         Some(
             TlsClient::from_host()
                 .map_err(|error| failure("load the host CA certificates", error))?,
@@ -97,7 +110,7 @@ pub fn start(
     };
     let config = DnsRuntimeConfig {
         policy: policy.network_allow.clone(),
-        upstreams: policy.dns_upstream.clone(),
+        upstreams,
         limits: policy.network_limits.clone(),
         trust,
         nft: tools.nft.clone(),

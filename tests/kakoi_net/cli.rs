@@ -76,6 +76,24 @@ fn filtered_run_keeps_supervising_and_returns_the_main_result() {
     assert!(stderr.contains("kakoi: network running: ready"), "{stderr}");
 }
 
+// @kotowari[EX-323]
+#[test]
+fn a_policy_without_dns_names_needs_no_dns_upstream() {
+    let filtered = Filtered::new("");
+    // The same environment without the explicit upstream.
+    filtered.home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}\n[network]\nmode = 'filtered'\n"),
+    );
+    let output = filtered
+        .with_pasta(&["/bin/sh", "-c", "echo ran"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stderr}");
+    assert_eq!(output.stdout, b"ran\n");
+}
+
 // @kotowari[REQ-057]
 #[test]
 fn a_missing_pasta_ends_the_start_before_the_application_runs() {

@@ -80,10 +80,13 @@ impl ExplicitResolver {
         trust: Option<TlsClient>,
     ) -> io::Result<Self> {
         validate_upstreams(&upstreams).map_err(io::Error::other)?;
-        let first = upstreams
+        // Without an upstream every question fails; a policy without DNS names
+        // never asks one.
+        if upstreams
             .first()
-            .ok_or_else(|| io::Error::other("explicit DNS needs an upstream"))?;
-        if first.tls_name().is_some() && trust.is_none() {
+            .is_some_and(|first| first.tls_name().is_some())
+            && trust.is_none()
+        {
             return Err(io::Error::other("TLS DNS requires a startup CA snapshot"));
         }
         Ok(Self {

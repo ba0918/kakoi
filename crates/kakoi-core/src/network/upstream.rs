@@ -11,6 +11,15 @@ pub struct DnsUpstream {
 }
 
 impl DnsUpstream {
+    /// A plain DNS upstream chosen by the executor rather than written in a policy.
+    pub fn plain(address: IpAddr, port: NonZeroU16) -> Self {
+        Self {
+            address,
+            port,
+            tls_name: None,
+        }
+    }
+
     pub fn port(&self) -> NonZeroU16 {
         self.port
     }
