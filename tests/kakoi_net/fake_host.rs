@@ -157,6 +157,20 @@ def line(stream, wait=PERMITTED):
         text += byte
     return text.decode()
 
+def pastas():
+    """The pasta processes in the namespace, by process ID and arguments.
+    Only kakoi starts pasta here."""
+    found = []
+    for entry in os.listdir('/proc'):
+        try:
+            with open(f'/proc/{entry}/cmdline', 'rb') as arguments:
+                words = arguments.read().split(b'\0')
+        except (FileNotFoundError, NotADirectoryError, ProcessLookupError):
+            continue
+        if b'--config-net' in words:
+            found.append((int(entry), words))
+    return found
+
 def finish(process):
     """Waits for kakoi and passes its standard error on for the report."""
     code = process.wait(timeout=60)

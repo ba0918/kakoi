@@ -10,14 +10,8 @@ const BREAK: &str = r#"
 import signal
 
 def outer_pasta():
-    for entry in os.listdir('/proc'):
-        try:
-            with open(f'/proc/{entry}/cmdline', 'rb') as arguments:
-                if b'--map-host-loopback' in arguments.read().split(b'\0'):
-                    return int(entry)
-        except (FileNotFoundError, NotADirectoryError, ProcessLookupError):
-            pass
-    raise AssertionError('no outer pasta')
+    [pid] = [pid for pid, words in pastas() if b'--map-host-loopback' in words]
+    return pid
 
 pasta = os.environ['BIN'] + '/pasta'
 original = os.readlink(pasta)
@@ -36,7 +30,7 @@ def repair():
 // even on a loaded host.
 const TTL: u32 = 8;
 
-// @kotowari[REQ-059, REQ-393, EX-107, EX-109, EX-110, EX-111, EX-128]
+// @kotowari[REQ-059, REQ-393, EX-107, EX-109, EX-111, EX-128]
 #[test]
 fn a_transport_fault_blocks_until_recovery_which_keeps_publications_and_dns_deadlines() {
     let host = FakeHost::new(
@@ -72,6 +66,8 @@ print('isolated', all(attempt.startswith('failed') for attempt in attempts), len
 # The resolved permission expires while the transport is down.
 time.sleep(max(0, expired - time.monotonic()))
 repair()
+# The retries back off (1, 2, 4, 8 seconds): the repair comes before the fifth,
+# so the recovery comes well within the wait for its notice.
 print(until(process, 'network running').strip())
 print('restored', ask(process, 'remote 11.0.0.5 permitted'), ask(process, f'remote {{resolved}} refused'),
       exchange('127.0.0.1', 18000, 'tcp', PERMITTED))
@@ -148,7 +144,7 @@ started = time.monotonic()
 process.stdin.write(b'end\n')
 process.stdin.flush()
 print('exit', finish(process), 'within the grace', time.monotonic() - started < 60)
-print('released', held('127.0.0.1', 18000, 'tcp'))
+print('released', held('127.0.0.1', 18000, 'tcp'), 'pasta left', len(pastas()))
 "#
     ));
     assert_eq!(
@@ -157,7 +153,7 @@ print('released', held('127.0.0.1', 18000, 'tcp'))
          terminating True\n\
          published True 0\n\
          exit 7 within the grace True\n\
-         released free\n",
+         released free pasta left 0\n",
         "{output}"
     );
 }
