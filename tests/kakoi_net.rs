@@ -47,10 +47,14 @@ mod ports;
 mod recovery;
 #[path = "kakoi_net/resolution.rs"]
 mod resolution;
+#[path = "kakoi_net/run.rs"]
+mod run;
 #[path = "kakoi_net/scope.rs"]
 mod scope;
 #[path = "kakoi_net/session.rs"]
 mod session;
+#[path = "kakoi_net/supervisor.rs"]
+mod supervisor;
 #[path = "kakoi_net/upstream.rs"]
 mod upstream;
 #[path = "kakoi_net/watchdog.rs"]

@@ -103,6 +103,15 @@ impl Session {
         self.notifications.pop()
     }
 
+    /// Queues an event of the environment that is not a network state change.
+    pub fn notice(&mut self, text: &str) {
+        self.notifications.notice(text);
+    }
+
+    pub fn pending_notifications(&self) -> usize {
+        self.notifications.pending()
+    }
+
     /// Notification loss never becomes a network fault. The caller retains one
     /// writer for this session, normally targeting the application's stderr.
     pub fn flush_notifications(&mut self, writer: &mut NotificationWriter) {

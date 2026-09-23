@@ -11,6 +11,8 @@ use kakoi_core::diagnostic::{Diagnostic, Kind, Warning};
 use kakoi_core::launch::{self, BwrapCommand};
 
 fn main() -> ExitCode {
+    // The isolation's process 1 of a filtered run is this executable (kakoi-net).
+    kakoi_net::init::run_if_requested();
     match startup::prepare(std::env::args_os().skip(1)) {
         Ok(Outcome::Text(text)) => {
             let _ = std::io::stdout().write_all(text.as_bytes());

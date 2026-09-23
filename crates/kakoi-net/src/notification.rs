@@ -39,8 +39,18 @@ impl Notifications {
         if self.current.as_deref() == Some(&line) {
             return;
         }
-        self.bytes += line.len();
         self.current = Some(Arc::clone(&line));
+        self.push(line);
+    }
+
+    /// An event outside the network state, such as a cut grace. It does not
+    /// replace the current state reported after omissions.
+    pub fn notice(&mut self, text: &str) {
+        self.push(bounded_line("kakoi: ", text).into());
+    }
+
+    fn push(&mut self, line: Arc<str>) {
+        self.bytes += line.len();
         self.queue.push_back(line);
         while self.pending() > MAX_NOTICES || self.bytes + self.in_flight_bytes > MAX_BYTES {
             self.bytes -= self.queue.pop_front().expect("nonempty overflow").len();
@@ -88,14 +98,16 @@ impl Notifications {
             let omitted = self
                 .omitted
                 .saturating_add(self.queue.len().saturating_sub(1) as u64);
-            let current = self.current.as_deref().expect("overflow has current state");
-            let summary = bounded_line(
-                &format!("kakoi: {omitted} network notifications omitted; current "),
-                current
-                    .trim_end()
-                    .strip_prefix("kakoi: network ")
-                    .unwrap_or(current),
-            );
+            let summary = match self.current.as_deref() {
+                Some(current) => bounded_line(
+                    &format!("kakoi: {omitted} network notifications omitted; current "),
+                    current
+                        .trim_end()
+                        .strip_prefix("kakoi: network ")
+                        .unwrap_or(current),
+                ),
+                None => bounded_line(&format!("kakoi: {omitted} notifications omitted"), ""),
+            };
             self.queue.clear();
             self.bytes = 0;
             self.omitted = 0;
