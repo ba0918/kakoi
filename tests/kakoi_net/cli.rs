@@ -220,7 +220,8 @@ fn ctrl_c_reaches_the_application_which_may_continue() {
         filtered.with_pasta(&[
             "/usr/bin/python3",
             "-c",
-            "import signal, sys, time\nsignal.signal(signal.SIGINT, lambda *_: print('caught', flush=True))\nprint('app-ready', flush=True)\ntime.sleep(2)\nprint('continued', flush=True)\nsys.exit(23)",
+            // The handler only records: printing from it could reenter a print.
+            "import signal, sys, time\ncaught = []\nsignal.signal(signal.SIGINT, lambda *_: caught.append(1))\nprint('app-ready', flush=True)\ntime.sleep(2)\nprint('caught' if caught else 'missed', flush=True)\nprint('continued', flush=True)\nsys.exit(23)",
         ]),
         "app-ready",
         0.0,

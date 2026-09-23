@@ -122,11 +122,10 @@ fn inside(home: &TempDir, workspace: &PathBuf, bin: &TempDir, script: &str) -> S
         .args(["--", "/usr/bin/python3", "-c", script])
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    // kakoi's notifications help to explain an unexpected result.
+    eprintln!("{stderr}");
     String::from_utf8(output.stdout).unwrap()
 }
 
@@ -152,12 +151,12 @@ fn tcp_echo(address: &str) -> (TcpListener, u16, std::thread::JoinHandle<()>) {
 
 const CONNECT: &str = r#"
 import socket, sys
-name, port, kind = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+name, port, kind, wait = sys.argv[1], int(sys.argv[2]), sys.argv[3], float(sys.argv[4])
 family = socket.AF_INET6 if 'v6' in name else socket.AF_INET
 try:
     address = socket.getaddrinfo(name, port, family)[0][4][0]
     with socket.socket(family, socket.SOCK_STREAM if kind == 'tcp' else socket.SOCK_DGRAM) as s:
-        s.settimeout(3)
+        s.settimeout(wait)
         s.connect((address, port))
         if kind == 'udp':
             s.send(b'probe')
@@ -166,8 +165,18 @@ except OSError as error:
     print('failed', type(error).__name__)
 "#;
 
+/// A permitted exchange may take long on a loaded host: its wait only guards
+/// against a hang. A refused one is dropped, so any wait ends the same way.
 fn connect(name: &str, port: u16, kind: &str) -> String {
-    format!("import sys\nsys.argv = ['connect', {name:?}, '{port}', {kind:?}]\n{CONNECT}")
+    exchange(name, port, kind, 20)
+}
+
+fn refused(name: &str, port: u16, kind: &str) -> String {
+    exchange(name, port, kind, 3)
+}
+
+fn exchange(name: &str, port: u16, kind: &str, wait: u32) -> String {
+    format!("import sys\nsys.argv = ['connect', {name:?}, '{port}', {kind:?}, '{wait}']\n{CONNECT}")
 }
 
 // @kotowari[EX-190, EX-192]
@@ -187,7 +196,7 @@ fn the_host_v4_name_reaches_only_the_permitted_host_loopback_port() {
         &format!(
             "{}\n{}",
             connect("host-v4.kakoi.internal", port, "tcp"),
-            connect("host-v4.kakoi.internal", other_port, "tcp")
+            refused("host-v4.kakoi.internal", other_port, "tcp")
         ),
     );
     assert_eq!(
@@ -237,7 +246,7 @@ fn a_dns_wildcard_does_not_permit_the_host_loopback() {
         &home,
         &workspace,
         &bin,
-        &connect("host-v4.kakoi.internal", port, "tcp"),
+        &refused("host-v4.kakoi.internal", port, "tcp"),
     );
     assert_eq!(output, "failed TimeoutError\n", "{output}");
     drop(listener);
