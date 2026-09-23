@@ -17,6 +17,8 @@ from worker import run
 
 HERE = str(Path(__file__).resolve())
 PORT = 8081
+# A dedicated alias instead of the gateway, so that the real gateway stays itself.
+DEDICATED = {'ipv4': '169.254.1.2', 'ipv6': 'fd6b:616b:6f69::2'}
 
 
 def reply(family, address, protocol):
@@ -73,7 +75,8 @@ def app(label):
         'app_netns': os.readlink('/proc/self/ns/net'),
         'app_routes': json.loads(routes.stdout),
         'replies': {name: {protocol: reply(family, address, protocol) for protocol in ('tcp', 'udp')}
-                    for name, address in (('gateway', gateway), ('host_nonloopback', external))},
+                    for name, address in (('gateway', gateway), ('dedicated', DEDICATED[label]),
+                                          ('host_nonloopback', external))},
     }), flush=True)
 
 
@@ -84,7 +87,7 @@ def middle(pasta, label, mapping):
     flag = '-4' if label == 'ipv4' else '-6'
     argv = [pasta, '-f', flag, '--config-net', '-I', 'app0',
             '-t', 'none', '-u', 'none', '-T', 'none', '-U', 'none']
-    if mapping == 'no-map-gw':
+    if mapping in ('no-map-gw', 'dedicated'):
         argv.append('--no-map-gw')
     argv += ['--', sys.executable, HERE, 'app', pasta, label, mapping]
     try:
@@ -112,9 +115,11 @@ def probe(pasta, label):
     flag = '-4' if label == 'ipv4' else '-6'
     outcomes = {}
     try:
-        for mapping in ('map-gw', 'no-map-gw'):
+        for mapping in ('map-gw', 'no-map-gw', 'dedicated'):
+            outer = (['--no-map-gw', '--map-host-loopback', DEDICATED[label]]
+                     if mapping == 'dedicated' else [])
             argv = [pasta, '-f', flag, '--config-net', '-i', 'probe0', '-I', 'middle0',
-                    '-t', 'none', '-u', 'none', '-T', 'none', '-U', 'none',
+                    '-t', 'none', '-u', 'none', '-T', 'none', '-U', 'none', *outer,
                     '--', sys.executable, HERE, 'middle', pasta, label, mapping]
             process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                        env={**os.environ, 'LC_ALL': 'C'})
@@ -144,6 +149,11 @@ def probe(pasta, label):
         if reached != {'tcp': 'tcp-ok', 'udp': 'udp-ok'}:
             raise RuntimeError('gateway did not reach the host loopback without inner mapping: '
                                + json.dumps(outcomes))
+        dedicated = outcomes['dedicated']
+        if dedicated['dedicated'] != {'tcp': 'tcp-ok', 'udp': 'udp-ok'}:
+            raise RuntimeError('the dedicated alias did not reach the host loopback: ' + json.dumps(outcomes))
+        if dedicated['gateway'] in ({'tcp': 'tcp-ok', 'udp': 'udp-ok'}, {'tcp': 'middle-tcp', 'udp': 'middle-udp'}):
+            raise RuntimeError('the gateway was still translated with a dedicated alias: ' + json.dumps(outcomes))
         print(json.dumps({'scope': 'two-stage host loopback reachability, no policy', 'outcomes': outcomes}),
               flush=True)
     finally:
