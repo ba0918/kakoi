@@ -317,14 +317,13 @@ fn partial_transport_replacement_failure_is_reaped_and_retry_keeps_the_same_name
     let (mut transport, original) = transport(&directory);
     let executable = directory.path().join("pasta");
     let script = std::fs::read_to_string(&executable).unwrap();
-    std::fs::write(
+    crate::common::write_executable(
         &executable,
         script.replace(
             "print(os.getpid(), flush=True)",
             "if 'app0' in sys.argv:\n    sys.exit(17)\nprint(os.getpid(), flush=True)",
         ),
-    )
-    .unwrap();
+    );
     let app = transport.controller_namespace().keeper_pid();
     assert!(transport
         .restart_closed_until(Instant::now() + Duration::from_secs(1))
@@ -339,7 +338,7 @@ fn partial_transport_replacement_failure_is_reaped_and_retry_keeps_the_same_name
     }
     assert_transit(original[0].1, false);
     crate::health::assert_loopback(transport.controller_namespace(), true);
-    std::fs::write(executable, script).unwrap();
+    crate::common::write_executable(&executable, script);
     transport
         .restart_closed_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
@@ -361,14 +360,13 @@ fn both_transport_stages_share_one_recovery_deadline() {
     let (mut transport, original) = transport(&directory);
     let executable = directory.path().join("pasta");
     let script = std::fs::read_to_string(&executable).unwrap();
-    std::fs::write(
-        executable,
+    crate::common::write_executable(
+        &executable,
         script.replace(
             "print(os.getpid(), flush=True)",
             "time.sleep(0.4 if 'app0' not in sys.argv else 30)\nprint(os.getpid(), flush=True)",
         ),
-    )
-    .unwrap();
+    );
     let start = Instant::now();
     assert_eq!(
         transport
@@ -462,14 +460,13 @@ fn explicit_shutdown_cancels_a_stalled_recovery_and_never_reopens_transit() {
     session.activate().unwrap();
     let executable = directory.path().join("pasta");
     let script = std::fs::read_to_string(&executable).unwrap();
-    std::fs::write(
-        executable,
+    crate::common::write_executable(
+        &executable,
         script.replace(
             "print(os.getpid(), flush=True)",
             "time.sleep(30)\nprint(os.getpid(), flush=True)",
         ),
-    )
-    .unwrap();
+    );
     assert_eq!(unsafe { libc::kill(original[1].0, libc::SIGKILL) }, 0);
     let deadline = Instant::now() + Duration::from_secs(2);
     let blocked_pid = loop {
@@ -530,12 +527,14 @@ fn shutdown_cancels_a_stalled_policy_rebuild_without_waiting_for_nft_timeout() {
 import os, subprocess, sys
 rules = sys.stdin.read()
 if 'delete table inet kakoi_policy' in rules:
-    with open({:?}, 'w') as out:
+    # Renamed into place, so that the marker never appears without the PID.
+    with open({marker:?} + '.partial', 'w') as out:
         out.write(str(os.getpid()))
+    os.rename({marker:?} + '.partial', {marker:?})
     os.execl('/bin/sleep', 'sleep', '30')
 sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).returncode)
 "#,
-            marker.to_str().unwrap()
+            marker = marker.to_str().unwrap()
         ),
     );
     let (transport, original) = transport_with_nft(&directory, &nft);
@@ -582,14 +581,13 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     let script = std::fs::read_to_string(&executable).unwrap();
     let mut session = Session::prepare(transport, config("/usr/sbin/nft"), &[], |_| None).unwrap();
     session.activate().unwrap();
-    std::fs::write(
+    crate::common::write_executable(
         &executable,
         script.replace(
             "print(os.getpid(), flush=True)",
             "if 'app0' in sys.argv:\n    sys.exit(17)\nprint(os.getpid(), flush=True)",
         ),
-    )
-    .unwrap();
+    );
     assert_eq!(unsafe { libc::kill(original[1].0, libc::SIGKILL) }, 0);
     let deadline = Instant::now() + Duration::from_secs(4);
     loop {
@@ -602,7 +600,7 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
         std::thread::sleep(Duration::from_millis(2));
     }
     assert_eq!(session.state(), SessionState::Isolated);
-    std::fs::write(&executable, script).unwrap();
+    crate::common::write_executable(&executable, script);
     let waiting = Instant::now() + Duration::from_millis(900);
     while Instant::now() < waiting {
         session.poll().unwrap();
@@ -624,7 +622,10 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     let notices: Vec<_> = std::iter::from_fn(|| session.take_notification()).collect();
     assert_eq!(notices.len(), 4);
     assert!(notices[1].contains("network controller stopped"));
-    assert!(notices[2].contains("pasta exited during startup"));
+    assert!(
+        notices[2].contains("pasta exited during startup"),
+        "{notices:?}"
+    );
     assert!(notices[3].contains("running: restored"));
     session
         .close_until(Instant::now() + Duration::from_secs(1))

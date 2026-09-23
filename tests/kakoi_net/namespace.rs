@@ -198,6 +198,19 @@ for kind, payload in [(socket.SOCK_DGRAM, b'udp'), (socket.SOCK_STREAM, b'tcp')]
     assert!(client.wait().unwrap().success());
     drop(stream);
     drop(sockets);
-    let rebound = DnsSockets::bind(namespace).unwrap();
+    // Another test's child, forked but not yet executing, may briefly hold a
+    // copy of the dropped sockets; the port must come free, not at once.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let rebound = loop {
+        match DnsSockets::bind(Arc::clone(&namespace)) {
+            Ok(rebound) => break rebound,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AddrInUse && Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(10))
+            }
+            Err(error) => panic!("{error}"),
+        }
+    };
     assert_eq!(rebound.udp.local_addr().unwrap().port(), 53);
 }
