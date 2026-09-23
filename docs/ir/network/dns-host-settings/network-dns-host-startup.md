@@ -1,18 +1,24 @@
 # 必要なホストDNSを引き継げない場合の起動拒否
 
-起動時の扱いと初期対応の方針。具体的な対応版と判定方法は実証待ち。
+起動時の扱いと、ホストの名前解決設定から上流を選ぶ規則。
 
 ## Requirements
 
 ### REQ-145: 必要なホストDNSを引き継げない場合の起動拒否
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A143, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A156
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A143, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A168
 - verification: unit
 
-DNS名の許可を使う "filtered" でホストDNSを選び、起動時にその構成を安全に引き継げないと判明した場合は起動エラーとし、上流DNSの明示指定を案内する。勝手に公開DNSへ切り替えない。DNS名の許可を使わない構成までホストDNS対応を必須にしない。起動後の設定取得失敗はnetwork-dns-settings-failure.mdに従う。
+DNS名の許可を使う "filtered" でホストDNSを選び、起動時にホストの名前解決設定を読めない、または "nameserver" が一つも無い場合は起動エラーとし、上流DNSの明示指定を案内する。勝手に公開DNSへ切り替えない。DNS名の許可を使わない構成までホストDNSを必須にしない。起動後の設定取得失敗はnetwork-dns-settings-failure.mdに従う。
 
-初期対応は、systemd-resolvedの中継窓口127.0.0.54を使う実証済みの構成から始める。その他の構成は上流DNSの明示指定を案内する。全systemd-resolved構成を対応済みとはせず、対応版・実際のホスト設定との一致・設定追従の判定方法は実証で確定する。
+### REQ-396: ホストの名前解決設定から上流を選ぶ
+
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A168
+- verification: unit
+
+ホストDNSは、ホストの名前解決設定の "nameserver" を記載順に通常DNSの上流として使う。記載がsystemd-resolvedのスタブ127.0.0.53だけの場合は、中継窓口127.0.0.54を使う。
 
 ## Examples
 
@@ -20,7 +26,7 @@ DNS名の許可を使う "filtered" でホストDNSを選び、起動時にそ�
 @id=EX-322 @about=REQ-145 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A143
 Scenario: 必要なホストDNSを引き継げなければアプリを起動しない
   Given filteredでDNS名の許可を使いホストDNSを選んでいる
-  When 起動時にその構成を安全に引き継げないと判明する
+  When 起動時にホストの名前解決設定にnameserverが一つも無い
   Then 起動エラーにして上流DNSの明示指定を案内する
   And 勝手に公開DNSへ切り替えない
 
@@ -30,4 +36,16 @@ Scenario: DNS名の許可がない空のfilteredにまでDNS対応を要求し�
   When ホストDNS構成が非対応である
   Then ホストDNSが非対応であることだけを理由に起動を拒否しない
 
+
+@id=EX-731 @about=REQ-396 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A168
+Scenario: ホストの記載どおりの問い合わせ先を使う
+  Given ホストの名前解決設定にnameserver 10.255.255.254とnameserver 192.0.2.53がこの順で書かれている
+  When アプリの名前解決のために上流へ問い合わせる
+  Then 10.255.255.254と192.0.2.53を記載順に通常DNSで使う
+
+@id=EX-732 @about=REQ-396 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A168
+Scenario: systemd-resolvedのスタブだけなら中継窓口を使う
+  Given ホストの名前解決設定のnameserverは127.0.0.53だけである
+  When アプリの名前解決のために上流へ問い合わせる
+  Then 127.0.0.54へ問い合わせる
 ```

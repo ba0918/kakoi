@@ -90,7 +90,7 @@ pub fn start(
     let upstreams = if !policy.dns_upstream.is_empty() {
         policy.dns_upstream.clone()
     } else if names {
-        let text = std::fs::read_to_string("/etc/resolv.conf")
+        let text = std::fs::read_to_string(host_dns::RESOLV_CONF)
             .map_err(|error| failure("read the host DNS configuration", error))?;
         host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?
     } else {

@@ -1,8 +1,7 @@
-//! Following the host's DNS when a policy names no upstream. Only the verified
-//! configuration is followed: a host whose resolver is systemd-resolved's stub is
-//! reached through resolved's proxy at 127.0.0.54, which forwards with the host's
-//! own per-link settings and follows their changes. Any other host configuration
-//! asks for an explicit upstream instead of guessing one.
+//! Following the host's DNS when a policy names no upstream: the `nameserver`
+//! entries of the host's resolver configuration, in their order, as plain DNS
+//! upstreams. A host that names only systemd-resolved's stub is reached through
+//! resolved's proxy at 127.0.0.54, which forwards without rewriting answers.
 
 use kakoi_core::network::DnsUpstream;
 use std::{
@@ -10,34 +9,36 @@ use std::{
     num::NonZeroU16,
 };
 
+/// Read again when it changes; the executor compares contents, not timestamps.
+pub const RESOLV_CONF: &str = "/etc/resolv.conf";
+
 const STUB: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 53));
 const PROXY: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 54));
+const PORT: NonZeroU16 = NonZeroU16::new(53).unwrap();
 
-/// `text` is the host's resolver configuration (`/etc/resolv.conf`). The upstream
-/// queries are sent from kakoi's own network namespace, where 127.0.0.54 is the
-/// host's.
+/// `text` is the host's resolver configuration. The upstream queries are sent
+/// from kakoi's own network namespace, so loopback nameservers are the host's.
+/// Entries that are not an IP address are skipped, as the C library does.
 pub fn upstreams_from_resolv_conf(text: &str) -> Result<Vec<DnsUpstream>, String> {
-    let nameservers: Vec<_> = text
+    let nameservers: Vec<IpAddr> = text
         .lines()
         .filter_map(|line| {
             let mut words = line.split_whitespace();
-            (words.next() == Some("nameserver")).then(|| words.next())?
+            (words.next() == Some("nameserver")).then(|| words.next()?.parse().ok())?
         })
         .collect();
-    if nameservers.len() == 1 && nameservers[0].parse::<IpAddr>().ok() == Some(STUB) {
-        Ok(vec![DnsUpstream::plain(
-            PROXY,
-            NonZeroU16::new(53).unwrap(),
-        )])
-    } else {
-        Err(format!(
-            "the host DNS ({}) is not systemd-resolved's stub, which is the only host \
-             configuration followed; set network.dns-upstream",
-            if nameservers.is_empty() {
-                "no nameserver".to_owned()
-            } else {
-                nameservers.join(", ")
-            }
-        ))
+    if nameservers.is_empty() {
+        return Err(format!(
+            "the host DNS configuration ({RESOLV_CONF}) names no nameserver; set network.dns-upstream"
+        ));
     }
+    let nameservers = if nameservers == [STUB] {
+        vec![PROXY]
+    } else {
+        nameservers
+    };
+    Ok(nameservers
+        .into_iter()
+        .map(|address| DnsUpstream::plain(address, PORT))
+        .collect())
 }
