@@ -145,10 +145,10 @@ def dns(records):
             server.sendto(response, peer)
     threading.Thread(target=loop, daemon=True).start()
 
-def kakoi(app, stdin=subprocess.DEVNULL):
-    """Starts kakoi with `app` as the sandbox's Python program."""
+def kakoi(app, stdin=subprocess.DEVNULL, options=()):
+    """Starts kakoi with `options` and `app` as the sandbox's Python program."""
     return subprocess.Popen(
-        [os.environ['KAKOI'], '--', '/usr/bin/python3', '-c', CLIENT + app],
+        [os.environ['KAKOI'], *options, '--', '/usr/bin/python3', '-c', CLIENT + app],
         cwd=os.environ['WORKSPACE'], stdin=stdin, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, bufsize=0,
         env={'PATH': os.environ['BIN'] + ':/usr/sbin:/usr/bin:/bin',
@@ -225,6 +225,12 @@ impl FakeHost {
             bin,
             remote: remote.to_vec(),
         }
+    }
+
+    /// Writes a file under the home directory, outside the workspace, and
+    /// returns its path.
+    pub(crate) fn write(&self, relative: &str, body: &str) -> PathBuf {
+        self.home.write(relative, body)
     }
 
     /// Puts an executable ahead of the host's own on kakoi's `PATH`.

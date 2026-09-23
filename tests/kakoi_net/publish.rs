@@ -212,3 +212,42 @@ for environment in (1, 2):
         "{output}"
     );
 }
+
+// Two environments on one host, each with its own publication and its own
+// permission: the end of one leaves the other's traffic in both directions.
+// @kotowari[EX-113]
+#[test]
+fn another_environment_keeps_its_publication_when_one_ends() {
+    let host = FakeHost::new(
+        "\n[[network.allow]]\ndestination = { ip = '11.0.0.5' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &["11.0.0.5/32"],
+    );
+    let publish = |host_port| {
+        format!(
+            "[network]\nmode = 'filtered'\n\n[[network.publish]]\nmode = 'fixed'\nprotocol = 'tcp'\nport = 8000\nhost-port = {host_port}\n"
+        )
+    };
+    let x = host.write("x.toml", &publish(18000));
+    let y = host.write("y.toml", &publish(18001));
+    let output = host.run(&format!(
+        r#"{CONTROL}
+serve('11.0.0.5', 8080, 'tcp', 'static')
+x = kakoi({SERVICES:?}, stdin=subprocess.PIPE, options=['--policy-file', {x:?}])
+y = kakoi({SERVICES:?}, stdin=subprocess.PIPE, options=['--policy-file', {y:?}])
+for process in (x, y):
+    until(process, 'published')
+    command(process, 'tcp start')
+print('both', exchange('127.0.0.1', 18000, 'tcp', PERMITTED), exchange('127.0.0.1', 18001, 'tcp', PERMITTED))
+x.stdin.close()
+assert finish(x) == 0
+print('x ended', held('127.0.0.1', 18000, 'tcp'), exchange('127.0.0.1', 18001, 'tcp', PERMITTED),
+      ask(y, 'remote 11.0.0.5 permitted'))
+y.stdin.close()
+assert finish(y) == 0
+"#
+    ));
+    assert_eq!(
+        output, "both inside-tcp-1 inside-tcp-1\nx ended free inside-tcp-1 static\n",
+        "{output}"
+    );
+}
