@@ -1,13 +1,13 @@
 # The root package is the `kakoi` binary, so that `cargo install --git` and a release
 # build at the root keep working; the library it is built on is the member below.
 [workspace]
-members = ["crates/kakoi-core"]
+members = ["crates/kakoi-core", "crates/kakoi-net"]
 
 # Specification section 17: the version lives in one place. Both packages inherit it.
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/ba0918/kakoi"
 
@@ -15,7 +15,11 @@ repository = "https://github.com/ba0918/kakoi"
 [workspace.dependencies]
 clap = { version = "=4.6.6", features = ["derive"] }
 libc = "=0.2.189"
+socket2 = "=0.6.5"
 idna = "=1.1.0"
+hickory-proto = { version = "=0.26.3", features = ["dnssec-ring"] }
+rustls = { version = "=0.23.45", default-features = false, features = ["std", "ring", "tls12"] }
+rustls-native-certs = "=0.8.4"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 toml = "=1.1.5"
@@ -47,6 +51,7 @@ strip = true
 [dependencies]
 clap.workspace = true
 kakoi-core = { path = "crates/kakoi-core" }
+kakoi-net = { path = "crates/kakoi-net" }
 serde.workspace = true
 serde_json.workspace = true
 

@@ -218,3 +218,18 @@ impl Drop for TempDir {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
+
+/// A TCP listener and a UDP socket on one loopback port. Another socket may
+/// already hold the UDP side of a free TCP port, so a shared one is searched for.
+#[allow(dead_code)]
+pub fn tcp_and_udp_on_one_port() -> (std::net::TcpListener, std::net::UdpSocket) {
+    (0..100)
+        .find_map(|_| {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            std::net::UdpSocket::bind(address)
+                .ok()
+                .map(|udp| (listener, udp))
+        })
+        .expect("no loopback port free for both TCP and UDP")
+}

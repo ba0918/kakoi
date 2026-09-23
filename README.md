@@ -31,7 +31,7 @@ that carry them.
 - On Ubuntu 24.04 and later, permission for `bwrap` to use a user namespace: the restriction is
   on by default, and every launch needs the namespace. See
   [Allowing the user namespace](docs/getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
-- A Rust toolchain, 1.85 or later, only to build from source
+- A Rust toolchain, 1.88 or later, only to build from source
 
 ## Install
 

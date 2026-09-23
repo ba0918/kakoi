@@ -1,0 +1,72 @@
+use super::{DnsError, Message, Question, ResponseCode};
+use kakoi_core::network::{Allow, Destination};
+
+/// Per-environment immutable authorization boundary. Host-reserved names are
+/// served separately by the controller and never sent to an upstream here.
+pub struct DnsGate {
+    pub(super) policy: std::sync::Arc<[Allow]>,
+}
+
+impl DnsGate {
+    pub fn new(policy: Vec<Allow>) -> Self {
+        Self {
+            policy: policy.into(),
+        }
+    }
+
+    pub(super) fn authorized_rules(&self, question: &Question) -> Vec<usize> {
+        let name = question.message.queries[0].name().to_ascii();
+        self.policy
+            .iter()
+            .enumerate()
+            .filter_map(|(index, rule)| match &rule.destination {
+                Destination::Dns(pattern) if pattern.matches(&name) => Some(index),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The resolver receives only authorized initial questions and original allow
+    /// indices. It must finish CNAME validation, address screening and kernel
+    /// permission installation before returning a successful response. An index
+    /// authorizes only its own protocol and ports, even if several rules match.
+    pub fn dispatch(
+        &self,
+        wire: &[u8],
+        resolve: impl FnOnce(&[u8], &[usize]) -> Result<Vec<u8>, DnsError>,
+    ) -> Result<Vec<u8>, DnsError> {
+        let question = Question::parse(wire)?;
+        let matched = self.authorized_rules(&question);
+        let result = if matched.is_empty() {
+            Err(DnsError::PolicyDenied)
+        } else {
+            resolve(wire, &matched).and_then(|answer| {
+                question.validate_response(&answer)?;
+                Ok(answer)
+            })
+        };
+        match result {
+            Ok(answer) => Ok(answer),
+            Err(error) => question.error_response(if error == DnsError::PolicyDenied {
+                ResponseCode::Refused
+            } else {
+                ResponseCode::ServFail
+            }),
+        }
+    }
+}
+
+impl Question {
+    pub(super) fn error_response(&self, code: ResponseCode) -> Result<Vec<u8>, DnsError> {
+        let mut response = Message::error_msg(
+            self.message.metadata.id,
+            self.message.metadata.op_code,
+            code,
+        );
+        response.metadata.recursion_desired = self.message.metadata.recursion_desired;
+        response.metadata.checking_disabled = self.message.metadata.checking_disabled;
+        response.metadata.recursion_available = true;
+        response.queries = self.message.queries.clone();
+        response.to_vec().map_err(|_| DnsError::Malformed)
+    }
+}

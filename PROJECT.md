@@ -18,7 +18,7 @@ kakoi-net implementation, starting with the initial-release feasibility gate; se
 
 ## Implementation and verification
 
-The project is implemented in Rust 2021 with a minimum supported Rust version of 1.85. The
+The project is implemented in Rust 2021 with a minimum supported Rust version of 1.88. The
 workspace manifest and locked dependency graph are in `Cargo.toml` and `Cargo.lock`; the
 implementation is in `src/` (the `kakoi` binary: the command line, the start-up, and the
 plan's text forms) and `crates/kakoi-core/src/` (the library `kakoi-core`: everything else,
@@ -32,6 +32,17 @@ cargo test --workspace --all-targets --locked
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
+
+The network tests additionally need `nftables` (tested with 1.0.9) at `/usr/sbin/nft`
+and `iproute2` at `/usr/sbin/ip`. The latter constructs private veth test fixtures;
+it is not a product runtime dependency.
+Watchdog fault tests also use `/usr/bin/nsenter` from util-linux to observe a
+private namespace while its controller process is stopped or killed.
+TLS transport tests use `/usr/bin/openssl` to generate temporary test certificates
+and Python's `ssl` module as an independent TLS server. OpenSSL is a test dependency;
+the product uses rustls and the host CA store.
+They run in private user/network namespaces and do not modify host rules. These kernel
+gate tests do not require TUN; product communication tests with pasta still do.
 
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on
 the machine; they fail rather than skip when any of them is missing. Inside the isolation they

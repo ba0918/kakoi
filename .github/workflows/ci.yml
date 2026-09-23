@@ -55,10 +55,11 @@ jobs:
       - name: Install bubblewrap and report the test requirements
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap nftables iproute2 openssl
           bwrap --version
           git --version
           python3 --version
+          nft --version
 
       # Ubuntu 23.10 and later set kernel.apparmor_restrict_unprivileged_userns=1, which
       # stops bwrap from creating the namespace ("setting up uid map: Permission denied").
@@ -95,14 +96,14 @@ jobs:
         run: diff examples/shim/codex skills/kakoi-setup/assets/shim/codex
 
   msrv:
-    # Cargo.toml declares rust-version = "1.85"; this job is what makes that claim true.
+    # Cargo.toml declares rust-version = "1.88"; this job is what makes that claim true.
     # It builds only: the behaviour is covered by `check`, and bwrap is not needed here.
     runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.88.0
 
       - uses: Swatinem/rust-cache@v2
 

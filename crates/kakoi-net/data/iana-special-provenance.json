@@ -1,0 +1,14 @@
+{
+  "4": {
+    "source": "https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry-1.csv",
+    "sha256_of_csv": "e3e39e76d00b1677335db8e9a805c7b9480ea2f4dc9e33f0b93cd3a905128d73",
+    "registry_updated": "2025-10-09",
+    "entries": 26
+  },
+  "6": {
+    "source": "https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry-1.csv",
+    "sha256_of_csv": "775feea0621dec8735a44fbf30f762e721e8f0a1b3ab7eb341961a88cfce2139",
+    "registry_updated": "2025-10-09",
+    "entries": 25
+  }
+}

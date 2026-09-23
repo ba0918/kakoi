@@ -1,0 +1,18 @@
+[package]
+name = "kakoi-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Network lifecycle and policy enforcement for kakoi."
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+kakoi-core = { path = "../kakoi-core" }
+libc.workspace = true
+hickory-proto.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
+serde_json.workspace = true
+socket2.workspace = true
