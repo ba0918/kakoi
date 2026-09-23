@@ -46,6 +46,37 @@ impl fmt::Debug for BwrapCommand {
 /// first and making a descriptor for every symbol. Fails when a descriptor cannot be
 /// made (the `bwrap` diagnostic of specification section 13).
 pub fn assemble(plan: &Plan) -> Result<BwrapCommand, Diagnostic> {
+    if plan.policy.network_mode == crate::policy::NetworkMode::Filtered {
+        return Err(Diagnostic::bwrap(
+            "filtered launch requires a prepared kakoi-net session",
+        ));
+    }
+    assemble_with_prefix(plan, &[])
+}
+
+/// Assembly entry for the network executor, which must enter the prepared user
+/// and network namespaces before executing bwrap. This function performs no
+/// namespace operation and does not establish or verify network permissions.
+pub fn assemble_for_network_executor(
+    plan: &Plan,
+    uid: u32,
+    gid: u32,
+) -> Result<BwrapCommand, Diagnostic> {
+    if plan.policy.network_mode != crate::policy::NetworkMode::Filtered {
+        return Err(Diagnostic::bwrap("network executor requires filtered mode"));
+    }
+    assemble_with_prefix(
+        plan,
+        &[
+            "--uid".into(),
+            uid.to_string().into(),
+            "--gid".into(),
+            gid.to_string().into(),
+        ],
+    )
+}
+
+fn assemble_with_prefix(plan: &Plan, prefix: &[OsString]) -> Result<BwrapCommand, Diagnostic> {
     raise_open_file_limit();
     let mut descriptors = Vec::new();
     let arguments = numbered_arguments(&plan.arguments, &mut descriptors).map_err(|error| {
@@ -55,6 +86,7 @@ pub fn assemble(plan: &Plan) -> Result<BwrapCommand, Diagnostic> {
     })?;
     let mut command = Command::new(&plan.bwrap);
     command
+        .args(prefix)
         .args(arguments)
         .env_clear()
         .envs(plan.environment.values());

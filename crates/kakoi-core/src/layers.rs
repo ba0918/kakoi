@@ -112,6 +112,12 @@ pub struct Policy {
     pub scan: Vec<Scan>,
     pub hide_mounts: Vec<HideMounts>,
     pub network_mode: NetworkMode,
+    pub network_settings_present: bool,
+    pub network_publish: Vec<crate::network::FixedPublication>,
+    pub network_allow: Vec<crate::network::Allow>,
+    pub network_limits: crate::network::NetworkLimits,
+    pub dns_upstream: Vec<crate::network::DnsUpstream>,
+    pub shutdown_grace_seconds: u32,
     pub env_mode: EnvMode,
     pub env_pass: Vec<String>,
     pub env_set: BTreeMap<String, String>,
@@ -125,11 +131,35 @@ pub struct Policy {
 /// except `path-prepend` where it goes first), scalars take the upper layer, tables merge by
 /// key with the upper layer winning.
 pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
+    let network_settings_present = layers.iter().any(|layer| {
+        let network = &layer.policy.network;
+        layer.policy.process.shutdown_grace_seconds.is_some()
+            || network.settings_present
+            || !network.allow.is_empty()
+            || !network.dns_upstream.is_empty()
+            || !network.publish.is_empty()
+            || network.limits.is_present()
+    });
+    if network_settings_present
+        && !layers
+            .iter()
+            .any(|layer| layer.policy.network.mode.is_some())
+    {
+        return Err(Diagnostic::policy(
+            "network settings require an explicit `network.mode` in a layer",
+        ));
+    }
     let mut policy = Policy {
         mounts: Vec::new(),
         scan: Vec::new(),
         hide_mounts: Vec::new(),
         network_mode: NetworkMode::Host,
+        network_settings_present,
+        network_publish: Vec::new(),
+        network_allow: Vec::new(),
+        network_limits: crate::network::NetworkLimits::default(),
+        dns_upstream: Vec::new(),
+        shutdown_grace_seconds: 5,
         env_mode: EnvMode::Inherit,
         env_pass: Vec::new(),
         env_set: BTreeMap::new(),
@@ -140,6 +170,10 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
     };
     for layer in layers {
         let file = &layer.policy;
+        file.process.validate().map_err(Diagnostic::policy)?;
+        if let Some(seconds) = file.process.shutdown_grace_seconds {
+            policy.shutdown_grace_seconds = seconds;
+        }
         for (directive, paths) in [
             (Directive::Rw, &file.mounts.rw),
             (Directive::RwFile, &file.mounts.rw_file),
@@ -159,6 +193,20 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
             .extend(file.mounts.hide_mounts.iter().cloned());
         if let Some(mode) = file.network.mode {
             policy.network_mode = mode;
+        }
+        policy.network_publish.extend(&file.network.publish);
+        policy
+            .dns_upstream
+            .extend(file.network.dns_upstream.iter().cloned());
+        policy.network_limits = file
+            .network
+            .limits
+            .apply(&policy.network_limits)
+            .map_err(Diagnostic::policy)?;
+        for rule in &file.network.allow {
+            if !policy.network_allow.contains(rule) {
+                policy.network_allow.push(rule.clone());
+            }
         }
         if let Some(mode) = file.env.mode {
             policy.env_mode = mode;
@@ -186,6 +234,13 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
             "`{key}` is in both `env.set` and `secrets` after merging"
         )));
     }
+    policy.network_publish =
+        crate::network::merge_publications(policy.network_publish).map_err(Diagnostic::policy)?;
+    policy
+        .network_limits
+        .validate_deadlines()
+        .map_err(Diagnostic::policy)?;
+    crate::network::validate_upstreams(&policy.dns_upstream).map_err(Diagnostic::policy)?;
     Ok(policy)
 }
 

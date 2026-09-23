@@ -67,6 +67,7 @@ fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
 /// command. Ends with the line that names the other two forms.
 fn render_summary(text: &mut String, plan: &Plan) {
     let _ = writeln!(text, "network: {}", network_mode(plan.policy.network_mode));
+    render_network_rules(text, &plan.policy);
     let _ = writeln!(text, "mounts (~ is {}):", shown(&plan.home));
     for item in &plan.mounts.items {
         let _ = writeln!(
@@ -225,6 +226,39 @@ fn render_command(text: &mut String, plan: &Plan) {
     let _ = writeln!(text, "bwrap: {}", shown(&plan.bwrap));
 }
 
+fn render_network_rules(text: &mut String, policy: &Policy) {
+    if policy.network_settings_present {
+        for rule in &policy.network_allow {
+            let _ = writeln!(
+                text,
+                "  allow {} {} ports {}",
+                rule.protocol,
+                escape_control(&rule.destination.to_string()),
+                rule.ports
+            );
+        }
+        for publication in &policy.network_publish {
+            let _ = writeln!(
+                text,
+                "  planned publication: {} {} host:{} -> sandbox:{}",
+                publication.protocol, publication.family, publication.host_port, publication.port
+            );
+        }
+        for upstream in &policy.dns_upstream {
+            let _ = writeln!(
+                text,
+                "  DNS upstream: {} port {}{}",
+                upstream.address,
+                upstream.port(),
+                upstream
+                    .tls_name()
+                    .map(|name| format!(" TLS name={name}"))
+                    .unwrap_or_else(|| " plain".into())
+            );
+        }
+    }
+}
+
 fn render_policy(text: &mut String, policy: &Policy) {
     text.push_str("policy (merged):\n");
     for item in &policy.mounts {
@@ -259,6 +293,50 @@ fn render_policy(text: &mut String, policy: &Policy) {
         "  network.mode = {}",
         network_mode(policy.network_mode)
     );
+    render_network_rules(text, policy);
+    if policy.network_settings_present || policy.network_mode == NetworkMode::Filtered {
+        let limits = &policy.network_limits;
+        for (name, value) in [
+            ("udp-idle-timeout-seconds", limits.udp_idle_timeout_seconds),
+            (
+                "dns-zero-ttl-grace-milliseconds",
+                limits.dns_zero_ttl_grace_milliseconds,
+            ),
+            (
+                "dns-server-timeout-seconds",
+                limits.dns_server_timeout_seconds,
+            ),
+            (
+                "dns-resolution-timeout-seconds",
+                limits.dns_resolution_timeout_seconds,
+            ),
+            ("dns-max-cname-hops", limits.dns_max_cname_hops),
+            ("dns-max-upstream-queries", limits.dns_max_upstream_queries),
+            (
+                "dns-max-concurrent-resolutions",
+                limits.dns_max_concurrent_resolutions,
+            ),
+            (
+                "dns-max-waiters-per-resolution",
+                limits.dns_max_waiters_per_resolution,
+            ),
+            (
+                "dns-failure-cache-seconds",
+                limits.dns_failure_cache_seconds,
+            ),
+            (
+                "recovery-attempt-timeout-seconds",
+                limits.recovery_attempt_timeout_seconds,
+            ),
+        ] {
+            let _ = writeln!(text, "  network.{name} = {value}");
+        }
+        let _ = writeln!(
+            text,
+            "  process.shutdown-grace-seconds = {}",
+            policy.shutdown_grace_seconds
+        );
+    }
     let _ = writeln!(text, "  env.mode = {}", env_mode(policy.env_mode));
     let _ = writeln!(text, "  env.pass = {}", list(&policy.env_pass));
     for (name, value) in &policy.env_set {
@@ -311,6 +389,7 @@ fn directive(directive: Directive) -> &'static str {
 
 fn network_mode(mode: NetworkMode) -> &'static str {
     match mode {
+        NetworkMode::Filtered => "filtered",
         NetworkMode::Host => "host",
         NetworkMode::None => "none",
     }

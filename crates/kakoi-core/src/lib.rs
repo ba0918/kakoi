@@ -22,6 +22,7 @@ pub mod layers;
 pub mod mount_facts;
 pub mod mount_list;
 pub mod mounts;
+pub mod network;
 pub mod placement;
 pub mod plan;
 pub mod planning;

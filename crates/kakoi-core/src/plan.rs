@@ -169,6 +169,13 @@ pub fn plan(
     );
     let environment_changes =
         environment_changes(inputs.policy, inputs.host, &isolation.environment);
+    let mut warnings = isolation.warnings;
+    if inputs.policy.network_settings_present && inputs.policy.network_mode != NetworkMode::Filtered
+    {
+        warnings.push(Warning::new(
+            "network/process settings are unused outside filtered mode",
+        ));
+    }
     Plan {
         nested: is_nested(inputs.host),
         policy: inputs.policy.clone(),
@@ -180,7 +187,7 @@ pub fn plan(
         not_copied: copies.not_copied,
         environment: isolation.environment,
         environment_changes,
-        warnings: isolation.warnings,
+        warnings,
         bwrap,
         command,
         arguments,
@@ -246,8 +253,11 @@ pub fn bwrap_arguments(
         Argument::text("/proc"),
         Argument::text("--unshare-all"),
     ];
-    if network_mode == NetworkMode::Host {
+    if matches!(network_mode, NetworkMode::Host | NetworkMode::Filtered) {
         arguments.push(Argument::text("--share-net"));
+    }
+    if network_mode == NetworkMode::Filtered {
+        arguments.extend([Argument::text("--cap-drop"), Argument::text("ALL")]);
     }
     arguments.extend([
         Argument::text("--die-with-parent"),
@@ -281,6 +291,17 @@ pub fn bwrap_arguments(
                 arguments.extend([Argument::text("--ro-bind-data"), Argument::EmptyFile, real]);
             }
         }
+    }
+    if network_mode == NetworkMode::Filtered {
+        // Apply after user mounts so a copied/hidden host resolver file cannot
+        // silently redirect the application's ordinary DNS lookups.
+        arguments.extend([
+            Argument::text("--ro-bind-data"),
+            Argument::CopiedFile(FileContent::new(
+                format!("nameserver {}\n", crate::network::DNS_RESOLVER_ADDRESS,).into_bytes(),
+            )),
+            Argument::text("/etc/resolv.conf"),
+        ]);
     }
     if let Some(command) = command {
         arguments.push(Argument::text("--"));

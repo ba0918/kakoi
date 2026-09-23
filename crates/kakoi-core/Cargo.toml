@@ -11,5 +11,6 @@ publish = false
 
 [dependencies]
 libc.workspace = true
+idna.workspace = true
 serde.workspace = true
 toml.workspace = true

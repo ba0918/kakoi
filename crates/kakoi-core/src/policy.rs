@@ -87,6 +87,7 @@ impl fmt::Display for PolicyPath {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NetworkMode {
+    Filtered,
     Host,
     None,
 }
@@ -103,9 +104,28 @@ pub enum EnvMode {
 pub struct PolicyFile {
     pub mounts: Mounts,
     pub network: Network,
+    pub process: Process,
     pub env: Env,
     pub secrets: BTreeMap<String, PolicyPath>,
     pub git: Git,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Process {
+    pub shutdown_grace_seconds: Option<u32>,
+}
+
+impl Process {
+    pub fn validate(&self) -> Result<(), String> {
+        if self
+            .shutdown_grace_seconds
+            .is_some_and(|value| !(1..=300).contains(&value))
+        {
+            return Err("process.shutdown-grace-seconds must be in 1..=300".into());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -139,9 +159,41 @@ pub struct HideMounts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+#[serde(from = "NetworkInput")]
 pub struct Network {
     pub mode: Option<NetworkMode>,
+    pub publish: Vec<crate::network::FixedPublication>,
+    pub allow: Vec<crate::network::Allow>,
+    pub limits: crate::network::LimitOverrides,
+    pub dns_upstream: Vec<crate::network::DnsUpstream>,
+    pub(crate) settings_present: bool,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+struct NetworkInput {
+    mode: Option<NetworkMode>,
+    publish: Option<Vec<crate::network::FixedPublication>>,
+    allow: Option<Vec<crate::network::Allow>>,
+    dns_upstream: Option<Vec<crate::network::DnsUpstream>>,
+    #[serde(flatten)]
+    limits: crate::network::LimitOverrides,
+}
+
+impl From<NetworkInput> for Network {
+    fn from(input: NetworkInput) -> Self {
+        Self {
+            mode: input.mode,
+            settings_present: input.publish.is_some()
+                || input.dns_upstream.is_some()
+                || input.allow.is_some()
+                || input.limits.is_present(),
+            publish: input.publish.unwrap_or_default(),
+            allow: input.allow.unwrap_or_default(),
+            limits: input.limits,
+            dns_upstream: input.dns_upstream.unwrap_or_default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -162,9 +214,13 @@ pub struct Git {
 
 /// Parses the text of one policy file. `origin` names the file in diagnostics.
 pub fn parse_policy(text: &str, origin: &Path) -> Result<PolicyFile, Diagnostic> {
-    let policy: PolicyFile = toml::from_str(text).map_err(|error| {
+    let mut policy: PolicyFile = toml::from_str(text).map_err(|error| {
         Diagnostic::policy(format!("{}: {}", origin.display(), error.message()))
     })?;
+    policy
+        .process
+        .validate()
+        .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
     for scan in &policy.mounts.scan {
         if scan.names.is_empty() {
             return Err(Diagnostic::policy(format!(
@@ -181,5 +237,14 @@ pub fn parse_policy(text: &str, origin: &Path) -> Result<PolicyFile, Diagnostic>
             )));
         }
     }
+    policy.network.publish = crate::network::merge_publications(policy.network.publish)
+        .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
+    policy
+        .network
+        .limits
+        .validate()
+        .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
+    crate::network::validate_upstreams(&policy.network.dns_upstream)
+        .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
     Ok(policy)
 }
