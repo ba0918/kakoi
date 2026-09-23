@@ -110,7 +110,10 @@ def publication(pasta, family):
 if __name__ == '__main__':
     require_private_namespace()
     name = sys.argv[1]
-    if name.startswith('dual-guard-'):
+    if name.startswith('host-loopback-'):
+        from host_loopback import probe
+        probe(sys.argv[2], name.removeprefix('host-loopback-'))
+    elif name.startswith('dual-guard-'):
         from dual_guard import probe
         probe(sys.argv[2], name.removeprefix('dual-guard-'))
     elif name.startswith('fixed-'):

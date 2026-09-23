@@ -1227,3 +1227,19 @@ PTYで実端末のCtrl+Cを試したところ、kakoiと同じプロセスグル
 
 pastaは代役で、実pastaの通信経路はこの環境（TUNなし）では確かめていない。
 Rust 1.88のGNU・musl各445件成功、CPU数の3倍の負荷で全体3回成功。
+
+## 2段pastaでのホストlocalhostへの到達（2026-09-24）
+
+この作業環境で `/dev/net/tun` が使えることを確認し、公式Debian backportsのpasta
+（0.0~git20260728.f8df3f1-1~bpo13+1、SHA256 `2a8cc0c5…04ee`）で実pastaの試験を行った。
+新しい `host-loopback-ipv4/ipv6`（tools/net-probes/host_loopback.py）は、2段のpastaの内側から
+ゲートウェイのアドレスへ接続したときの到達先を、中間の名前空間とホスト役のループバックで
+異なる応答を返すサーバーで見分ける。
+
+- 内側のpastaが既定のゲートウェイ変換を行うと、ゲートウェイは中間の名前空間の
+  ループバックへ届き、ホストには届かない（TCP/UDP、IPv4/IPv6とも）。
+- 内側のpastaに `--no-map-gw` を付けると、ゲートウェイへの通信は通常の転送として中間へ
+  出て、外側のpastaの変換でホスト役のループバックへ届く（TCP/UDP、IPv4/IPv6とも）。
+
+結果は `.agents/tmp/kakoi-net-probes/host-loopback-local*/`（ローカル記録）。許可判定を
+入れない到達性だけの確認で、製品のホスト宛て許可の実装と試験は別に行う。
