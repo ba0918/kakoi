@@ -44,7 +44,7 @@ the product uses rustls and the host CA store.
 They run in private user/network namespaces and do not modify host rules. These kernel
 gate tests do not require TUN. The tests that carry real traffic through pasta need
 `/dev/net/tun` and a pasta executable, taken from `KAKOI_TEST_PASTA` or else from `PATH`;
-they fail rather than skip without one. Most of them run kakoi inside a private
+they fail rather than skip without one. They run kakoi inside a private
 user, network, and PID namespace that stands in for the host, created with `unshare` from
 util-linux, so that their addresses and ports never meet the real host's. The verified build is Debian trixie-backports
 `passt 0.0~git20260728.f8df3f1-1~bpo13+1`, which CI fetches and checks by digest.

@@ -1,12 +1,10 @@
-use crate::common::{binary, TempDir, RW_WORKSPACE};
-use crate::fake_host::pasta;
+use crate::fake_host::FakeHost;
 use kakoi_net::{
     dns::{AcceptedRequest, DnsRequests},
     host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
 };
 use std::{
-    net::{IpAddr, TcpListener, UdpSocket},
-    path::PathBuf,
+    net::IpAddr,
     time::{Duration, Instant},
 };
 
@@ -84,159 +82,76 @@ fn reserved_host_names_are_answered_locally_whatever_the_policy() {
     assert_eq!(reply.wire[3] & 15, 5);
 }
 
-fn filtered(allow: &str) -> (TempDir, PathBuf, TempDir) {
-    let home = TempDir::new();
-    let workspace = home.path().join("ws");
-    std::fs::create_dir(&workspace).unwrap();
-    home.write(
-        ".config/kakoi/profile/default.toml",
-        format!(
-            "{RW_WORKSPACE}\n[network]\nmode = 'filtered'\n\n[[network.dns-upstream]]\ntransport = 'plain'\nip = '127.0.0.1'\nport = 9\n{allow}"
-        ),
-    );
-    let bin = TempDir::new();
-    // pasta selects its mode by the name it is started under.
-    std::os::unix::fs::symlink(pasta(), bin.path().join("pasta")).unwrap();
-    (home, workspace, bin)
+/// The application resolves `name` for its family and exchanges with the
+/// address; it prints the address and the reply.
+fn reach(name: &str, port: u16, kind: &str, wait: &str) -> String {
+    format!(
+        "family = socket.AF_INET6 if 'v6' in {name:?} else socket.AF_INET\n\
+         address = socket.getaddrinfo({name:?}, {port}, family)[0][4][0]\n\
+         print(address, exchange(address, {port}, {kind:?}, {wait}))\n"
+    )
 }
 
-/// Runs `script` with the sandbox's Python and returns its standard output.
-fn inside(home: &TempDir, workspace: &PathBuf, bin: &TempDir, script: &str) -> String {
-    let output = binary(home.path())
-        .env(
-            "PATH",
-            format!("{}:/usr/sbin:/usr/bin:/bin", bin.path().display()),
-        )
-        .current_dir(workspace)
-        .args(["--", "/usr/bin/python3", "-c", script])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "{stderr}");
-    // kakoi's notifications help to explain an unexpected result.
-    eprintln!("{stderr}");
-    String::from_utf8(output.stdout).unwrap()
-}
-
-fn tcp_echo(address: &str) -> (TcpListener, u16, std::thread::JoinHandle<()>) {
-    let listener = TcpListener::bind((address, 0)).unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let server = listener.try_clone().unwrap();
-    let handle = std::thread::spawn(move || {
-        use std::io::Write;
-        // Gives up after a while, so that a refused connection cannot hang the test.
-        server.set_nonblocking(true).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while Instant::now() < deadline {
-            if let Ok((mut stream, _)) = server.accept() {
-                let _ = stream.write_all(b"host-tcp");
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    });
-    (listener, port, handle)
-}
-
-const CONNECT: &str = r#"
-import socket, sys
-name, port, kind, wait = sys.argv[1], int(sys.argv[2]), sys.argv[3], float(sys.argv[4])
-family = socket.AF_INET6 if 'v6' in name else socket.AF_INET
-try:
-    address = socket.getaddrinfo(name, port, family)[0][4][0]
-    with socket.socket(family, socket.SOCK_STREAM if kind == 'tcp' else socket.SOCK_DGRAM) as s:
-        s.settimeout(wait)
-        s.connect((address, port))
-        if kind == 'udp':
-            s.send(b'probe')
-        print(address, s.recv(32).decode())
-except OSError as error:
-    print('failed', type(error).__name__)
-"#;
-
-/// A permitted exchange may take long on a loaded host: its wait only guards
-/// against a hang. A refused one is dropped, so any wait ends the same way.
-fn connect(name: &str, port: u16, kind: &str) -> String {
-    exchange(name, port, kind, 20)
-}
-
-fn refused(name: &str, port: u16, kind: &str) -> String {
-    exchange(name, port, kind, 3)
-}
-
-fn exchange(name: &str, port: u16, kind: &str, wait: u32) -> String {
-    format!("import sys\nsys.argv = ['connect', {name:?}, '{port}', {kind:?}, '{wait}']\n{CONNECT}")
+/// Runs `app` in kakoi on a fake host whose own loopback serves `services`
+/// (address, port, protocol, reply), and prints the application's output.
+fn on_host(network: &str, services: &[(&str, u16, &str, &str)], app: &str) -> String {
+    let host = FakeHost::new(network, &[]);
+    let services: String = services
+        .iter()
+        .map(|(address, port, kind, reply)| {
+            format!("serve({address:?}, {port}, {kind:?}, {reply:?})\n")
+        })
+        .collect();
+    host.run(&format!(
+        "{services}process = kakoi({app:?})\nprint(process.stdout.read().decode(), end='')\nassert finish(process) == 0\n"
+    ))
 }
 
 // @kotowari[EX-190, EX-192]
 #[test]
 fn the_host_v4_name_reaches_only_the_permitted_host_loopback_port() {
-    let (listener, port, server) = tcp_echo("127.0.0.1");
-    // A listening service on a port the policy does not name.
-    let other = TcpListener::bind("127.0.0.1:0").unwrap();
-    let other_port = other.local_addr().unwrap().port();
-    let (home, workspace, bin) = filtered(&format!(
-        "\n[[network.allow]]\ndestination = {{ host-loopback = 'ipv4' }}\nprotocol = 'tcp'\nports = ['{port}']\n"
-    ));
-    let output = inside(
-        &home,
-        &workspace,
-        &bin,
+    let output = on_host(
+        "\n[[network.allow]]\ndestination = { host-loopback = 'ipv4' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        // A listening service on a port the policy does not name.
+        &[
+            ("127.0.0.1", 8080, "tcp", "host-tcp"),
+            ("127.0.0.1", 8081, "tcp", "other"),
+        ],
         &format!(
-            "{}\n{}",
-            connect("host-v4.kakoi.internal", port, "tcp"),
-            refused("host-v4.kakoi.internal", other_port, "tcp")
+            "{}{}",
+            reach("host-v4.kakoi.internal", 8080, "tcp", "PERMITTED"),
+            reach("host-v4.kakoi.internal", 8081, "tcp", "REFUSED")
         ),
     );
     assert_eq!(
         output,
-        format!("{HOST_LOOPBACK_V4} host-tcp\nfailed TimeoutError\n"),
+        format!("{HOST_LOOPBACK_V4} host-tcp\n{HOST_LOOPBACK_V4} failed TimeoutError\n"),
         "{output}"
     );
-    server.join().unwrap();
-    drop((listener, other));
 }
 
 // @kotowari[EX-191]
 #[test]
 fn the_host_v6_name_reaches_a_permitted_udp_service() {
-    let socket = UdpSocket::bind("[::1]:0").unwrap();
-    let port = socket.local_addr().unwrap().port();
-    let server = std::thread::spawn(move || {
-        let mut buffer = [0; 64];
-        socket
-            .set_read_timeout(Some(Duration::from_secs(30)))
-            .unwrap();
-        if let Ok((_, peer)) = socket.recv_from(&mut buffer) {
-            socket.send_to(b"host-udp", peer).unwrap();
-        }
-    });
-    let (home, workspace, bin) = filtered(&format!(
-        "\n[[network.allow]]\ndestination = {{ host-loopback = 'ipv6' }}\nprotocol = 'udp'\nports = ['{port}']\n"
-    ));
-    let output = inside(
-        &home,
-        &workspace,
-        &bin,
-        &connect("host-v6.kakoi.internal", port, "udp"),
+    let output = on_host(
+        "\n[[network.allow]]\ndestination = { host-loopback = 'ipv6' }\nprotocol = 'udp'\nports = ['8080']\n",
+        &[("::1", 8080, "udp", "host-udp")],
+        &reach("host-v6.kakoi.internal", 8080, "udp", "PERMITTED"),
     );
     assert_eq!(output, format!("{HOST_LOOPBACK_V6} host-udp\n"), "{output}");
-    server.join().unwrap();
 }
 
 // @kotowari[EX-194]
 #[test]
 fn a_dns_wildcard_does_not_permit_the_host_loopback() {
-    let (listener, port, _) = tcp_echo("127.0.0.1");
-    let (home, workspace, bin) = filtered(&format!(
-        "\n[[network.allow]]\ndestination = {{ dns = '*.kakoi.internal' }}\nprotocol = 'tcp'\nports = ['{port}']\n"
-    ));
-    let output = inside(
-        &home,
-        &workspace,
-        &bin,
-        &refused("host-v4.kakoi.internal", port, "tcp"),
+    let output = on_host(
+        "\n[[network.allow]]\ndestination = { dns = '*.kakoi.internal' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &[("127.0.0.1", 8080, "tcp", "host-tcp")],
+        &reach("host-v4.kakoi.internal", 8080, "tcp", "REFUSED"),
     );
-    assert_eq!(output, "failed TimeoutError\n", "{output}");
-    drop(listener);
+    assert_eq!(
+        output,
+        format!("{HOST_LOOPBACK_V4} failed TimeoutError\n"),
+        "{output}"
+    );
 }
