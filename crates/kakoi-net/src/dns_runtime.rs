@@ -93,7 +93,10 @@ impl DnsRuntime {
             config.limits.dns_max_waiters_per_resolution as usize,
             timeout,
         )
-        .map_err(io::Error::other)?;
+        .map_err(io::Error::other)?
+        .with_failure_hold(Duration::from_secs(u64::from(
+            config.limits.dns_failure_cache_seconds,
+        )));
         let resolver = Arc::new(ExplicitResolver::new(
             config.policy.clone(),
             config.upstreams,

@@ -526,3 +526,53 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
     stop.store(true, Ordering::Relaxed);
     responder.join().unwrap();
 }
+
+// A failed resolution is held: the same question is answered SERVFAIL without
+// new work until the hold ends, and another question is not held.
+// @kotowari[REQ-134, EX-301, EX-302]
+#[test]
+fn a_failed_resolution_is_held_for_the_failure_cache_time() {
+    use kakoi_net::dns::{AcceptedRequest, DnsError, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests = DnsRequests::new(
+        vec![rule("*.example.com")],
+        7,
+        4,
+        4,
+        Duration::from_secs(10),
+    )
+    .unwrap()
+    .with_failure_hold(Duration::from_secs(5));
+    let question = query("api.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&question, 1, now).unwrap() else {
+        panic!("the first question starts a resolution")
+    };
+    let replies = requests.complete(task.id, Err(DnsError::IncompleteResponse), now);
+    assert_eq!(replies[0].wire[3] & 15, 2);
+    let AcceptedRequest::Answer(reply) = requests
+        .accept(&question, 2, now + Duration::from_secs(2))
+        .unwrap()
+    else {
+        panic!("a held failure started new work")
+    };
+    assert_eq!((reply.recipient, reply.wire[3] & 15), (2, 2));
+    assert_eq!(&reply.wire[..2], &question[..2]);
+    // Another type of the same name is another question.
+    assert!(matches!(
+        requests
+            .accept(
+                &query("api.example.com", 28),
+                3,
+                now + Duration::from_secs(2)
+            )
+            .unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+    assert!(matches!(
+        requests
+            .accept(&question, 4, now + Duration::from_secs(5))
+            .unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+}

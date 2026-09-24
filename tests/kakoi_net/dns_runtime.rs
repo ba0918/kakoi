@@ -124,3 +124,95 @@ s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x
             .any(|entry| entry["rule"]["chain"] == "dns_permitted"));
     }
 }
+
+// The runtime holds a failure for the configured time: asked again at once,
+// the same question gets SERVFAIL without reaching the upstream.
+// @kotowari[REQ-134, EX-301]
+#[test]
+fn the_runtime_holds_a_failed_resolution_without_asking_again() {
+    let ns = Arc::new(NetworkNamespace::create().unwrap());
+    assert!(ns
+        .command("/usr/sbin/ip")
+        .unwrap()
+        .args(["link", "set", "lo", "up"])
+        .status()
+        .unwrap()
+        .success());
+    nft::apply(
+        &ns,
+        Path::new("/usr/sbin/nft"),
+        &filter::compile_static(&[], 120).unwrap(),
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+    socket.set_nonblocking(true).unwrap();
+    let config = parse_policy(
+        &format!(
+            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
+            socket.local_addr().unwrap().port()
+        ),
+        Path::new("dns.toml"),
+    )
+    .unwrap();
+    let mut runtime = DnsRuntime::new(
+        Arc::clone(&ns),
+        DnsRuntimeConfig {
+            policy: vec![Allow {
+                destination: Destination::Dns("api.example.com".parse().unwrap()),
+                protocol: Protocol::Tcp,
+                ports: vec!["443".into()].try_into().unwrap(),
+            }],
+            upstreams: config.network.dns_upstream,
+            limits: NetworkLimits {
+                dns_failure_cache_seconds: 60,
+                ..NetworkLimits::default()
+            },
+            nft: "/usr/sbin/nft".into(),
+            trust: None,
+            scope: AddressContext::default(),
+            generation: 0,
+            host_dns: None,
+        },
+        |_| None,
+    )
+    .unwrap();
+    let mut upstream_queries = 0;
+    for _ in 0..2 {
+        let mut client = ns
+            .command("/usr/bin/python3")
+            .unwrap()
+            .args([
+                "-c",
+                r#"
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(20)
+s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x01', ('127.0.0.53', 53))
+sys.exit(s.recv(512)[3] & 15)
+"#,
+            ])
+            .spawn()
+            .unwrap();
+        // Only guards against a hang.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let status = loop {
+            runtime.poll(Instant::now()).unwrap();
+            let mut bytes = [0; 512];
+            if let Ok((size, peer)) = socket.recv_from(&mut bytes) {
+                upstream_queries += 1;
+                let mut answer = bytes[..size].to_vec();
+                answer[2] |= 0x80;
+                answer[3] = (answer[3] & 0xf0) | 2;
+                socket.send_to(&answer, peer).unwrap();
+            }
+            if let Some(status) = client.try_wait().unwrap() {
+                break status;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        assert_eq!(status.code(), Some(2));
+    }
+    assert_eq!(upstream_queries, 1);
+}

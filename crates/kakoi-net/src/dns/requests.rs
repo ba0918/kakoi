@@ -4,7 +4,13 @@ use super::{
 };
 use hickory_proto::op::Query;
 use kakoi_core::network::Allow;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
+/// Held failures kept at most; beyond it a failure is simply asked again.
+const MAX_HELD_FAILURES: usize = 4096;
 
 pub struct DnsReply<W> {
     pub recipient: W,
@@ -31,6 +37,7 @@ struct Waiter<W> {
 
 struct Running {
     id: ResolutionId,
+    key: ResolutionKey,
     question: Question,
     deadline: Instant,
 }
@@ -45,6 +52,9 @@ pub struct DnsRequests<W> {
     pool: ResolutionPool<ResolutionKey, Waiter<W>>,
     running: Vec<Running>,
     timeout: Duration,
+    failure_hold: Duration,
+    // Resolution conditions that failed, until when they are answered SERVFAIL.
+    held: HashMap<ResolutionKey, Instant>,
 }
 
 impl<W> DnsRequests<W> {
@@ -64,7 +74,16 @@ impl<W> DnsRequests<W> {
             pool: ResolutionPool::new(max_resolutions, max_waiters)?,
             running: Vec::new(),
             timeout,
+            failure_hold: Duration::ZERO,
+            held: HashMap::new(),
         })
+    }
+
+    /// A failed resolution answers the same condition with SERVFAIL, without
+    /// asking an upstream, for `hold`. Zero holds nothing.
+    pub fn with_failure_hold(mut self, hold: Duration) -> Self {
+        self.failure_hold = hold;
+        self
     }
 
     /// Questions accepted from now on belong to a new settings generation: they
@@ -98,16 +117,20 @@ impl<W> DnsRequests<W> {
         if self.gate.authorized_rules(&question).is_empty() {
             return reply(&question, recipient, ResponseCode::Refused);
         }
+        if self.held.get(&key).is_some_and(|until| now < *until) {
+            return reply(&question, recipient, ResponseCode::ServFail);
+        }
         let waiter = Waiter {
             recipient,
             id: question.message.metadata.id,
             query: question.message.queries[0].clone(),
         };
-        match self.pool.admit(key, waiter) {
+        match self.pool.admit(key.clone(), waiter) {
             Ok(Admission::Start(id)) => {
                 let deadline = now + self.timeout;
                 self.running.push(Running {
                     id,
+                    key,
                     question,
                     deadline,
                 });
@@ -144,6 +167,15 @@ impl<W> DnsRequests<W> {
         } else {
             ResponseCode::ServFail
         };
+        // A resolution that ended in SERVFAIL, whether kakoi's or the
+        // upstream's, failed; a negative answer or a refusal did not.
+        let failed = match &result {
+            Ok(answer) => answer.wire.get(3).is_some_and(|flags| flags & 15 == 2),
+            Err(_) => code == ResponseCode::ServFail,
+        };
+        if failed {
+            self.hold(running.key.clone(), now);
+        }
         self.pool
             .complete(id)
             .into_iter()
@@ -187,6 +219,16 @@ impl<W> DnsRequests<W> {
                 }
             })
             .collect()
+    }
+
+    fn hold(&mut self, key: ResolutionKey, now: Instant) {
+        if self.failure_hold.is_zero() {
+            return;
+        }
+        self.held.retain(|_, until| now < *until);
+        if self.held.len() < MAX_HELD_FAILURES {
+            self.held.insert(key, now + self.failure_hold);
+        }
     }
 
     pub fn expire(&mut self, now: Instant) -> Vec<DnsReply<W>> {
