@@ -305,4 +305,29 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
             "the redo was given a fresh query count"
         );
     }
+
+    // Six silent upstreams from the host at 2 seconds each would take 12: the
+    // default 10 seconds in all ends the resolution before the sixth.
+    // @kotowari[EX-255]
+    #[test]
+    fn the_overall_limit_applies_to_the_host_upstreams() {
+        let temp = TempDir::new();
+        let silent: Vec<_> = (0..6).map(|_| upstream()).collect();
+        let file = temp.write(
+            "resolv.conf",
+            silent
+                .iter()
+                .map(|(_, port)| format!("upstream {port}\n"))
+                .collect::<String>(),
+        );
+        let (ns, mut runtime) = runtime_with(&file, NetworkLimits::default());
+        let app = client(&ns);
+        assert_eq!(finish(app, &mut runtime), "2 -\n");
+        let mut bytes = [0; 512];
+        assert!(
+            silent[5].0.recv_from(&mut bytes).is_err(),
+            "the sixth upstream was asked"
+        );
+        assert!(silent[0].0.recv_from(&mut bytes).is_ok());
+    }
 }

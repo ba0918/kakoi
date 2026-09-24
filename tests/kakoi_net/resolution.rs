@@ -33,7 +33,7 @@ fn cname_chain_limits_hops_detects_case_insensitive_cycles_and_keeps_earliest_ex
     );
 }
 
-// @kotowari[REQ-116, REQ-122]
+// @kotowari[REQ-116, REQ-122, EX-253]
 #[test]
 fn retries_share_the_original_deadline_and_send_budget() {
     let start = Instant::now();
@@ -89,6 +89,30 @@ fn host_dns_uses_the_whole_deadline_and_separate_resolutions_have_separate_budge
     let mut expired = ResolutionBudget::new(start, &limits).unwrap();
     assert_eq!(
         expired.reserve_query(start + Duration::from_secs(10), UpstreamWait::HostResolver),
+        Err(ResolutionLimit::Deadline)
+    );
+}
+
+// Written waits apply: 5 seconds a candidate, 30 in all.
+// @kotowari[EX-254]
+#[test]
+fn written_dns_waits_bound_each_candidate_and_the_whole() {
+    let start = Instant::now();
+    let limits = NetworkLimits {
+        dns_server_timeout_seconds: 5,
+        dns_resolution_timeout_seconds: 30,
+        ..NetworkLimits::default()
+    };
+    let mut budget = ResolutionBudget::new(start, &limits).unwrap();
+    assert_eq!(
+        budget.reserve_query(start, UpstreamWait::Explicit).unwrap(),
+        start + Duration::from_secs(5)
+    );
+    assert!(budget
+        .ensure_live(start + Duration::from_millis(29_999))
+        .is_ok());
+    assert_eq!(
+        budget.ensure_live(start + Duration::from_secs(30)),
         Err(ResolutionLimit::Deadline)
     );
 }
