@@ -68,7 +68,9 @@ cannot administer, and the traffic is carried by two `pasta` processes outside i
   an address learned by DNS counts only when the answer came through `kakoi`'s own resolver,
   and only until the answer's time to live runs out;
 - the host's loopback is reachable only through `host-loopback` rules, and a port is published
-  to the host only when a `[[network.publish]]` names it;
+  to the host only when a `[[network.publish]]` names it. The host's other addresses are
+  reachable only through `ip` or `cidr` rules: a `dns` rule whose name resolves to one opens
+  nothing;
 - when the enforcement fails while running (a `pasta` process, the supervisor, or its watchdog
   stops), all traffic in and out is blocked, the process keeps running, and `kakoi` rebuilds
   the same rules behind the block before opening again. Addresses whose DNS answers expired
@@ -84,6 +86,8 @@ Limits of `filtered`, as it stands:
   from. When that number is already taken on the host, the flow cannot be made and its
   datagrams are dropped without notice; the process sees a timeout. Sending again from another
   port is a new flow. This is `pasta`'s behaviour and is accepted.
+- the host's own addresses are read once, at start-up. An address the host gains later (a VPN
+  coming up, say) counts as any other, and a `dns` rule whose name resolves to it opens it.
 - IPv6 link-local destinations (`host-interface`) are refused, and publications are fixed:
   nothing is published because something inside started listening.
 

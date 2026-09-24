@@ -5,7 +5,7 @@ use crate::{
     dns_runtime::{DnsRuntimeConfig, HostDns},
     dns_transport::TlsClient,
     filter::FilterRule,
-    host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
+    host::{self, HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
     host_dns,
     scope::AddressContext,
     session::Session,
@@ -119,7 +119,11 @@ pub fn start(
         limits: policy.network_limits.clone(),
         trust,
         nft: tools.nft.clone(),
+        // Read before pasta starts, while this thread is still in the host's
+        // network namespace.
         scope: AddressContext {
+            host_addresses: host::addresses()
+                .map_err(|error| failure("read the host's addresses", error))?,
             host_loopback_v4: Some(HOST_LOOPBACK_V4),
             host_loopback_v6: Some(HOST_LOOPBACK_V6),
             ..AddressContext::default()

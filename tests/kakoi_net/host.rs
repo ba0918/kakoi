@@ -155,3 +155,48 @@ fn a_dns_wildcard_does_not_permit_the_host_loopback() {
         "{output}"
     );
 }
+
+// An address the host itself holds, outside loopback, is reached only through
+// an IP permission: a name permitted by `dns` that resolves to it opens nothing,
+// whereas the same answer for a remote address does.
+// @kotowari[REQ-139]
+#[test]
+fn a_dns_permission_does_not_open_an_address_the_host_holds() {
+    let dns_only =
+        "\n[[network.allow]]\ndestination = { dns = '*.example' }\nprotocol = 'tcp'\nports = ['8080']\n";
+    let script = |network: &str| {
+        FakeHost::new(network, &["11.0.0.5/32"]).run(&format!(
+            r#"
+ip('link', 'add', 'lan0', 'type', 'dummy')
+ip('link', 'set', 'lan0', 'up')
+ip('-4', 'addr', 'add', '11.0.0.7/32', 'dev', 'lan0')
+dns({{('own.example', 1): [('11.0.0.7', 300)], ('far.example', 1): [('11.0.0.5', 300)]}})
+serve('11.0.0.7', 8080, 'tcp', 'host-lan')
+serve('11.0.0.5', 8080, 'tcp', 'remote')
+process = kakoi({app:?})
+print(process.stdout.read().decode(), end='')
+assert finish(process) == 0
+"#,
+            app = r#"
+for name in ('own.example', 'far.example'):
+    try:
+        address = socket.getaddrinfo(name, 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    except OSError:
+        print(name, 'not resolved')
+        continue
+    print(name, exchange(address, 8080, 'tcp', PERMITTED if name == 'far.example' else REFUSED))
+"#
+        ))
+    };
+    assert_eq!(
+        script(dns_only),
+        "own.example not resolved\nfar.example remote\n"
+    );
+    // With the address permitted as an IP, the same name reaches it.
+    assert_eq!(
+        script(&format!(
+            "{dns_only}\n[[network.allow]]\ndestination = {{ ip = '11.0.0.7' }}\nprotocol = 'tcp'\nports = ['8080']\n"
+        )),
+        "own.example host-lan\nfar.example remote\n"
+    );
+}
