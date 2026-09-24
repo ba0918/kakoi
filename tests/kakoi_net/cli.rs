@@ -267,7 +267,9 @@ fn a_main_command_ended_by_ctrl_c_is_cleaned_up_like_any_main_exit() {
         filtered.with_pasta(&[
             "/usr/bin/python3",
             "-c",
-            "import subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', 'import signal, sys, time; signal.signal(signal.SIGTERM, lambda *_: (print(\"term-received\", flush=True), sys.exit(0))); time.sleep(600)'], start_new_session=True)\nprint('app-ready', flush=True)\ntime.sleep(600)",
+            // The child marks itself ready once its handler is in place, so the
+            // termination request cannot arrive before the handler does.
+            "import os, subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', 'import signal, sys, time; signal.signal(signal.SIGTERM, lambda *_: (print(\"term-received\", flush=True), sys.exit(0))); open(\"child-ready\", \"w\").close(); time.sleep(600)'], start_new_session=True)\nwhile not os.path.exists('child-ready'):\n    time.sleep(0.01)\nprint('app-ready', flush=True)\ntime.sleep(600)",
         ]),
         "app-ready",
         0.0,
