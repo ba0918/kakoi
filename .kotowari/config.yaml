@@ -9,6 +9,10 @@ tests:
   rust:
     attributes: []
     macros: []
+guides:
+  files:
+    - "docs/guide/*.md"
+    - "docs/guide/**/*.md"
 limits:
   lines: 200
   requirements: 10
