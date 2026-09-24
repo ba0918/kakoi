@@ -837,6 +837,79 @@ fn staging_that_cannot_finish_before_the_answer_expires_fails_only_that_answer()
     assert_eq!(dns_sets(&namespace).len(), 1);
 }
 
+/// The time a DNS permission has left in the kernel, read from `nft`'s text
+/// listing, which unlike its JSON keeps the milliseconds.
+fn dns_permission_expires(namespace: &NetworkNamespace) -> Duration {
+    let output = namespace
+        .command("/usr/sbin/nft")
+        .unwrap()
+        .args(["list", "table", "inet", "kakoi_policy"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let expires = text
+        .split(" expires ")
+        .nth(1)
+        .and_then(|rest| rest.split([' ', ',', '\n']).next())
+        .unwrap_or_else(|| panic!("no expiring element in {text}"));
+    let mut total = Duration::ZERO;
+    let mut digits = String::new();
+    let mut unit = String::new();
+    for character in expires.chars().chain([' ']) {
+        if character.is_ascii_digit() || character == ' ' {
+            if !unit.is_empty() {
+                let value: u64 = digits.parse().unwrap();
+                total += match unit.as_str() {
+                    "d" => Duration::from_secs(value * 86400),
+                    "h" => Duration::from_secs(value * 3600),
+                    "m" => Duration::from_secs(value * 60),
+                    "s" => Duration::from_secs(value),
+                    "ms" => Duration::from_millis(value),
+                    other => panic!("unknown unit {other} in {expires}"),
+                };
+                digits.clear();
+                unit.clear();
+            }
+            digits.push(character);
+        } else {
+            unit.push(character);
+        }
+    }
+    total
+}
+
+// A staging retried with a longer reserve still counts the permission's
+// kernel lifetime from the end of that reserve, never from its start: the
+// kernel removes the permission no later than the answer's expiry.
+// @kotowari[REQ-397, EX-733]
+#[test]
+fn a_late_staging_never_leaves_the_permission_past_the_answer_expiry() {
+    use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    let namespace = dns_owner_namespace();
+    let temp = crate::common::TempDir::new();
+    let (wrapper, _slow) = slow_nft(&temp);
+    let mut owner = DynamicPermissions::new(&namespace, &wrapper, api_rule());
+    let deadline = Instant::now() + Duration::from_secs(3);
+    owner
+        .install(&[ActiveGrant {
+            rule: 0,
+            address: "1.1.1.1".parse().unwrap(),
+            deadline,
+        }])
+        .unwrap();
+    // Taken before the listing, so the sum never exceeds the real expiry and
+    // load cannot make this fail. Counting from the start of the reserve would
+    // exceed the deadline by the wrapper's 120 ms; 20 ms covers kernel rounding.
+    let listed = Instant::now();
+    let expires = dns_permission_expires(&namespace);
+    assert!(
+        listed + expires <= deadline + Duration::from_millis(20),
+        "the permission outlives the answer by {:?}",
+        (listed + expires).saturating_duration_since(deadline)
+    );
+}
+
 // A rule for all of IPv6 keeps its port, and does not reach a link-local
 // neighbour: only a rule naming the interface could, and the initial release
 // has none.
