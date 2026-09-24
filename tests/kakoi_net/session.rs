@@ -74,7 +74,7 @@ pub(crate) fn assert_transit(keeper: i32, expected: bool) {
     assert_loopback_command(command, expected);
 }
 
-// @kotowari[REQ-057, REQ-058, REQ-150]
+// @kotowari[REQ-057, REQ-058, REQ-150, EX-176]
 #[test]
 fn session_opens_only_after_preparation_and_latches_closed_on_transport_failure() {
     for signal in [libc::SIGSTOP, libc::SIGKILL] {
@@ -133,7 +133,7 @@ fn failed_session_policy_preparation_reaps_transport_without_opening_it() {
     }
 }
 
-// @kotowari[REQ-116, REQ-131, REQ-058]
+// @kotowari[REQ-116, REQ-131, REQ-058, EX-053]
 #[test]
 fn session_services_dns_and_closes_before_draining_its_controllers() {
     use kakoi_core::network::{Allow, Destination, Protocol};
@@ -672,7 +672,7 @@ fn recovery_removes_only_a_retired_watchdogs_guard_before_opening() {
     }
 }
 
-// @kotowari[REQ-058, REQ-066, REQ-069]
+// @kotowari[REQ-058, REQ-066, REQ-069, EX-132, EX-133]
 #[test]
 fn blocked_notification_output_does_not_delay_isolation_recovery_or_shutdown() {
     use kakoi_net::notification::NotificationWriter;

@@ -21,7 +21,7 @@ with ThreadPoolExecutor(len(calls)) as pool:
     )
 }
 
-// @kotowari[EX-001, EX-002, EX-003]
+// @kotowari[EX-001, EX-002, EX-003, EX-051, EX-052, EX-048, EX-049, EX-310, EX-311]
 #[test]
 fn only_the_permitted_ip_protocol_and_port_reach_a_remote_service() {
     let host = FakeHost::new(

@@ -24,7 +24,7 @@ fn publication_merge_deduplicates_and_an_empty_upper_layer_preserves_lower_entri
     assert_eq!(merged.network_mode, kakoi_core::policy::NetworkMode::None);
 }
 
-// @kotowari[REQ-395]
+// @kotowari[REQ-395, EX-729]
 #[test]
 fn publication_conflicts_are_rejected_within_and_across_layers() {
     for conflicting in [
@@ -60,7 +60,7 @@ fn distinct_publication_protocols_and_families_can_share_numbers() {
     assert_eq!(merged.network_publish.len(), 3);
 }
 
-// @kotowari[REQ-087]
+// @kotowari[REQ-087, EX-179, EX-181]
 #[test]
 fn empty_network_lists_still_require_an_explicit_mode_in_some_layer() {
     for field in ["allow", "publish"] {
@@ -76,7 +76,7 @@ fn empty_network_lists_still_require_an_explicit_mode_in_some_layer() {
     assert!(kakoi_core::layers::merge(&[layer("")]).is_ok());
 }
 
-// @kotowari[REQ-092]
+// @kotowari[REQ-092, EX-195, EX-196, EX-197]
 #[test]
 fn allow_merge_keeps_lower_rules_and_deduplicates_normalized_entries() {
     let first = layer("[network]\nmode='host'\n[[network.allow]]\ndestination={ip='192.0.2.1'}\nprotocol='tcp'\nports=['443']");
@@ -134,7 +134,7 @@ fn omitted_families_mean_ipv4() {
     );
 }
 
-// @kotowari[REQ-394]
+// @kotowari[REQ-394, EX-727, EX-728, EX-171]
 #[test]
 fn fixed_publication_rejects_unsupported_forms_even_when_inactive() {
     let mut invalid = vec![

@@ -6,7 +6,7 @@ fn entry(destination: &str) -> String {
     format!("[[network.allow]]\ndestination = {{ {destination} }}\nprotocol = 'tcp'\nports = ['443', '8000-8010']\n")
 }
 
-// @kotowari[REQ-088, REQ-089, REQ-005]
+// @kotowari[REQ-088, REQ-089, REQ-005, EX-100]
 #[test]
 fn allow_entries_accept_each_destination_kind_and_keep_protocol_ports() {
     for destination in [
@@ -25,7 +25,7 @@ fn allow_entries_accept_each_destination_kind_and_keep_protocol_ports() {
     }
 }
 
-// @kotowari[REQ-088, REQ-005, REQ-009]
+// @kotowari[REQ-088, REQ-005, REQ-009, EX-184, EX-186, EX-009, EX-189]
 #[test]
 fn allow_entries_require_all_fields_and_one_destination() {
     let good = entry("ip = '192.0.2.1'");
@@ -59,7 +59,7 @@ fn allow_entries_require_all_fields_and_one_destination() {
     }
 }
 
-// @kotowari[REQ-052, REQ-053, REQ-141]
+// @kotowari[REQ-052, REQ-053, REQ-141, EX-185, EX-098, EX-099, EX-102]
 #[test]
 fn link_local_requires_an_explicit_interface_but_wide_cidr_does_not() {
     for destination in ["ip = 'fe80::1'", "cidr = 'fe80::/64'"] {

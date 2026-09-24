@@ -16,7 +16,7 @@ fn dns_chain_deadline_uses_each_reception_time_and_zero_ttl_grace_only_for_zero(
     );
 }
 
-// @kotowari[REQ-014, REQ-133, REQ-389]
+// @kotowari[REQ-014, REQ-133, REQ-389, EX-300]
 #[test]
 fn old_dns_grants_keep_their_deadline_and_rules_do_not_revoke_each_other() {
     let start = Instant::now();
@@ -34,7 +34,7 @@ fn old_dns_grants_keep_their_deadline_and_rules_do_not_revoke_each_other() {
     assert!(!original.permits(1, ip, start));
 }
 
-// @kotowari[REQ-389, REQ-014]
+// @kotowari[REQ-389, REQ-014, EX-721]
 #[test]
 fn delayed_activation_and_recovery_cannot_resurrect_expired_dns_grants() {
     let start = Instant::now();

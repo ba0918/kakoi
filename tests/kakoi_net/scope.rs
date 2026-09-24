@@ -96,7 +96,7 @@ fn special_dns_results_use_existing_ip_permissions_without_expanding_their_ports
     );
 }
 
-// @kotowari[REQ-032, REQ-043]
+// @kotowari[REQ-032, REQ-043, EX-101]
 #[test]
 fn broad_cidrs_do_not_authorize_host_aliases_or_unscoped_link_local_routes() {
     let context = AddressContext {

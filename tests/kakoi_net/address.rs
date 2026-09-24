@@ -1,6 +1,6 @@
 use kakoi_core::network::{parse_ip, IpNetwork};
 
-// @kotowari[REQ-044, REQ-048, REQ-050, REQ-051]
+// @kotowari[REQ-044, REQ-048, REQ-050, REQ-051, EX-088, EX-089, EX-090, EX-096, EX-097]
 #[test]
 fn ip_input_is_strict_and_mapped_addresses_normalize_to_ipv4() {
     assert_eq!(
@@ -31,7 +31,7 @@ fn ip_input_is_strict_and_mapped_addresses_normalize_to_ipv4() {
     }
 }
 
-// @kotowari[REQ-045, REQ-046, REQ-047, REQ-049]
+// @kotowari[REQ-045, REQ-046, REQ-047, REQ-049, EX-082, EX-083, EX-086, EX-087, EX-092, EX-093]
 #[test]
 fn cidr_requires_canonical_network_bits_and_normalizes_mapped_ranges() {
     let mapped: IpNetwork = "::ffff:192.0.2.0/120".parse().unwrap();

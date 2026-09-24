@@ -4,7 +4,7 @@ fn profile(mode: &str) -> String {
     format!("[network]\nmode='{mode}'\n[[network.allow]]\ndestination={{dns='ＥＸＡＭＰＬＥ.com'}}\nprotocol='tcp'\nports=['443']\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nport=8000\nhost-port=18000\n")
 }
 
-// @kotowari[REQ-013, REQ-390, REQ-394]
+// @kotowari[REQ-013, REQ-390, REQ-394, EX-165]
 #[test]
 fn filtered_plan_shows_normalized_intent_without_starting_network_tools() {
     let home = TempDir::new();
@@ -73,7 +73,7 @@ fn inactive_network_settings_warn_without_starting_network_tools() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("allow tcp example.com ports 443"));
 }
 
-// @kotowari[REQ-013, REQ-394]
+// @kotowari[REQ-013, REQ-394, EX-183]
 #[test]
 fn full_plan_exposes_network_rules_and_effective_time_limits() {
     let home = TempDir::new();

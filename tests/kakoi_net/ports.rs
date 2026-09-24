@@ -9,7 +9,7 @@ fn parse(items: &[&str]) -> Result<Ports, String> {
     )
 }
 
-// @kotowari[REQ-005, REQ-007, REQ-008]
+// @kotowari[REQ-005, REQ-007, REQ-008, EX-008, EX-010, EX-013, EX-015]
 #[test]
 fn port_union_is_normalized_and_includes_both_endpoints() {
     let ports = parse(&["8005-8020", "443", "8000-8010", "443-443", "1", "65535"]).unwrap();
@@ -27,7 +27,7 @@ fn port_union_is_normalized_and_includes_both_endpoints() {
     assert!((1..=u16::MAX).all(|port| all.contains(port)));
 }
 
-// @kotowari[REQ-006, REQ-007, REQ-009]
+// @kotowari[REQ-006, REQ-007, REQ-009, EX-011, EX-012, EX-014, EX-016]
 #[test]
 fn port_input_rejects_ambiguous_empty_or_invalid_ranges() {
     for items in [vec![], vec!["*", "443"], vec!["*", "*"]] {

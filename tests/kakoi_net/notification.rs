@@ -63,7 +63,7 @@ fn notifications_are_bounded_prefixed_single_utf8_lines_even_for_large_diagnosti
     assert!(notices.retained_bytes() <= 4096);
 }
 
-// @kotowari[REQ-069, REQ-144]
+// @kotowari[REQ-069, REQ-144, EX-321]
 #[test]
 fn a_full_output_pipe_does_not_block_notices_and_recovers_with_current_state() {
     use kakoi_net::notification::NotificationWriter;

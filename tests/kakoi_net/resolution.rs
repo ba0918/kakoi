@@ -3,7 +3,7 @@ use kakoi_net::resolution::{CnameChain, CnameError};
 use kakoi_net::resolution::{ResolutionBudget, ResolutionLimit, UpstreamWait};
 use std::time::{Duration, Instant};
 
-// @kotowari[REQ-120, REQ-014, REQ-389, EX-264, EX-265, EX-266]
+// @kotowari[REQ-120, REQ-014, REQ-389, EX-264, EX-265, EX-266, EX-036]
 #[test]
 fn cname_chain_limits_hops_detects_case_insensitive_cycles_and_keeps_earliest_expiry() {
     let start = Instant::now();

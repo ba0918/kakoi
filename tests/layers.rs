@@ -141,7 +141,7 @@ fn path_prepend_puts_the_upper_layer_first() {
     );
 }
 
-// @kotowari[REQ-154]
+// @kotowari[REQ-154, EX-182]
 #[test]
 fn scalars_take_the_upper_layer() {
     let overridden = merge(&[

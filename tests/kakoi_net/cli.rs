@@ -61,7 +61,7 @@ impl Filtered {
     }
 }
 
-// @kotowari[REQ-068, REQ-148]
+// @kotowari[REQ-068, REQ-148, EX-129, EX-130]
 #[test]
 fn filtered_run_keeps_supervising_and_returns_the_main_result() {
     let filtered = Filtered::new("");

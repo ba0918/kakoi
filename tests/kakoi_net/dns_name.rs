@@ -64,7 +64,7 @@ fn invalid_names_and_nonleading_wildcards_are_rejected() {
         .is_err());
 }
 
-// @kotowari[REQ-091]
+// @kotowari[REQ-091, EX-193]
 #[test]
 fn reserved_host_names_require_the_host_loopback_destination() {
     for name in ["host-v4.kakoi.internal", "HOST-V6.kakoi.internal."] {

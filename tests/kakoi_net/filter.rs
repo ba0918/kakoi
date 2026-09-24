@@ -33,7 +33,7 @@ fn ip(namespace: &NetworkNamespace, args: &[&str]) {
     );
 }
 
-// @kotowari[REQ-001, REQ-030, REQ-015, REQ-016, REQ-017]
+// @kotowari[REQ-001, REQ-030, REQ-015, REQ-016, REQ-017, EX-079, EX-313, EX-028]
 #[test]
 fn kernel_filter_matches_address_protocol_and_port_in_both_families() {
     let client = NetworkNamespace::create().unwrap();

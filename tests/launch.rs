@@ -755,7 +755,7 @@ fn a_host_socket_visible_read_only_is_connectable() {
     server.join().unwrap();
 }
 
-// @kotowari[REQ-388]
+// @kotowari[REQ-388, EX-167]
 #[test]
 fn network_none_has_no_route() {
     let (home, workspace) = home_with_workspace();

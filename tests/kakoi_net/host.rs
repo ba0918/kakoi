@@ -107,7 +107,7 @@ fn on_host(network: &str, services: &[(&str, u16, &str, &str)], app: &str) -> St
     ))
 }
 
-// @kotowari[EX-190, EX-192]
+// @kotowari[EX-190, EX-192, EX-055, EX-056, EX-187]
 #[test]
 fn the_host_v4_name_reaches_only_the_permitted_host_loopback_port() {
     let output = on_host(
@@ -130,7 +130,7 @@ fn the_host_v4_name_reaches_only_the_permitted_host_loopback_port() {
     );
 }
 
-// @kotowari[EX-191]
+// @kotowari[EX-191, EX-188]
 #[test]
 fn the_host_v6_name_reaches_a_permitted_udp_service() {
     let output = on_host(
