@@ -141,7 +141,7 @@ fn path_prepend_puts_the_upper_layer_first() {
     );
 }
 
-// @kotowari[REQ-154, EX-182]
+// @kotowari[REQ-154, EX-182, REQ-399, EX-750]
 #[test]
 fn scalars_take_the_upper_layer() {
     let overridden = merge(&[
@@ -207,7 +207,16 @@ fn tables_merge_by_key_with_the_upper_layer_winning() {
     );
 }
 
-// @kotowari[REQ-157]
+// A network key written without any layer writing `network.mode` does not fall back to
+// host, even when the key holds nothing.
+// @kotowari[REQ-399, EX-752]
+#[test]
+fn a_network_key_without_a_written_mode_is_a_policy_diagnostic() {
+    let error = merge(&[profile("[network]\npublish = []"), policy_file("")]).unwrap_err();
+    assert_eq!(error.kind(), Kind::Policy);
+}
+
+// @kotowari[REQ-157, EX-751]
 #[test]
 fn pass_under_inherit_is_a_policy_diagnostic_after_merge() {
     let single = merge(&[profile("[env]\npass = [\"X\"]")]).unwrap_err();
