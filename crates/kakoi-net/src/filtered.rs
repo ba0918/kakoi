@@ -14,7 +14,8 @@ use crate::{
 };
 use kakoi_core::{
     diagnostic::Diagnostic,
-    network::{Destination, FixedPublication, IpFamily, IpNetwork},
+    layers::Policy,
+    network::{Allow, Destination, DnsUpstream, FixedPublication, IpFamily, IpNetwork},
     plan::Plan,
     planning::locate_command,
 };
@@ -61,50 +62,8 @@ pub fn start(
     stdout: Stdio,
 ) -> Result<(Session, Application), Diagnostic> {
     let policy = &plan.policy;
-    let mut rules = Vec::new();
-    for allow in &policy.network_allow {
-        match &allow.destination {
-            Destination::Address {
-                network,
-                host_interface: None,
-            } => rules.push(FilterRule {
-                network: *network,
-                protocol: allow.protocol,
-                ports: allow.ports.clone(),
-            }),
-            Destination::Dns(_) => {}
-            Destination::HostLoopback(family) => rules.push(FilterRule {
-                network: host_loopback(*family),
-                protocol: allow.protocol,
-                ports: allow.ports.clone(),
-            }),
-            Destination::Address { .. } => {
-                return Err(unsupported("`host-interface` destinations"))
-            }
-        }
-    }
-    let names = policy
-        .network_allow
-        .iter()
-        .any(|allow| matches!(allow.destination, Destination::Dns(_)));
-    let mut following = None;
-    let upstreams = if !policy.dns_upstream.is_empty() {
-        policy.dns_upstream.clone()
-    } else if names {
-        let text = std::fs::read_to_string(host_dns::RESOLV_CONF)
-            .map_err(|error| failure("read the host DNS configuration", error))?;
-        let upstreams = host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?;
-        following = Some(HostDns {
-            path: host_dns::RESOLV_CONF.into(),
-            parse: host_dns::upstreams_from_resolv_conf,
-            text: Some(text),
-            wait: host_dns::wait_for,
-        });
-        upstreams
-    } else {
-        // Without DNS names the managed resolver refuses every name by itself.
-        Vec::new()
-    };
+    let rules = filter_rules(&policy.network_allow)?;
+    let (upstreams, following) = dns_upstreams(policy)?;
     let trust = if upstreams
         .first()
         .is_some_and(|first| first.tls_name().is_some())
@@ -183,6 +142,62 @@ fn host_loopback(family: IpFamily) -> IpNetwork {
 
 fn unsupported(what: &str) -> Diagnostic {
     Diagnostic::bwrap(format!("filtered network mode does not support {what} yet"))
+}
+
+/// The static rules of the allow list: addresses and the host's loopback. DNS
+/// names become permissions only as they are answered.
+fn filter_rules(allows: &[Allow]) -> Result<Vec<FilterRule>, Diagnostic> {
+    let mut rules = Vec::new();
+    for allow in allows {
+        match &allow.destination {
+            Destination::Address {
+                network,
+                host_interface: None,
+            } => rules.push(FilterRule {
+                network: *network,
+                protocol: allow.protocol,
+                ports: allow.ports.clone(),
+            }),
+            Destination::Dns(_) => {}
+            Destination::HostLoopback(family) => rules.push(FilterRule {
+                network: host_loopback(*family),
+                protocol: allow.protocol,
+                ports: allow.ports.clone(),
+            }),
+            Destination::Address { .. } => {
+                return Err(unsupported("`host-interface` destinations"))
+            }
+        }
+    }
+    Ok(rules)
+}
+
+/// The upstreams DNS names are resolved through: the policy's, or the host's DNS
+/// configuration, which is then followed.
+fn dns_upstreams(policy: &Policy) -> Result<(Vec<DnsUpstream>, Option<HostDns>), Diagnostic> {
+    let names = policy
+        .network_allow
+        .iter()
+        .any(|allow| matches!(allow.destination, Destination::Dns(_)));
+    let mut following = None;
+    let upstreams = if !policy.dns_upstream.is_empty() {
+        policy.dns_upstream.clone()
+    } else if names {
+        let text = std::fs::read_to_string(host_dns::RESOLV_CONF)
+            .map_err(|error| failure("read the host DNS configuration", error))?;
+        let upstreams = host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?;
+        following = Some(HostDns {
+            path: host_dns::RESOLV_CONF.into(),
+            parse: host_dns::upstreams_from_resolv_conf,
+            text: Some(text),
+            wait: host_dns::wait_for,
+        });
+        upstreams
+    } else {
+        // Without DNS names the managed resolver refuses every name by itself.
+        Vec::new()
+    };
+    Ok((upstreams, following))
 }
 
 fn failure(what: &str, error: std::io::Error) -> Diagnostic {
