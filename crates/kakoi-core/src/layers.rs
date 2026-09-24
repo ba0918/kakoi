@@ -97,6 +97,19 @@ pub enum Directive {
     Hide,
 }
 
+impl Directive {
+    /// The word a policy writes the directive with.
+    pub fn name(self) -> &'static str {
+        match self {
+            Directive::Rw => "rw",
+            Directive::RwFile => "rw-file",
+            Directive::RwCopy => "rw-copy",
+            Directive::Ro => "ro",
+            Directive::Hide => "hide",
+        }
+    }
+}
+
 /// One written mount item, with the layer it came from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MountItem {

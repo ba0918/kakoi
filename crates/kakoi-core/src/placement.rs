@@ -169,7 +169,7 @@ pub fn check_origins(
                  would skip the origin and hide nothing under it",
                 path.display(),
                 link.display(),
-                directive_name(holder.directive),
+                holder.directive.name(),
                 holder.real.display()
             )));
         }
@@ -354,7 +354,7 @@ fn check_written_paths(
     for (index, item, real) in items {
         let role = format!(
             "the `{}` item `{}` at {}",
-            directive_name(item.directive),
+            item.directive.name(),
             item.written,
             item.path.display()
         );
@@ -401,7 +401,7 @@ fn check_hide_links(
              be removed from inside the isolation and the next start would leave the target \
              unhidden",
             link.display(),
-            directive_name(holder.directive),
+            holder.directive.name(),
             holder.real.display()
         ))),
         None => Ok(()),
@@ -486,7 +486,7 @@ fn check_replacement(
             "{role} resolves to {}, which is or lies inside the `{}` item `{}` at {}, so it \
              could be redirected from inside the isolation",
             real.display(),
-            directive_name(directive),
+            directive.name(),
             partner_written,
             partner_path.display()
         ))),
@@ -607,7 +607,7 @@ impl<'a> Reference<'a> {
     fn how(&self) -> String {
         let through = format!(
             "through the `{}` item {}",
-            directive_name(self.item.directive),
+            self.item.directive.name(),
             self.item.real.display()
         );
         if self.inherited {
@@ -696,7 +696,7 @@ fn check_fixed_targets(items: &[ResolvedItem]) -> Result<(), Diagnostic> {
             "the `{}` item `{}` resolves to {}, which is `/`, `/dev`, or `/proc` or lies \
              inside them; the isolation mounts those itself and an item there would cover \
              or break its own view",
-            directive_name(item.directive),
+            item.directive.name(),
             item.written,
             item.real.display()
         ))),
@@ -713,7 +713,7 @@ fn check_width(writable: &[&ResolvedItem], home: &HomeDirectory) -> Result<(), D
     {
         Some(item) => Err(Diagnostic::path(format!(
             "the `{}` item {} is `/`, the home directory, or an ancestor of it",
-            directive_name(item.directive),
+            item.directive.name(),
             item.real.display()
         ))),
         None => Ok(()),
@@ -793,7 +793,7 @@ fn check_prefixes(
                 "{role} {} is inside the `{}` item {} and could be replaced from inside the \
                  isolation",
                 path.display(),
-                directive_name(item.directive),
+                item.directive.name(),
                 item.real.display()
             )));
         }
@@ -805,7 +805,7 @@ fn check_prefixes(
                  could be re-pointed from inside the isolation",
                 link.display(),
                 path.display(),
-                directive_name(item.directive),
+                item.directive.name(),
                 item.real.display()
             )));
         }
@@ -820,22 +820,12 @@ fn check_prefixes(
                  entries could be replaced from inside the isolation",
                 directory.display(),
                 path.display(),
-                directive_name(item.directive),
+                item.directive.name(),
                 item.real.display()
             )));
         }
     }
     Ok(())
-}
-
-fn directive_name(directive: Directive) -> &'static str {
-    match directive {
-        Directive::Rw => "rw",
-        Directive::RwFile => "rw-file",
-        Directive::RwCopy => "rw-copy",
-        Directive::Ro => "ro",
-        Directive::Hide => "hide",
-    }
 }
 
 /// Whether `candidate` is `/`, `path`, or an ancestor of `path`. `/` is named on its own so

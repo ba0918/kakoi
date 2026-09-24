@@ -10,10 +10,10 @@ use std::ffi::OsStr;
 
 use serde::Serialize;
 
-use kakoi_core::layers::{Directive, LayerOrigin, Policy, PolicySource};
+use kakoi_core::layers::{LayerOrigin, Policy, PolicySource};
 use kakoi_core::mounts::{EntryKind, ItemOrigin, SkippedRole};
 use kakoi_core::plan::{Argument, Plan};
-use kakoi_core::policy::{EnvMode, NetworkMode, PolicyPath};
+use kakoi_core::policy::PolicyPath;
 
 /// The version of the shape: bumped when a key is removed or changes its meaning.
 pub const FORMAT_VERSION: u32 = 1;
@@ -207,7 +207,7 @@ impl From<&Plan> for PlanDocument {
                 .items
                 .iter()
                 .map(|item| MountItem {
-                    directive: directive(item.directive),
+                    directive: item.directive.name(),
                     path: text(&item.real),
                     kind: match item.kind {
                         EntryKind::Directory => "directory",
@@ -222,7 +222,7 @@ impl From<&Plan> for PlanDocument {
                 .skipped
                 .iter()
                 .map(|item| SkippedMount {
-                    directive: directive(item.directive),
+                    directive: item.directive.name(),
                     written: item.written.clone(),
                     origin: layer(&item.origin),
                     reason: item.reason.clone(),
@@ -308,7 +308,7 @@ fn merged_policy(policy: &Policy) -> MergedPolicy {
             .mounts
             .iter()
             .map(|item| PolicyMount {
-                directive: directive(item.directive),
+                directive: item.directive.name(),
                 path: item.path.to_string(),
                 origin: layer(&item.origin),
             })
@@ -336,15 +336,8 @@ fn merged_policy(policy: &Policy) -> MergedPolicy {
         network_limits: policy.network_limits.clone(),
         dns_upstream: policy.dns_upstream.clone(),
         shutdown_grace_seconds: policy.shutdown_grace_seconds,
-        network_mode: match policy.network_mode {
-            NetworkMode::Filtered => "filtered",
-            NetworkMode::Host => "host",
-            NetworkMode::None => "none",
-        },
-        env_mode: match policy.env_mode {
-            EnvMode::Inherit => "inherit",
-            EnvMode::Clear => "clear",
-        },
+        network_mode: policy.network_mode.name(),
+        env_mode: policy.env_mode.name(),
         env_pass: policy.env_pass.clone(),
         env_set: policy.env_set.clone(),
         env_unset: policy.env_unset.clone(),
@@ -359,16 +352,6 @@ fn merged_policy(policy: &Policy) -> MergedPolicy {
             .map(|(name, path)| (name.clone(), path.to_string()))
             .collect(),
         instead_of: policy.instead_of.clone(),
-    }
-}
-
-fn directive(directive: Directive) -> &'static str {
-    match directive {
-        Directive::Rw => "rw",
-        Directive::RwFile => "rw-file",
-        Directive::RwCopy => "rw-copy",
-        Directive::Ro => "ro",
-        Directive::Hide => "hide",
     }
 }
 

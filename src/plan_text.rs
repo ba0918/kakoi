@@ -17,7 +17,7 @@ use kakoi_core::diagnostic::escape_control;
 use kakoi_core::layers::{Directive, LayerOrigin, Policy, PolicySource};
 use kakoi_core::mounts::{ItemOrigin, SkippedRole};
 use kakoi_core::plan::{Argument, Plan};
-use kakoi_core::policy::{EnvMode, NetworkMode, PolicyPath};
+use kakoi_core::policy::{NetworkMode, PolicyPath};
 
 /// The text of `plan` in `form`.
 pub fn render(plan: &Plan, form: PlanForm) -> String {
@@ -66,14 +66,14 @@ fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
 /// origin only where it is not the global scope, the changes to the environment, and the
 /// command. Ends with the line that names the other two forms.
 fn render_summary(text: &mut String, plan: &Plan) {
-    let _ = writeln!(text, "network: {}", network_mode(plan.policy.network_mode));
+    let _ = writeln!(text, "network: {}", plan.policy.network_mode.name());
     render_network_rules(text, &plan.policy);
     let _ = writeln!(text, "mounts (~ is {}):", shown(&plan.home));
     for item in &plan.mounts.items {
         let _ = writeln!(
             text,
             "  {:<7} {}{}",
-            directive(item.directive),
+            item.directive.name(),
             shortened(&item.real, &plan.home),
             item_origin_note(&item.origin)
         );
@@ -82,7 +82,7 @@ fn render_summary(text: &mut String, plan: &Plan) {
         let _ = writeln!(
             text,
             "  skipped {} `{}`{}: {}",
-            directive(item.directive),
+            item.directive.name(),
             escape_control(&item.written),
             layer_note(&item.origin),
             escape_control(&item.reason)
@@ -99,7 +99,7 @@ fn render_summary(text: &mut String, plan: &Plan) {
     let _ = writeln!(
         text,
         "environment ({}): {kept}, and:",
-        env_mode(plan.policy.env_mode)
+        plan.policy.env_mode.name()
     );
     for name in &changes.unset {
         let _ = writeln!(text, "  unset  {}", shown(name));
@@ -127,7 +127,7 @@ fn render_full(text: &mut String, plan: &Plan) {
         let _ = writeln!(
             text,
             "  {:<7} {} (from {}: `{}`)",
-            directive(item.directive),
+            item.directive.name(),
             shown(&item.real),
             item_origin(&item.origin),
             escape_control(&item.written)
@@ -137,7 +137,7 @@ fn render_full(text: &mut String, plan: &Plan) {
         let _ = writeln!(
             text,
             "  skipped {} `{}` (from {}): {}",
-            directive(item.directive),
+            item.directive.name(),
             escape_control(&item.written),
             layer(&item.origin),
             escape_control(&item.reason)
@@ -265,7 +265,7 @@ fn render_policy(text: &mut String, policy: &Policy) {
         let _ = writeln!(
             text,
             "  mounts.{} `{}` (from {})",
-            directive(item.directive),
+            item.directive.name(),
             escape_control(&item.path.to_string()),
             layer(&item.origin)
         );
@@ -288,11 +288,7 @@ fn render_policy(text: &mut String, policy: &Policy) {
             list(&hide_mounts.fstype)
         );
     }
-    let _ = writeln!(
-        text,
-        "  network.mode = {}",
-        network_mode(policy.network_mode)
-    );
+    let _ = writeln!(text, "  network.mode = {}", policy.network_mode.name());
     render_network_rules(text, policy);
     if policy.network_settings_present || policy.network_mode == NetworkMode::Filtered {
         let limits = &policy.network_limits;
@@ -337,7 +333,7 @@ fn render_policy(text: &mut String, policy: &Policy) {
             policy.shutdown_grace_seconds
         );
     }
-    let _ = writeln!(text, "  env.mode = {}", env_mode(policy.env_mode));
+    let _ = writeln!(text, "  env.mode = {}", policy.env_mode.name());
     let _ = writeln!(text, "  env.pass = {}", list(&policy.env_pass));
     for (name, value) in &policy.env_set {
         let _ = writeln!(
@@ -374,31 +370,6 @@ fn render_policy(text: &mut String, policy: &Policy) {
             escape_control(original),
             escape_control(replacement)
         );
-    }
-}
-
-fn directive(directive: Directive) -> &'static str {
-    match directive {
-        Directive::Rw => "rw",
-        Directive::RwFile => "rw-file",
-        Directive::RwCopy => "rw-copy",
-        Directive::Ro => "ro",
-        Directive::Hide => "hide",
-    }
-}
-
-fn network_mode(mode: NetworkMode) -> &'static str {
-    match mode {
-        NetworkMode::Filtered => "filtered",
-        NetworkMode::Host => "host",
-        NetworkMode::None => "none",
-    }
-}
-
-fn env_mode(mode: EnvMode) -> &'static str {
-    match mode {
-        EnvMode::Inherit => "inherit",
-        EnvMode::Clear => "clear",
     }
 }
 

@@ -92,11 +92,32 @@ pub enum NetworkMode {
     None,
 }
 
+impl NetworkMode {
+    /// The word a policy writes the mode with.
+    pub fn name(self) -> &'static str {
+        match self {
+            NetworkMode::Filtered => "filtered",
+            NetworkMode::Host => "host",
+            NetworkMode::None => "none",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EnvMode {
     Inherit,
     Clear,
+}
+
+impl EnvMode {
+    /// The word a policy writes the mode with.
+    pub fn name(self) -> &'static str {
+        match self {
+            EnvMode::Inherit => "inherit",
+            EnvMode::Clear => "clear",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
