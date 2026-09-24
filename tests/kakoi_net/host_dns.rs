@@ -42,12 +42,21 @@ fn the_systemd_resolved_stub_alone_is_reached_through_its_proxy() {
 fn only_the_systemd_resolved_proxy_is_given_the_whole_resolution_wait() {
     use kakoi_net::{host_dns::wait_for, resolution::UpstreamWait};
     let wait = |text| wait_for(&upstreams_from_resolv_conf(text).unwrap());
-    assert_eq!(wait("nameserver 127.0.0.53\n"), UpstreamWait::HostResolver);
-    assert_eq!(wait("nameserver 127.0.0.54\n"), UpstreamWait::HostResolver);
-    assert_eq!(wait("nameserver 10.255.255.254\n"), UpstreamWait::Explicit);
+    assert_eq!(
+        wait("nameserver 127.0.0.53\n"),
+        UpstreamWait::WholeResolution
+    );
+    assert_eq!(
+        wait("nameserver 127.0.0.54\n"),
+        UpstreamWait::WholeResolution
+    );
+    assert_eq!(
+        wait("nameserver 10.255.255.254\n"),
+        UpstreamWait::PerCandidate
+    );
     assert_eq!(
         wait("nameserver 127.0.0.53\nnameserver 192.0.2.53\n"),
-        UpstreamWait::Explicit
+        UpstreamWait::PerCandidate
     );
 }
 
@@ -104,9 +113,9 @@ mod following {
     /// "relay" in the fixture stands for the systemd-resolved proxy.
     fn fixture_wait(upstreams: &[DnsUpstream]) -> UpstreamWait {
         if upstreams.len() == 1 && RELAY.with(|relay| relay.get()) == upstreams[0].port().get() {
-            UpstreamWait::HostResolver
+            UpstreamWait::WholeResolution
         } else {
-            UpstreamWait::Explicit
+            UpstreamWait::PerCandidate
         }
     }
 

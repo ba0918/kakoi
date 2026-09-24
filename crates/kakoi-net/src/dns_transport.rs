@@ -51,7 +51,14 @@ pub fn exchange_upstreams(
     trust: Option<&TlsClient>,
     budget: &mut ResolutionBudget,
 ) -> io::Result<ReceivedResponse> {
-    exchange_upstreams_cancellable(wire, upstreams, trust, budget, None, UpstreamWait::Explicit)
+    exchange_upstreams_cancellable(
+        wire,
+        upstreams,
+        trust,
+        budget,
+        None,
+        UpstreamWait::PerCandidate,
+    )
 }
 
 pub(crate) fn exchange_upstreams_cancellable(
@@ -116,7 +123,7 @@ pub fn exchange_plain_candidates(
     peers: &[SocketAddr],
     budget: &mut ResolutionBudget,
 ) -> io::Result<ReceivedResponse> {
-    plain_candidates(wire, peers, budget, None, UpstreamWait::Explicit)
+    plain_candidates(wire, peers, budget, None, UpstreamWait::PerCandidate)
 }
 
 fn plain_candidates(

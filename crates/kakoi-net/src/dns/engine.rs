@@ -96,7 +96,7 @@ impl ExplicitResolver {
             upstreams,
             limits,
             trust,
-            wait: UpstreamWait::Explicit,
+            wait: UpstreamWait::PerCandidate,
         })
     }
 

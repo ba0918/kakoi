@@ -43,20 +43,20 @@ fn retries_share_the_original_deadline_and_send_budget() {
     };
     let mut budget = ResolutionBudget::new(start, &limits).unwrap();
     assert_eq!(
-        budget.reserve_query(start, UpstreamWait::Explicit),
+        budget.reserve_query(start, UpstreamWait::PerCandidate),
         Ok(start + Duration::from_secs(2))
     );
     assert_eq!(
-        budget.reserve_query(start + Duration::from_secs(1), UpstreamWait::Explicit),
+        budget.reserve_query(start + Duration::from_secs(1), UpstreamWait::PerCandidate),
         Ok(start + Duration::from_secs(3))
     );
     // The caller changes DNS settings here; the same resolution owns the budget.
     assert_eq!(
-        budget.reserve_query(start + Duration::from_secs(9), UpstreamWait::Explicit),
+        budget.reserve_query(start + Duration::from_secs(9), UpstreamWait::PerCandidate),
         Ok(start + Duration::from_secs(10))
     );
     assert_eq!(
-        budget.reserve_query(start + Duration::from_secs(9), UpstreamWait::Explicit),
+        budget.reserve_query(start + Duration::from_secs(9), UpstreamWait::PerCandidate),
         Err(ResolutionLimit::Queries)
     );
     assert_eq!(
@@ -76,19 +76,22 @@ fn host_dns_uses_the_whole_deadline_and_separate_resolutions_have_separate_budge
     let mut ipv4 = ResolutionBudget::new(start, &limits).unwrap();
     let mut ipv6 = ResolutionBudget::new(start, &limits).unwrap();
     assert_eq!(
-        ipv4.reserve_query(start, UpstreamWait::HostResolver),
+        ipv4.reserve_query(start, UpstreamWait::WholeResolution),
         Ok(start + Duration::from_secs(10))
     );
     assert_eq!(
-        ipv4.reserve_query(start, UpstreamWait::HostResolver),
+        ipv4.reserve_query(start, UpstreamWait::WholeResolution),
         Err(ResolutionLimit::Queries)
     );
     assert!(ipv6
-        .reserve_query(start, UpstreamWait::HostResolver)
+        .reserve_query(start, UpstreamWait::WholeResolution)
         .is_ok());
     let mut expired = ResolutionBudget::new(start, &limits).unwrap();
     assert_eq!(
-        expired.reserve_query(start + Duration::from_secs(10), UpstreamWait::HostResolver),
+        expired.reserve_query(
+            start + Duration::from_secs(10),
+            UpstreamWait::WholeResolution
+        ),
         Err(ResolutionLimit::Deadline)
     );
 }
@@ -105,7 +108,9 @@ fn written_dns_waits_bound_each_candidate_and_the_whole() {
     };
     let mut budget = ResolutionBudget::new(start, &limits).unwrap();
     assert_eq!(
-        budget.reserve_query(start, UpstreamWait::Explicit).unwrap(),
+        budget
+            .reserve_query(start, UpstreamWait::PerCandidate)
+            .unwrap(),
         start + Duration::from_secs(5)
     );
     assert!(budget

@@ -381,7 +381,7 @@ fn resolution_follows_cname_with_one_budget_and_ages_the_assembled_answer() {
     let resolved = resolve_addresses(&query(1), &limits, &mut budget, |request, budget| {
         let received = start + Duration::from_secs(calls * 4);
         budget
-            .reserve_query(received, UpstreamWait::Explicit)
+            .reserve_query(received, UpstreamWait::PerCandidate)
             .map_err(|_| DnsError::IncompleteResponse)?;
         let mut response = request.to_vec();
         response[2] |= 0x80;
@@ -447,7 +447,7 @@ fn a_cname_resolution_cannot_reset_query_limits_or_return_partial_success() {
     let mut sent = 0;
     let result = resolve_addresses(&query(1), &limits, &mut budget, |request, budget| {
         budget
-            .reserve_query(start, UpstreamWait::Explicit)
+            .reserve_query(start, UpstreamWait::PerCandidate)
             .map_err(|_| DnsError::IncompleteResponse)?;
         sent += 1;
         let mut response = request.to_vec();
@@ -546,7 +546,7 @@ fn the_zero_ttl_grace_counts_from_the_reception() {
     let received = start;
     let resolved = resolve_addresses(&query(1), &limits, &mut budget, |request, budget| {
         budget
-            .reserve_query(received, UpstreamWait::Explicit)
+            .reserve_query(received, UpstreamWait::PerCandidate)
             .map_err(|_| DnsError::IncompleteResponse)?;
         let mut response = request.to_vec();
         response[2] |= 0x80;

@@ -50,7 +50,7 @@ pub fn upstreams_from_resolv_conf(text: &str) -> Result<Vec<DnsUpstream>, String
 /// candidate's wait.
 pub fn wait_for(upstreams: &[DnsUpstream]) -> UpstreamWait {
     match upstreams {
-        [only] if only.address == PROXY && only.port() == PORT => UpstreamWait::HostResolver,
-        _ => UpstreamWait::Explicit,
+        [only] if only.address == PROXY && only.port() == PORT => UpstreamWait::WholeResolution,
+        _ => UpstreamWait::PerCandidate,
     }
 }

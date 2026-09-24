@@ -61,10 +61,13 @@ pub enum ResolutionLimit {
     Queries,
 }
 
+/// How long one upstream is waited for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpstreamWait {
-    Explicit,
-    HostResolver,
+    /// One candidate's wait, within the resolution's limit.
+    PerCandidate,
+    /// Up to the resolution's limit, for a resolver that chooses among servers itself.
+    WholeResolution,
 }
 
 /// The upstream queries one resolution may still send. Clones share the
@@ -137,15 +140,15 @@ impl ResolutionBudget {
     pub fn reserve_query(
         &mut self,
         now: Instant,
-        upstream: UpstreamWait,
+        wait: UpstreamWait,
     ) -> Result<Instant, ResolutionLimit> {
         self.ensure_live(now)?;
         if !self.queries.take() {
             return Err(ResolutionLimit::Queries);
         }
-        Ok(match upstream {
-            UpstreamWait::HostResolver => self.deadline,
-            UpstreamWait::Explicit => now
+        Ok(match wait {
+            UpstreamWait::WholeResolution => self.deadline,
+            UpstreamWait::PerCandidate => now
                 .checked_add(self.server_timeout)
                 .map_or(self.deadline, |deadline| deadline.min(self.deadline)),
         })

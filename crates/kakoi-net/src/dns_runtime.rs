@@ -109,7 +109,7 @@ impl DnsRuntime {
         let wait = config
             .host_dns
             .as_ref()
-            .map_or(UpstreamWait::Explicit, |source| {
+            .map_or(UpstreamWait::PerCandidate, |source| {
                 (source.wait)(&config.upstreams)
             });
         let resolver = Arc::new(
