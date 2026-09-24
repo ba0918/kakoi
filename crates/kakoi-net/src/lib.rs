@@ -2,6 +2,7 @@
 //! Configuration validation and planning belong to `kakoi-core`.
 
 pub mod application;
+mod child_output;
 pub mod dns;
 pub mod dns_adoption;
 pub mod dns_front;

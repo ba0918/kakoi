@@ -1,8 +1,9 @@
 //! Apply one nft transaction without letting a blocked pipe defeat its deadline.
 
+use crate::child_output::{drain, nonblocking, with_diagnostic};
 use crate::namespace::NetworkNamespace;
 use std::io::{self, Read, Write};
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
@@ -14,33 +15,6 @@ impl Drop for OwnedChild {
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
-}
-
-fn nonblocking(fd: RawFd) -> io::Result<()> {
-    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-fn drain(reader: &mut impl Read, tail: &mut Vec<u8>) -> io::Result<()> {
-    let mut buffer = [0; 1024];
-    for _ in 0..1024 {
-        match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => {
-                tail.extend_from_slice(&buffer[..count]);
-                let excess = tail.len().saturating_sub(8192);
-                tail.drain(..excess);
-            }
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
 }
 
 /// A failure does not prove that the kernel rejected the transaction: a timeout
@@ -212,8 +186,5 @@ fn run(
         }
         std::thread::sleep(Duration::from_millis(5));
     })();
-    result.map_err(|error| {
-        let message = kakoi_core::diagnostic::escape_control(&String::from_utf8_lossy(&diagnostic));
-        io::Error::new(error.kind(), format!("{error}: {message}"))
-    })
+    result.map_err(|error| with_diagnostic(error, &diagnostic))
 }

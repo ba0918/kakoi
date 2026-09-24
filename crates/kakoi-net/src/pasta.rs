@@ -1,7 +1,7 @@
 //! Foreground pasta ownership and its documented post-initialization PID handshake.
 
 use crate::host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6};
-use crate::{health::TRANSIT_INTERFACE, namespace::NetworkNamespace};
+use crate::{child_output, health::TRANSIT_INTERFACE, namespace::NetworkNamespace};
 use kakoi_core::network::{merge_publications, FixedPublication, IpFamily, Protocol};
 use std::io::{self, Read};
 use std::os::fd::AsRawFd;
@@ -145,21 +145,11 @@ impl Pasta {
             _target: target,
         };
         for fd in [pasta.readiness.as_raw_fd(), pasta.stderr.as_raw_fd()] {
-            let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-            if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
-            {
-                return Err(io::Error::last_os_error());
-            }
+            child_output::nonblocking(fd)?;
         }
         if let Err(error) = pasta.await_ready(timeout, cancellation) {
             let _ = pasta.drain_diagnostics();
-            let diagnostic = kakoi_core::diagnostic::escape_control(&String::from_utf8_lossy(
-                &pasta.diagnostics,
-            ));
-            return Err(io::Error::new(
-                error.kind(),
-                format!("{error}: {diagnostic}"),
-            ));
+            return Err(child_output::with_diagnostic(error, &pasta.diagnostics));
         }
         Ok(pasta)
     }
@@ -191,23 +181,7 @@ impl Pasta {
     }
 
     fn drain_diagnostics(&mut self) -> io::Result<()> {
-        let mut buffer = [0; 1024];
-        // Bound per-poll work as well as retained memory; drain a full Linux pipe
-        // so a tool that just exited does not lose the end of its diagnostic.
-        for _ in 0..1024 {
-            match self.stderr.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(count) => {
-                    self.diagnostics.extend_from_slice(&buffer[..count]);
-                    let excess = self.diagnostics.len().saturating_sub(8192);
-                    self.diagnostics.drain(..excess);
-                }
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
+        child_output::drain(&mut self.stderr, &mut self.diagnostics)
     }
 
     fn await_ready(
