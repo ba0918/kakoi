@@ -8,10 +8,14 @@ layered policy, and returns the command's exit code unchanged. Its network mode 
 ports published to the host's localhost, built on pasta and nftables). It is a Rust
 command-line tool for Linux on x86_64.
 
-The specification index, [`docs/spec/kakoi.md`](docs/spec/kakoi.md), and its linked
-responsibility-specific documents under `docs/spec/kakoi/` are the canonical source
-for product, implementation, verification, and release requirements. The scope of the first
-kakoi-net release is `docs/spec/kakoi/network/initial-release.md`.
+The IR under [`docs/ir/`](docs/ir/) (`core/` for the existing product, `network/` for
+kakoi-net) is the canonical source for product, implementation, verification, and release
+requirements. [`docs/guide/`](docs/guide/README.md) is its human-readable reference, in
+Japanese; it adds no rules of its own. The scope of the first kakoi-net release is
+`docs/ir/network/network-initial-release.md`. Rules the retired `docs/spec/` stated but the IR
+does not are recorded as FLAG-011 to FLAG-026 in `docs/ir/FLAGS.md`, and the guide's appendix
+`docs/guide/appendix/spec-sections.md` maps the old section numbers still cited in code and
+tests to guide chapters.
 [`CONTEXT.md`](CONTEXT.md) is the glossary: the project's reading of terms such as "policy",
 "layer", "workspace", and "worktree", and the words not to use for them.
 
@@ -72,11 +76,11 @@ lefthook install
 This repository uses kotowari (`.kotowari/config.yaml`). Which kotowari skill to read, and
 when, is in the routing table of `AGENTS.md`.
 
-- The specification's canonical source stays `docs/spec/kakoi.md` and its linked documents.
-  The IR under `docs/ir/` (`core/` for the existing product, `network/` for kakoi-net) is the
-  checkable counterpart of that specification and must not become a second source of truth.
-  Keep existing behavior; a brainstorm names every clause it changes. IR not yet approved is
-  a draft.
+- The IR under `docs/ir/` is the canonical specification. Keep existing behavior; a
+  brainstorm names every requirement it changes. IR not yet approved is a draft.
+- The guide under `docs/guide/` is listed in `guides.files`. Each section carries guide marks
+  naming the IR items it explains; when `kotowari check` reports `guide_stale`, review that
+  section against the IR before copying the new fingerprint.
 - Decision records go in `docs/decision/brainstorm/`, ADRs in `docs/decision/adr/`, and
   implementation plans in `docs/plans/`.
 - The tests kotowari reads are set in `.kotowari/config.yaml` (currently `tests/*.rs` and
@@ -85,11 +89,13 @@ when, is in the routing table of `AGENTS.md`.
 
 ## Project constraints
 
-- The specification's section 14 is authoritative for runtime boundaries: no persistent state.
-  Host/none retain the `bwrap`-only execution boundary. For filtered, its dependencies and
-  supported environment are governed by `docs/spec/kakoi/proof-gate.md`, including the product
-  integration checks required before the initial filtered release. A launch that wraps a command (including
+- `docs/ir/core/core-runtime.md` (old section 14) is authoritative for runtime boundaries: no
+  persistent state. Host/none retain the `bwrap`-only execution boundary. For filtered, its
+  dependencies and supported environment are governed by the proof gate in
+  `docs/guide/maintainer/library.md`, including the product integration checks required
+  before the initial filtered release. A launch that wraps a command (including
   `--print-plan`) writes no files; `init` is the only form that writes files, and only within
-  the paths section 14 allows.
-- The specification's section 18 is authoritative for features excluded from version 0.3.
-- The version lives in `Cargo.toml` only (specification section 17).
+  the paths the runtime boundary allows.
+- `docs/ir/core/core-product.md` (old section 18) is authoritative for features excluded from
+  version 0.3.
+- The version lives in `Cargo.toml` only (`docs/ir/core/core-release.md`, old section 17).

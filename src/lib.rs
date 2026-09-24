@@ -1,5 +1,5 @@
 //! `kakoi`: runs a command inside a bubblewrap mount namespace shaped by a layered
-//! policy. The specification is `docs/spec/kakoi.md`. This crate is the command-line
+//! policy. The specification is `docs/ir/`, read through `docs/guide/`. This crate is the command-line
 //! interface; everything else is `kakoi-core`.
 
 pub mod cli;

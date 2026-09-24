@@ -208,7 +208,8 @@ and the fifteen known gaps are in [Security model](docs/security.md).
   paths that are refused.
 - [Wrapping a command](docs/shim.md): the shim template and the setup skill.
 - [Security model](docs/security.md): trust boundary, known gaps, and what 0.3 leaves out.
-- [Specification](docs/spec/kakoi.md) (Japanese): the complete behaviour;
+- [Reference guide](docs/guide/README.md) (Japanese): the complete behaviour, written from
+  the checkable specification under `docs/ir/`;
   [`CONTEXT.md`](CONTEXT.md) is the glossary.
 
 ## Status

@@ -8,6 +8,8 @@ pastaの通常の起動時設定で、外向き通信の制限と明示的な固
 
 ## 仕様と承認の扱い
 
+（2026-09-25 追記）ここが指す docs/spec は削除した（[決定記録](../decision/brainstorm/2026-09-25-kakoi-spec-retirement.md#A1)）。仕様の文面は Git の履歴で、旧節番号とガイドの章の対応は docs/guide/appendix/spec-sections.md で引ける。以下は削除前の記録として残す。
+
 正本の入口は `docs/spec/kakoi.md`。工程内で `network/` から始まる仕様パスおよび `proof-gate.md` 等の仕様ファイル名は `docs/spec/kakoi/` を基準とする。今回の初版範囲は `docs/spec/kakoi/network/initial-release.md` を参照し、各責務の仕様へ進む。検査用表現は `docs/ir/`。末尾の検証対応表に対象要求を列挙する。
 
 既存の責務別仕様は会話で承認済みであり、未コミットだけを理由に壁打ちをやり直さない。今回の範囲改訂と計画はkemiで内容承認済み。計画の承認後、実装開始前に仕様・IR・判断記録・計画の対象バイトを固定する。検証が通った区切りごとに作業ブランチへコミットする。push・マージ・リリースは利用者の指示による。
