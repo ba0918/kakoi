@@ -63,11 +63,11 @@ if script:
             os._exit(os.waitstatus_to_exitcode(status))
 "#;
 
-/// The host side's preparation and helpers. The addresses on `svc0` stand for
-/// remote services: pasta copies only the addresses of `probe0` into the
-/// sandbox, so these stay remote from inside it.
+/// The host side's preparation and helpers. The remote services live in a
+/// network namespace of their own, reached over a veth pair: an address the
+/// host itself holds is not remote, and kakoi treats it as the host's.
 const HOST: &str = r#"
-import os, select, subprocess, sys, threading
+import ipaddress, os, select, subprocess, sys, threading
 
 def ip(*arguments):
     subprocess.run(['/usr/sbin/ip', *arguments], check=True)
@@ -80,10 +80,52 @@ ip('-6', 'addr', 'add', '2001:db8::1/64', 'dev', 'probe0', 'nodad')
 ip('-6', 'addr', 'add', 'fe80::1/64', 'dev', 'probe0', 'nodad')
 ip('-4', 'route', 'add', 'default', 'via', '198.18.0.254', 'dev', 'probe0')
 ip('-6', 'route', 'add', 'default', 'via', '2001:db8::fe', 'dev', 'probe0')
-ip('link', 'add', 'svc0', 'type', 'dummy')
-ip('link', 'set', 'svc0', 'up')
-for address in REMOTE:
-    ip('addr', 'add', address, 'dev', 'svc0', *(['nodad'] if ':' in address else []))
+
+HOST_NS = os.open('/proc/self/ns/net', os.O_RDONLY)
+REMOTE_ADDRESSES = {address.split('/')[0] for address in REMOTE}
+if REMOTE:
+    # Duplicate address detection would hold the link-local addresses that
+    # neighbour discovery on the veth pair needs.
+    def no_dad():
+        for name in ('default', 'all'):
+            with open(f'/proc/sys/net/ipv6/conf/{name}/accept_dad', 'w') as knob:
+                knob.write('0')
+    no_dad()
+    remote_holder = subprocess.Popen(['/usr/bin/unshare', '--net', '/usr/bin/sleep', 'infinity'])
+    while os.readlink(f'/proc/{remote_holder.pid}/ns/net') == os.readlink('/proc/self/ns/net'):
+        pass
+    REMOTE_NS = os.open(f'/proc/{remote_holder.pid}/ns/net', os.O_RDONLY)
+
+    def remote_ip(*arguments):
+        subprocess.run(['/usr/bin/nsenter', '--net=/proc/%d/ns/net' % remote_holder.pid,
+                        '/usr/sbin/ip', *arguments], check=True)
+
+    os.setns(REMOTE_NS, os.CLONE_NEWNET)
+    try:
+        no_dad()
+    finally:
+        os.setns(HOST_NS, os.CLONE_NEWNET)
+    ip('link', 'add', 'rhost0', 'type', 'veth', 'peer', 'name', 'remote0', 'netns', str(remote_holder.pid))
+    ip('-6', 'addr', 'add', 'fe80::fe/64', 'dev', 'rhost0', 'nodad')
+    ip('link', 'set', 'rhost0', 'up')
+    remote_ip('link', 'set', 'lo', 'up')
+    remote_ip('link', 'set', 'remote0', 'up')
+    for address in REMOTE:
+        remote_ip('addr', 'add', address, 'dev', 'remote0', *(['nodad'] if ':' in address else []))
+        ip('route', 'add', str(ipaddress.ip_interface(address).network), 'dev', 'rhost0')
+    remote_ip('-4', 'route', 'add', 'default', 'dev', 'remote0')
+    remote_ip('-6', 'route', 'add', 'default', 'via', 'fe80::fe', 'dev', 'remote0')
+
+def new_socket(address, family, kind):
+    """A socket in the namespace that holds `address`."""
+    remote = address in REMOTE_ADDRESSES
+    if remote:
+        os.setns(REMOTE_NS, os.CLONE_NEWNET)
+    try:
+        return socket.socket(family, kind)
+    finally:
+        if remote:
+            os.setns(HOST_NS, os.CLONE_NEWNET)
 
 received = []
 # The queries the fake upstream DNS received.
@@ -93,7 +135,7 @@ def serve(address, port, kind, reply):
     """Binds before returning, so that a later exchange cannot race the bind.
     Records each message it receives."""
     family = socket.AF_INET6 if ':' in address else socket.AF_INET
-    server = socket.socket(family, socket.SOCK_STREAM if kind == 'tcp' else socket.SOCK_DGRAM)
+    server = new_socket(address, family, socket.SOCK_STREAM if kind == 'tcp' else socket.SOCK_DGRAM)
     server.bind((address, port))
     if kind == 'tcp':
         server.listen()
@@ -123,7 +165,7 @@ def dns(records, address='127.0.0.1'):
     """Answers plain queries on `address`:53 from `records`, which maps a
     name and a record type (1 or 28) to its addresses and time to live. An
     unknown name does not exist."""
-    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server = new_socket(address, socket.AF_INET, socket.SOCK_DGRAM)
     server.bind((address, 53))
 
     def loop():
