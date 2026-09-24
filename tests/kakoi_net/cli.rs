@@ -1,4 +1,4 @@
-use crate::common::{binary, TempDir, RW_WORKSPACE};
+use crate::common::{assert_diagnostic, binary, TempDir, RW_WORKSPACE};
 use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -43,19 +43,25 @@ impl Filtered {
         }
     }
 
-    fn command(&self, path: &str, arguments: &[&str]) -> Command {
+    fn command(&self, path: &str, options: &[&str], arguments: &[&str]) -> Command {
         let mut command = binary(self.home.path());
         command
             .env("PATH", path)
             .current_dir(&self.workspace)
+            .args(options)
             .arg("--")
             .args(arguments);
         command
     }
 
     fn with_pasta(&self, arguments: &[&str]) -> Command {
+        self.with_pasta_and_options(&[], arguments)
+    }
+
+    fn with_pasta_and_options(&self, options: &[&str], arguments: &[&str]) -> Command {
         self.command(
             &format!("{}:/usr/sbin:/usr/bin:/bin", self.bin.path().display()),
+            options,
             arguments,
         )
     }
@@ -110,6 +116,7 @@ fn a_missing_pasta_ends_the_start_before_the_application_runs() {
     let output = filtered
         .command(
             tools.path().to_str().unwrap(),
+            &[],
             &["/bin/sh", "-c", &format!("touch '{}'", marker.display())],
         )
         .output()
@@ -623,28 +630,12 @@ fn filtered_refuses_a_host_interface_destination_as_a_policy_error() {
     let filtered = Filtered::new(
         "\n[[network.allow]]\ndestination = { ip = 'fe80::1', host-interface = 'eth0' }\nprotocol = 'tcp'\nports = ['443']\n",
     );
-    for arguments in [&[][..], &["--print-plan"][..]] {
-        let output = binary(filtered.home.path())
-            .env(
-                "PATH",
-                format!("{}:/usr/sbin:/usr/bin:/bin", filtered.bin.path().display()),
-            )
-            .current_dir(&filtered.workspace)
-            .args(arguments)
-            .args(["--", "/bin/sh", "-c", "echo ran"])
+    for options in [&[][..], &["--print-plan"][..]] {
+        let output = filtered
+            .with_pasta_and_options(options, &["/bin/sh", "-c", "echo ran"])
             .output()
             .unwrap();
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert_eq!(
-            (
-                output.status.code(),
-                output.stdout.as_slice(),
-                stderr.starts_with("kakoi: policy: "),
-                stderr.lines().count()
-            ),
-            (Some(125), b"".as_slice(), true, 1),
-            "{arguments:?}: {stderr}"
-        );
+        assert_diagnostic(&output, 125, "policy");
     }
 }
 
