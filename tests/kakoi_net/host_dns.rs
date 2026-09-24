@@ -91,6 +91,17 @@ mod following {
     }
 
     fn runtime(file: &Path) -> (Arc<NetworkNamespace>, DnsRuntime) {
+        runtime_with(
+            file,
+            NetworkLimits {
+                dns_resolution_timeout_seconds: 30,
+                dns_server_timeout_seconds: 30,
+                ..NetworkLimits::default()
+            },
+        )
+    }
+
+    fn runtime_with(file: &Path, limits: NetworkLimits) -> (Arc<NetworkNamespace>, DnsRuntime) {
         let ns = Arc::new(NetworkNamespace::create().unwrap());
         assert!(ns
             .command("/usr/sbin/ip")
@@ -119,11 +130,7 @@ mod following {
                     ports: vec!["443".into()].try_into().unwrap(),
                 }],
                 upstreams: fixture_parse(&std::fs::read_to_string(file).unwrap()).unwrap(),
-                limits: NetworkLimits {
-                    dns_resolution_timeout_seconds: 30,
-                    dns_server_timeout_seconds: 30,
-                    ..NetworkLimits::default()
-                },
+                limits,
                 nft: "/usr/sbin/nft".into(),
                 trust: None,
                 scope: AddressContext::default(),
@@ -256,6 +263,46 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         assert!(
             old.recv_from(&mut bytes).is_err(),
             "the old upstream was used as a fallback"
+        );
+    }
+
+    // The query sent before the change counts. With two allowed, the redo
+    // under the new settings sends one, and fails rather than send another.
+    // @kotowari[EX-238, EX-270, EX-334, EX-335]
+    #[test]
+    fn a_redo_after_a_host_dns_change_keeps_the_query_count() {
+        let temp = TempDir::new();
+        let (old, old_port) = upstream();
+        let (first, first_port) = upstream();
+        let (second, second_port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+        let (ns, mut runtime) = runtime_with(
+            &file,
+            NetworkLimits {
+                dns_resolution_timeout_seconds: 30,
+                dns_server_timeout_seconds: 30,
+                dns_max_upstream_queries: 2,
+                ..NetworkLimits::default()
+            },
+        );
+        let app = client(&ns);
+        received(&old, &mut runtime);
+        std::fs::write(
+            &file,
+            format!("upstream {first_port}\nupstream {second_port}\n"),
+        )
+        .unwrap();
+        // The one query left goes to the first new upstream, which fails.
+        let (query, peer) = received(&first, &mut runtime);
+        let mut failure = query.clone();
+        failure[2] |= 0x80;
+        failure[3] = (failure[3] & 0xf0) | 2;
+        first.send_to(&failure, peer).unwrap();
+        assert_eq!(finish(app, &mut runtime), "2 -\n");
+        let mut bytes = [0; 512];
+        assert!(
+            second.recv_from(&mut bytes).is_err(),
+            "the redo was given a fresh query count"
         );
     }
 }

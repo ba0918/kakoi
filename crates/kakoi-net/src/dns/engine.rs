@@ -4,7 +4,7 @@ use crate::{
     dns_workers::Cancellation,
     dynamic::DynamicPermissions,
     leases::ActiveGrant,
-    resolution::ResolutionBudget,
+    resolution::{QueryAllowance, ResolutionBudget},
     scope::{AddressContext, DnsAdmission},
 };
 use hickory_proto::rr::{DNSClass, RecordType};
@@ -107,14 +107,36 @@ impl ExplicitResolver {
         scope: &AddressContext,
         route: impl Fn(IpAddr) -> Option<String>,
     ) -> Result<PreparedAnswer, DnsError> {
+        let queries = QueryAllowance::new(&self.limits);
+        self.prepare_sharing(wire, deadline, &queries, cancellation, scope, route)
+    }
+
+    /// As [`Self::prepare_until`], taking upstream queries from `queries`: work
+    /// asked again under new settings continues the count of the first.
+    pub fn prepare_sharing(
+        &self,
+        wire: &[u8],
+        deadline: Instant,
+        queries: &QueryAllowance,
+        cancellation: Option<&Cancellation>,
+        scope: &AddressContext,
+        route: impl Fn(IpAddr) -> Option<String>,
+    ) -> Result<PreparedAnswer, DnsError> {
         let deadline = deadline.min(self.default_deadline());
         let question = Question::parse(wire)?;
         let mut grants = Vec::new();
-        let answer =
-            self.resolve_controlled(wire, deadline, cancellation, scope, route, |candidate| {
+        let answer = self.resolve_controlled(
+            wire,
+            deadline,
+            Some(queries),
+            cancellation,
+            scope,
+            route,
+            |candidate| {
                 grants.extend_from_slice(candidate);
                 Ok(())
-            })?;
+            },
+        )?;
         let validated = question.validate_response(&answer)?;
         // The final lifetime/cancellation check may have turned a candidate into
         // SERVFAIL after collecting grants. Such an answer must adopt nothing.
@@ -160,7 +182,7 @@ impl ExplicitResolver {
         route: impl Fn(IpAddr) -> Option<String>,
         install: impl FnOnce(&[ActiveGrant]) -> Result<(), DnsError>,
     ) -> Result<Vec<u8>, DnsError> {
-        self.resolve_controlled(wire, deadline, None, scope, route, install)
+        self.resolve_controlled(wire, deadline, None, None, scope, route, install)
     }
 
     pub fn resolve_cancellable_until(
@@ -172,13 +194,23 @@ impl ExplicitResolver {
         route: impl Fn(IpAddr) -> Option<String>,
         install: impl FnOnce(&[ActiveGrant]) -> Result<(), DnsError>,
     ) -> Result<Vec<u8>, DnsError> {
-        self.resolve_controlled(wire, deadline, Some(cancellation), scope, route, install)
+        self.resolve_controlled(
+            wire,
+            deadline,
+            None,
+            Some(cancellation),
+            scope,
+            route,
+            install,
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn resolve_controlled(
         &self,
         wire: &[u8],
         deadline: Instant,
+        queries: Option<&QueryAllowance>,
         cancellation: Option<&Cancellation>,
         scope: &AddressContext,
         route: impl Fn(IpAddr) -> Option<String>,
@@ -193,7 +225,10 @@ impl ExplicitResolver {
                 }
             };
             check_cancel()?;
-            let mut budget = ResolutionBudget::new(Instant::now(), &self.limits)
+            let queries = queries
+                .cloned()
+                .unwrap_or_else(|| QueryAllowance::new(&self.limits));
+            let mut budget = ResolutionBudget::sharing(Instant::now(), &self.limits, queries)
                 .map_err(|_| DnsError::IncompleteResponse)?;
             budget.constrain_deadline(deadline);
             ensure_live(&budget, &[])?;

@@ -10,6 +10,7 @@ use crate::{
     dns_transport::TlsClient,
     dns_workers::{DnsWorkers, WorkResult},
     namespace::{DnsSockets, NetworkNamespace},
+    resolution::QueryAllowance,
     scope::AddressContext,
 };
 use kakoi_core::network::{Allow, DnsUpstream, NetworkLimits};
@@ -60,8 +61,9 @@ pub struct DnsRuntime {
     limits: NetworkLimits,
     trust: Option<TlsClient>,
     following: Option<Following>,
-    // Questions handed to a worker, kept to ask again under new settings.
-    inflight: HashMap<ResolutionId, (Vec<u8>, Instant)>,
+    // Questions handed to a worker, kept to ask again under new settings with
+    // the same deadline and what is left of the same query count.
+    inflight: HashMap<ResolutionId, (Vec<u8>, Instant, QueryAllowance)>,
     // Workers whose settings were replaced; their results are never used.
     retired: HashSet<ResolutionId>,
     scope: Arc<AddressContext>,
@@ -175,6 +177,7 @@ impl DnsRuntime {
         id: ResolutionId,
         wire: Vec<u8>,
         deadline: Instant,
+        queries: QueryAllowance,
         now: Instant,
     ) -> io::Result<()> {
         if now >= deadline {
@@ -183,22 +186,24 @@ impl DnsRuntime {
         let resolver = Arc::clone(&self.resolver);
         let scope = Arc::clone(&self.scope);
         let route = Arc::clone(&self.route);
+        let shared = queries.clone();
         let task = crate::dns::ResolutionTask {
             id,
             wire: wire.clone(),
             deadline,
         };
         match self.workers.start(task, move |task, cancel| {
-            resolver.prepare_until(
+            resolver.prepare_sharing(
                 &task.wire,
                 task.deadline,
+                &shared,
                 Some(&cancel),
                 &scope,
                 |address| route(address),
             )
         }) {
             Ok(()) => {
-                self.inflight.insert(id, (wire, deadline));
+                self.inflight.insert(id, (wire, deadline, queries));
                 Ok(())
             }
             Err((_, error)) if error.kind() == io::ErrorKind::BrokenPipe => Err(error),
@@ -227,10 +232,10 @@ impl DnsRuntime {
             let task = self.inflight.remove(&completed.id);
             if self.retired.remove(&completed.id) && !self.stopping {
                 // Asked under replaced settings: ask again, within the same deadline.
-                if let (Some((wire, deadline)), false) =
+                if let (Some((wire, deadline, queries)), false) =
                     (task, matches!(completed.result, WorkResult::Panicked))
                 {
-                    self.dispatch(completed.id, wire, deadline, now)?;
+                    self.dispatch(completed.id, wire, deadline, queries, now)?;
                     continue;
                 }
             }
@@ -258,7 +263,8 @@ impl DnsRuntime {
         }
         if !self.stopping {
             for task in self.service.poll(now)? {
-                self.dispatch(task.id, task.wire, task.deadline, now)?;
+                let queries = QueryAllowance::new(&self.limits);
+                self.dispatch(task.id, task.wire, task.deadline, queries, now)?;
             }
         }
         Ok(())

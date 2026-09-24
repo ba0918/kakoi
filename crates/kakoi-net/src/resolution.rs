@@ -2,7 +2,13 @@
 
 use hickory_proto::rr::Name;
 use kakoi_core::network::NetworkLimits;
-use std::time::{Duration, Instant};
+use std::{
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CnameError {
@@ -61,15 +67,48 @@ pub enum UpstreamWait {
     HostResolver,
 }
 
+/// The upstream queries one resolution may still send. Clones share the
+/// count, so that asking again under new settings continues it.
+#[derive(Debug, Clone)]
+pub struct QueryAllowance(Arc<AtomicU32>);
+
+impl QueryAllowance {
+    pub fn new(limits: &NetworkLimits) -> Self {
+        Self(Arc::new(AtomicU32::new(limits.dns_max_upstream_queries)))
+    }
+
+    pub fn remaining(&self) -> u32 {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    fn take(&self) -> bool {
+        self.0
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok()
+    }
+}
+
 #[derive(Debug)]
 pub struct ResolutionBudget {
     deadline: Instant,
     server_timeout: Duration,
-    remaining_queries: u32,
+    queries: QueryAllowance,
 }
 
 impl ResolutionBudget {
     pub fn new(start: Instant, limits: &NetworkLimits) -> Result<Self, ResolutionLimit> {
+        Self::sharing(start, limits, QueryAllowance::new(limits))
+    }
+
+    /// A budget whose queries come out of `queries`, shared with earlier work
+    /// on the same resolution.
+    pub fn sharing(
+        start: Instant,
+        limits: &NetworkLimits,
+        queries: QueryAllowance,
+    ) -> Result<Self, ResolutionLimit> {
         Ok(Self {
             deadline: start
                 .checked_add(Duration::from_secs(u64::from(
@@ -77,7 +116,7 @@ impl ResolutionBudget {
                 )))
                 .ok_or(ResolutionLimit::Deadline)?,
             server_timeout: Duration::from_secs(u64::from(limits.dns_server_timeout_seconds)),
-            remaining_queries: limits.dns_max_upstream_queries,
+            queries,
         })
     }
 
@@ -101,10 +140,9 @@ impl ResolutionBudget {
         upstream: UpstreamWait,
     ) -> Result<Instant, ResolutionLimit> {
         self.ensure_live(now)?;
-        self.remaining_queries = self
-            .remaining_queries
-            .checked_sub(1)
-            .ok_or(ResolutionLimit::Queries)?;
+        if !self.queries.take() {
+            return Err(ResolutionLimit::Queries);
+        }
         Ok(match upstream {
             UpstreamWait::HostResolver => self.deadline,
             UpstreamWait::Explicit => now
