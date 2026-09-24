@@ -248,6 +248,12 @@ A163により、未修正pastaを2段にして中間の制御用ネットワー�
 - `docs/ir/network/publish-target/network-publish.md#REQ-035`
 - `docs/ir/network/publish-target/network-publish.md#REQ-036`
 
+初版の合格判定から外す具体例（2026-09-24に利用者が承認。削除・検証済み扱いにしない）:
+
+- `docs/ir/network/link-local/network-link-local-wide-cidr.md` のEX-315: 接続口付きの許可を使う例で、初版はA167によりそれを起動前に拒否する。REQ-054〜056と同じく後続で確かめる。
+- `docs/ir/network/dns-work-limits/network-dns-query-limit.md` のEX-271: kakoiはDNSのUDPを自分で再送せず、TCPの再送はカーネルの中で起きるので、試験から観測できない。
+- `docs/ir/network/dns-capacity/network-dns-coalescing.md` のEX-290: 解決条件が同じなら名前も同じなので、許可されない問い合わせが進行中の解決に合流する前提を作れない。許可の確認が合流より先にあることは実装の順序で保たれている。
+
 ## kotowariと既存の未対応テスト
 
 テスト配置は `tests/kakoi_net.rs` と `tests/kakoi_net/`。現行 `.kotowari/config.yaml` の `tests/*.rs` / `tests/**/*.rs` に含める。各テストには実際に検証した要求の印だけを置き、製品のテストでないPython probeへ対応済み印を付けない。
