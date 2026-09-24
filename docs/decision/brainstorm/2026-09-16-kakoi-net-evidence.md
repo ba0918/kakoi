@@ -1387,3 +1387,14 @@ muslのビルドにはrustlsのringが使うmuslのgccが要り、CIに追加し
 遅いnftの代役で確かめる試験を足した（予備時間の始まりから数える版では約117ms超過して失敗）。
 TTLの件はA171で、アプリへ返す応答の回答部のTTLを最短に揃えるよう直した（修正前は試験2件が失敗）。
 Rust 1.88のGNUで実pasta込みの全体529件が成功。
+
+## ユーザー名前空間の制限が有効なUbuntuでの起動（2026-09-24）
+
+GitHub Actionsのubuntu-24.04（`kernel.apparmor_restrict_unprivileged_userns`が既定で1）で観察した。
+制限ありではhostがbwrapのuid map設定で失敗し、filteredは
+`kakoi: bwrap: start pasta: create user/network namespace: Permission denied (os error 13)`
+と出して125で止まり、コマンドは実行されなかった。bwrap用のAppArmorプロファイル
+（`bwrap-userns-restrict`）を読み込むとhostは成功したが、filteredは同じ125で止まった。
+制限を外すとfilteredは許可した宛先に届いた。制限の下でも通信制限なしで動くことはない。
+filteredには制限を外す必要があると利用者向け文書に書き、CIの`userns-restriction`ジョブで
+この3通りを毎回確かめる。kakoiとpasta用のAppArmorプロファイルは用意しておらず、後続とする。

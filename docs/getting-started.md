@@ -70,9 +70,15 @@ Ubuntu describes the restriction in the
 [24.04 release notes](https://documentation.ubuntu.com/release-notes/24.04/).
 
 In `filtered` network mode `kakoi` itself and `pasta` create user namespaces too, outside
-`bwrap`, so the `bwrap` profile alone does not cover them. That combination has not been tried
-on a machine with the restriction on; the one `filtered` has been run on so far (WSL2) does not
-carry it.
+`bwrap`, and the `bwrap` profile does not cover them: with the restriction on, loaded profile or
+not, a `filtered` launch stops with exit code 125 before the command runs, saying
+
+```
+kakoi: bwrap: start pasta: create user/network namespace: Permission denied (os error 13)
+```
+
+For `filtered`, turn the restriction off with the sysctl above. CI checks both outcomes on
+Ubuntu 24.04.
 
 ## The first launch
 

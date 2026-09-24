@@ -124,12 +124,105 @@ jobs:
       - name: cargo build on the minimum supported Rust version
         run: cargo build --workspace --locked
 
+  userns-restriction:
+    # Ubuntu 23.10 and later restrict unprivileged user namespaces, and `filtered` makes
+    # them outside bwrap (kakoi itself and pasta), where the bwrap AppArmor profile does
+    # not reach. getting-started.md states the outcome; this job keeps it true: with the
+    # restriction on, a `filtered` launch stops with 125 before the command runs, profile
+    # loaded or not, and with it off the command reaches what it is allowed to.
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # apparmor-profiles carries the bwrap profile, which the runner image does not.
+      - name: Install bubblewrap, nftables, and the bwrap profile
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap nftables iproute2 apparmor-profiles
+
+      # The same verified build `check` uses. Here it goes on PATH, where the product looks.
+      - name: Fetch the verified pasta
+        run: |
+          url=https://deb.debian.org/debian/pool/main/p/passt/passt_0.0~git20260728.f8df3f1-1~bpo13+1_amd64.deb
+          curl -fsSLo "$RUNNER_TEMP/passt.deb" "$url"
+          echo "c8ac47eb51979289f8bbb1761d9954cf1ee8dd1ac42ea5d2ce5136330099f43a  $RUNNER_TEMP/passt.deb" | sha256sum -c -
+          dpkg-deb -x "$RUNNER_TEMP/passt.deb" "$RUNNER_TEMP/passt"
+          echo "$RUNNER_TEMP/passt/usr/bin" >> "$GITHUB_PATH"
+
+      - name: cargo build
+        run: cargo build --locked
+
+      # The allowed destination is a server on the runner's own loopback, so the check
+      # does not depend on anything outside the runner.
+      - name: Launch with the restriction on and off
+        run: |
+          kakoi=$PWD/target/debug/kakoi
+          out=$RUNNER_TEMP/out
+          policy=$RUNNER_TEMP/filtered.toml
+          cat > "$policy" <<'EOF'
+          [network]
+          mode = "filtered"
+
+          [[network.allow]]
+          destination = { host-loopback = "ipv4" }
+          protocol = "tcp"
+          ports = ["18080"]
+          EOF
+          mkdir "$RUNNER_TEMP/site"
+          echo "served by the runner" > "$RUNNER_TEMP/site/index.html"
+          python3 -m http.server 18080 --bind 127.0.0.1 --directory "$RUNNER_TEMP/site" &
+          timeout 10 sh -c 'until curl -fs http://127.0.0.1:18080/ >/dev/null; do sleep 0.2; done'
+          reach='import urllib.request; print("command ran"); print(urllib.request.urlopen("http://host-v4.kakoi.internal:18080/", timeout=5).read().decode().strip())'
+
+          failed=0
+          launch() {
+            set +e
+            timeout 60 "$@" > "$out" 2>&1
+            code=$?
+            set -e
+            cat "$out"
+            echo "exit $code"
+          }
+          fail() {
+            echo "::error::$1"
+            failed=1
+          }
+          refused() {
+            launch "$kakoi" --policy-file "$policy" -- python3 -c "$reach"
+            [ "$code" -eq 125 ] || fail "$1: filtered exited $code, expected 125"
+            grep -qF 'create user/network namespace: Permission denied' "$out" \
+              || fail "$1: filtered did not name the refused namespace"
+            ! grep -qF 'command ran' "$out" || fail "$1: the command ran"
+          }
+
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          refused "restricted"
+
+          profile=/usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          sudo apparmor_parser -r "$profile"
+          launch "$kakoi" -- true
+          [ "$code" -eq 0 ] || fail "restricted with the bwrap profile: host exited $code"
+          refused "restricted with the bwrap profile"
+          sudo apparmor_parser -R "$profile"
+
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          launch "$kakoi" --policy-file "$policy" -- python3 -c "$reach"
+          [ "$code" -eq 0 ] || fail "unrestricted: filtered exited $code"
+          grep -qF 'served by the runner' "$out" || fail "unrestricted: the allowed server was not reached"
+
+          exit "$failed"
+
   release:
     # The tag confirms the checks passed; it never starts them, so this job waits for
-    # both. It runs on every push to main and releases nothing unless the manifest's
+    # every check. It runs on every push to main and releases nothing unless the manifest's
     # version has a dated changelog heading and a comparison link and no tag yet, so an
     # ordinary push is a no-op and a release is cut by promoting the changelog.
-    needs: [check, msrv]
+    needs: [check, msrv, userns-restriction]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
 
