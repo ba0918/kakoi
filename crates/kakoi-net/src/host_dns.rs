@@ -10,7 +10,8 @@ use std::{
     num::NonZeroU16,
 };
 
-/// Read again when it changes; the executor compares contents, not timestamps.
+/// Read again every second while followed; a change is a difference in contents,
+/// not in timestamps.
 pub const RESOLV_CONF: &str = "/etc/resolv.conf";
 
 const STUB: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 53));

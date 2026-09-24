@@ -48,8 +48,9 @@ struct Pending<W> {
 
 /// Owned by one environment's controller. Keys must include name, type, class,
 /// DNS options and resolver settings generation; authorize each waiter before
-/// admission. Only `Start` creates a worker and its time/query budget. Joining
-/// retains the existing worker, so it cannot reset that budget.
+/// admission. Only `Start` creates a resolution and its time/query budget; asking
+/// it again under new settings continues that budget. Joining retains the
+/// existing worker, so it cannot reset that budget.
 pub struct ResolutionPool<K, W> {
     pending: HashMap<K, Pending<W>>,
     max_resolutions: usize,

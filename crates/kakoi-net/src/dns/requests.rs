@@ -53,7 +53,8 @@ struct Running {
     deadline: Instant,
 }
 
-/// One immutable policy/settings generation per environment. The caller executes
+/// One immutable policy per environment, whose settings generation advances when
+/// the upstreams change. The caller executes
 /// only `Start` tasks and enforces their original absolute deadline. Completion
 /// must follow address screening and kernel permission installation; this owner
 /// only validates and distributes the answer, and never installs permissions.
@@ -296,7 +297,7 @@ impl<W> DnsRequests<W> {
     }
 
     /// The cached answer to `question`, its times to live counted down by the
-    /// seconds begun since, while every record has at least one left.
+    /// seconds begun since, while every answer record has at least one left.
     fn cached(&self, key: &ResolutionKey, question: &Question, now: Instant) -> Option<Vec<u8>> {
         let cached = self.cache.get(key)?;
         let elapsed = now.checked_duration_since(cached.received)?;

@@ -1,5 +1,7 @@
-//! One upstream exchange. Policy authorization, query budgets, candidate changes,
-//! TCP fallback and settings generations belong to the resolution coordinator.
+//! Upstream exchanges for one question: trying the candidates in order, reserving
+//! each query from the shared budget, and falling back to TCP within a candidate's
+//! wait. Policy authorization and settings generations belong to the resolution
+//! coordinator.
 
 use crate::{
     dns::{Question, ResponseDisposition, ValidatedResponse},
@@ -106,9 +108,9 @@ pub(crate) fn exchange_upstreams_cancellable(
     Err(last_error)
 }
 
-/// One question against an immutable explicit-upstream snapshot. CNAME traversal
-/// and settings-change restarts must keep the same `budget`. Host-resolver routing
-/// uses a different wait policy and must not enter this explicit-candidate path.
+/// One question against fixed plain candidates, each given one candidate's wait.
+/// CNAME traversal must keep the same `budget`. The host's DNS reaches the same
+/// candidate loop through `exchange_upstreams_cancellable`, with its own wait.
 pub fn exchange_plain_candidates(
     wire: &[u8],
     peers: &[SocketAddr],

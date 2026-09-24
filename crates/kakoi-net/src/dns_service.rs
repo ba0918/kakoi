@@ -16,8 +16,9 @@ impl DnsService {
         Self { front, requests }
     }
 
-    /// Each returned task owns one admitted resolution slot. Schedule it once,
-    /// carrying its deadline, and report its completion after permission adoption.
+    /// Each returned task owns one admitted resolution slot. Schedule it with its
+    /// deadline, again under new settings if they change, and report its completion
+    /// after permission adoption.
     /// Workers must remain bounded independently of client expiration: an expired
     /// task may still be exiting and must not be replaced with unbounded threads.
     pub fn poll(&mut self, now: Instant) -> io::Result<Vec<ResolutionTask>> {

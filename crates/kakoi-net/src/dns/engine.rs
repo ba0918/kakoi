@@ -11,8 +11,9 @@ use hickory_proto::rr::{DNSClass, RecordType};
 use kakoi_core::network::{validate_upstreams, Allow, DnsUpstream, NetworkLimits};
 use std::{collections::BTreeMap, io, net::IpAddr, time::Instant};
 
-/// Synchronous resolution worker for one immutable explicit-upstream snapshot.
-/// The environment controller owns concurrency, settings generations and caches.
+/// Synchronous resolution worker for one immutable snapshot of upstreams, written
+/// in the policy or read from the host's DNS configuration. The environment
+/// controller owns concurrency, settings generations and caches.
 pub struct ExplicitResolver {
     gate: DnsGate,
     upstreams: Vec<DnsUpstream>,

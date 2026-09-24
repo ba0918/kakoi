@@ -56,7 +56,8 @@ impl LeaseBook {
             .is_some_and(|expiry| *expiry > now)
     }
 
-    /// Recovery takes only grants that are still alive at reconstruction time.
+    /// The grants still alive at `now`; each staging installs these again beside
+    /// the new ones.
     pub fn active(&self, now: Instant) -> Vec<ActiveGrant> {
         self.deadlines
             .iter()

@@ -1,5 +1,6 @@
-//! Explicit-upstream DNS runtime. The session owns transit health and must close
-//! its gate on any error here, and before stopping or replacing this runtime.
+//! DNS runtime for the policy's upstreams, or for the host's DNS configuration,
+//! which it follows. The session owns transit health and must close its gate on
+//! any error here, and before stopping or replacing this runtime.
 use crate::{
     dns::{
         DnsError, DnsRequests, EnforcedDnsError, ExplicitResolver, PreparedAnswer, ResolutionId,
