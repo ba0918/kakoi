@@ -50,7 +50,7 @@ pub struct HostDns {
     /// The contents `upstreams` were parsed from, or `None` when they could
     /// not be read. A later read that differs is a change, even one made
     /// before the runtime started.
-    pub read: Option<String>,
+    pub text: Option<String>,
     /// How long each of the parsed upstreams is waited for.
     pub wait: fn(&[DnsUpstream]) -> UpstreamWait,
 }
@@ -122,7 +122,7 @@ impl DnsRuntime {
             .waiting(wait),
         );
         let following = config.host_dns.map(|source| Following {
-            text: source.read.clone(),
+            text: source.text.clone(),
             source,
             next: Instant::now() + FOLLOW_INTERVAL,
         });

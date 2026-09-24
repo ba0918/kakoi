@@ -97,7 +97,7 @@ pub fn start(
         following = Some(HostDns {
             path: host_dns::RESOLV_CONF.into(),
             parse: host_dns::upstreams_from_resolv_conf,
-            read: Some(text),
+            text: Some(text),
             wait: host_dns::wait_for,
         });
         upstreams

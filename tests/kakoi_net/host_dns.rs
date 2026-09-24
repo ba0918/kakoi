@@ -175,7 +175,7 @@ mod following {
         let host_dns = HostDns {
             path: file.to_owned(),
             parse: fixture_parse,
-            read: Some(read.clone()),
+            text: Some(read.clone()),
             wait: fixture_wait,
         };
         let runtime = DnsRuntime::new(
