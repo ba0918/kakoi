@@ -10,7 +10,7 @@ use crate::{
     dns_transport::TlsClient,
     dns_workers::{DnsWorkers, WorkResult},
     namespace::{DnsSockets, NetworkNamespace},
-    resolution::QueryAllowance,
+    resolution::{QueryAllowance, UpstreamWait},
     scope::AddressContext,
 };
 use kakoi_core::network::{Allow, DnsUpstream, NetworkLimits};
@@ -50,6 +50,8 @@ pub struct HostDns {
     /// not be read. A later read that differs is a change, even one made
     /// before the runtime started.
     pub read: Option<String>,
+    /// How long each of the parsed upstreams is waited for.
+    pub wait: fn(&[DnsUpstream]) -> UpstreamWait,
 }
 
 struct Following {
@@ -103,12 +105,21 @@ impl DnsRuntime {
         .with_failure_hold(Duration::from_secs(u64::from(
             config.limits.dns_failure_cache_seconds,
         )));
-        let resolver = Arc::new(ExplicitResolver::new(
-            config.policy.clone(),
-            config.upstreams,
-            config.limits.clone(),
-            config.trust.clone(),
-        )?);
+        let wait = config
+            .host_dns
+            .as_ref()
+            .map_or(UpstreamWait::Explicit, |source| {
+                (source.wait)(&config.upstreams)
+            });
+        let resolver = Arc::new(
+            ExplicitResolver::new(
+                config.policy.clone(),
+                config.upstreams,
+                config.limits.clone(),
+                config.trust.clone(),
+            )?
+            .waiting(wait),
+        );
         let following = config.host_dns.map(|source| Following {
             text: source.read.clone(),
             source,
@@ -164,12 +175,16 @@ impl DnsRuntime {
             .and_then(|text| (following.source.parse)(text).ok())
             .unwrap_or_default();
         following.text = text;
-        self.resolver = Arc::new(ExplicitResolver::new(
-            self.policy.clone(),
-            upstreams,
-            self.limits.clone(),
-            self.trust.clone(),
-        )?);
+        let wait = (following.source.wait)(&upstreams);
+        self.resolver = Arc::new(
+            ExplicitResolver::new(
+                self.policy.clone(),
+                upstreams,
+                self.limits.clone(),
+                self.trust.clone(),
+            )?
+            .waiting(wait),
+        );
         self.service.advance_generation();
         self.retired.extend(self.inflight.keys().copied());
         self.workers.retire();

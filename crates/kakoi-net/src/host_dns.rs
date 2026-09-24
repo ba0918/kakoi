@@ -3,6 +3,7 @@
 //! upstreams. A host that names only systemd-resolved's stub is reached through
 //! resolved's proxy at 127.0.0.54, which forwards without rewriting answers.
 
+use crate::resolution::UpstreamWait;
 use kakoi_core::network::DnsUpstream;
 use std::{
     net::{IpAddr, Ipv4Addr},
@@ -41,4 +42,14 @@ pub fn upstreams_from_resolv_conf(text: &str) -> Result<Vec<DnsUpstream>, String
         .into_iter()
         .map(|address| DnsUpstream::plain(address, PORT))
         .collect())
+}
+
+/// systemd-resolved's proxy chooses among the host's servers by itself, so it is
+/// given the whole resolution; nameservers kakoi tries in turn each get one
+/// candidate's wait.
+pub fn wait_for(upstreams: &[DnsUpstream]) -> UpstreamWait {
+    match upstreams {
+        [only] if only.address == PROXY && only.port() == PORT => UpstreamWait::HostResolver,
+        _ => UpstreamWait::Explicit,
+    }
 }

@@ -7,10 +7,10 @@
 ### REQ-116: 候補別と名前解決全体の期限を設定できる
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A121
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A121, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A173
 - verification: unit
 
-明示した上流DNSの1候補を待つ時間は既定2秒、名前解決全体の上限は既定10秒とし、どちらも設定で変更できる。別候補への切替、CNAME参照、ホストDNS設定変更によるやり直しで全体の期限を延長しない。ホストDNS利用時も全体上限を適用するが、ホスト内部の候補選択に1候補上限を直接適用する規則ではない。
+明示した上流DNSの1候補を待つ時間は既定2秒、名前解決全体の上限は既定10秒とし、どちらも設定で変更できる。別候補への切替、CNAME参照、ホストDNS設定変更によるやり直しで全体の期限を延長しない。ホストDNS利用時も全体上限を適用する。ホストの "nameserver" をkakoiが順に試す場合は各候補に1候補の待ち時間を適用し、systemd-resolvedの中継窓口だけを使う場合は1候補の待ち時間を適用せず全体上限まで待つ。
 
 ## Examples
 

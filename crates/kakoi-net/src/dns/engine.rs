@@ -4,7 +4,7 @@ use crate::{
     dns_workers::Cancellation,
     dynamic::DynamicPermissions,
     leases::ActiveGrant,
-    resolution::{QueryAllowance, ResolutionBudget},
+    resolution::{QueryAllowance, ResolutionBudget, UpstreamWait},
     scope::{AddressContext, DnsAdmission},
 };
 use hickory_proto::rr::{DNSClass, RecordType};
@@ -18,6 +18,7 @@ pub struct ExplicitResolver {
     upstreams: Vec<DnsUpstream>,
     limits: NetworkLimits,
     trust: Option<TlsClient>,
+    wait: UpstreamWait,
 }
 
 #[derive(Debug)]
@@ -94,7 +95,15 @@ impl ExplicitResolver {
             upstreams,
             limits,
             trust,
+            wait: UpstreamWait::Explicit,
         })
+    }
+
+    /// How long each upstream is waited for: one candidate's wait by default, or
+    /// the whole resolution for a host resolver that chooses among its servers.
+    pub fn waiting(mut self, wait: UpstreamWait) -> Self {
+        self.wait = wait;
+        self
     }
 
     /// Compute and screen an answer without changing kernel permissions. Workers
@@ -244,6 +253,7 @@ impl ExplicitResolver {
                     self.trust.as_ref(),
                     &mut budget,
                     cancellation,
+                    self.wait,
                 )
                 .map(|answer| answer.wire().to_vec())
                 .map_err(|_| DnsError::IncompleteResponse);
@@ -256,6 +266,7 @@ impl ExplicitResolver {
                         self.trust.as_ref(),
                         budget,
                         cancellation,
+                        self.wait,
                     )
                     .map_err(|_| DnsError::IncompleteResponse)?;
                     Ok((answer.wire().to_vec(), answer.received_at))

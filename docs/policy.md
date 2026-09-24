@@ -250,8 +250,11 @@ tls-name = "resolver.example.com"   # required for "tls", refused for "plain"
 ```
 
 Several upstreams are tried in order; plain and TLS are not mixed. TLS verifies the server with
-the host's CA certificates. The waits are `network.dns-server-timeout-seconds` (default 2) and
-`network.dns-resolution-timeout-seconds` (default 10).
+the host's CA certificates. The waits are `network.dns-server-timeout-seconds` (default 2) for each
+upstream and `network.dns-resolution-timeout-seconds` (default 10) for the whole resolution.
+Following the host, each `nameserver` gets the per-upstream wait, except systemd-resolved's
+`127.0.0.54` used alone: it tries the host's servers itself and is waited for up to the whole
+resolution.
 
 ### Publishing a port
 

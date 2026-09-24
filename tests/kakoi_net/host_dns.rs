@@ -34,6 +34,23 @@ fn the_systemd_resolved_stub_alone_is_reached_through_its_proxy() {
     );
 }
 
+// The systemd-resolved proxy chooses among the host's servers by itself, so kakoi gives
+// it the whole resolution rather than one candidate's wait; nameservers kakoi tries in
+// turn keep the per-candidate wait.
+// @kotowari[REQ-116]
+#[test]
+fn only_the_systemd_resolved_proxy_is_given_the_whole_resolution_wait() {
+    use kakoi_net::{host_dns::wait_for, resolution::UpstreamWait};
+    let wait = |text| wait_for(&upstreams_from_resolv_conf(text).unwrap());
+    assert_eq!(wait("nameserver 127.0.0.53\n"), UpstreamWait::HostResolver);
+    assert_eq!(wait("nameserver 127.0.0.54\n"), UpstreamWait::HostResolver);
+    assert_eq!(wait("nameserver 10.255.255.254\n"), UpstreamWait::Explicit);
+    assert_eq!(
+        wait("nameserver 127.0.0.53\nnameserver 192.0.2.53\n"),
+        UpstreamWait::Explicit
+    );
+}
+
 // @kotowari[REQ-145, EX-322]
 #[test]
 fn a_host_configuration_without_a_nameserver_asks_for_an_explicit_upstream() {
@@ -51,6 +68,7 @@ mod following {
         filter,
         namespace::NetworkNamespace,
         nft,
+        resolution::UpstreamWait,
         scope::AddressContext,
     };
     use std::{
@@ -81,6 +99,20 @@ mod following {
                 DnsUpstream::plain("127.0.0.1".parse().unwrap(), NonZeroU16::new(port).unwrap())
             })
             .collect())
+    }
+
+    /// "relay" in the fixture stands for the systemd-resolved proxy.
+    fn fixture_wait(upstreams: &[DnsUpstream]) -> UpstreamWait {
+        if upstreams.len() == 1 && RELAY.with(|relay| relay.get()) == upstreams[0].port().get() {
+            UpstreamWait::HostResolver
+        } else {
+            UpstreamWait::Explicit
+        }
+    }
+
+    thread_local! {
+        /// The port a test's fixture treats as the systemd-resolved proxy.
+        static RELAY: std::cell::Cell<u16> = const { std::cell::Cell::new(0) };
     }
 
     fn upstream() -> (UdpSocket, u16) {
@@ -135,6 +167,7 @@ mod following {
             path: file.to_owned(),
             parse: fixture_parse,
             read: Some(read.clone()),
+            wait: fixture_wait,
         };
         let runtime = DnsRuntime::new(
             Arc::clone(&ns),
@@ -286,6 +319,31 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         let (query, peer) = received(&new, &mut runtime);
         new.send_to(&answer(&query, [1, 1, 1, 1]), peer).unwrap();
         assert_eq!(finish(app, &mut runtime), "0 1.1.1.1\n");
+    }
+
+    // An upstream that answers after 3 seconds is past one candidate's 2 but
+    // well inside the resolution's 10: the relay is waited for, a nameserver
+    // kakoi tries itself is not.
+    // @kotowari[REQ-116]
+    #[test]
+    fn the_resolved_proxy_is_waited_for_beyond_one_candidates_wait() {
+        for relay in [true, false] {
+            let temp = TempDir::new();
+            let (slow, port) = upstream();
+            RELAY.with(|cell| cell.set(if relay { port } else { 0 }));
+            let file = temp.write("resolv.conf", format!("upstream {port}\n"));
+            let (ns, mut runtime) = runtime_with(&file, NetworkLimits::default());
+            let app = client(&ns);
+            let (query, peer) = received(&slow, &mut runtime);
+            let answer_at = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < answer_at {
+                runtime.poll(Instant::now()).unwrap();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let _ = slow.send_to(&answer(&query, [1, 1, 1, 1]), peer);
+            let expected = if relay { "0 1.1.1.1\n" } else { "2 -\n" };
+            assert_eq!(finish(app, &mut runtime), expected, "relay: {relay}");
+        }
     }
 
     // @kotowari[EX-239, EX-240]

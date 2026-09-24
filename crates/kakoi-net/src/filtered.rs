@@ -98,6 +98,7 @@ pub fn start(
             path: host_dns::RESOLV_CONF.into(),
             parse: host_dns::upstreams_from_resolv_conf,
             read: Some(text),
+            wait: host_dns::wait_for,
         });
         upstreams
     } else {

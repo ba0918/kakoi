@@ -49,7 +49,7 @@ pub fn exchange_upstreams(
     trust: Option<&TlsClient>,
     budget: &mut ResolutionBudget,
 ) -> io::Result<ReceivedResponse> {
-    exchange_upstreams_cancellable(wire, upstreams, trust, budget, None)
+    exchange_upstreams_cancellable(wire, upstreams, trust, budget, None, UpstreamWait::Explicit)
 }
 
 pub(crate) fn exchange_upstreams_cancellable(
@@ -58,6 +58,7 @@ pub(crate) fn exchange_upstreams_cancellable(
     trust: Option<&TlsClient>,
     budget: &mut ResolutionBudget,
     cancellation: Option<&Cancellation>,
+    wait: UpstreamWait,
 ) -> io::Result<ReceivedResponse> {
     kakoi_core::network::validate_upstreams(upstreams)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
@@ -72,7 +73,7 @@ pub(crate) fn exchange_upstreams_cancellable(
             .iter()
             .map(|upstream| SocketAddr::new(upstream.address, upstream.port().get()))
             .collect();
-        return plain_candidates(wire, &peers, budget, cancellation);
+        return plain_candidates(wire, &peers, budget, cancellation, wait);
     }
     let trust = trust.ok_or_else(|| io::Error::other("TLS DNS requires startup CA snapshot"))?;
     Question::parse(wire).map_err(invalid_dns)?;
@@ -87,7 +88,7 @@ pub(crate) fn exchange_upstreams_cancellable(
             continue;
         }
         let deadline = budget
-            .reserve_query(Instant::now(), UpstreamWait::Explicit)
+            .reserve_query(Instant::now(), wait)
             .map_err(|limit| io::Error::other(format!("DNS resolution limit: {limit:?}")))?;
         match trust.exchange_controlled(
             wire,
@@ -113,7 +114,7 @@ pub fn exchange_plain_candidates(
     peers: &[SocketAddr],
     budget: &mut ResolutionBudget,
 ) -> io::Result<ReceivedResponse> {
-    plain_candidates(wire, peers, budget, None)
+    plain_candidates(wire, peers, budget, None, UpstreamWait::Explicit)
 }
 
 fn plain_candidates(
@@ -121,6 +122,7 @@ fn plain_candidates(
     peers: &[SocketAddr],
     budget: &mut ResolutionBudget,
     cancellation: Option<&Cancellation>,
+    wait: UpstreamWait,
 ) -> io::Result<ReceivedResponse> {
     Question::parse(wire).map_err(invalid_dns)?;
     let mut attempted = BTreeSet::new();
@@ -130,7 +132,7 @@ fn plain_candidates(
             continue;
         }
         let candidate_deadline = budget
-            .reserve_query(Instant::now(), UpstreamWait::Explicit)
+            .reserve_query(Instant::now(), wait)
             .map_err(|limit| io::Error::other(format!("DNS resolution limit: {limit:?}")))?;
         let mut result = plain(
             wire,
@@ -149,7 +151,7 @@ fn plain_candidates(
                 continue;
             }
             let deadline = budget
-                .reserve_query(Instant::now(), UpstreamWait::Explicit)
+                .reserve_query(Instant::now(), wait)
                 .map_err(|limit| io::Error::other(format!("DNS resolution limit: {limit:?}")))?
                 .min(candidate_deadline);
             result = plain(
