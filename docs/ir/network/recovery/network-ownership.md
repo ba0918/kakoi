@@ -1,6 +1,6 @@
 # ネットワーク状態の所有と終了
 
-隔離環境ごとの所有を定義する草案。終了猶予設定の配置・名前と期限の起点、異常終了の検知・回収方式は未決。
+隔離環境ごとの所有を定義する草案。異常終了の検知・回収方式は未決。終了猶予の設定の配置と期限の起点はnetwork/process/process-shutdown-config.mdとnetwork/process/process-shutdown-deadline.mdで定義する。
 
 終了猶予はfilteredだけに適用する。host・noneの終了方式は既存どおりとし、適用条件はnetwork/process/process-shutdown-config.mdに従う。
 

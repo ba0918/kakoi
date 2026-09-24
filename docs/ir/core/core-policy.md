@@ -97,6 +97,13 @@ network と process の追加キーはネットワーク IR で定める。固�
 
 合成後の "env.mode" が "inherit" のとき "env.pass" が空でないなら、ポリシー読み込み失敗。下の段が"inherit" で、上の段が "clear" と "pass" を両方書く形は通る。
 
+### REQ-399: 省略時のモード
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A9
+- verification: unit
+
+合成後に、"network.mode" をどの段も書いていなければ "host"、"env.mode" をどの段も書いていなければ "inherit" とする。REQ-087 の条件に当たるネットワークのキーをどれかの段が書いたときは "network.mode" の既定値を使わず、どの段にも "network.mode" が無ければ種類 "policy" の診断で終わる。
+
 ## Decision tables
 
 ### TBL-151: パス変数の値
@@ -230,4 +237,28 @@ Scenario: 注入先の競合
   Given 合成後の env.set と secrets に同じキーがある
   When ポリシーを合成する
   Then policy の診断で終了する
+```
+
+```gherkin
+@id=EX-750 @about=REQ-399 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A9
+Scenario: 省略したモードの既定値
+  Given どの段も network.mode と env.mode を書いていない
+  When ポリシーを合成する
+  Then 通信モードは host で環境のモードは inherit になる
+```
+
+```gherkin
+@id=EX-751 @about=REQ-399 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A9,docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+Scenario: 既定の inherit と pass
+  Given どの段も env.mode を書かず env.pass に HOME を書いている
+  When 合成結果を検査する
+  Then 合成後の env.mode は inherit なので policy の診断で終了する
+```
+
+```gherkin
+@id=EX-752 @about=REQ-399 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A9
+Scenario: 追加のネットワークのキーとモードの欠落
+  Given ある段が network.publish に空の配列を書き、どの段も network.mode を書いていない
+  When ポリシーを合成する
+  Then host を補わず policy の診断で終了する
 ```

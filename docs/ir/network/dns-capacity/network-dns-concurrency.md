@@ -10,7 +10,7 @@
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A127
 - verification: unit
 
-DNS同時処理上限は環境ごとに既定256件とし、"network.dns-max-concurrent-resolutions" で1〜4096の整数に変更できる。上位指定優先・省略時継承とし、どの段にも指定がなければ256件とする。0・無制限・小数は認めない。IPv4用とIPv6用は別件として数える。
+DNS同時処理上限は環境ごとに既定256件とし、"network.dns-max-concurrent-resolutions" で1〜4096の整数に変更できる。上の段の指定を優先し、省略時は下の段の値を使い、どの段にも指定がなければ256件とする。0・無制限・小数は認めない。IPv4用とIPv6用は別件として数える。
 
 ### REQ-126: 処理枠を要する上限超過の問い合わせは待たせず失敗を返す
 

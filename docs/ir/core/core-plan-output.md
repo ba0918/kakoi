@@ -60,6 +60,20 @@ JSONの秘密値はenvironmentでnullとし他のキーにも値を出さない�
 
 JSONの項目の出所はprofile、built-in-default、policy-file、command-line、scan、hide-mounts、secret、config-secretsのkindを持ち、ファイルがあるものはpath、secretはnameを持つ。不正UTF-8は置換文字、制御文字はJSONエスケープとし生の制御文字を出さない。
 
+### REQ-403: 生成の段の検査
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
+- verification: unit
+
+REQ-294の3番目の生成の段では、生成に加えて次を検査し、どちらも種類pathの診断で終わる。走査で一致したシンボリックリンクの先が書かれたroの項目の中にあり、そのroの項目が隔離の中から差し替えられる（解決が書き込める項目を通る）とき。mounts.hide-mountsが書かれていて、マウント一覧を読めないとき。
+
+### REQ-404: rw-copyの読み込みの検査
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
+- verification: unit
+
+REQ-294の9番目のrw-copyの読み込みの段では、適用するrw-copyの項目ごとに、対象の種類、読めない複製元、量の上限を検査し、どれも種類pathの診断で終わる。項目の実体がディレクトリでも通常ファイルでもないとき、一覧できないディレクトリか読めないファイルがあるとき、REQ-311の上限（項目あたり4096エントリ、通常ファイルの内容の合計64MiB）を超えるときである。
+
 ## Examples
 
 ```gherkin
@@ -113,5 +127,32 @@ Scenario: JSONの出所と文字
   Given 本体の既存仕様を適用する
   When secret由来のマウントをJSON表示する
   Then originのkindはsecretでnameを持つ
+
+```
+
+```gherkin
+@id=EX-759 @about=REQ-403 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
+Scenario: 差し替えられるroへの走査のリンク
+  Given 走査で一致したリンクの先が、解決がrwの中を通るroの項目の中にある
+  When 段階7の生成を行う
+  Then リンクを隠さずpathの診断で止まる
+
+@id=EX-760 @about=REQ-403 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
+Scenario: 読めないマウント一覧
+  Given mounts.hide-mountsが書かれていてマウント一覧を読めない
+  When 段階7の生成を行う
+  Then 隠すマウントを見落としうるのでpathの診断で止まる
+
+@id=EX-761 @about=REQ-404 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
+Scenario: 上限を超える複製元
+  Given rw-copyのディレクトリが4097個のエントリを持つ
+  When 段階7のrw-copyの読み込みを行う
+  Then 複製を始めずpathの診断で止まる
+
+@id=EX-762 @about=REQ-404 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12,docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+Scenario: 名前付きパイプのrw-copy
+  Given rw-copyの項目の実体が名前付きパイプである
+  When 段階7のrw-copyの読み込みを行う
+  Then 内容を待たずpathの診断で止まる
 
 ```

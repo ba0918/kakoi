@@ -151,7 +151,7 @@ Scenario: Gitの番号検査
 
 ```gherkin
 @id=EX-515 @about=REQ-153 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-Scenario: 環境値を使う合成の限定
+Scenario: env.setの値の変数は展開しない
   Given 本体の既存仕様を適用する
   When env.setに${worktree}という文字列がある
   Then 環境の値には文字列をそのまま入れる

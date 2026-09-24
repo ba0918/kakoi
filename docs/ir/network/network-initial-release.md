@@ -50,7 +50,40 @@ TCP/UDPの固定公開は内側とホストの番号を起動前に明示する�
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#D11, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A161
 - verification: unit
 
-公開リストはレイヤ間で連結し、空配列で下位を消さない。正規化後の同じ項目はまとめる。同じ内側端点への異なる公開設定、同じホスト端点への異なる転送先は設定エラーにする。端点はprotocol・family・portで比較する。host/noneでは形式と設定内競合だけ検査し、実際のポート確保や依存探索はしない。
+公開リストは段の間で連結し、空配列で下位を消さない。正規化後の同じ項目はまとめる。同じ内側端点への異なる公開設定、同じホスト端点への異なる転送先は設定エラーにする。端点はprotocol・family・portで比較する。host/noneでは形式と設定内競合だけ検査し、実際のポート確保や依存探索はしない。
+
+### REQ-421: 固定公開のホスト側の待受アドレス
+
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+- verification: unit
+
+固定公開のホスト側は、host-familyがipv4なら127.0.0.1だけ、ipv6なら::1だけで待ち受ける。ホストの他のアドレスや全アドレスでは待ち受けない。
+
+### REQ-422: 固定公開の一部だけの成功と終了時の回収
+
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+- verification: unit
+
+複数の固定公開のうち一部だけを確保できた状態ではアプリを起動せず、確保済みの公開も回収する。隔離環境の終了時は、主コマンドの終了ではREQ-061、SIGTERMによる終了要求ではREQ-101の終了処理の中で公開を止め、ホスト側で確保した番号を回収する。
+
+### REQ-423: 固定公開でアプリの標準出力を書き換えない
+
+- kind: prohibition
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73
+- verification: unit
+
+固定公開を使う場合も、アプリの標準出力を書き換えない。公開の接続先の通知はREQ-068に従って標準エラーに出す。
+
+### REQ-424: pastaのUDPの送信元ポートの制約を公開文書に載せる
+
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A7
+- verification: review
+- how_to_verify: "docs/security.md" の filtered の制約を並べた箇所を読み、pasta がUDPの流れごとにホスト側でアプリの送信元ポートと同じ番号を使うこと、その番号がホストで使用中なら流れを作れずデータグラムが通知なく捨てられること、アプリからはタイムアウトに見えることの3点が書かれているかを確かめる。
+
+"docs/security.md" のfilteredの制約に、pastaの次の振る舞いを載せる。pastaはUDPの流れごとに、ホスト側のソケットへアプリ側の送信元ポートと同じ番号を使う。その番号がホストの別のソケットで使用中の場合、pastaはその流れを作れず、同じ送信元からのデータグラムを捨て続ける。アプリからは応答の無いタイムアウトに見え、kakoiは通知しない。
 
 ## Examples
 
@@ -101,8 +134,8 @@ Scenario: 初版でboth指定を拒否する
   Then 設定エラーにする
 
 @id=EX-729 @about=REQ-395 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#D11,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A161
-Scenario: レイヤをまたぐ同じホスト端点への異なる転送先を拒否する
-  Given 二つのレイヤに同じホスト端点への異なる転送先が指定されている
+Scenario: 段をまたぐ同じホスト端点への異なる転送先を拒否する
+  Given 二つの段に同じホスト端点への異なる転送先が指定されている
   When 公開設定を連結して検査する
   Then 設定エラーにする
 
@@ -111,4 +144,53 @@ Scenario: hostモードでは固定公開用ポートを確保しない
   Given hostモードで形式が有効かつ設定内競合のない固定公開指定が残っている
   When 設定を検査する
   Then 公開用ポートの確保もpasta依存探索も行わない
+
+@id=EX-808 @about=REQ-421 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+Scenario: IPv4の固定公開はホストの127.0.0.1だけで待ち受ける
+  Given host-family=ipv4でTCPのhost-port=8080の固定公開を指定している
+  When 隔離環境を起動する
+  Then ホストの127.0.0.1のTCP8080番で待ち受ける
+
+@id=EX-809 @about=REQ-421 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+Scenario: 固定公開をホストのループバック以外のアドレスで待ち受けない
+  Given host-family=ipv4でTCPのhost-port=8080の固定公開を指定し、ホストはLAN側のアドレスも持つ
+  When 隔離環境を起動する
+  Then ホストのLAN側のアドレスのTCP8080番へは接続できない
+
+@id=EX-810 @about=REQ-422 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+Scenario: 一部の固定公開だけが確保できたらアプリを起動しない
+  Given TCPのhost-port=8080と8081の固定公開を指定し、ホストの8081番は別のプロセスが使っている
+  When 固定公開を準備する
+  Then アプリを起動せず起動エラーにする
+  And ホストの8080番を待受のまま残さない
+
+@id=EX-811 @about=REQ-422 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+Scenario: 終了後にホスト側の公開の番号を残さない
+  Given TCPのhost-port=8080の固定公開で隔離環境が動いている
+  When 主コマンドが終了してkakoiが終わる
+  Then ホストの127.0.0.1のTCP8080番は待受のまま残らない
+
+@id=EX-812 @about=REQ-423 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
+Scenario: 固定公開があってもアプリの標準出力をそのまま渡す
+  Given 固定公開を指定しアプリが標準出力に "hello" を書く
+  When 隔離環境でアプリを実行する
+  Then kakoiの標準出力は "hello" だけである
+
+@id=EX-813 @about=REQ-423 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73
+Scenario: 公開の接続先の通知を標準出力に混ぜない
+  Given 固定公開を指定しアプリの標準出力を別のコマンドへ渡している
+  When 公開の接続先を通知する
+  Then その通知を標準出力には出さない
+
+@id=EX-814 @about=REQ-424 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A7
+Scenario: UDPの送信元ポートの制約を公開文書で読める
+  Given 利用者が "docs/security.md" でfilteredの制約を調べる
+  When UDPの通信が応答なく失敗する理由を探す
+  Then pastaがアプリの送信元ポートと同じ番号をホスト側で使う制約を読める
+
+@id=EX-815 @about=REQ-424 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A7
+Scenario: UDPの送信元ポートの制約が公開文書に無いことは契約違反である
+  Given "docs/security.md" のfilteredの制約を読む
+  When 契約への適合を確認する
+  Then pastaのUDPの送信元ポートの制約が載っていないことは契約違反である
 ```

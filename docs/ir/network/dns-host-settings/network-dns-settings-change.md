@@ -1,6 +1,6 @@
 # 実行中のホストDNS設定変更
 
-ホストのDNS設定への追従を定義する草案。変更検知の機構と遅延は未決。変更後の設定取得失敗はnetwork-dns-settings-failure.mdで定義する。
+ホストのDNS設定への追従を定義する草案。変更を内容で判定することはREQ-418で定める。検知の仕組みと遅延は未決。変更後の設定取得失敗はnetwork-dns-settings-failure.mdで定義する。
 
 ## Requirements
 
@@ -27,6 +27,22 @@
 - verification: unit
 
 ホストDNS設定変更の検知後に届く旧設定の問い合わせ応答は採用せず、新設定で問い合わせ直す。旧応答をアプリへ返さず、キャッシュやIP許可の追加・更新にも使わない。問い合わせ直す場合も元の解決処理の時間・作業量上限を引き継ぎ、設定変更が続いても無制限には延長しない。
+
+### REQ-418: 名前解決設定の内容の変化を変更として検出する
+
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+- verification: unit
+
+ホストDNSを使う場合、kakoiはホストの名前解決設定の内容の変化を設定の変更として検出する。内容が変わらない書き直しは変更として扱わない。
+
+### REQ-419: 問い合わせ先が同じでも変更後は別の解決条件とする
+
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+- verification: unit
+
+ホストの名前解決設定の変更を検出した後は、問い合わせ先のIPと通信方式が変更前と同じでも、別の解決条件として扱う。変更前に始めた未完了の問い合わせはREQ-109に従って新しい設定でやり直し、変更前に保存した応答はREQ-108に従って破棄する。
 
 ## Examples
 
@@ -78,4 +94,28 @@ Scenario: 問い合わせ直しても解決処理の上限を数え直さない
   When 設定変更により新設定で問い合わせ直す
   Then 元の処理の期限と残り作業量を引き継ぐ
   And 再び設定が変わっても上限をリセットしない
+
+@id=EX-798 @about=REQ-418 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+Scenario: 名前解決設定の内容が変わったら変更として扱う
+  Given ホストDNSを使い名前解決設定の "nameserver" は 192.0.2.53 である
+  When 名前解決設定の "nameserver" を 192.0.2.54 に書き換える
+  Then 変更を検出し以後に始める上流への問い合わせは 192.0.2.54 へ送る
+
+@id=EX-799 @about=REQ-418 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+Scenario: 内容が同じ書き直しを変更として扱わない
+  Given ホストDNSを使い kakoi-net が保存した期限内の応答がある
+  When 名前解決設定を同じ内容のまま書き直す
+  Then 変更として扱わず保存した応答を破棄しない
+
+@id=EX-800 @about=REQ-419 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+Scenario: 問い合わせ先が同じ変更でも未完了の問い合わせをやり直す
+  Given ホストDNSで 192.0.2.53 へ通常DNSで送った問い合わせが未完了である
+  When 名前解決設定の "nameserver" を 192.0.2.53 のまま他の行を書き換える
+  Then 変更前の問い合わせの応答を採用せず新しい設定で問い合わせ直す
+
+@id=EX-801 @about=REQ-419 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+Scenario: 問い合わせ先が同じ変更でも保存した応答を使わない
+  Given kakoi-net が 192.0.2.53 から得た期限内の応答を保存している
+  When 名前解決設定の "nameserver" を 192.0.2.53 のまま他の行を書き換えた後にその名前を解決する
+  Then 保存した応答を使わず新しい設定で問い合わせる
 ```

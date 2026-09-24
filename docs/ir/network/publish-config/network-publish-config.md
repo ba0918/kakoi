@@ -24,13 +24,13 @@
 
 同じ待受に一致する公開設定が複数ある場合、ホスト側の許可範囲と "host-family" が同じなら重複をまとめる。異なれば起動前の設定エラーにする。同じ待受を設定ごとに複数箇所へ公開しない。
 
-### REQ-081: 公開リストのレイヤ間連結
+### REQ-081: 公開リストを段の間で連結
 
 - kind: ubiquitous
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A86
 - verification: unit
 
-"network.publish" はレイヤ間で連結し、上の段が追加する。空配列でも下の段の公開設定は消さない。合成後に公開設定の重複・競合を判定する。公開を減らしたい場合は別のプロファイルを使う。
+"network.publish" は段の間で連結し、上の段が追加する。空配列でも下の段の公開設定は消さない。合成後に公開設定の重複・競合を判定する。公開を減らしたい場合は別のプロファイルを使う。
 
 ## Examples
 
@@ -97,8 +97,8 @@ Scenario: 空配列で下の段の公開を消さない
   When 設定を合成する
   Then 下の段の公開設定を維持する
 
-@id=EX-164 @about=REQ-081 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A86
-Scenario: レイヤをまたぐ競合も起動前に拒否する
+@id=EX-164 @about=REQ-081 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A86,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A85
+Scenario: 段をまたぐ競合も起動前に拒否する
   Given 下の段でTCP8000番の公開先をホスト18000番に指定している
   And 上の段で同じTCP8000番の公開先をホスト19000番に指定している
   When 設定を合成して検査する

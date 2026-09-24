@@ -10,7 +10,7 @@
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A123
 - verification: unit
 
-CNAME参照は既定16段とし、"network.dns-max-cname-hops" で1〜128の整数に変更できる。0・無制限・小数は認めない。上位指定優先・省略時継承とし、どの段にも指定がなければ16段とする。
+CNAME参照は既定16段とし、"network.dns-max-cname-hops" で1〜128の整数に変更できる。0・無制限・小数は認めない。上の段の指定を優先し、省略時は下の段の値を使い、どの段にも指定がなければ16段とする。
 
 ### REQ-120: 参照上限の超過と循環で解決を失敗させる
 

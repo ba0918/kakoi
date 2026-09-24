@@ -15,10 +15,10 @@ CNAMEの参照と、許可できるIP・できないIPが混在するDNS応答�
 ### REQ-020: 混在した応答の選別
 
 - kind: event_driven
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A23, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A24
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A23, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A24, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A5
 - verification: unit
 
-DNS応答に許可できるIPと許可できないIPが混在する場合、許可できるIPだけをアプリに返して通す。別途明示許可していない内部IPは除外する。ただし署名付きの混在応答は加工せずアプリに返し、通信段階で禁止IPを拒否する。
+DNS応答に許可できるIPと許可できないIPが混在する場合、許可できるIPだけをアプリに返して通す。別途明示許可していない内部IPは除外する。ただし署名付きの混在応答は加工せずアプリに返し、通信段階で禁止IPを拒否する。ここでの署名付きは、メッセージ署名（TSIG）付きの応答と、DNSSECの署名（RRSIG）を含む応答の両方を指す。
 
 ### REQ-021: 応答の全IPが禁止の場合の拒否
 
@@ -67,4 +67,16 @@ Scenario: 署名付きでも全IPが禁止なら名前解決を拒否する
   Given 署名付きDNS応答で返されたIPがすべて明示許可のない内部IPである
   When 応答を検査する
   Then 応答全体を拒否して名前解決を失敗させる
+
+@id=EX-806 @about=REQ-020 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A5
+Scenario: DNSSECの署名を含む混在応答は加工しない
+  Given TSIGのメッセージ署名は無くRRSIGを含むDNS応答に許可できる公開IPと明示許可のない内部IPが混在している
+  When 応答を検査する
+  Then 応答を加工せずアプリに返す
+
+@id=EX-807 @about=REQ-020 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A5
+Scenario: メッセージ署名付きの混在応答は加工しない
+  Given TSIGのメッセージ署名付きDNS応答に許可できる公開IPと明示許可のない内部IPが混在している
+  When 応答を検査する
+  Then 応答を加工せずアプリに返す
 ```

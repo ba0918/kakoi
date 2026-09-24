@@ -48,10 +48,13 @@ kakoi経由の経路だけ/tmp/kakoiがなければ作る。その名前がリ�
 
 ### REQ-372: フラグと引数の写し
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2
 - verification: review
+- how_to_verify: examples/shim/codexの引数を走査する部分とヘッダーを読み、下の規則と一致することを確かめる。REQ-373の代役の手順で "codex -m --cd /etc exec" を起動し、kakoiの代役が "--workspace /etc" を受け取ることを観測する。
 
 追加フラグはグローバルオプション位置である引数列の先頭へ置く。フラグなし一覧に一致してもkakoiは経由する。引数はツール節の対応に従い次の語・イコール結合・短縮結合の文法でworkspace/rwへ写し、--以後は走査しない。不在の写し先を雛形で検査しない。位置引数と空白区切り複数値の先頭以外は写さない。
+
+雛形は包む対象の他のオプションが値を取るかを知らないので、写す対象のオプションと同じ名前の語を、他のオプションの値や位置引数の位置を含めてどこにあってもそのオプションとして読み、その値を写す。このため "--workspace" や "--rw" が利用者の意図より広がりうる（"codex -m --cd /etc exec" ではkakoiに "--workspace /etc" が渡る）。これは受け入れた性質である。
 
 ### REQ-373: シムの人による検証
 - kind: ubiquitous
@@ -59,6 +62,22 @@ kakoi経由の経路だけ/tmp/kakoiがなければ作る。その名前がリ�
 - verification: review
 
 雛形は第15節の自動テスト対象にせず、人がPATH上の2ディレクトリと引数表示の代役で確認する。先頭がサブコマンド・オプション・help、引数写し、一覧の先頭一致、空フラグ、OFFの素通しを観測する。同梱フラグの実対象への効果を保守側が確認し、各許可項目でモデルが動かないことは利用者が確認する。手順と確認者を"docs/shim.md"へ載せる。
+
+### REQ-407: シムの詳細文書の掲載項目
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A17
+- verification: review
+- how_to_verify: "docs/shim.md" を読み、本文に挙げた5つの項目がそれぞれ載っていることを確かめる。
+
+"docs/shim.md" には、雛形を写してツール節を埋める手順、同梱のツール節の値がcodexの例であること、REQ-369の壊れ方に応じた表、素通し許可リストに最初に入りそうな例、保守側と利用者のそれぞれが確かめる条件を載せる。
+
+### REQ-408: READMEのシムの節
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A17
+- verification: review
+- how_to_verify: READMEのシムの節を読み、雛形を写す最短の手順、KAKOI_SHIM_OFF=1の存在、"docs/shim.md" へのリンクがあることを確かめる。
+
+READMEのシムの節には、雛形を写す最短の手順、KAKOI_SHIM_OFF=1の存在、"docs/shim.md" への導線を載せる。
 
 ## Examples
 
@@ -161,5 +180,41 @@ Scenario: シムの人による検証・反例
   Given 雛形の一般経路を代役で確認する
   When 契約への適合を確認する
   Then 代役の成功だけで実対象へのフラグ効果も確認済みにすることは契約違反である
+
+@id=EX-767 @about=REQ-372 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2
+Scenario: 同じ名前の語の読み取り・成功
+  Given 写す対象に--cdがあり、利用者が-mの値の位置に--cdを置いて-m --cd /etc execと起動する
+  When 契約への適合を確認する
+  Then --cdをオプションとして読みkakoiに--workspace /etcを渡す
+
+@id=EX-768 @about=REQ-372 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2
+Scenario: 同じ名前の語の読み取り・反例
+  Given 写す対象に--cdがあり、利用者が-mの値の位置に--cdを置いて-m --cd /etc execと起動する
+  When 契約への適合を確認する
+  Then 写しの取りこぼしも誤読も隔離が緩む向きに働かないと説明することは契約違反である
+
+@id=EX-769 @about=REQ-407 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A17
+Scenario: シムの詳細文書の掲載項目・成功
+  Given codex以外のコマンドを包みたい利用者が詳細文書を読む
+  When 契約への適合を確認する
+  Then ツール節を埋める手順と同梱の値がcodexの例であることが分かる
+
+@id=EX-770 @about=REQ-407 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A17
+Scenario: シムの詳細文書の掲載項目・反例
+  Given codex以外のコマンドを包みたい利用者が詳細文書を読む
+  When 契約への適合を確認する
+  Then 壊れ方に応じた表を雛形のヘッダーにだけ置き詳細文書に載せないことは契約違反である
+
+@id=EX-771 @about=REQ-408 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A17
+Scenario: READMEのシムの節・成功
+  Given ビルド環境を持つ利用者がREADMEのシムの節を読む
+  When 契約への適合を確認する
+  Then 雛形を写す最短の手順とKAKOI_SHIM_OFF=1を知り、"docs/shim.md" へ移れる
+
+@id=EX-772 @about=REQ-408 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A17
+Scenario: READMEのシムの節・反例
+  Given READMEのシムの節から詳細文書へリンクしている
+  When 契約への適合を確認する
+  Then READMEのシムの節にKAKOI_SHIM_OFF=1を載せないことは契約違反である
 
 ```
