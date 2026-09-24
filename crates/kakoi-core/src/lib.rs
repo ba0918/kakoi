@@ -1,7 +1,7 @@
 //! `kakoi-core`: everything of `kakoi` that is not the command line. The policy files and
 //! their merge, the mount and seccomp plan, and the `bwrap` command line assembled from
 //! it, usable from Rust without going through the CLI. The specification is
-//! `docs/spec/kakoi.md` of the repository.
+//! `docs/ir/` of the repository, read through `docs/guide/`.
 //!
 //! Nothing here interprets arguments, reads the process's environment or current
 //! directory, writes to standard output or standard error, or executes anything: those
