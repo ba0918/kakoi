@@ -53,7 +53,7 @@
 
 `network.allow`、`network.publish`、`network.dns-upstream` の各項目の中のキーと、`network` と `process` のキーを書いたときに `network.mode` の明示が要る条件は、それぞれの詳細の章が定める。
 
-`env.mode` と `network.mode` を省略したときの値は、このガイドが根拠とする仕様（IR）には書かれていない（旧仕様の定めは[旧仕様にだけあった規則](../appendix/open-issues.md#省略時のモードの既定値)）。
+`env.mode` と `network.mode` の「表の下を参照」は、どの段も書かなかったときの値が合成の後に決まることを表す（[モードを省略したときの値](#モードを省略したときの値)）。
 同梱プロファイルは両方を明示している（`env.mode = "inherit"`、`network.mode = "host"`）。
 
 ## ファイルの形式
@@ -300,6 +300,33 @@ set = { EDITOR = "nano" }
 ```
 
 合成後は `mounts.rw` が `~/.cache` と `~/.npm` の 2 つ、`env.set` が `EDITOR = "nano"` と `LANG = "C.UTF-8"`、`PATH` の先頭は `~/project-tools/bin`、`~/bin` の順になる（パスは展開後の実体）。
+
+## モードを省略したときの値
+<!-- @kotowari[REQ-399:a12cc88f, EX-750:79097c75, EX-751:03954215, EX-752:557080d6] -->
+
+`network.mode` と `env.mode` は、段を合成した後に、どの段も書いていなければ次の値になる。
+ある段が書いていれば、合成の規則（上の段が上書きする）で決まった値を使う。
+
+| キー | どの段も書いていないときの値 |
+|---|---|
+| `network.mode` | `"host"` |
+| `env.mode` | `"inherit"` |
+
+`network.mode` には例外が 1 つある。
+`filtered` とともに加えたネットワークのキー（`network.allow`、`network.publish`、補助のキー）をどれかの段が書いたときは、既定値の `"host"` を補わない。
+その場合にどの段にも `network.mode` が無ければ、種類 `policy` の診断で終わる（終了コード 125）。
+キーの範囲とモードを明示する条件は[モード](network/01-modes.md)が定める。
+
+```toml
+# どの段も network.mode を書いていない
+[network]
+publish = []
+```
+
+この段だけでは `host` にならず、種類 `policy` の診断で終わる。
+
+`env.mode` の既定値の `"inherit"` も、[合成した後の検査](#合成した後の検査)の対象になる。
+どの段も `env.mode` を書かずに `env.pass = ["HOME"]` を書くと、合成後の `env.mode` が `inherit` なので、種類 `policy` の診断で終わる。
 
 ## ワイルドカード
 <!-- @kotowari[REQ-155:c0592024, EX-358:bd9f2df1] -->
