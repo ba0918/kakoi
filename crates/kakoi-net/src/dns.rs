@@ -14,7 +14,7 @@ mod requests;
 mod resolve;
 mod screen;
 pub use chain::{AddressCandidate, AddressChain, AddressProgress};
-pub use engine::{EnforcedDnsError, ExplicitResolver};
+pub use engine::{EnforcedDnsError, UpstreamResolver};
 pub use gate::DnsGate;
 pub use pool::{Admission, CapacityError, ResolutionId, ResolutionKey, ResolutionPool};
 pub use prepared::PreparedAnswer;

@@ -14,7 +14,7 @@ use std::{collections::BTreeMap, io, net::IpAddr, time::Instant};
 /// Synchronous resolution worker for one immutable snapshot of upstreams, written
 /// in the policy or read from the host's DNS configuration. The environment
 /// controller owns concurrency, settings generations and caches.
-pub struct ExplicitResolver {
+pub struct UpstreamResolver {
     gate: DnsGate,
     upstreams: Vec<DnsUpstream>,
     limits: NetworkLimits,
@@ -30,7 +30,7 @@ pub enum EnforcedDnsError {
     Enforcement(io::Error),
 }
 
-impl ExplicitResolver {
+impl UpstreamResolver {
     pub fn resolve_enforced(
         &self,
         wire: &[u8],

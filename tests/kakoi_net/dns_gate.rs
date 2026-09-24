@@ -175,7 +175,7 @@ fn resolution_keys_share_case_and_client_ids_but_separate_dns_conditions() {
 #[test]
 fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
     use kakoi_core::{network::NetworkLimits, policy::parse_policy};
-    use kakoi_net::{dns::ExplicitResolver, scope::AddressContext};
+    use kakoi_net::{dns::UpstreamResolver, scope::AddressContext};
     use std::{
         net::UdpSocket,
         thread,
@@ -217,7 +217,7 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
             std::path::Path::new("upstream.toml"),
         )
         .unwrap();
-        let resolver = ExplicitResolver::new(
+        let resolver = UpstreamResolver::new(
             vec![rule("api.example.com")],
             policy.network.dns_upstream,
             NetworkLimits {
@@ -386,7 +386,7 @@ fn shared_resolution_rejects_wrong_or_late_answers_and_keeps_dns_conditions_sepa
 fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
     use kakoi_core::{network::NetworkLimits, policy::parse_policy};
     use kakoi_net::{
-        dns::{AcceptedRequest, DnsRequests, ExplicitResolver},
+        dns::{AcceptedRequest, DnsRequests, UpstreamResolver},
         scope::AddressContext,
     };
     use std::{
@@ -406,7 +406,7 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
             std::path::Path::new("upstream.toml"),
         )
         .unwrap();
-        ExplicitResolver::new(
+        UpstreamResolver::new(
             vec![rule("api.example.com")],
             policy.network.dns_upstream,
             NetworkLimits::default(),

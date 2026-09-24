@@ -312,7 +312,7 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
     sample(false, "198.18.0.3", "fd00:1::3"); // Referencing an expired set must never reinsert its elements.
 
     use kakoi_core::{network::NetworkLimits, policy::parse_policy};
-    use kakoi_net::{dns::ExplicitResolver, scope::AddressContext};
+    use kakoi_net::{dns::UpstreamResolver, scope::AddressContext};
     use std::net::UdpSocket;
     sample(false, "1.1.1.1", "2606:4700:4700::1111");
     let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -350,7 +350,7 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
         Path::new("dns.toml"),
     )
     .unwrap();
-    let resolver = ExplicitResolver::new(
+    let resolver = UpstreamResolver::new(
         rules,
         config.network.dns_upstream,
         NetworkLimits::default(),
@@ -543,7 +543,7 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
         policy::parse_policy,
     };
     use kakoi_net::{
-        dns::{EnforcedDnsError, ExplicitResolver},
+        dns::{EnforcedDnsError, UpstreamResolver},
         dynamic::DynamicPermissions,
         leases::ActiveGrant,
         scope::AddressContext,
@@ -578,7 +578,7 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
         dns_server_timeout_seconds: 1,
         ..NetworkLimits::default()
     };
-    let resolver = ExplicitResolver::new(rules, config.network.dns_upstream, limits, None).unwrap();
+    let resolver = UpstreamResolver::new(rules, config.network.dns_upstream, limits, None).unwrap();
     let mut question = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
     question.extend(b"\x03api\x07example\x03com\0\0\x01\0\x01");
     assert!(matches!(
@@ -605,7 +605,7 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
         policy::parse_policy,
     };
     use kakoi_net::{
-        dns::{AcceptedRequest, DnsRequests, EnforcedDnsError, ExplicitResolver},
+        dns::{AcceptedRequest, DnsRequests, EnforcedDnsError, UpstreamResolver},
         dns_workers::{DnsWorkers, WorkResult},
         dynamic::DynamicPermissions,
         scope::AddressContext,
@@ -656,7 +656,7 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
             answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
             socket.send_to(&answer, peer).unwrap();
         });
-        let resolver = ExplicitResolver::new(
+        let resolver = UpstreamResolver::new(
             rules.clone(),
             config.network.dns_upstream,
             NetworkLimits::default(),

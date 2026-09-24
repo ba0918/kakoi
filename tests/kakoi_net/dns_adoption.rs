@@ -4,8 +4,8 @@ use kakoi_core::{
 };
 use kakoi_net::{
     dns::{
-        AcceptedRequest, DnsRequests, EnforcedDnsError, ExplicitResolver, PreparedAnswer,
-        ResolutionId,
+        AcceptedRequest, DnsRequests, EnforcedDnsError, PreparedAnswer, ResolutionId,
+        UpstreamResolver,
     },
     dns_adoption::DnsAdoption,
     filter,
@@ -49,7 +49,7 @@ fn candidate(requests: &mut DnsRequests<()>, name: u8) -> (ResolutionId, Prepare
         answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
         socket.send_to(&answer, peer).unwrap();
     });
-    let resolver = ExplicitResolver::new(
+    let resolver = UpstreamResolver::new(
         rules(),
         config.network.dns_upstream,
         NetworkLimits::default(),

@@ -3,7 +3,7 @@
 //! any error here, and before stopping or replacing this runtime.
 use crate::{
     dns::{
-        DnsError, DnsRequests, EnforcedDnsError, ExplicitResolver, PreparedAnswer, ResolutionId,
+        DnsError, DnsRequests, EnforcedDnsError, PreparedAnswer, ResolutionId, UpstreamResolver,
     },
     dns_adoption::DnsAdoption,
     dns_front::DnsFront,
@@ -63,7 +63,7 @@ struct Following {
 
 pub struct DnsRuntime {
     service: DnsService,
-    resolver: Arc<ExplicitResolver>,
+    resolver: Arc<UpstreamResolver>,
     policy: Vec<Allow>,
     limits: NetworkLimits,
     trust: Option<TlsClient>,
@@ -113,7 +113,7 @@ impl DnsRuntime {
                 (source.wait)(&config.upstreams)
             });
         let resolver = Arc::new(
-            ExplicitResolver::new(
+            UpstreamResolver::new(
                 config.policy.clone(),
                 config.upstreams,
                 config.limits.clone(),
@@ -178,7 +178,7 @@ impl DnsRuntime {
         following.text = text;
         let wait = (following.source.wait)(&upstreams);
         self.resolver = Arc::new(
-            ExplicitResolver::new(
+            UpstreamResolver::new(
                 self.policy.clone(),
                 upstreams,
                 self.limits.clone(),
