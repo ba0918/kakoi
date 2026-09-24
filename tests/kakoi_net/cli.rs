@@ -639,6 +639,34 @@ fn filtered_refuses_a_host_interface_destination_as_a_policy_error() {
     }
 }
 
+// An upstream error in one file is found while the file is read, and a mix of
+// transports only once the layers are merged: both are policy errors, and
+// nothing starts.
+// @kotowari[REQ-426, EX-818, EX-819]
+#[test]
+fn upstream_errors_found_while_reading_or_merging_are_policy_errors() {
+    let written = Filtered::new("tls-name = 'resolver.example.com'\n");
+    let output = written
+        .with_pasta(&["/bin/sh", "-c", "echo ran"])
+        .output()
+        .unwrap();
+    assert_diagnostic(&output, 125, "policy");
+
+    let merged = Filtered::new("");
+    let upper = merged.home.write(
+        "upper.toml",
+        "[[network.dns-upstream]]\ntransport = 'tls'\nip = '192.0.2.53'\nport = 853\ntls-name = 'resolver.example.com'\n",
+    );
+    let output = merged
+        .with_pasta_and_options(
+            &["--policy-file", upper.to_str().unwrap()],
+            &["/bin/sh", "-c", "echo ran"],
+        )
+        .output()
+        .unwrap();
+    assert_diagnostic(&output, 125, "policy");
+}
+
 // Unused settings are not looked into: an interface that does not exist is
 // not checked in host mode, and a name is not asked about in none mode.
 // @kotowari[EX-173, EX-174, EX-823]
