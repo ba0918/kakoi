@@ -248,9 +248,12 @@ command(process, 'fill stderr')
 # Only guards against a hang.
 deadline = time.monotonic() + PERMITTED
 queued = array.array('i', [0])
+# Under many open pipes the kernel gives new ones a single page, so the
+# pipe's own size says when it is full.
+capacity = fcntl.fcntl(process.stderr.fileno(), fcntl.F_GETPIPE_SZ)
 while True:
     fcntl.ioctl(process.stderr.fileno(), termios.FIONREAD, queued)
-    if queued[0] >= 60000:
+    if queued[0] >= capacity - 1024:
         break
     assert time.monotonic() < deadline, 'the pipe did not fill'
     time.sleep(.05)
