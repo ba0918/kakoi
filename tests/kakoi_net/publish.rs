@@ -113,7 +113,7 @@ def notices(process, count):
     return ''.join(sorted(found))
 "#;
 
-// @kotowari[REQ-393, EX-725]
+// @kotowari[REQ-393, EX-725, REQ-421, EX-808, EX-809, REQ-422, EX-811]
 #[test]
 fn fixed_publish_lifetime() {
     let host = FakeHost::new(&format!("{TCP_V4}{UDP_V6}"), &[]);
@@ -175,7 +175,7 @@ fn fixed_publish_conflict_prevents_launch() {
     assert_eq!(output, "exit 125 ran False\nnamed True\n", "{output}");
 }
 
-// @kotowari[EX-726]
+// @kotowari[EX-726, REQ-422, EX-810]
 #[test]
 fn fixed_publish_partial_failure_prevents_launch() {
     let host = FakeHost::new(&format!("{TCP_V4}{UDP_V6}"), &[]);
@@ -186,6 +186,25 @@ fn fixed_publish_partial_failure_prevents_launch() {
         output, "exit 125 ran False\nnamed True\nother free\n",
         "{output}"
     );
+}
+
+// Standard output is a pipe to another program: it carries the
+// application's output alone, and the publication is told on standard error.
+// @kotowari[REQ-423, EX-812, EX-813]
+#[test]
+fn a_publication_leaves_the_applications_standard_output_as_it_is() {
+    let host = FakeHost::new(TCP_V4, &[]);
+    let output = host.run(
+        r#"
+process = kakoi("print('hello')")
+out = process.stdout.read().decode()
+code = process.wait(timeout=60)
+err = process.stderr.read().decode()
+sys.stderr.write(err)
+print(code, repr(out), 'kakoi: network published: tcp 127.0.0.1:18000' in err)
+"#,
+    );
+    assert_eq!(output, "0 'hello\\n' True\n", "{output}");
 }
 
 // The second environment also starts while the first one's TCP connections

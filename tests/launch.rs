@@ -392,7 +392,30 @@ fn the_isolated_process_inherits_the_raised_soft_limit() {
     assert_ne!(lines[0], "1024", "{}", output_report(&output));
 }
 
-// @kotowari[REQ-264]
+// A `bwrap` that passes the lookup on PATH but cannot be executed fails while kakoi is
+// still running, so kakoi reports it.
+// @kotowari[REQ-401, EX-755]
+#[test]
+fn a_bwrap_that_cannot_be_executed_is_a_bwrap_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    let tools = home.path().join("tools");
+    home.write_executable("tools/bwrap", "#!/nonexistent/interpreter\n");
+    let mut paths = vec![tools];
+    paths.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+
+    let output = binary(home.path())
+        .env("PATH", std::env::join_paths(paths).unwrap())
+        .current_dir(&workspace)
+        .args(["--", "/bin/true"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "bwrap");
+}
+
+// @kotowari[REQ-264, REQ-401, EX-756]
 #[test]
 fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
@@ -1191,7 +1214,7 @@ fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
-// @kotowari[REQ-167]
+// @kotowari[REQ-167, REQ-404, EX-762]
 #[test]
 fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_path_diagnostic() {
     // A FIFO has no content to copy. The run stops rather than standing an empty regular
@@ -1213,7 +1236,7 @@ fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_p
     assert!(diagnostic.contains("not a regular file"), "{diagnostic}");
 }
 
-// @kotowari[REQ-168]
+// @kotowari[REQ-168, REQ-404, EX-761]
 #[test]
 fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is

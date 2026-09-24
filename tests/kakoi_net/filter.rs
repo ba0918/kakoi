@@ -788,7 +788,149 @@ fn api_rule() -> Vec<kakoi_core::network::Allow> {
     }]
 }
 
-// @kotowari[REQ-014]
+/// One staging of DNS permissions that ran out its reserve: the time left to
+/// the permission's expiry when it began, and how long it was given before
+/// it was discarded.
+struct LateStaging {
+    left: Duration,
+    reserve: Duration,
+}
+
+/// Installs one permission expiring `left` from now through an nft that never
+/// finishes a staging, so that every staging runs out its reserve and is
+/// discarded. Returns each staging, in order, and how the install ended.
+fn late_stagings(left: Duration) -> (Vec<LateStaging>, std::io::ErrorKind) {
+    use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    use std::time::SystemTime;
+    let namespace = dns_owner_namespace();
+    let temp = crate::common::TempDir::new();
+    let log = temp.path().join("log");
+    let wrapper = temp.path().join("nft");
+    crate::common::write_executable(
+        &wrapper,
+        format!(
+            r#"#!/bin/sh
+if [ "$1" = "-f" ]; then
+    now=$(/bin/date +%s%N)
+    input='{directory}/input.'$$
+    /bin/cat > "$input"
+    if /bin/grep -q '^add element' "$input"; then
+        echo "stage $now" >> '{log}'
+        exec /bin/sleep 60
+    fi
+    if /bin/grep -q '^delete set' "$input"; then
+        echo "discard $now" >> '{log}'
+    fi
+    exec /usr/sbin/nft "$@" < "$input"
+fi
+exec /usr/sbin/nft "$@"
+"#,
+            directory = temp.path().display(),
+            log = log.display(),
+        ),
+    );
+    let mut owner = DynamicPermissions::new(&namespace, &wrapper, api_rule());
+    let expiry = SystemTime::now() + left;
+    let error = owner
+        .install(&[ActiveGrant {
+            rule: 0,
+            address: "1.1.1.1".parse().unwrap(),
+            deadline: Instant::now() + left,
+        }])
+        .unwrap_err();
+    assert!(!owner.requires_reconciliation());
+    let events: Vec<(String, SystemTime)> = std::fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let (kind, nanos) = line.split_once(' ').unwrap();
+            (
+                kind.to_owned(),
+                SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos.parse().unwrap()),
+            )
+        })
+        .collect();
+    let stagings = events
+        .chunks(2)
+        .map(|pair| {
+            assert_eq!(
+                [pair[0].0.as_str(), pair[1].0.as_str()],
+                ["stage", "discard"]
+            );
+            LateStaging {
+                left: expiry.duration_since(pair[0].1).unwrap(),
+                reserve: pair[1].1.duration_since(pair[0].1).unwrap(),
+            }
+        })
+        .collect();
+    (stagings, error.kind())
+}
+
+// While half the time left allows, each late staging is tried again with
+// twice the reserve. A measured reserve also carries the cost of starting
+// and discarding nft, so the doubling is judged on how much each reserve grew
+// over the one before it: a growth is a difference of two measurements, the
+// cost drops out of it, and each growth is twice the one before. Only runs
+// whose first reserve is already long enough for its growth to stand above
+// the jitter of that cost are compared, and they are picked by that reserve
+// alone: picking them by the growth itself would keep just the short growths
+// that the jitter inflated, and pull their ratios below two.
+// @kotowari[REQ-420, EX-804]
+#[test]
+fn a_late_staging_is_tried_again_with_twice_the_reserve() {
+    let (stagings, error) = late_stagings(Duration::from_secs(10));
+    assert_eq!(error, std::io::ErrorKind::TimedOut);
+    let compared: Vec<f64> = stagings
+        .windows(3)
+        .filter(|run| {
+            run[0].reserve >= Duration::from_millis(150)
+                && run[0].reserve * 2 <= run[1].left / 2
+                && run[1].reserve * 2 <= run[2].left / 2
+        })
+        .map(|run| {
+            let earlier = run[1].reserve - run[0].reserve;
+            let later = run[2].reserve.saturating_sub(run[1].reserve);
+            later.as_secs_f64() / earlier.as_secs_f64()
+        })
+        .collect();
+    assert!(compared.len() >= 2, "{compared:?}");
+    assert!(
+        compared.iter().all(|ratio| (1.6..=2.4).contains(ratio)),
+        "{compared:?}"
+    );
+}
+
+// With about 1 second left, a doubled reserve past half the time left is cut
+// to that half; once no longer reserve fits, the install gives up. The cut
+// reserve is judged against the midpoint between half the time left and
+// double the previous reserve; both measured reserves carry the cost of
+// starting nft, so it cancels out of the comparison.
+// @kotowari[REQ-420, EX-805]
+#[test]
+fn a_staging_reserve_never_exceeds_half_the_time_left() {
+    let (stagings, error) = late_stagings(Duration::from_millis(1850));
+    assert_eq!(error, std::io::ErrorKind::TimedOut);
+    let cut: Vec<_> = stagings
+        .windows(2)
+        .filter(|pair| pair[0].reserve * 2 > pair[1].left / 2 + Duration::from_millis(100))
+        .collect();
+    assert!(
+        !cut.is_empty(),
+        "the doubling never reached half the time left"
+    );
+    for pair in cut {
+        let midpoint = (pair[0].reserve * 2 + pair[1].left / 2) / 2;
+        assert!(
+            pair[1].reserve < midpoint,
+            "reserve {:?} after {:?} with {:?} left",
+            pair[1].reserve,
+            pair[0].reserve,
+            pair[1].left
+        );
+    }
+}
+
+// @kotowari[REQ-014, REQ-420]
 #[test]
 fn a_late_nft_widens_the_staging_reserve_instead_of_faulting_the_owner() {
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};

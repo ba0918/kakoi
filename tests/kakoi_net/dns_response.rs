@@ -298,7 +298,7 @@ fn update_transfer_any_and_multiple_questions_are_not_ordinary_read_queries() {
     assert!(Question::parse(&many).is_err());
 }
 
-// @kotowari[REQ-020, REQ-021, REQ-025, EX-032, EX-034, EX-035]
+// @kotowari[REQ-020, REQ-021, REQ-025, EX-032, EX-034, EX-035, EX-806]
 #[test]
 fn mixed_answers_filter_unsigned_data_preserve_signatures_and_refuse_all_denied() {
     let question = Question::parse(&query(1)).unwrap();
@@ -588,7 +588,7 @@ fn answer_ttls(wire: &[u8]) -> Vec<u32> {
         .collect()
 }
 
-// @kotowari[REQ-398, EX-734]
+// @kotowari[REQ-398, EX-734, EX-803]
 #[test]
 fn every_answer_reaches_the_application_with_the_shortest_time_to_live() {
     let question = Question::parse(&query(1)).unwrap();
@@ -625,6 +625,72 @@ fn every_answer_reaches_the_application_with_the_shortest_time_to_live() {
         assert_eq!(ttls.len(), if signed { 3 } else { 2 });
         assert!(ttls.iter().all(|ttl| *ttl <= 30), "{ttls:?}");
     }
+}
+
+/// Appends a message signature (TSIG) as the last additional record. Its MAC
+/// is not a real one: nothing here verifies it.
+fn sign(wire: &mut Vec<u8>) {
+    wire[11] += 1;
+    wire.extend(name("key.example"));
+    wire.extend(250u16.to_be_bytes());
+    wire.extend(255u16.to_be_bytes());
+    wire.extend(0u32.to_be_bytes());
+    let mut data = name("hmac-sha256");
+    data.extend([0, 0, 0x68, 0x00, 0x00, 0x00]);
+    data.extend(300u16.to_be_bytes());
+    data.extend(32u16.to_be_bytes());
+    data.extend([0xab; 32]);
+    data.extend([0x12, 0x34, 0, 0, 0, 0]);
+    wire.extend((data.len() as u16).to_be_bytes());
+    wire.extend(data);
+}
+
+/// Screens `wire`, an answer to an address question, admitting only 1.1.1.1
+/// and 1.1.1.2, and returns what reaches the application.
+fn screened(wire: &[u8]) -> Vec<u8> {
+    let question = Question::parse(&query(1)).unwrap();
+    let response = question.validate_response(wire).unwrap();
+    let AddressProgress::Complete(candidates) = question
+        .address_chain(16)
+        .unwrap()
+        .consume(&response, Instant::now(), Duration::from_secs(1))
+        .unwrap()
+    else {
+        panic!("no addresses")
+    };
+    response
+        .screen_addresses(&candidates, |ip| {
+            if ["1.1.1.1", "1.1.1.2"].contains(&ip.to_string().as_str()) {
+                DnsAdmission::Dynamic
+            } else {
+                DnsAdmission::Denied
+            }
+        })
+        .unwrap()
+        .wire
+}
+
+// A message signature covers the whole message, times to live included.
+// @kotowari[REQ-398, EX-802]
+#[test]
+fn a_message_signed_answer_keeps_its_times_to_live() {
+    let mut wire = response(1, 0x80);
+    answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
+    answer(&mut wire, "api.example.com", 1, 300, &[1, 1, 1, 2]);
+    sign(&mut wire);
+    let reached = screened(&wire);
+    assert_eq!(answer_ttls(&reached), [30, 300]);
+    assert_eq!(reached, wire);
+}
+
+// @kotowari[REQ-020, EX-807]
+#[test]
+fn a_message_signed_mixed_answer_reaches_the_application_unchanged() {
+    let mut wire = response(1, 0x80);
+    answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
+    answer(&mut wire, "api.example.com", 1, 30, &[10, 0, 0, 1]);
+    sign(&mut wire);
+    assert_eq!(screened(&wire), wire);
 }
 
 // @kotowari[REQ-398, EX-735]

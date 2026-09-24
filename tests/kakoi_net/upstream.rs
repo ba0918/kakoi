@@ -12,7 +12,7 @@ fn layer(text: &str) -> Layer {
     }
 }
 
-// @kotowari[REQ-146]
+// @kotowari[REQ-146, REQ-415, EX-791, EX-792, EX-793]
 #[test]
 fn upstream_configuration_separates_connection_address_from_tls_identity() {
     let tls = layer(TLS);
@@ -45,7 +45,37 @@ fn upstream_configuration_separates_connection_address_from_tls_identity() {
     }
 }
 
-// @kotowari[REQ-146, REQ-087, EX-324, EX-325]
+// @kotowari[REQ-415, EX-790]
+#[test]
+fn an_internationalized_tls_name_is_matched_in_its_ascii_form() {
+    let tls = layer(&TLS.replace("'ＲＥＳＯＬＶＥＲ.example.'", "'例え.jp'"));
+    assert_eq!(
+        tls.policy.network.dns_upstream[0].tls_name(),
+        Some("xn--r8jz45g.jp")
+    );
+}
+
+// @kotowari[REQ-416, EX-794]
+#[test]
+fn upstream_candidates_keep_their_written_order_and_duplicates_across_layers() {
+    let plain =
+        |ip: &str| format!("[[network.dns-upstream]]\ntransport='plain'\nip='{ip}'\nport=53\n");
+    let lower = layer(&format!("{}{}", plain("192.0.2.1"), plain("192.0.2.2")));
+    let upper = layer(&plain("192.0.2.1"));
+    let mode = layer("[network]\nmode='host'");
+    let merged = merge(&[mode, lower, upper]).unwrap();
+    let addresses: Vec<std::net::IpAddr> = merged
+        .dns_upstream
+        .iter()
+        .map(|upstream| upstream.address)
+        .collect();
+    assert_eq!(
+        addresses,
+        ["192.0.2.1", "192.0.2.2", "192.0.2.1"].map(|ip| ip.parse::<std::net::IpAddr>().unwrap())
+    );
+}
+
+// @kotowari[REQ-146, REQ-087, EX-324, EX-325, REQ-416, EX-795]
 #[test]
 fn upstream_layers_append_preserving_order_and_reject_mixed_transport() {
     let mode = layer("[network]\nmode='host'");

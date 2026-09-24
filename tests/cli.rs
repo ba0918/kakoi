@@ -341,7 +341,7 @@ fn an_unknown_option_from_a_deleted_current_directory_is_a_usage_diagnostic() {
     assert_diagnostic(&output, 125, "usage");
 }
 
-// @kotowari[REQ-293]
+// @kotowari[REQ-293, REQ-400, EX-753]
 #[test]
 fn a_deleted_current_directory_is_a_path_diagnostic() {
     let home = TempDir::new();
@@ -358,6 +358,22 @@ fn a_deleted_current_directory_is_a_path_diagnostic() {
     );
 
     assert_diagnostic(&output, 125, "path");
+}
+
+// With the current directory at hand, a relative `HOME` stops the run at the next stage.
+// @kotowari[REQ-400, EX-754]
+#[test]
+fn a_relative_home_under_a_usable_current_directory_is_an_env_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = binary(home.path())
+        .env("HOME", "relative/home")
+        .current_dir(&workspace)
+        .args(["--", "true"])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "env");
 }
 
 // @kotowari[REQ-293]

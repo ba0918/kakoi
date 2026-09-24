@@ -1,4 +1,4 @@
-use crate::common::{binary, TempDir, RW_WORKSPACE};
+use crate::common::{assert_diagnostic, binary, TempDir, RW_WORKSPACE};
 use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -43,19 +43,25 @@ impl Filtered {
         }
     }
 
-    fn command(&self, path: &str, arguments: &[&str]) -> Command {
+    fn command(&self, path: &str, options: &[&str], arguments: &[&str]) -> Command {
         let mut command = binary(self.home.path());
         command
             .env("PATH", path)
             .current_dir(&self.workspace)
+            .args(options)
             .arg("--")
             .args(arguments);
         command
     }
 
     fn with_pasta(&self, arguments: &[&str]) -> Command {
+        self.with_pasta_and_options(&[], arguments)
+    }
+
+    fn with_pasta_and_options(&self, options: &[&str], arguments: &[&str]) -> Command {
         self.command(
             &format!("{}:/usr/sbin:/usr/bin:/bin", self.bin.path().display()),
+            options,
             arguments,
         )
     }
@@ -110,6 +116,7 @@ fn a_missing_pasta_ends_the_start_before_the_application_runs() {
     let output = filtered
         .command(
             tools.path().to_str().unwrap(),
+            &[],
             &["/bin/sh", "-c", &format!("touch '{}'", marker.display())],
         )
         .output()
@@ -615,9 +622,54 @@ fn an_inherited_none_ignores_a_publication_above_it() {
     );
 }
 
+// A host-interface destination is refused while the policy is merged, before
+// anything starts: the launch and the plan alike end with a policy diagnostic.
+// @kotowari[REQ-428, EX-820, EX-822]
+#[test]
+fn filtered_refuses_a_host_interface_destination_as_a_policy_error() {
+    let filtered = Filtered::new(
+        "\n[[network.allow]]\ndestination = { ip = 'fe80::1', host-interface = 'eth0' }\nprotocol = 'tcp'\nports = ['443']\n",
+    );
+    for options in [&[][..], &["--print-plan"][..]] {
+        let output = filtered
+            .with_pasta_and_options(options, &["/bin/sh", "-c", "echo ran"])
+            .output()
+            .unwrap();
+        assert_diagnostic(&output, 125, "policy");
+    }
+}
+
+// An upstream error in one file is found while the file is read, and a mix of
+// transports only once the layers are merged: both are policy errors, and
+// nothing starts.
+// @kotowari[REQ-426, EX-818, EX-819]
+#[test]
+fn upstream_errors_found_while_reading_or_merging_are_policy_errors() {
+    let written = Filtered::new("tls-name = 'resolver.example.com'\n");
+    let output = written
+        .with_pasta(&["/bin/sh", "-c", "echo ran"])
+        .output()
+        .unwrap();
+    assert_diagnostic(&output, 125, "policy");
+
+    let merged = Filtered::new("");
+    let upper = merged.home.write(
+        "upper.toml",
+        "[[network.dns-upstream]]\ntransport = 'tls'\nip = '192.0.2.53'\nport = 853\ntls-name = 'resolver.example.com'\n",
+    );
+    let output = merged
+        .with_pasta_and_options(
+            &["--policy-file", upper.to_str().unwrap()],
+            &["/bin/sh", "-c", "echo ran"],
+        )
+        .output()
+        .unwrap();
+    assert_diagnostic(&output, 125, "policy");
+}
+
 // Unused settings are not looked into: an interface that does not exist is
 // not checked in host mode, and a name is not asked about in none mode.
-// @kotowari[EX-173, EX-174]
+// @kotowari[EX-173, EX-174, EX-823]
 #[test]
 fn unused_settings_are_neither_checked_nor_resolved() {
     let output = launched(

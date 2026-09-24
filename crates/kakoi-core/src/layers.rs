@@ -247,6 +247,21 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
             "`{key}` is in both `env.set` and `secrets` after merging"
         )));
     }
+    if policy.network_mode == NetworkMode::Filtered
+        && policy.network_allow.iter().any(|allow| {
+            matches!(
+                allow.destination,
+                crate::network::Destination::Address {
+                    host_interface: Some(_),
+                    ..
+                }
+            )
+        })
+    {
+        return Err(Diagnostic::policy(
+            "filtered network mode does not support `host-interface` destinations",
+        ));
+    }
     policy.network_publish =
         crate::network::merge_publications(policy.network_publish).map_err(Diagnostic::policy)?;
     policy

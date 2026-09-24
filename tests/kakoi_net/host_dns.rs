@@ -69,6 +69,29 @@ fn a_host_configuration_without_a_nameserver_asks_for_an_explicit_upstream() {
     }
 }
 
+// The host's configuration, not the policy, is at fault: kakoi says so as a
+// start-up failure and the application does not run.
+// @kotowari[REQ-427, EX-821]
+#[test]
+fn a_host_configuration_without_a_nameserver_ends_the_start_as_a_bwrap_error() {
+    let host = crate::fake_host::FakeHost::following_host_dns(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &[],
+    );
+    let output = host.run(
+        r#"
+resolv('search example.test\n')
+process = kakoi("print('ran')")
+out = process.stdout.read().decode()
+code = process.wait(timeout=60)
+err = process.stderr.read().decode()
+sys.stderr.write(err)
+print(code, repr(out), err.startswith('kakoi: bwrap: '), len(err.splitlines()))
+"#,
+    );
+    assert_eq!(output, "125 '' True 1\n");
+}
+
 mod following {
     use crate::common::TempDir;
     use kakoi_core::network::{Allow, Destination, DnsUpstream, NetworkLimits, Protocol};
@@ -258,7 +281,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         output
     }
 
-    // @kotowari[EX-232, EX-237]
+    // @kotowari[EX-232, EX-237, REQ-418, EX-798]
     #[test]
     fn a_host_dns_change_redoes_pending_queries_and_ignores_old_answers() {
         let temp = TempDir::new();
@@ -441,5 +464,139 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
             "the sixth upstream was asked"
         );
         assert!(silent[0].0.recv_from(&mut bytes).is_ok());
+    }
+
+    /// Lets the runtime read the host's configuration again, as it does once a
+    /// second.
+    fn noticed(runtime: &mut DnsRuntime) {
+        let noticed = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < noticed {
+            runtime.poll(Instant::now()).unwrap();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Asks once through the runtime and answers from `socket` with `address`.
+    fn resolved(
+        ns: &NetworkNamespace,
+        socket: &UdpSocket,
+        runtime: &mut DnsRuntime,
+        address: [u8; 4],
+    ) -> String {
+        let app = client(ns);
+        let (query, peer) = received(socket, runtime);
+        socket.send_to(&answer(&query, address), peer).unwrap();
+        finish(app, runtime)
+    }
+
+    // The upstream on the host's loopback is asked from kakoi's own network:
+    // a listener on the same address and port inside the isolation hears
+    // nothing.
+    // @kotowari[REQ-417, EX-796, EX-797]
+    #[test]
+    fn a_loopback_nameserver_is_the_hosts_not_the_isolations() {
+        let temp = TempDir::new();
+        let (host, port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {port}\n"));
+        let (ns, mut runtime) = runtime(&file);
+        let mut inside = ns
+            .command("/usr/bin/python3")
+            .unwrap()
+            .args([
+                "-c",
+                &format!(
+                    r#"
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(('127.0.0.1', {port}))
+print('ready', flush=True)
+s.settimeout(3)
+try:
+    s.recv(512)
+    print('asked')
+except socket.timeout:
+    print('silent')
+"#
+                ),
+            ])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut heard = std::io::BufReader::new(inside.stdout.take().unwrap());
+        let mut line = String::new();
+        std::io::BufRead::read_line(&mut heard, &mut line).unwrap();
+        assert_eq!(line, "ready\n");
+        assert_eq!(
+            resolved(&ns, &host, &mut runtime, [1, 1, 1, 1]),
+            "0 1.1.1.1\n"
+        );
+        line.clear();
+        std::io::BufRead::read_line(&mut heard, &mut line).unwrap();
+        inside.wait().unwrap();
+        assert_eq!(line, "silent\n");
+    }
+
+    // @kotowari[REQ-418, EX-799]
+    #[test]
+    fn rewriting_the_same_content_keeps_the_saved_answers() {
+        let temp = TempDir::new();
+        let (host, port) = upstream();
+        let content = format!("upstream {port}\n");
+        let file = temp.write("resolv.conf", &content);
+        let (ns, mut runtime) = runtime(&file);
+        assert_eq!(
+            resolved(&ns, &host, &mut runtime, [1, 1, 1, 1]),
+            "0 1.1.1.1\n"
+        );
+        std::fs::write(&file, &content).unwrap();
+        noticed(&mut runtime);
+        assert_eq!(finish(client(&ns), &mut runtime), "0 1.1.1.1\n");
+        let mut bytes = [0; 512];
+        assert!(
+            host.recv_from(&mut bytes).is_err(),
+            "the saved answer was not used"
+        );
+    }
+
+    // Another line changes and the nameserver stays: a query asked before the
+    // change is asked again, and its old answer is not taken.
+    // @kotowari[REQ-419, EX-800]
+    #[test]
+    fn a_change_with_the_same_nameserver_redoes_a_pending_query() {
+        let temp = TempDir::new();
+        let (host, port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {port}\n"));
+        let (ns, mut runtime) = runtime(&file);
+        let app = client(&ns);
+        let (stale_query, stale_peer) = received(&host, &mut runtime);
+        std::fs::write(&file, format!("upstream {port}\noptions edns0\n")).unwrap();
+        let (query, peer) = received(&host, &mut runtime);
+        host.send_to(&answer(&stale_query, [2, 2, 2, 2]), stale_peer)
+            .unwrap();
+        for _ in 0..20 {
+            runtime.poll(Instant::now()).unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        host.send_to(&answer(&query, [1, 1, 1, 1]), peer).unwrap();
+        assert_eq!(finish(app, &mut runtime), "0 1.1.1.1\n");
+    }
+
+    // @kotowari[REQ-419, EX-801]
+    #[test]
+    fn a_change_with_the_same_nameserver_drops_the_saved_answers() {
+        let temp = TempDir::new();
+        let (host, port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {port}\n"));
+        let (ns, mut runtime) = runtime(&file);
+        assert_eq!(
+            resolved(&ns, &host, &mut runtime, [1, 1, 1, 1]),
+            "0 1.1.1.1\n"
+        );
+        std::fs::write(&file, format!("upstream {port}\noptions edns0\n")).unwrap();
+        noticed(&mut runtime);
+        assert_eq!(
+            resolved(&ns, &host, &mut runtime, [3, 3, 3, 3]),
+            "0 3.3.3.3\n"
+        );
     }
 }

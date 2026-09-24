@@ -353,7 +353,7 @@ fn env_links_into_claude_settings(links: &[&str]) -> Facts {
 const RW_CLAUDE_RO_SETTINGS: &str =
     "[mounts]\nrw = [\"${worktree}\", \"~/.claude\"]\nro = [\"~/.claude/settings.json\"]\n";
 
-// @kotowari[REQ-170]
+// @kotowari[REQ-170, REQ-403, EX-759]
 #[test]
 fn a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic() {
     // The `ro` item resolves through `rw ~/.claude`, so from inside the isolation it could
