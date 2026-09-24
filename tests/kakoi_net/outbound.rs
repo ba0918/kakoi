@@ -77,7 +77,7 @@ print('received', sorted(received))
 // even on a loaded host.
 const TTL: u32 = 8;
 
-// @kotowari[REQ-002, EX-023, EX-024, EX-025, EX-026, EX-027]
+// @kotowari[REQ-002, REQ-133, EX-023, EX-024, EX-025, EX-026, EX-027, EX-299]
 #[test]
 fn a_resolved_name_permits_its_addresses_until_the_answer_expires() {
     let host = FakeHost::new(
@@ -92,6 +92,8 @@ v4 = socket.getaddrinfo('app.example', 8080, socket.AF_INET, socket.SOCK_STREAM)
 v6 = socket.getaddrinfo('app.example', 8080, socket.AF_INET6, socket.SOCK_DGRAM)[0][4][0]
 # Both answers arrived before this point, so both expire by its end.
 expired = time.monotonic() + {TTL} + 1
+# Asked again within the time to live: answered without the upstream.
+assert socket.getaddrinfo('app.example', 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0] == v4
 tcp = socket.create_connection((v4, 8080), timeout=PERMITTED)
 print('tcp', v4, tcp.recv(64).decode())
 udp = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
@@ -113,6 +115,8 @@ serve('2a00:5::5', 8080, 'udp', 'v6-udp')
 process = kakoi({app:?})
 print(process.stdout.read().decode(), end='')
 assert finish(process) == 0
+# One query per type: none for the cached answer, none ahead of expiry.
+print('upstream queries', len(asked))
 "#
     ));
     assert_eq!(
@@ -122,7 +126,8 @@ assert finish(process) == 0
          tcp kept v4-tcp\n\
          udp kept v6-udp\n\
          tcp new failed TimeoutError\n\
-         udp new failed PermissionError\n",
+         udp new failed PermissionError\n\
+         upstream queries 2\n",
         "{output}"
     );
 }

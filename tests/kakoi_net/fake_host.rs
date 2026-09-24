@@ -86,6 +86,8 @@ for address in REMOTE:
     ip('addr', 'add', address, 'dev', 'svc0', *(['nodad'] if ':' in address else []))
 
 received = []
+# The queries the fake upstream DNS received.
+asked = []
 
 def serve(address, port, kind, reply):
     """Binds before returning, so that a later exchange cannot race the bind.
@@ -127,6 +129,7 @@ def dns(records):
     def loop():
         while True:
             query, peer = server.recvfrom(512)
+            asked.append(query)
             at, labels = 12, []
             while query[at]:
                 labels.append(query[at + 1:at + 1 + query[at]].decode().lower())
