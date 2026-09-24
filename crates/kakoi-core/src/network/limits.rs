@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+/// Upper bounds the settings are validated against. The network runtime relies on
+/// them too, and checks what it is given against the same values.
+pub const MAX_UDP_IDLE_TIMEOUT_SECONDS: u32 = 86400;
+pub const MAX_DNS_RESOLUTION_TIMEOUT_SECONDS: u32 = 3600;
+pub const MAX_DNS_CONCURRENT_RESOLUTIONS: u32 = 4096;
+pub const MAX_DNS_WAITERS_PER_RESOLUTION: u32 = 1024;
+pub const MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS: u32 = 300;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NetworkLimits {
     pub udp_idle_timeout_seconds: u32,
@@ -62,9 +70,11 @@ impl LimitOverrides {
     pub fn validate(&self) -> Result<(), String> {
         if self
             .udp_idle_timeout_seconds
-            .is_some_and(|v| !(1..=86400).contains(&v))
+            .is_some_and(|v| !(1..=MAX_UDP_IDLE_TIMEOUT_SECONDS).contains(&v))
         {
-            return Err("network.udp-idle-timeout-seconds must be in 1..=86400".into());
+            return Err(format!(
+                "network.udp-idle-timeout-seconds must be in 1..={MAX_UDP_IDLE_TIMEOUT_SECONDS}"
+            ));
         }
         if self
             .dns_zero_ttl_grace_milliseconds
@@ -80,9 +90,11 @@ impl LimitOverrides {
         }
         if self
             .dns_resolution_timeout_seconds
-            .is_some_and(|v| !(1..=3600).contains(&v))
+            .is_some_and(|v| !(1..=MAX_DNS_RESOLUTION_TIMEOUT_SECONDS).contains(&v))
         {
-            return Err("network.dns-resolution-timeout-seconds must be in 1..=3600".into());
+            return Err(format!(
+                "network.dns-resolution-timeout-seconds must be in 1..={MAX_DNS_RESOLUTION_TIMEOUT_SECONDS}"
+            ));
         }
         if self
             .dns_max_cname_hops
@@ -98,15 +110,19 @@ impl LimitOverrides {
         }
         if self
             .dns_max_concurrent_resolutions
-            .is_some_and(|v| !(1..=4096).contains(&v))
+            .is_some_and(|v| !(1..=MAX_DNS_CONCURRENT_RESOLUTIONS).contains(&v))
         {
-            return Err("network.dns-max-concurrent-resolutions must be in 1..=4096".into());
+            return Err(format!(
+                "network.dns-max-concurrent-resolutions must be in 1..={MAX_DNS_CONCURRENT_RESOLUTIONS}"
+            ));
         }
         if self
             .dns_max_waiters_per_resolution
-            .is_some_and(|v| !(1..=1024).contains(&v))
+            .is_some_and(|v| !(1..=MAX_DNS_WAITERS_PER_RESOLUTION).contains(&v))
         {
-            return Err("network.dns-max-waiters-per-resolution must be in 1..=1024".into());
+            return Err(format!(
+                "network.dns-max-waiters-per-resolution must be in 1..={MAX_DNS_WAITERS_PER_RESOLUTION}"
+            ));
         }
         if self
             .dns_failure_cache_seconds
@@ -116,9 +132,11 @@ impl LimitOverrides {
         }
         if self
             .recovery_attempt_timeout_seconds
-            .is_some_and(|v| !(1..=300).contains(&v))
+            .is_some_and(|v| !(1..=MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS).contains(&v))
         {
-            return Err("network.recovery-attempt-timeout-seconds must be in 1..=300".into());
+            return Err(format!(
+                "network.recovery-attempt-timeout-seconds must be in 1..={MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS}"
+            ));
         }
         Ok(())
     }

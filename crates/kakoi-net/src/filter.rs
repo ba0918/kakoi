@@ -1,7 +1,7 @@
 //! Kernel enforcement for resolved, static IP permissions. Host alias routing and
 //! DNS-derived permissions are separate from this compilation layer.
 
-use kakoi_core::network::{IpNetwork, Ports, Protocol};
+use kakoi_core::network::{IpNetwork, Ports, Protocol, MAX_UDP_IDLE_TIMEOUT_SECONDS};
 use std::fmt::Write;
 
 pub struct FilterRule {
@@ -13,7 +13,7 @@ pub struct FilterRule {
 /// Install before application execution. The caller must resolve policy address
 /// scopes and host aliases before producing these static permissions.
 pub fn compile_static(rules: &[FilterRule], udp_idle_seconds: u32) -> Result<String, String> {
-    if !(1..=86400).contains(&udp_idle_seconds) {
+    if !(1..=MAX_UDP_IDLE_TIMEOUT_SECONDS).contains(&udp_idle_seconds) {
         return Err("UDP idle timeout must be in 1..=86400 seconds".into());
     }
     let mut script = format!(

@@ -5,7 +5,7 @@ use crate::{
     dynamic::DynamicPermissions,
     namespace::NetworkNamespace,
 };
-use kakoi_core::network::Allow;
+use kakoi_core::network::{Allow, MAX_DNS_CONCURRENT_RESOLUTIONS};
 use std::{
     io,
     path::PathBuf,
@@ -43,7 +43,7 @@ impl DnsAdoption {
         policy: Vec<Allow>,
         limit: usize,
     ) -> io::Result<Self> {
-        if !(1..=4096).contains(&limit) {
+        if !(1..=MAX_DNS_CONCURRENT_RESOLUTIONS as usize).contains(&limit) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid DNS adoption capacity",

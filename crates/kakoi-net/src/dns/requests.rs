@@ -3,7 +3,7 @@ use super::{
     ResponseCode,
 };
 use hickory_proto::op::Query;
-use kakoi_core::network::Allow;
+use kakoi_core::network::{Allow, MAX_DNS_RESOLUTION_TIMEOUT_SECONDS};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
@@ -78,7 +78,9 @@ impl<W> DnsRequests<W> {
         max_waiters: usize,
         timeout: Duration,
     ) -> Result<Self, &'static str> {
-        if timeout.is_zero() || timeout > Duration::from_secs(3600) {
+        if timeout.is_zero()
+            || timeout > Duration::from_secs(MAX_DNS_RESOLUTION_TIMEOUT_SECONDS.into())
+        {
             return Err("DNS resolution timeout outside supported range");
         }
         Ok(Self {

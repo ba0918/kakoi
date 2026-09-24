@@ -3,6 +3,7 @@
 
 use crate::namespace::DnsSockets;
 use hickory_proto::op::{Edns, Message};
+use kakoi_core::network::{MAX_DNS_CONCURRENT_RESOLUTIONS, MAX_DNS_RESOLUTION_TIMEOUT_SECONDS};
 use std::{
     collections::{BTreeMap, VecDeque},
     io::{self, Read, Write},
@@ -49,9 +50,9 @@ impl DnsFront {
         max_connections: usize,
         resolution_timeout: Duration,
     ) -> io::Result<Self> {
-        if !(1..=4096).contains(&max_connections)
+        if !(1..=MAX_DNS_CONCURRENT_RESOLUTIONS as usize).contains(&max_connections)
             || resolution_timeout.is_zero()
-            || resolution_timeout > Duration::from_secs(3600)
+            || resolution_timeout > Duration::from_secs(MAX_DNS_RESOLUTION_TIMEOUT_SECONDS.into())
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

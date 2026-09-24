@@ -1,4 +1,5 @@
 use super::{DnsError, Question};
+use kakoi_core::network::{MAX_DNS_CONCURRENT_RESOLUTIONS, MAX_DNS_WAITERS_PER_RESOLUTION};
 use std::{collections::HashMap, hash::Hash};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -60,7 +61,9 @@ pub struct ResolutionPool<K, W> {
 
 impl<K: Eq + Hash, W> ResolutionPool<K, W> {
     pub fn new(max_resolutions: usize, max_waiters: usize) -> Result<Self, &'static str> {
-        if !(1..=4096).contains(&max_resolutions) || !(1..=1024).contains(&max_waiters) {
+        if !(1..=MAX_DNS_CONCURRENT_RESOLUTIONS as usize).contains(&max_resolutions)
+            || !(1..=MAX_DNS_WAITERS_PER_RESOLUTION as usize).contains(&max_waiters)
+        {
             return Err("DNS capacity limits outside supported range");
         }
         Ok(Self {

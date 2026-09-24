@@ -1,5 +1,6 @@
 //! Physical worker accounting, independent of expired client/request slots.
 use crate::dns::{ResolutionId, ResolutionTask};
+use kakoi_core::network::MAX_DNS_CONCURRENT_RESOLUTIONS;
 use std::{
     io,
     sync::{
@@ -55,7 +56,7 @@ pub struct DnsWorkers<R> {
 
 impl<R: Send + 'static> DnsWorkers<R> {
     pub fn new(limit: usize) -> Result<Self, &'static str> {
-        if !(1..=4096).contains(&limit) {
+        if !(1..=MAX_DNS_CONCURRENT_RESOLUTIONS as usize).contains(&limit) {
             return Err("DNS worker limit outside supported range");
         }
         Ok(Self {

@@ -102,7 +102,11 @@ pub fn merge_publications(
 }
 
 mod limits;
-pub use limits::{LimitOverrides, NetworkLimits};
+pub use limits::{
+    LimitOverrides, NetworkLimits, MAX_DNS_CONCURRENT_RESOLUTIONS,
+    MAX_DNS_RESOLUTION_TIMEOUT_SECONDS, MAX_DNS_WAITERS_PER_RESOLUTION,
+    MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS, MAX_UDP_IDLE_TIMEOUT_SECONDS,
+};
 mod upstream;
 pub use upstream::{validate_upstreams, DnsUpstream};
 

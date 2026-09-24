@@ -1,5 +1,6 @@
 //! Pure retry timing. The executor cancels/reaps a timed-out attempt before
 //! reporting completion; expiry alone never makes room for an overlapping task.
+use kakoi_core::network::MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +36,7 @@ pub struct Recovery {
 
 impl Recovery {
     pub fn new(timeout_seconds: u32) -> Result<Self, &'static str> {
-        if !(1..=300).contains(&timeout_seconds) {
+        if !(1..=MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS).contains(&timeout_seconds) {
             return Err("recovery timeout must be 1..=300 seconds");
         }
         Ok(Self {
