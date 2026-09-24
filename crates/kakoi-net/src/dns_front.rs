@@ -81,6 +81,13 @@ impl DnsFront {
         self.peers.retain(|_, peer| now < peer.deadline);
         self.order.retain(|id| self.peers.contains_key(id));
         let mut incoming = Vec::new();
+        self.receive_datagrams(&mut incoming)?;
+        self.accept_streams(now)?;
+        self.step_streams(now, &mut incoming);
+        Ok(incoming)
+    }
+
+    fn receive_datagrams(&mut self, incoming: &mut Vec<IncomingQuery>) -> io::Result<()> {
         let mut datagram = [0; u16::MAX as usize];
         for _ in 0..32 {
             match self.sockets.udp.recv_from(&mut datagram) {
@@ -102,6 +109,10 @@ impl DnsFront {
                 Err(error) => return Err(error),
             }
         }
+        Ok(())
+    }
+
+    fn accept_streams(&mut self, now: Instant) -> io::Result<()> {
         for _ in 0..16 {
             match self.sockets.tcp.accept() {
                 Ok((socket, _)) => {
@@ -138,16 +149,19 @@ impl DnsFront {
                 Err(error) => return Err(error),
             }
         }
+        Ok(())
+    }
+
+    fn step_streams(&mut self, now: Instant, incoming: &mut Vec<IncomingQuery>) {
         for _ in 0..self.order.len().min(64) {
             let id = self.order.pop_front().expect("bounded by queue length");
             let peer = self.peers.get_mut(&id).expect("queue contains live peers");
-            if peer.step(id, now, self.resolution_timeout, &mut incoming) {
+            if peer.step(id, now, self.resolution_timeout, incoming) {
                 self.order.push_back(id);
             } else {
                 self.peers.remove(&id);
             }
         }
-        Ok(incoming)
     }
 
     /// `false` means the requester has gone away or a UDP response was dropped
@@ -262,24 +276,26 @@ impl Peer {
                 Err(_) => return false,
             }
         }
-        if self.input.len() >= 2 {
-            let length = self.frame_length();
-            if length == 2 {
-                return false;
-            }
-            if self.input.len() >= length {
-                let wire = self.input[2..length].to_vec();
-                self.input.drain(..length);
-                self.pending = true;
-                // Keep the transport long enough to write a timeout SERVFAIL;
-                // the resolution deadline itself remains unchanged.
-                self.deadline = now + timeout + IO_TIMEOUT;
-                incoming.push(IncomingQuery {
-                    wire,
-                    reply: ReplyToken(ReplyDestination::Tcp(id)),
-                });
-            }
+        if self.input.len() < 2 {
+            return true;
         }
+        let length = self.frame_length();
+        if length == 2 {
+            return false;
+        }
+        if self.input.len() < length {
+            return true;
+        }
+        let wire = self.input[2..length].to_vec();
+        self.input.drain(..length);
+        self.pending = true;
+        // Keep the transport long enough to write a timeout SERVFAIL;
+        // the resolution deadline itself remains unchanged.
+        self.deadline = now + timeout + IO_TIMEOUT;
+        incoming.push(IncomingQuery {
+            wire,
+            reply: ReplyToken(ReplyDestination::Tcp(id)),
+        });
         true
     }
 
