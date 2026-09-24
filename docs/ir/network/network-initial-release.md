@@ -15,11 +15,11 @@
 ### REQ-391: 将来の動的公開の責務を分離する
 
 - kind: invariant
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A155, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A155, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-25-library-boundary.md#A2
 - verification: review
-- how_to_verify: crates/kakoi-netを読み、公開の判断とpasta固有の操作が別の部分に分かれていることを確かめる。コードと公開文書に、上流の正式対応時期や修正の採用を確約された事実として扱う処理や記述が無いことを確かめる。上流のUDP削除・再利用問題の修正を必要とする動的公開を採用する変更では、その問題の解決が採用の条件として扱われていることを確かめる。
+- how_to_verify: crates/kakoi-coreとcrates/kakoi-netを読み、何を公開するかの判断（入力の形、段の合成、競合の検査）がkakoi-coreに、pastaの引数への変換とpastaの起動がkakoi-netに分かれていることを確かめる。コードと公開文書に、上流の正式対応時期や修正の採用を確約された事実として扱う処理や記述が無いことを確かめる。上流のUDP削除・再利用問題の修正を必要とする動的公開を採用する変更では、その問題の解決が採用の条件として扱われていることを確かめる。
 
-将来の動的公開を追加できるよう公開の判断とpasta固有の操作を分離する。上流の正式対応時期や修正採用を確約された事実として扱わない。上流のUDP削除・再利用問題の解決条件は、その修正を必要とする動的公開の採用に適用する。
+将来の動的公開を追加できるよう、何を公開するかの判断（入力の形、段の合成、競合の検査）をkakoi-coreに、pastaの引数への変換とpastaの起動をkakoi-netに分けて置く。上流の正式対応時期や修正採用を確約された事実として扱わない。上流のUDP削除・再利用問題の解決条件は、その修正を必要とする動的公開の採用に適用する。
 
 ### REQ-392: 初版の開始条件と提供条件を分ける
 
