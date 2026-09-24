@@ -1365,7 +1365,11 @@ EX-315: 接続口付きの許可は初版では起動前に拒否する）。実
 
 対応を表明する標準導入環境での確認は、このWSL2（Ubuntu 24.04.4、bubblewrap 0.9.0、
 nftables 1.0.9、Debian trixie-backportsのpasta 0.0~git20260728.f8df3f1-1~bpo13+1）だけで
-ある。ユーザー名前空間の制限が有効なUbuntuとCIでは未実施（NOT_RUN）。
+ある。ユーザー名前空間の制限が有効なUbuntuでは未実施（NOT_RUN）。
+
+push後のCI（GitHub Actionsのubuntu-24.04、制限を外す設定をしたランナー）では、GNUとmuslの
+どちらでも実pastaの試験を含む全体526件が成功した。unshareと/dev/net/tunはランナーで使えた。
+muslのビルドにはrustlsのringが使うmuslのgccが要り、CIに追加した。
 
 別コンテキストのレビューで、REQ-150・391・392はPASSとされた（REQ-150は通信の責務に限った
 読みで、kakoi-coreの既存の起動処理はbwrapを起動する）。指摘のうち、設定変更で問い合わせ直した
