@@ -19,6 +19,8 @@
 | REQ-013 | [日本語の名前と変換結果](../../spec/kakoi/network/dns-input.md#日本語の名前と変換結果) | [network-idn](../../ir/network/dns-input/network-idn.md) |
 | REQ-389 | [TTLゼロの応答にも接続のための猶予を設ける](../../spec/kakoi/network/dns-lifetime.md#ttlゼロの応答にも接続のための猶予を設ける) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |
 | REQ-014 | [名前解決で得た許可が切れるまで](../../spec/kakoi/network/dns-lifetime.md#名前解決で得た許可が切れるまで) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |
+| REQ-397 | [名前解決で得た許可が切れるまで](../../spec/kakoi/network/dns-lifetime.md#名前解決で得た許可が切れるまで) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |
+| REQ-398 | [名前解決で得た許可が切れるまで](../../spec/kakoi/network/dns-lifetime.md#名前解決で得た許可が切れるまで) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |
 | REQ-015 | [期限が切れた後のTCPとUDP](../../spec/kakoi/network/dns-lifetime.md#期限が切れた後のtcpとudp) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |
 | REQ-016 | [期限が切れた後のTCPとUDP](../../spec/kakoi/network/dns-lifetime.md#期限が切れた後のtcpとudp) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |
 | REQ-017 | [UDPの無通信期限を変える](../../spec/kakoi/network/dns-lifetime.md#udpの無通信期限を変える) | [network-dns-lifetime](../../ir/network/dns-lifetime/network-dns-lifetime.md) |

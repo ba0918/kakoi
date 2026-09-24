@@ -60,6 +60,22 @@ CNAME経由の新規通信許可の期限は、参照経路のCNAMEと最終IP�
 
 TTLが0のDNS応答で検査を通ったIPへの新規通信には、応答の受信から既定1000ミリ秒の猶予を設ける。"network.dns-zero-ttl-grace-milliseconds" は100〜10000の整数ミリ秒で指定し、上位の明示値を優先、省略時は下位の値を引き継ぐ。検査・登録の遅れで期限を数え直さず、期限切れの候補を後から有効にしない。許可の更新は新たに検査を通った応答だけで行い、通常の通信では延長しない。TTLゼロの応答を後の問い合わせに再利用しない。猶予中に始まったTCP・UDPには既存の継続規則を適用する。CNAME経路ではTTLゼロの情報にのみ猶予を適用し、各情報の失効時点の最小値を使う。正のTTLの失効を猶予で延ばさない。
 
+### REQ-397: 許可は期限より後に切れない
+
+- kind: invariant
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A170, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A165
+- verification: unit
+
+DNS由来の許可は、応答の受信とTTLから決まる期限より後にカーネルで失効させない。登録の遅れに備えて見込んだ時間の分だけ期限より早く失効することは認める。
+
+### REQ-398: アプリへ返す応答のTTLを最短に揃える
+
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A171
+- verification: unit
+
+アドレスの問い合わせへの応答をアプリへ返すとき、回答部の各レコードのTTLを、その応答の回答部で最も短いTTLに揃える。メッセージ署名付きの応答は元のTTLのまま返す。
+
 ## Examples
 
 ```gherkin
@@ -140,5 +156,23 @@ Scenario: 期限後の登録完了では許可を復活させない
   Given 既定設定で受信したTTLゼロ応答の検査を通った
   When 受信から1000ミリ秒より後に許可登録が完了する
   Then その候補を新規通信の有効な許可にしない
+
+@id=EX-733 @about=REQ-397 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A170
+Scenario: 登録が遅れても許可を期限より後まで残さない
+  Given カーネルへの許可の登録が見込んだ時間を超えて遅れる
+  When 見込む時間を延ばして許可を登録し直す
+  Then カーネルの許可は応答の受信とTTLから決まる期限までに失効する
+
+@id=EX-734 @about=REQ-398 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A171
+Scenario: TTLの違うアドレスを最短のTTLで返す
+  Given 上流の応答が許可された二つのIPをTTL30秒と300秒で返す
+  When その応答をアプリへ返す
+  Then アプリが受け取る二つのIPのTTLはどちらも30秒以下である
+
+@id=EX-735 @about=REQ-398 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A171
+Scenario: 別名の短いTTLに最終IPのTTLを揃える
+  Given 別名のTTLが10秒で最終IPのTTLが300秒である
+  When その応答をアプリへ返す
+  Then アプリが受け取る最終IPのTTLは10秒以下である
 
 ```
