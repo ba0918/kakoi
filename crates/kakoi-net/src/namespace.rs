@@ -36,6 +36,36 @@ pub(crate) fn pidfd(pid: libc::pid_t) -> io::Result<OwnedFd> {
     Ok(unsafe { OwnedFd::from_raw_fd(fd as RawFd) })
 }
 
+/// The pidfd of `pid`, a child just forked and not yet reaped. When it cannot be
+/// opened, the child is killed and reaped here, so that the error leaves nothing
+/// running.
+pub(crate) fn child_pidfd(pid: libc::pid_t) -> io::Result<OwnedFd> {
+    pidfd(pid).inspect_err(|_| {
+        // SAFETY: the child is still ours and has not been reaped, so its PID
+        // cannot yet be reused.
+        unsafe {
+            libc::kill(pid, libc::SIGKILL);
+        }
+        reap(pid);
+    })
+}
+
+/// Kills the child `pidfd` refers to and reaps `pid`. The signal goes through the
+/// pidfd, so it cannot reach another process that reused the PID.
+pub(crate) fn kill_and_reap(pidfd: &OwnedFd, pid: libc::pid_t) {
+    // SAFETY: a valid pidfd, SIGKILL, and no siginfo, as pidfd_send_signal allows.
+    unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            pidfd.as_raw_fd(),
+            libc::SIGKILL,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        );
+    }
+    reap(pid);
+}
+
 pub(crate) fn duplicate_above_stdio(fd: RawFd) -> io::Result<OwnedFd> {
     let fd = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 10) };
     if fd < 0 {
@@ -84,18 +114,7 @@ impl NetworkNamespace {
         }
         drop(child);
         drop(parent_pidfd);
-        let child_pidfd = match pidfd(pid) {
-            Ok(fd) => fd,
-            Err(error) => {
-                // The child is still ours and has not been reaped, so its PID cannot
-                // yet be reused. Normal cleanup below uses pidfd to avoid PID races.
-                unsafe {
-                    libc::kill(pid, libc::SIGKILL);
-                }
-                reap(pid);
-                return Err(error);
-            }
-        };
+        let child_pidfd = child_pidfd(pid)?;
         let mut keeper = Keeper {
             pid,
             pidfd: child_pidfd,
@@ -162,16 +181,7 @@ pub(crate) fn reap(pid: libc::pid_t) {
 
 impl Drop for Keeper {
     fn drop(&mut self) {
-        unsafe {
-            libc::syscall(
-                libc::SYS_pidfd_send_signal,
-                self.pidfd.as_raw_fd(),
-                libc::SIGKILL,
-                std::ptr::null::<libc::siginfo_t>(),
-                0,
-            );
-        }
-        reap(self.pid);
+        kill_and_reap(&self.pidfd, self.pid);
     }
 }
 

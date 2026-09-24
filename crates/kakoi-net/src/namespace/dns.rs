@@ -1,4 +1,4 @@
-use super::{duplicate_above_stdio, pidfd, reap, NetworkNamespace};
+use super::{child_pidfd, duplicate_above_stdio, kill_and_reap, NetworkNamespace};
 use std::{
     io,
     net::{TcpListener, UdpSocket},
@@ -25,16 +25,7 @@ struct Helper {
 
 impl Drop for Helper {
     fn drop(&mut self) {
-        unsafe {
-            libc::syscall(
-                libc::SYS_pidfd_send_signal,
-                self.pidfd.as_raw_fd(),
-                libc::SIGKILL,
-                std::ptr::null::<libc::siginfo_t>(),
-                0,
-            );
-        }
-        reap(self.pid);
+        kill_and_reap(&self.pidfd, self.pid);
     }
 }
 
@@ -57,16 +48,7 @@ impl DnsSockets {
             unsafe { bind_child(control, user, net) }
         }
         drop(endpoint);
-        let pidfd = match pidfd(pid) {
-            Ok(fd) => fd,
-            Err(error) => {
-                unsafe {
-                    libc::kill(pid, libc::SIGKILL);
-                }
-                reap(pid);
-                return Err(error);
-            }
-        };
+        let pidfd = child_pidfd(pid)?;
         let _helper = Helper { pid, pidfd };
         let [udp, tcp] = receive(&parent)?;
         Ok(Self {

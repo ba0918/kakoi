@@ -1,5 +1,5 @@
 //! A separate writer process may block on stderr; its controller never does.
-use crate::namespace::{duplicate_above_stdio, pidfd, reap};
+use crate::namespace::{child_pidfd, duplicate_above_stdio, kill_and_reap};
 use std::{
     io,
     os::{
@@ -39,16 +39,7 @@ impl NotificationWriter {
             unsafe { writer(output_fd.as_raw_fd(), control_fd.as_raw_fd(), parent_pid) }
         }
         drop(child);
-        let pidfd = match pidfd(pid) {
-            Ok(fd) => fd,
-            Err(error) => {
-                unsafe {
-                    libc::kill(pid, libc::SIGKILL);
-                }
-                reap(pid);
-                return Err(error);
-            }
-        };
+        let pidfd = child_pidfd(pid)?;
         Ok(Self {
             pid,
             pidfd,
@@ -135,16 +126,7 @@ impl NotificationWriter {
 impl Drop for NotificationWriter {
     fn drop(&mut self) {
         if !self.reaped {
-            unsafe {
-                libc::syscall(
-                    libc::SYS_pidfd_send_signal,
-                    self.pidfd.as_raw_fd(),
-                    libc::SIGKILL,
-                    std::ptr::null::<libc::siginfo_t>(),
-                    0,
-                );
-            }
-            reap(self.pid);
+            kill_and_reap(&self.pidfd, self.pid);
         }
     }
 }

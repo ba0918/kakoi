@@ -1,4 +1,4 @@
-use super::{duplicate_above_stdio, pidfd, reap, NetworkNamespace};
+use super::{child_pidfd, duplicate_above_stdio, kill_and_reap, pidfd, NetworkNamespace};
 use crate::health::CLOSE_RULES;
 use std::{
     ffi::CString,
@@ -100,16 +100,7 @@ impl TransitWatchdog {
         }
         drop(child);
         drop(descriptors);
-        let child_pidfd = match pidfd(pid) {
-            Ok(fd) => fd,
-            Err(error) => {
-                unsafe {
-                    libc::kill(pid, libc::SIGKILL);
-                }
-                reap(pid);
-                return Err(error);
-            }
-        };
+        let child_pidfd = child_pidfd(pid)?;
         let watchdog = Self {
             pid,
             pidfd: child_pidfd,
@@ -197,16 +188,7 @@ impl Drop for TransitWatchdog {
         // The session closes transit before retiring its monitor. PID ownership
         // stays pinned even if it exited between the last poll and this cleanup.
         if self.status.is_none() {
-            unsafe {
-                libc::syscall(
-                    libc::SYS_pidfd_send_signal,
-                    self.pidfd.as_raw_fd(),
-                    libc::SIGKILL,
-                    std::ptr::null::<libc::siginfo_t>(),
-                    0,
-                );
-            }
-            reap(self.pid);
+            kill_and_reap(&self.pidfd, self.pid);
         }
     }
 }
