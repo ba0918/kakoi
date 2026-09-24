@@ -13,6 +13,10 @@ use std::{
 
 const IO_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_FRAME: usize = u16::MAX as usize + 2;
+/// The UDP reply every DNS client accepts, used when a query advertises nothing.
+const MIN_UDP_PAYLOAD: usize = 512;
+/// The largest UDP payload an IPv4 datagram carries.
+const MAX_UDP_PAYLOAD: usize = 65507;
 
 pub struct IncomingQuery {
     pub wire: Vec<u8>,
@@ -83,8 +87,11 @@ impl DnsFront {
                 Ok((size, peer)) => {
                     let wire = datagram[..size].to_vec();
                     let limit = Message::from_vec(&wire)
-                        .map(|message| usize::from(message.max_payload()).clamp(512, 65507))
-                        .unwrap_or(512);
+                        .map(|message| {
+                            usize::from(message.max_payload())
+                                .clamp(MIN_UDP_PAYLOAD, MAX_UDP_PAYLOAD)
+                        })
+                        .unwrap_or(MIN_UDP_PAYLOAD);
                     incoming.push(IncomingQuery {
                         wire,
                         reply: ReplyToken(ReplyDestination::Udp { peer, limit }),
