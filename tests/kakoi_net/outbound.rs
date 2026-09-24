@@ -432,3 +432,126 @@ print('routed', routed, 'asked', len(asked))
         "{output}"
     );
 }
+
+/// A DNS over TLS upstream on 127.0.0.1:853 with a certificate for
+/// resolver.example from a CA of its own, `ca.pem`, and another CA,
+/// `other.pem`, that did not sign it. It answers every name with 11.0.0.5.
+const DOT: &str = r#"
+import ssl
+tls = os.environ['HOME_DIR'] + '/tls'
+os.makedirs(tls)
+with open(tls + '/server.ext', 'w') as ext:
+    ext.write('subjectAltName=DNS:resolver.example\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\n')
+for arguments in [
+        ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'ca.key', '-out', 'ca.pem', '-days', '1', '-subj', '/CN=kakoi test CA'],
+        ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'other.key', '-out', 'other.pem', '-days', '1', '-subj', '/CN=kakoi other CA'],
+        ['req', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'server.key', '-out', 'server.csr', '-subj', '/CN=resolver.example'],
+        ['x509', '-req', '-in', 'server.csr', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '1', '-out', 'server.pem', '-days', '1', '-extfile', 'server.ext']]:
+    subprocess.run(['/usr/bin/openssl', *arguments], cwd=tls, check=True, capture_output=True)
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.load_cert_chain(tls + '/server.pem', tls + '/server.key')
+tls_listener = socket.socket()
+tls_listener.bind(('127.0.0.1', 853))
+tls_listener.listen()
+tls_queries = []
+
+def serve_tls(connection):
+    try:
+        with context.wrap_socket(connection, server_side=True) as stream:
+            while True:
+                size = stream.recv(2)
+                if len(size) < 2:
+                    return
+                query = b''
+                while len(query) < int.from_bytes(size, 'big'):
+                    query += stream.recv(int.from_bytes(size, 'big') - len(query))
+                tls_queries.append(query)
+                answer = bytearray(query)
+                answer[2] |= 0x80
+                answer[7] = 1
+                answer += b'\xc0\x0c\x00\x01\x00\x01\x00\x00\x01\x2c\x00\x04' + socket.inet_aton('11.0.0.5')
+                stream.sendall(len(answer).to_bytes(2, 'big') + answer)
+    except (ssl.SSLError, OSError):
+        pass
+
+def accept_tls():
+    while True:
+        connection, _ = tls_listener.accept()
+        threading.Thread(target=serve_tls, args=(connection,), daemon=True).start()
+threading.Thread(target=accept_tls, daemon=True).start()
+"#;
+
+fn over_tls(name: &str) -> String {
+    format!(
+        "\n[[network.dns-upstream]]\ntransport = 'tls'\nip = '127.0.0.1'\nport = 853\ntls-name = '{name}'\n\
+         \n[[network.allow]]\ndestination = {{ dns = '*.example' }}\nprotocol = 'tcp'\nports = ['8080']\n"
+    )
+}
+
+// TLS upstreams are verified with the host's CA certificates, read when the
+// run starts: a change of them afterwards does not reach the running one.
+// @kotowari[REQ-147, EX-326, EX-327]
+#[test]
+fn tls_upstreams_are_verified_with_the_host_cas_read_at_start() {
+    let host = FakeHost::following_host_dns(&over_tls("resolver.example"), &[]);
+    let output = host.run(&format!(
+        r#"{CONTROL}
+{DOT}
+import shutil
+store = os.environ['HOME_DIR'] + '/ca-store.pem'
+shutil.copy(tls + '/ca.pem', store)
+app = '''
+import sys
+for line in sys.stdin:
+    try:
+        print(socket.getaddrinfo(line.strip(), 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0], flush=True)
+    except OSError as error:
+        print('failed', type(error).__name__, flush=True)
+'''
+process = kakoi(app, stdin=subprocess.PIPE, environment={{'SSL_CERT_FILE': store}})
+print('trusted', ask(process, 'a.example'))
+# The host's store no longer holds the CA: the run keeps what it read.
+shutil.copy(tls + '/other.pem', store)
+print('changed', ask(process, 'b.example'))
+process.stdin.close()
+assert finish(process) == 0
+# A new run reads the store again.
+process = kakoi(app, stdin=subprocess.PIPE, environment={{'SSL_CERT_FILE': store}})
+print('restarted', ask(process, 'c.example'))
+process.stdin.close()
+assert finish(process) == 0
+"#
+    ));
+    assert_eq!(
+        output, "trusted 11.0.0.5\nchanged 11.0.0.5\nrestarted failed gaierror\n",
+        "{output}"
+    );
+}
+
+// A certificate that does not match the name fails the question: nothing
+// goes to the same server, or to its plain port, without TLS.
+// @kotowari[EX-297]
+#[test]
+fn a_failed_tls_check_does_not_fall_back_to_plain_dns() {
+    let host = FakeHost::following_host_dns(&over_tls("wrong.example"), &[]);
+    let output = host.run(&format!(
+        r#"{CONTROL}
+{DOT}
+dns({{('a.example', 1): [('11.0.0.5', 300)]}}, '127.0.0.1')
+app = '''
+try:
+    print(socket.getaddrinfo('a.example', 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0])
+except OSError as error:
+    print('failed', type(error).__name__)
+'''
+process = kakoi(app, environment={{'SSL_CERT_FILE': tls + '/ca.pem'}})
+print(process.stdout.read().decode(), end='')
+assert finish(process) == 0
+print('plain queries', len(asked), 'tls queries', len(tls_queries))
+"#
+    ));
+    assert_eq!(
+        output, "failed gaierror\nplain queries 0 tls queries 0\n",
+        "{output}"
+    );
+}

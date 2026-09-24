@@ -168,15 +168,17 @@ def resolv(text):
         with open(RESOLV, 'r+b', buffering=0) as current:
             current.write(padded)
 
-def kakoi(app, stdin=subprocess.DEVNULL, options=()):
-    """Starts kakoi with `options` and `app` as the sandbox's Python program."""
+def kakoi(app, stdin=subprocess.DEVNULL, options=(), environment=None):
+    """Starts kakoi with `options` and `app` as the sandbox's Python program,
+    adding `environment` to kakoi's own."""
     return subprocess.Popen(
         [os.environ['KAKOI'], *options, '--', '/usr/bin/python3', '-c', CLIENT + app],
         cwd=os.environ['WORKSPACE'], stdin=stdin, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, bufsize=0,
         env={'PATH': os.environ['BIN'] + ':/usr/sbin:/usr/bin:/bin',
              'HOME': os.environ['HOME_DIR'],
-             'XDG_CONFIG_HOME': os.environ['HOME_DIR'] + '/.config'})
+             'XDG_CONFIG_HOME': os.environ['HOME_DIR'] + '/.config',
+             **(environment or {})})
 
 def line(stream, wait=PERMITTED):
     """The next line of the unbuffered `stream`, or '' at its end; a hang ends
