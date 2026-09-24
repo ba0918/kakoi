@@ -6,15 +6,17 @@
 
 ### REQ-386: 版の唯一の典拠
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "Cargo.toml" 以外のソースに版を独立して書いた箇所が無いことを確かめる。"CHANGELOG.md" に各リリースの項目があり、各リリースに版にvを前置したタグがあることを確かめる。リリースしたkakoiの版の出力、"Cargo.toml" の版、タグの版が一致することを確かめる。
 
 版の典拠はCargo.tomlだけに置く。リリースごとにCHANGELOG.mdへ項目を追加し、版にvを前置したタグを付ける。version出力・Cargo.toml・タグの版を一致させる。
 
 ### REQ-387: 配布物の契約
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: リリースの配布物を取得し、kakoi-v<版>-x86_64-unknown-linux-musl.tar.gzとその名前に.sha256を足したSHA-256のファイルがあること、書庫の直下に静的リンクの実行ファイルが1つだけあることを確かめる。インストーラが読む書庫名がこの名前と一致することを確かめる。
 
 リリースにはLinux x86_64向け静的リンク実行ファイルを1つ平置きにしたkakoi-v<版>-x86_64-unknown-linux-musl.tar.gzと、その名前に.sha256を足したSHA-256ファイルを添える。インストーラが読む書庫名は契約である。CIと配布物の作成手順はこの仕様に含めない。
 

@@ -23,8 +23,9 @@ CNAMEの循環、参照回数または解決時間の上限超過時は名前解
 ### REQ-025: DNSSEC検証の担当
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A30
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A30, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: crates/kakoi-netを読み、DNSSECの署名を暗号学的に検証する処理が無く、DNSSECの検証を設定された問い合わせ先DNSサーバーに任せていること、kakoi-netの判定がIPとポートの許可であることを確かめる。
 
 DNSSECの署名検証は設定された問い合わせ先DNSサーバーに任せ、kakoi-net自身は暗号学的な署名検証を行わない。kakoi-netはIP・ポートの許可判定を担当する。DNSSECの保証は上流の検証設定と通信経路に依存し、非検証の上流を使う場合には保証しない。
 

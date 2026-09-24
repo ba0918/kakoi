@@ -6,8 +6,9 @@
 
 ### REQ-358: 公開文書の導線
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "README.md" が英語で、目的、コンテナやVMの代替でないこと、対応環境、インストール、最短起動、最小ポリシー、仕組み、シム・スキル、保証と限界、詳細文書、対象外の代表例を載せていることを確かめる。READMEから "docs/getting-started.md"、"docs/cli.md"、"docs/policy.md"、"docs/shim.md"、"docs/security.md" へ直接リンクし、これらが英語で詳細を責務ごとに分けて載せていることを確かめる。
 
 公開ドキュメントは英語のREADMEとREADMEから直接リンクするdocs以下の英語文書で構成する。READMEは目的、コンテナやVMの代替でないこと、対応環境、インストール、最短起動、最小ポリシー、仕組み、シム・スキル、保証と限界、詳細文書、対象外の代表例を短く載せる。詳細はgetting-started、cli、policy、shim、securityに責務分離する。
 
@@ -21,29 +22,33 @@
 
 ### REQ-360: 配置保護の説明
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "docs/policy.md" を読み、祖先の改名で保護を迂回できる理由と拒否、dotfilesの設定実体がworktree内のときの下位workspaceとrwのworkspace/git_common_dirの例、下位workspaceはそこで起動し別の場所からリンク越しに指定すると拒否されることと実体の指定による回避、rw内のリンクのhide/root/underは着地先を問わず拒否されること、rw/rw-fileは根の外へ着地すると拒否されること、roの許容と既知の隙間15が説明されていることを確かめる。
 
 "docs/policy.md"は祖先の改名で保護を迂回できる理由と拒否を説明する。dotfilesの設定実体がworktree内なら下位workspaceとrwのworkspace/git_common_dirを例示する。下位workspaceはそこで起動し、別場所からリンク越しに指定すると拒否されること、実体指定による回避を示す。rw内リンクのhide/root/underは着地先を問わず拒否、rw/rw-fileは根の外へ着地すれば拒否、roの許容と既知の隙間15も説明する。
 
 ### REQ-361: rw-copyと一時領域の説明
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "docs/policy.md" を読み、rw-copyとhideの初期内容の違い、設定変更をホストへ出さない用途、リンクとモードを保存すること、所有者・時刻・ハードリンクの共有を保存しないこと、上限と失敗、内部のポリシーファイルが配置拒否されないことが説明されていることを確かめる。秘密をconfigのsecrets配下へ案内していること、/tmp/kakoiが利用者かシムが作る共有場所で無ければ飛ばされ/tmpは空であること、/tmpをhideするソケット上の理由が書かれていることを確かめる。
 
 "docs/policy.md"はrw-copyとhideの初期内容の違い、設定変更をホストへ出さない用途、リンク・モードの保存、所有者・時刻・ハードリンク共有を保存しないこと、上限・失敗、内部のポリシーファイルが配置拒否されないことを説明する。秘密はconfigのsecrets配下へ案内し、/tmp/kakoiは利用者かシムが作る共有場所で、なければ飛ばされ/tmpは空であること、/tmpをhideするソケット上の理由を書く。
 
 ### REQ-362: インストールの説明順
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "README.md" で配布実行ファイルのインストーラと手動の書庫の手順がソースからのビルドより前にあり、導入直後に組み込みの既定で起動できることとinitとprint-planが最短手順に示されていることを確かめる。"docs/getting-started.md" と "docs/shim.md" が任意の調整としてinit、秘密、シム、gh skill installを案内していることを確かめる。READMEと "docs/getting-started.md" の両方に、初回は/tmpが空でghが未認証だと書かれていることを確かめる。
 
 READMEは配布実行ファイルのインストーラと手動書庫の手順をソースビルドより先に載せる。導入直後に組み込み既定で起動できること、initとprint-planを最短手順に示す。getting-startedとshimでは任意の調整としてinit、秘密、シムとgh skill installを案内する。READMEとgetting-started双方に初回は/tmpが空でghは未認証と書く。
 
 ### REQ-363: スキルの隔離外実行の案内
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: READMEとREADMEから直接リンクする詳細文書のセットアップスキルを説明する箇所を読み、スキルを隔離の外で動かすこと、シム導入前・KAKOI_SHIM_OFF=1・kakoiを経由しないCLIの経路が示されていることを確かめる。その間は隔離されないのでスキルに差分の承認を求めさせること、それを守るかはCLIに依存するのでCLI側も承認を求めるモードにすることが案内されていることを確かめる。
 
 セットアップスキルは隔離外で動かすと説明する。シム導入前、KAKOI_SHIM_OFF=1、kakoiを経由しないCLIの経路を示し、その間は隔離されずスキルに差分承認を求めさせること、それを守るかはCLIに依存するためCLI側も承認を求めるモードにすることを案内する。
 

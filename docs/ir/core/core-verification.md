@@ -6,8 +6,9 @@
 
 ### REQ-354: 計画算出の純粋な境界
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: crates/kakoi-coreの計画算出の関数を読み、入力が合成前の各段と出所、CLI引数、ホスト環境、収集済みの事実だけであり、事実に候補パスの存在・種類・実体、マウント一覧と取得失敗、走査結果、Git相互リンク、秘密の内容、パス解決で参照したもの、rw-copyの木、cwdが含まれることを確かめる。その関数がファイルシステムやプロセスに触れず、事実の収集、記述子の割り当て、bwrapの起動が関数の外にあることを確かめる。
 
 計画算出は合成前の各段と出所、CLI引数、ホスト環境、収集済み事実だけを入力にする純粋関数にする。事実には候補パスの存在・種類・実体、マウント一覧と取得失敗、走査結果、Git相互リンク、秘密の内容、パス解決で参照したもの、rw-copyの木、cwdを含む。事実収集、記述子割当、bwrap起動は関数の外に置く。
 
@@ -29,8 +30,9 @@ Linux x86_64でビルド済みkakoiと実bwrapを起動し、表 TBL-158 と表 
 
 ### REQ-357: 移行時の一度限りの確認
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 現行のcodex用jailから移行するとき、利用者の実機で旧スクリプトのbwrap引数と kakoi --print-plan の出力を並べ、マウント集合が一致することを人が一度確かめる。旧スクリプトが継続して動くテストに含まれていないことをテストの構成で確かめる。
 
 現行codex用jailからの移行時は、利用者の実機で旧スクリプトのbwrap引数とprint-planを並べ、マウント集合が一致することを人が一度確認する。旧スクリプトは製品でないため継続テストにしない。
 

@@ -6,22 +6,25 @@
 
 ### REQ-350: 実行結果と引数の保存
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "Cargo.toml" とソースの構成で、kakoiがRust製のCLIでbwrapのマウント名前空間にコマンドを起動することを確かめる。argv[0]と引数を表示するコマンドをkakoiで起動し、COMMANDの文字列がそのままargv[0]になりARGSが追加・変更されていないこと、kakoiの終了結果がコマンドの終了結果と一致することを観測する。filteredの外部終了要求と安全上の故障では、既存のネットワーク終了契約の要求と突き合わせてその終了結果が優先されることを確かめる。
 
 kakoiはRust製CLIとして、指定したポリシーとワークスペースでbwrapのマウント名前空間にコマンドを起動する。COMMANDの文字列をargv[0]として保存し、ARGSを追加・変更しない。終了結果はコマンドの終了結果を返す。ただしfilteredの外部終了要求と安全上の故障は既存のネットワーク終了契約を優先する。
 
 ### REQ-351: 計画の決定性
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 同じポリシー、ワークスペース、カレントディレクトリ、環境、ファイルシステムで kakoi --print-plan=full を2回実行し、出力が一致することを観測する。起動後にアプリからポリシーを変更・拡張する経路がCLIとポリシーのキーに無く、filteredのDNS許可と公開の更新が起動時に確定したポリシーの範囲を超えないことを、計画算出とcrates/kakoi-netの構成を読んで確かめる。
 
 同じポリシー、ワークスペース、カレントディレクトリ、環境、ファイルシステムの事実からは同じ起動計画を算出する。許可ポリシーは起動時に確定し、アプリから変更・拡張できない。filteredのDNS許可と公開の更新は確定したポリシーの範囲内で行う。
 
 ### REQ-352: 対応環境
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: "README.md" の対応環境の記述とソースを読み、対応環境がLinux x86_64、bwrap 0.9.0以上、root以外の利用者、setuidでないbwrapで、WSL2を含むことを確かめる。x86_64以外を対象にしたビルドがコンパイル時に失敗すること、隔離の中で32ビットとx32のバイナリを実行できないことを観測する。filteredの追加依存が無い環境でhostとnoneの起動が通ることを観測する。
 
 対応環境はLinux x86_64、bwrap 0.9.0以上、root以外の利用者、setuidでないbwrapである。WSL2を含む。x86_64以外へのビルドはコンパイル時に拒否する。32ビットとx32のバイナリは隔離内で実行できない。filteredの追加依存は実証工程で確定し、host/noneに必須としない。
 
