@@ -214,6 +214,9 @@ loopback.
   that, as does a UDP exchange that keeps going (`network.udp-idle-timeout-seconds`, default
   120). Loopback, private, and other special addresses in an answer are not allowed by a
   `dns` rule alone; allow them with `ip` or `cidr`.
+  The resolver answers the same question again from what it last received while that
+  answer lives, and a question that just failed fails again without asking for
+  `network.dns-failure-cache-seconds` (default 5).
 - **`ports`** is a list of strings: `"443"`, a range `"8000-8010"`, or `"*"` for every port
   alone. Numbers are 1 to 65535, without leading zeros, signs, or spaces; service names and
   bare integers are refused.

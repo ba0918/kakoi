@@ -314,7 +314,8 @@ fn authorized_requests_share_work_and_return_individual_answers_without_resettin
     let mut answer = first.clone();
     answer[2] |= 0x80;
     answer[7] = 1;
-    answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
+    // No time to live: the same question afterwards is new work, not cached.
+    answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 1, 1, 1]);
     let replies = requests.complete(task.id, Ok(answer), now + Duration::from_millis(950));
     assert_eq!(replies.len(), 2);
     for (reply, wire, peer) in [(&replies[0], &first, 10), (&replies[1], &second, 11)] {
@@ -573,6 +574,85 @@ fn a_failed_resolution_is_held_for_the_failure_cache_time() {
         requests
             .accept(&question, 4, now + Duration::from_secs(5))
             .unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+}
+
+/// An answer to `question` with one A record of `ttl` seconds.
+fn answered(question: &[u8], ttl: u32) -> Vec<u8> {
+    let mut answer = question.to_vec();
+    answer[2] |= 0x80;
+    answer[7] = 1;
+    answer.extend([0xc0, 0x0c, 0, 1, 0, 1]);
+    answer.extend(ttl.to_be_bytes());
+    answer.extend([0, 4, 1, 1, 1, 1]);
+    answer
+}
+
+// A valid answer is used again for the same question until its time to live
+// runs out, counted down, with the asker's own ID; an answer with no time to
+// live is not kept, and new settings do not use what the old ones cached.
+// @kotowari[REQ-133, REQ-389, EX-234]
+#[test]
+fn a_valid_answer_is_reused_until_its_time_to_live_runs_out() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests = DnsRequests::new(
+        vec![rule("*.example.com")],
+        7,
+        4,
+        4,
+        Duration::from_secs(10),
+    )
+    .unwrap();
+    let question = query("api.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&question, 1, now).unwrap() else {
+        panic!("the first question starts a resolution")
+    };
+    requests.complete(task.id, Ok(answered(&question, 30)), now);
+    let mut again = query("API.example.com", 1);
+    again[..2].copy_from_slice(&[0x55, 0x66]);
+    let AcceptedRequest::Answer(reply) = requests
+        .accept(&again, 2, now + Duration::from_millis(10_500))
+        .unwrap()
+    else {
+        panic!("a valid cached answer started new work")
+    };
+    let validated = kakoi_net::dns::Question::parse(&again)
+        .unwrap()
+        .validate_response(&reply.wire)
+        .unwrap();
+    assert_eq!(validated.wire()[3] & 15, 0);
+    // 30 seconds less the 11 begun since the answer.
+    let len = reply.wire.len();
+    assert_eq!(&reply.wire[len - 10..len - 6], &19u32.to_be_bytes());
+    assert_eq!(&reply.wire[len - 4..], &[1, 1, 1, 1]);
+    assert!(matches!(
+        requests
+            .accept(&question, 3, now + Duration::from_secs(30))
+            .unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+    // Nothing is kept of an answer without a time to live.
+    let other = query("www.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&other, 4, now).unwrap() else {
+        panic!()
+    };
+    requests.complete(task.id, Ok(answered(&other, 0)), now);
+    assert!(matches!(
+        requests.accept(&other, 5, now).unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+    // New settings: the cache of the old ones is not used.
+    let third = query("cdn.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&third, 6, now).unwrap() else {
+        panic!()
+    };
+    requests.complete(task.id, Ok(answered(&third, 30)), now);
+    requests.advance_generation();
+    assert!(matches!(
+        requests.accept(&third, 7, now).unwrap(),
         AcceptedRequest::Start(_)
     ));
 }

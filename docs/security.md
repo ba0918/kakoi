@@ -86,7 +86,6 @@ Limits of `filtered`, as it stands:
   port is a new flow. This is `pasta`'s behaviour and is accepted.
 - IPv6 link-local destinations (`host-interface`) are refused, and publications are fixed:
   nothing is published because something inside started listening.
-- The resolver does not cache answers yet.
 
 ## Known gaps
 

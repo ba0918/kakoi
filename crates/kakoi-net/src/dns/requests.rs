@@ -11,6 +11,16 @@ use std::{
 
 /// Held failures kept at most; beyond it a failure is simply asked again.
 const MAX_HELD_FAILURES: usize = 4096;
+/// Cached answers kept at most; beyond it an answer is simply not kept.
+const MAX_CACHED_ANSWERS: usize = 4096;
+
+/// An answer kept for its time to live, counted from when its resolution
+/// started: no record in it was received before, so none outlives this.
+struct Cached {
+    message: hickory_proto::op::Message,
+    received: Instant,
+    ttl: u32,
+}
 
 pub struct DnsReply<W> {
     pub recipient: W,
@@ -39,6 +49,7 @@ struct Running {
     id: ResolutionId,
     key: ResolutionKey,
     question: Question,
+    started: Instant,
     deadline: Instant,
 }
 
@@ -55,6 +66,7 @@ pub struct DnsRequests<W> {
     failure_hold: Duration,
     // Resolution conditions that failed, until when they are answered SERVFAIL.
     held: HashMap<ResolutionKey, Instant>,
+    cache: HashMap<ResolutionKey, Cached>,
 }
 
 impl<W> DnsRequests<W> {
@@ -76,6 +88,7 @@ impl<W> DnsRequests<W> {
             timeout,
             failure_hold: Duration::ZERO,
             held: HashMap::new(),
+            cache: HashMap::new(),
         })
     }
 
@@ -90,6 +103,9 @@ impl<W> DnsRequests<W> {
     /// never share a resolution started under the previous one.
     pub fn advance_generation(&mut self) {
         self.generation = self.generation.wrapping_add(1);
+        // What the old settings answered or failed is of no use to the new.
+        self.cache.clear();
+        self.held.clear();
     }
 
     pub fn accept(
@@ -120,6 +136,9 @@ impl<W> DnsRequests<W> {
         if self.held.get(&key).is_some_and(|until| now < *until) {
             return reply(&question, recipient, ResponseCode::ServFail);
         }
+        if let Some(wire) = self.cached(&key, &question, now) {
+            return Ok(AcceptedRequest::Answer(DnsReply { recipient, wire }));
+        }
         let waiter = Waiter {
             recipient,
             id: question.message.metadata.id,
@@ -132,6 +151,7 @@ impl<W> DnsRequests<W> {
                     id,
                     key,
                     question,
+                    started: now,
                     deadline,
                 });
                 Ok(AcceptedRequest::Start(ResolutionTask {
@@ -175,6 +195,8 @@ impl<W> DnsRequests<W> {
         };
         if failed {
             self.hold(running.key.clone(), now);
+        } else if let Ok(answer) = &result {
+            self.keep(running.key.clone(), &answer.message, running.started, now);
         }
         self.pool
             .complete(id)
@@ -219,6 +241,65 @@ impl<W> DnsRequests<W> {
                 }
             })
             .collect()
+    }
+
+    /// Keeps a positive answer with a time to live. An answer without one,
+    /// a negative one, and one carrying a message signature are not kept.
+    fn keep(
+        &mut self,
+        key: ResolutionKey,
+        message: &hickory_proto::op::Message,
+        received: Instant,
+        now: Instant,
+    ) {
+        if message.metadata.response_code != ResponseCode::NoError
+            || message.metadata.truncation
+            || message.signature.is_some()
+        {
+            return;
+        }
+        let Some(ttl) = message.answers.iter().map(|record| record.ttl).min() else {
+            return;
+        };
+        if ttl == 0 {
+            return;
+        }
+        self.cache
+            .retain(|_, cached| now < cached.received + Duration::from_secs(u64::from(cached.ttl)));
+        if self.cache.len() < MAX_CACHED_ANSWERS {
+            self.cache.insert(
+                key,
+                Cached {
+                    message: message.clone(),
+                    received,
+                    ttl,
+                },
+            );
+        }
+    }
+
+    /// The cached answer to `question`, its times to live counted down by the
+    /// seconds begun since, while every record has at least one left.
+    fn cached(&self, key: &ResolutionKey, question: &Question, now: Instant) -> Option<Vec<u8>> {
+        let cached = self.cache.get(key)?;
+        let elapsed = now.checked_duration_since(cached.received)?;
+        let begun =
+            u32::try_from(elapsed.as_secs() + u64::from(elapsed.subsec_nanos() > 0)).ok()?;
+        if begun >= cached.ttl {
+            return None;
+        }
+        let mut message = cached.message.clone();
+        message.metadata.id = question.message.metadata.id;
+        message.queries[0] = question.message.queries[0].clone();
+        for record in message
+            .answers
+            .iter_mut()
+            .chain(message.authorities.iter_mut())
+            .chain(message.additionals.iter_mut())
+        {
+            record.ttl = record.ttl.saturating_sub(begun);
+        }
+        message.to_vec().ok()
     }
 
     fn hold(&mut self, key: ResolutionKey, now: Instant) {
