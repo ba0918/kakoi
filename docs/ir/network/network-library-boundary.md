@@ -7,8 +7,9 @@ coreとnetの分担と、CLIを通さない利用の契約を定義する草案�
 ### REQ-150: 計画と実行の責務を分ける
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: crates/kakoi-coreを読み、設定の検査・合成・計画を担当し環境へ直接アクセスしないことを確かめる。crates/kakoi-netが通信の起動・監督・停止を担い、CLIを通さずRustプログラムから使える公開の入口を持つこと、DNS応答の採否と許可期限の判断がOS操作と分かれて単独で検証できる構造であることを確かめる。
 
 kakoi-coreは設定の検査・合成・計画を担当し、環境へ直接アクセスしない。kakoi-netが通信の起動・監督・停止を担い、CLI以外のRustプログラムからも使える形にする。DNS応答の採否や許可期限の判断はOS操作と分けて検証できる構造にする。
 

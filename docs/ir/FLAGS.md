@@ -78,3 +78,10 @@ tests/cli.rsのrw-copy表示テストはevery_formという名前を持つが、
 - source: docs/decision/brainstorm/2026-09-25-kakoi-spec-retirement.md#A2, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A6
 
 旧仕様の network/initial-release の文書は、固定公開について「内側の転送先も指定系統のループバックとし、そのアドレスで接続できる全アドレス待受も利用できる」「設定一覧や外部コマンドの成功終了だけを実際の確保の証拠にはしない」と定めていた。前者は実装もテストも見つからない。後者について kakoi はホスト側のポートを直接確かめるコードを持たない。どちらも今の実装で確かめられないので要求にしていない。同じ文書の他の細部はREQ-421〜REQ-423で要求にした。
+
+### FLAG-027: 動的公開のための責務分離の区切り方に決定の根拠が無い
+- kind: gap
+- related: REQ-391
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+
+REQ-391は「将来の動的公開を追加できるよう公開の判断とpasta固有の操作を分離する」と定める。決定A159が述べるのは「将来の動的公開を追加できる責務分離を初版から設ける」ことだけで、何と何を分けるかを書いていない。確かめ方を書いた照合で、この区切り方を支える決定が見つからなかった。実装の構造が区切り方に合っているかは確かめていない。区切り方を決定として記録するか、要求の文を決定の範囲に狭めるかを決める必要がある。

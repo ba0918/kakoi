@@ -15,16 +15,18 @@
 ### REQ-391: 将来の動的公開の責務を分離する
 
 - kind: invariant
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A155, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: crates/kakoi-netを読み、公開の判断とpasta固有の操作が別の部分に分かれていることを確かめる。コードと公開文書に、上流の正式対応時期や修正の採用を確約された事実として扱う処理や記述が無いことを確かめる。上流のUDP削除・再利用問題の修正を必要とする動的公開を採用する変更では、その問題の解決が採用の条件として扱われていることを確かめる。
 
 将来の動的公開を追加できるよう公開の判断とpasta固有の操作を分離する。上流の正式対応時期や修正採用を確約された事実として扱わない。上流のUDP削除・再利用問題の解決条件は、その修正を必要とする動的公開の採用に適用する。
 
 ### REQ-392: 初版の開始条件と提供条件を分ける
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#D9
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#D9, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A155, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 実証の記録を読み、実装開始前に上流未修正版で初版の通信・固定公開・全経路遮断・導入経路を確認したこと、提供前に実コードでDNS・監督・期限・終了の統合を確認したことを確かめる。過去の限定修正版による部分確認を初版全体の合格として扱った記録が無いことを確かめる。
 
 実装開始前に上流未修正版で初版の通信・固定公開・全経路遮断・導入経路を確認する。実コードでのDNS・監督・期限・終了の統合は提供前に確認する。過去の限定修正版による部分確認を初版全体の合格へ繰り上げない。
 

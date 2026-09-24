@@ -15,8 +15,9 @@
 ### REQ-132: DoHを追加できるよう通信方式を許可判定から分離する
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A131, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: crates/kakoi-netのDNSの通信方式を扱う部分と、DNS応答の検査・IP許可判定の部分を読み、両者が分かれていて、許可判定が通信方式に依存しないことを確かめる。
 
 DNSの通信方式をDNS応答の検査・IP許可判定から分離し、将来DNS over HTTPSを追加できる設計とする。方式の追加で既存の許可モデルを作り直す構造にしない。
 

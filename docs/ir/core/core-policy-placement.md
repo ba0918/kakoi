@@ -100,8 +100,9 @@
 
 ### REQ-162: 根の項目と露出する組の根拠
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 本文に挙げた差し替えの形（前置きでない場所のリンク、".." で "rw" の中のディレクトリを通り抜ける形、入れ子の項目の差し替え、飛び先同士の正当化、"--workspace" を "rw" の中のリンク越しに与える形）が、REQ-158からREQ-161の規則で止まることを規則と突き合わせて確かめる。露出する組の指令の組み合わせと、実体のパスで書けば通る配置・諦める配置が、REQ-161の検査と一致することを確かめる。
 
 なぜ根の項目という考え方が要るか。書き込める項目の中にあるものを参照して解決されるパスは、隔離の中からその参照先を書き換えることで、次の起動に別の実体を読ませたり、別の実体へ指令を適用させたりできる。前置きの実体だけを見ると、前置きではない場所にあるリンク（"~/policies" が "~/cache/link/pol"を指し、"~/cache/link" が "rw" の中）を張り替えられる。
 
@@ -125,8 +126,9 @@
 
 ### REQ-163: 残る配置上の隙間と受け入れる形
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 本文の配置（"rw" の中の "ro" の入れ子、"rw" の中に置いたリンクのパスを "rw"、"rw-file"、"hide"、走査の "root"、"hide-mounts" の "under" に書く配置とリンク先の実体のパスを書く配置、同じリンクのパスを "ro" に書く配置）でkakoiを起動し、それぞれ本文のとおり通るか1回目の起動から止まるかを観測する。"ro" で書いたリンクの守りの限界が表 TBL-160 の既知の隙間15と一致すること、秘密ファイルが保護対象のパスに含まれることをREQ-158と突き合わせて確かめる。
 
 "rw" の中の "hide"・"ro" の項目は着地先を変えられると元の対象を隠せなくなるが、それは下の「読み取り専用で重ねるだけでは足りない理由」のとおり祖先の改名でも起きることで、この規則の穴ではない。入れ子を禁じないのは、第 6.4 節の表にある "rw" の中の "ro" のような形を残すためである。
 
@@ -138,15 +140,17 @@
 
 ### REQ-164: 読み取り専用で重ねる保護の限界
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: bwrap 0.9.0 以上で、読み取り専用で重ねたファイルの祖先ディレクトリを隔離の中で改名して同じパスに別のファイルを置き、次の起動がその別のファイルを読むことを観測する。
 
 読み取り専用で重ねるだけでは足りない理由: 重ねたファイル自体は動かせないが、その祖先ディレクトリの改名は許され、同じパスに別のファイルを置けば次回の起動がそれを読む（2026-09-03 に bwrap 0.9.0 で実測）。
 
 ### REQ-165: 配置保護の受け入れ例と拒否例
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 本文に挙げた各配置を用意してkakoiを起動し、通るとされた配置が通り、止まるとされた配置が理由付きの診断（書かれた項目と "--workspace" では種類 "path"）で止まることを一つずつ観測する。合成結果が "--print-plan=full" に表示されること、削除の演算子に相当する書き方がどの段でも読み込みに失敗することを観測する。
 
 成功の観測条件: 上の表の規則で合成した結果が "--print-plan=full" に表示され、削除の演算子に相当する書き方はどの段でも読み込み失敗になり、ワークツリーの中に置いたポリシーファイルを "--policy-file" で指すと理由付きの診断で止まり、"rw" の中を指す "secrets" の値も同じ診断で止まり、"rw" の外にあるポリシーファイルを "rw" の中に置いたシンボリックリンク越しに指しても同じ診断で止まり、リンク先が ".." で"rw" の中のディレクトリを通り抜ける形でも同じ診断で止まる。
 
@@ -168,8 +172,9 @@
 
 ### REQ-166: 複製・生成・起点に関する境界例
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
 - verification: review
+- how_to_verify: 本文に挙げた各配置（"rw-copy" と "rw-file" の組、別の根の項目への着地、生成された "hide" の中への着地、固定部分、走査の起点）を用意してkakoiを起動し、通るとされた配置が通り、止まるとされた配置が種類 "path" の診断で止まることを一つずつ観測する。
 
 "rw = ["~/a", "~/b"]" と "hide = ["~/b/creds"]" のプロファイルに、"~/a/link" を "~/b/creds" へ向けた"--policy-file" の "rw-copy = ["~/a/link"]" は "path" で止まり、同じ形で相手が "ro = ["~/b/creds"]" なら通る。
 
