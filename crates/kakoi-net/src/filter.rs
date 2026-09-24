@@ -35,6 +35,7 @@ pub fn compile_static(rules: &[FilterRule], udp_idle_seconds: u32) -> Result<Str
   ct state related meta l4proto {{ icmp, ipv6-icmp }} accept
   ip daddr {{ 224.0.0.0/4, 255.255.255.255 }} drop
   ip6 daddr ff00::/8 drop
+  ip6 daddr fe80::/10 drop
   ct mark 1 meta l4proto tcp ct state established accept
   ct mark 1 meta l4proto udp accept
   jump permitted

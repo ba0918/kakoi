@@ -836,3 +836,109 @@ fn staging_that_cannot_finish_before_the_answer_expires_fails_only_that_answer()
         .unwrap();
     assert_eq!(dns_sets(&namespace).len(), 1);
 }
+
+// A rule for all of IPv6 does not reach a link-local neighbour: only a rule
+// naming the interface could, and the initial release has none.
+// @kotowari[REQ-141, EX-314]
+#[test]
+fn a_rule_for_all_of_ipv6_does_not_reach_link_local() {
+    let client = NetworkNamespace::create().unwrap();
+    let server = NetworkNamespace::create_within(&client).unwrap();
+    ip(
+        &client,
+        &[
+            "link",
+            "add",
+            "app0",
+            "type",
+            "veth",
+            "peer",
+            "name",
+            "srv0",
+            "netns",
+            &server.keeper_pid().to_string(),
+        ],
+    );
+    for (namespace, interface, suffix) in [(&client, "app0", "1"), (&server, "srv0", "2")] {
+        ip(namespace, &["link", "set", "lo", "up"]);
+        ip(namespace, &["link", "set", interface, "up"]);
+        for address in [format!("fd00:1::{suffix}/64"), format!("fe80::{suffix}/64")] {
+            ip(
+                namespace,
+                &["-6", "addr", "add", &address, "dev", interface, "nodad"],
+            );
+        }
+    }
+    let script = filter::compile_static(
+        &[FilterRule {
+            network: "::/0".parse().unwrap(),
+            protocol: Protocol::Tcp,
+            ports: Ports::try_from(vec!["8080".into()]).unwrap(),
+        }],
+        1,
+    )
+    .unwrap();
+    nft::apply(
+        &client,
+        Path::new("/usr/sbin/nft"),
+        &script,
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    let mut server = Server(
+        server
+            .command("/usr/bin/python3")
+            .unwrap()
+            .args([
+                "-c",
+                r#"
+import socket, sys, threading
+listener = socket.socket(socket.AF_INET6)
+listener.bind(('::', 8080))
+listener.listen()
+def serve():
+    while True:
+        connection, _ = listener.accept()
+        with connection:
+            connection.sendall(b'served')
+threading.Thread(target=serve, daemon=True).start()
+print('ready', flush=True)
+sys.stdin.read()
+"#,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut ready = String::new();
+    BufReader::new(server.0.stdout.take().unwrap())
+        .read_line(&mut ready)
+        .unwrap();
+    assert_eq!(ready, "ready\n");
+    let output = client
+        .command("/usr/bin/python3")
+        .unwrap()
+        .args([
+            "-c",
+            r#"
+import socket
+for address in [('fd00:1::2', 8080), ('fe80::2%app0', 8080)]:
+    with socket.socket(socket.AF_INET6) as sock:
+        sock.settimeout(1)
+        try:
+            sock.connect(socket.getaddrinfo(*address, socket.AF_INET6, socket.SOCK_STREAM)[0][4])
+            print(address[0], sock.recv(16).decode())
+        except OSError as error:
+            print(address[0], 'failed', type(error).__name__)
+"#,
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "fd00:1::2 served\nfe80::2%app0 failed TimeoutError\n",
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
