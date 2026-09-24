@@ -55,7 +55,8 @@ jobs:
       - name: Install bubblewrap and report the test requirements
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap nftables iproute2 openssl
+          # musl-tools: rustls's ring compiles C for the musl target with musl's gcc.
+          sudo apt-get install -y bubblewrap nftables iproute2 openssl musl-tools
           bwrap --version
           git --version
           python3 --version
@@ -142,6 +143,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.PUBLISHED_TARGET }}
+
+      # rustls's ring compiles C for the musl target with musl's gcc.
+      - name: Install the musl C compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - uses: Swatinem/rust-cache@v2
 
