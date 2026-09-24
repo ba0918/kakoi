@@ -357,6 +357,18 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        let _ = self.close_until(Instant::now() + Duration::from_secs(2));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let _ = self.close_until(deadline);
+        // A cancelled rebuild still owns a transport; joining it ends that
+        // transport here instead of in a detached worker. A worker stuck past the
+        // deadline is left detached rather than hang the caller.
+        if let Some(work) = self.rebuilding.take() {
+            while !work.is_finished() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            if work.is_finished() {
+                let _ = work.join();
+            }
+        }
     }
 }

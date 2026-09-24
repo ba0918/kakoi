@@ -572,6 +572,57 @@ sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).re
     assert!(timely, "cancelled rebuild waited for nft timeout");
 }
 
+// Dropping a session in the middle of a rebuild returns only once the rebuild
+// has let go of the environment: its pasta processes and the stalled nft are
+// gone, not left to a detached worker.
+// @kotowari[REQ-060]
+#[test]
+fn dropping_a_session_during_a_rebuild_ends_the_rebuilt_environment() {
+    let directory = TempDir::new();
+    let marker = directory.path().join("blocked-nft");
+    let nft = directory.write_executable(
+        "nft",
+        format!(
+            r#"#!/usr/bin/python3
+import os, subprocess, sys
+rules = sys.stdin.read()
+if 'delete table inet kakoi_policy' in rules:
+    with open({marker:?} + '.partial', 'w') as out:
+        out.write(str(os.getpid()))
+    os.rename({marker:?} + '.partial', {marker:?})
+    os.execl('/bin/sleep', 'sleep', '30')
+sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).returncode)
+"#,
+            marker = marker.to_str().unwrap()
+        ),
+    );
+    let (transport, original) = transport_with_nft(&directory, &nft);
+    let mut session =
+        Session::prepare(transport, config(nft.to_str().unwrap()), &[], |_| None).unwrap();
+    session.activate().unwrap();
+    assert_eq!(unsafe { libc::kill(original[1].0, libc::SIGKILL) }, 0);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !marker.exists() {
+        let _ = session.poll();
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let blocked: i32 = std::fs::read_to_string(&marker).unwrap().parse().unwrap();
+    drop(session);
+    let records = std::fs::read_to_string(directory.path().join("processes")).unwrap();
+    let left: Vec<_> = records
+        .split_whitespace()
+        .chain([blocked.to_string().as_str()])
+        .filter(|pid| Path::new(&format!("/proc/{pid}")).exists())
+        .map(str::to_owned)
+        .collect();
+    // Clean up even on RED so a stalled nft cannot outlive the test.
+    unsafe {
+        libc::kill(blocked, libc::SIGKILL);
+    }
+    assert!(left.is_empty(), "left running after the drop: {left:?}");
+}
+
 // @kotowari[REQ-058, REQ-066, REQ-067, REQ-143, EX-123]
 #[test]
 fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
