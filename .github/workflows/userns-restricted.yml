@@ -28,7 +28,7 @@ jobs:
       - name: Install bubblewrap and nftables
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap nftables iproute2
+          sudo apt-get install -y bubblewrap nftables iproute2 apparmor-profiles
           bwrap --version
           nft --version
 
@@ -61,7 +61,8 @@ jobs:
           ports = ["443"]
           EOF
           reach='import socket; socket.create_connection(("1.1.1.1", 443), 5).close(); print("reached 1.1.1.1:443")'
-          profile=/usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          # The runner image does not carry Ubuntu's extra profiles; the package above does.
+          profile=$(find /usr/share/apparmor /etc/apparmor.d -name bwrap-userns-restrict -type f 2>/dev/null | head -n1)
           launch() {
             local label=$1; shift
             echo "::group::$label"
@@ -88,14 +89,18 @@ jobs:
 
           echo "restriction: $(sysctl -n kernel.apparmor_restrict_unprivileged_userns)"
           sudo aa-status | grep -i bwrap || echo "no bwrap profile loaded"
-          ls -l "$profile"
+          echo "bwrap profile file: ${profile:-none}"
 
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
           case_of "restricted"
 
-          sudo apparmor_parser -r "$profile"
-          case_of "restricted, bwrap profile"
-          sudo apparmor_parser -R "$profile"
+          if [ -n "$profile" ]; then
+            sudo apparmor_parser -r "$profile"
+            case_of "restricted, bwrap profile"
+            sudo apparmor_parser -R "$profile"
+          else
+            echo "### restricted, bwrap profile: not run, no profile file" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           case_of "unrestricted"
