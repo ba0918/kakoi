@@ -1214,7 +1214,7 @@ fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
-// @kotowari[REQ-167]
+// @kotowari[REQ-167, REQ-404, EX-762]
 #[test]
 fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_path_diagnostic() {
     // A FIFO has no content to copy. The run stops rather than standing an empty regular
@@ -1236,7 +1236,7 @@ fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_p
     assert!(diagnostic.contains("not a regular file"), "{diagnostic}");
 }
 
-// @kotowari[REQ-168]
+// @kotowari[REQ-168, REQ-404, EX-761]
 #[test]
 fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is

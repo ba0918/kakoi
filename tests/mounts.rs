@@ -645,7 +645,7 @@ fn hide_mounts_leaves_the_workspace_worktree_and_common_dir_alone() {
     );
 }
 
-// @kotowari[REQ-170]
+// @kotowari[REQ-170, REQ-403, EX-760]
 #[test]
 fn an_unreadable_mount_list_with_hide_mounts_is_a_path_diagnostic() {
     // A mount to hide might be there unseen (a `/proc` restricted by another sandbox), so
