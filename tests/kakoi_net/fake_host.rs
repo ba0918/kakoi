@@ -142,8 +142,12 @@ def dns(records, address='127.0.0.1'):
             response = query[:2] + flags.to_bytes(2, 'big') + (1).to_bytes(2, 'big')
             response += len(answers).to_bytes(2, 'big') + bytes(4) + query[12:at + 5]
             for address, ttl in answers:
-                data = socket.inet_pton(socket.AF_INET6 if kind == 28 else socket.AF_INET, address)
-                response += b'\xc0\x0c' + kind.to_bytes(2, 'big') + (1).to_bytes(2, 'big')
+                if address == 'rrsig':
+                    # A syntactic signature, not a cryptographic one.
+                    record, data = 46, bytes([0, kind, 8, 3, 0, 0, 0, 30, 255, 255, 255, 255, 0, 0, 0, 1, 0, 1, 0, 1, 2, 3, 4])
+                else:
+                    record, data = kind, socket.inet_pton(socket.AF_INET6 if kind == 28 else socket.AF_INET, address)
+                response += b'\xc0\x0c' + record.to_bytes(2, 'big') + (1).to_bytes(2, 'big')
                 response += ttl.to_bytes(4, 'big') + len(data).to_bytes(2, 'big') + data
             server.sendto(response, peer)
     threading.Thread(target=loop, daemon=True).start()

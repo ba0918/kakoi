@@ -343,3 +343,92 @@ print('received', sorted(received))
         "{output}"
     );
 }
+
+// A signed answer mixing an address the rule may open with an internal one
+// reaches the application unchanged, and still only the first is opened.
+// @kotowari[EX-033]
+#[test]
+fn an_internal_address_left_in_a_signed_answer_stays_closed() {
+    let host = FakeHost::new(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &["11.0.0.5/32", "10.0.0.9/32"],
+    );
+    let app = r#"
+addresses = sorted({entry[4][0] for entry in socket.getaddrinfo('app.example', 8080, socket.AF_INET, socket.SOCK_STREAM)})
+print(*addresses)
+print(exchange('11.0.0.5', 8080, 'tcp', PERMITTED), exchange('10.0.0.9', 8080, 'tcp', REFUSED))
+"#;
+    let output = host.run(&format!(
+        r#"
+dns({{('app.example', 1): [('11.0.0.5', 300), ('10.0.0.9', 300), ('rrsig', 300)]}})
+serve('11.0.0.5', 8080, 'tcp', 'public')
+serve('10.0.0.9', 8080, 'tcp', 'internal')
+process = kakoi({app:?})
+print(process.stdout.read().decode(), end='')
+assert finish(process) == 0
+print('received', sorted(received))
+"#
+    ));
+    assert_eq!(
+        output, "10.0.0.9 11.0.0.5\npublic failed TimeoutError\nreceived ['public']\n",
+        "{output}"
+    );
+}
+
+// The host's stub resolver alone in resolv.conf stands for a host that routes
+// names by itself: kakoi asks its routing side, and each name goes where the
+// host sends it.
+// @kotowari[REQ-106, EX-230, EX-243]
+#[test]
+fn the_host_routes_each_name_through_its_stub_resolver() {
+    let host = FakeHost::following_host_dns(
+        "\n[[network.allow]]\ndestination = { dns = '*.corp.example' }\nprotocol = 'tcp'\nports = ['8080']\n\
+         \n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &[],
+    );
+    let app = r#"
+for name in ('wiki.corp.example', 'app.example'):
+    print(name, socket.getaddrinfo(name, 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0])
+"#;
+    let output = host.run(&format!(
+        r#"
+dns({{('wiki.corp.example', 1): [('11.0.0.5', 300)]}}, '127.0.0.1')
+dns({{('app.example', 1): [('11.0.0.6', 300)]}}, '127.0.0.2')
+stub = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+stub.bind(('127.0.0.53', 53))
+stub.setblocking(False)
+routed = []
+
+def route():
+    # The host's routing side: internal names to one server, the rest to
+    # another, as systemd-resolved's split DNS does.
+    router = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    router.bind(('127.0.0.54', 53))
+    while True:
+        query, peer = router.recvfrom(512)
+        name = query[12:].split(b'\0')[0]
+        server = '127.0.0.1' if b'corp' in name else '127.0.0.2'
+        routed.append(server)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as upstream:
+            upstream.settimeout(5)
+            upstream.sendto(query, (server, 53))
+            router.sendto(upstream.recv(512), peer)
+threading.Thread(target=route, daemon=True).start()
+resolv('nameserver 127.0.0.53\n')
+process = kakoi({app:?})
+print(process.stdout.read().decode(), end='')
+assert finish(process) == 0
+try:
+    stub.recv(512)
+    print('the stub was asked')
+except BlockingIOError:
+    pass
+print('routed', routed, 'asked', len(asked))
+"#
+    ));
+    assert_eq!(
+        output,
+        "wiki.corp.example 11.0.0.5\napp.example 11.0.0.6\nrouted ['127.0.0.1', '127.0.0.2'] asked 2\n",
+        "{output}"
+    );
+}
