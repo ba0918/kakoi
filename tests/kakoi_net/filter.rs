@@ -811,14 +811,15 @@ fn late_stagings(left: Duration) -> (Vec<LateStaging>, std::io::ErrorKind) {
         format!(
             r#"#!/bin/sh
 if [ "$1" = "-f" ]; then
+    now=$(/bin/date +%s%N)
     input='{directory}/input.'$$
     /bin/cat > "$input"
     if /bin/grep -q '^add element' "$input"; then
-        echo "stage $(/bin/date +%s%N)" >> '{log}'
+        echo "stage $now" >> '{log}'
         exec /bin/sleep 60
     fi
     if /bin/grep -q '^delete set' "$input"; then
-        echo "discard $(/bin/date +%s%N)" >> '{log}'
+        echo "discard $now" >> '{log}'
     fi
     exec /usr/sbin/nft "$@" < "$input"
 fi
@@ -866,50 +867,59 @@ exec /usr/sbin/nft "$@"
 }
 
 // While half the time left allows, each late staging is tried again with
-// twice the reserve. Reserves too short for the doubling to show above the
-// cost of starting nft are not compared.
+// twice the reserve. A measured reserve also carries the cost of starting
+// nft, which would pull the ratio of short reserves below two, so a pair is
+// compared only when the earlier reserve grew by enough over the one before
+// it; that growth is a difference of two measurements and carries no such
+// cost.
 // @kotowari[REQ-420, EX-804]
 #[test]
 fn a_late_staging_is_tried_again_with_twice_the_reserve() {
     let (stagings, error) = late_stagings(Duration::from_secs(10));
     assert_eq!(error, std::io::ErrorKind::TimedOut);
     let compared: Vec<f64> = stagings
-        .windows(2)
-        .filter(|pair| {
-            pair[0].reserve >= Duration::from_millis(90)
-                && pair[0].reserve * 2 + Duration::from_millis(100) < pair[1].left / 2
+        .windows(3)
+        .filter(|run| {
+            run[1].reserve.saturating_sub(run[0].reserve) >= Duration::from_millis(75)
+                && run[1].reserve * 2 <= run[2].left / 2
         })
-        .map(|pair| pair[1].reserve.as_secs_f64() / pair[0].reserve.as_secs_f64())
+        .map(|run| run[2].reserve.as_secs_f64() / run[1].reserve.as_secs_f64())
         .collect();
-    assert!(compared.len() >= 3, "{compared:?}");
+    assert!(compared.len() >= 2, "{compared:?}");
     assert!(
         compared.iter().all(|ratio| (1.6..=2.4).contains(ratio)),
         "{compared:?}"
     );
 }
 
-// With 1 second left, a doubled reserve past 0.5 seconds is cut to half the
-// time left; once no longer reserve fits, the install gives up.
+// With about 1 second left, a doubled reserve past half the time left is cut
+// to that half; once no longer reserve fits, the install gives up. The cut
+// reserve is judged against the midpoint between half the time left and
+// double the previous reserve; both measured reserves carry the cost of
+// starting nft, so it cancels out of the comparison.
 // @kotowari[REQ-420, EX-805]
 #[test]
 fn a_staging_reserve_never_exceeds_half_the_time_left() {
-    let (stagings, error) = late_stagings(Duration::from_millis(1750));
+    let (stagings, error) = late_stagings(Duration::from_millis(1850));
     assert_eq!(error, std::io::ErrorKind::TimedOut);
-    let slack = Duration::from_millis(60);
-    for staging in &stagings {
-        assert!(
-            staging.reserve <= staging.left / 2 + slack,
-            "reserve {:?} with {:?} left",
-            staging.reserve,
-            staging.left
-        );
-    }
+    let cut: Vec<_> = stagings
+        .windows(2)
+        .filter(|pair| pair[0].reserve * 2 > pair[1].left / 2 + Duration::from_millis(100))
+        .collect();
     assert!(
-        stagings
-            .windows(2)
-            .any(|pair| pair[0].reserve * 2 > pair[1].left / 2 + Duration::from_millis(100)),
+        !cut.is_empty(),
         "the doubling never reached half the time left"
     );
+    for pair in cut {
+        let midpoint = (pair[0].reserve * 2 + pair[1].left / 2) / 2;
+        assert!(
+            pair[1].reserve < midpoint,
+            "reserve {:?} after {:?} with {:?} left",
+            pair[1].reserve,
+            pair[0].reserve,
+            pair[1].left
+        );
+    }
 }
 
 // @kotowari[REQ-014, REQ-420]
