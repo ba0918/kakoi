@@ -529,3 +529,35 @@ fn assembled_cname_answers_preserve_signed_rrsets_when_only_some_ips_are_allowed
     assert_eq!(screened.wire, assembled);
     assert_eq!(screened.dynamic_grants.len(), 1);
 }
+
+// A zero time to live is granted the default second from the answer's
+// reception, not from when the resolution finished checking it.
+// @kotowari[EX-718]
+#[test]
+fn the_zero_ttl_grace_counts_from_the_reception() {
+    use kakoi_core::network::NetworkLimits;
+    use kakoi_net::{
+        dns::resolve_addresses,
+        resolution::{ResolutionBudget, UpstreamWait},
+    };
+    let limits = NetworkLimits::default();
+    let start = Instant::now();
+    let mut budget = ResolutionBudget::new(start, &limits).unwrap();
+    let received = start;
+    let resolved = resolve_addresses(&query(1), &limits, &mut budget, |request, budget| {
+        budget
+            .reserve_query(received, UpstreamWait::Explicit)
+            .map_err(|_| DnsError::IncompleteResponse)?;
+        let mut response = request.to_vec();
+        response[2] |= 0x80;
+        answer(&mut response, "api.example.com", 1, 0, &[1, 1, 1, 1]);
+        // The check finishes well after the reception.
+        std::thread::sleep(Duration::from_millis(300));
+        Ok((response, received))
+    })
+    .unwrap();
+    assert_eq!(
+        resolved.candidates[0].deadline,
+        received + Duration::from_millis(1000)
+    );
+}

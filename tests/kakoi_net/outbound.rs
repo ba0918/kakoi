@@ -1,4 +1,4 @@
-use crate::fake_host::FakeHost;
+use crate::{fake_host::FakeHost, publish::CONTROL};
 
 /// The application tries each exchange at once, since every refused one
 /// waits out its whole wait, and prints the results in order. A refused TCP
@@ -174,6 +174,172 @@ print('exit', finish(process), 'received', received)
          listening\n\
          published failed ConnectionRefusedError failed ConnectionRefusedError\n\
          exit 0 received []\n",
+        "{output}"
+    );
+}
+
+/// The application's side of the host DNS tests: `resolve` prints the
+/// name's address or the failure, `open` makes TCP and UDP exchanges it keeps,
+/// `kept` uses them again, and `new ADDRESS` tries a new TCP connection
+/// (`refused ADDRESS` when it is expected to fail, with a shorter wait).
+const RESOLVER_APP: &str = r#"
+import sys
+tcp = udp = None
+for command in sys.stdin:
+    words = command.split()
+    if words[0] == 'resolve':
+        try:
+            print(socket.getaddrinfo('app.example', 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0], flush=True)
+        except OSError as error:
+            print('failed', type(error).__name__, flush=True)
+    elif words[0] == 'open':
+        tcp = socket.create_connection((words[1], 8080), timeout=PERMITTED)
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp.connect((words[1], 8080))
+        print(tcp.recv(64).decode(), exchange(words[1], 8080, 'udp', PERMITTED, udp), flush=True)
+    elif words[0] == 'kept':
+        tcp.send(b'again')
+        print(tcp.recv(64).decode(), exchange(words[1], 8080, 'udp', PERMITTED, udp), flush=True)
+    elif words[0] == 'new':
+        print(exchange(words[1], 8080, 'tcp', PERMITTED), flush=True)
+    elif words[0] == 'refused':
+        print(exchange(words[1], 8080, 'tcp', REFUSED), flush=True)
+"#;
+
+const RESOLVER_HOST: &str = r#"
+def until_resolved(process, expected):
+    """Asks again until the new settings take effect; a hang ends the test."""
+    deadline = time.monotonic() + PERMITTED
+    while True:
+        answer = ask(process, 'resolve')
+        if answer == expected:
+            return answer
+        assert time.monotonic() < deadline, answer
+        time.sleep(.2)
+"#;
+
+// With no upstream written, the host's resolv.conf names it. A change of the
+// file takes effect while running; what was granted and opened before it
+// stays, also when the new file names no usable upstream.
+// @kotowari[EX-042, EX-235, EX-236, EX-241]
+#[test]
+fn the_host_resolver_is_followed_without_touching_what_was_granted() {
+    let host = FakeHost::following_host_dns(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n\
+         \n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'udp'\nports = ['8080']\n",
+        &["11.0.0.5/32", "11.0.0.6/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+{RESOLVER_HOST}
+import time
+dns({{('app.example', 1): [('11.0.0.5', 300)]}}, '127.0.0.1')
+dns({{('app.example', 1): [('11.0.0.6', 300)]}}, '127.0.0.2')
+for address in ('11.0.0.5', '11.0.0.6'):
+    serve(address, 8080, 'tcp', address)
+    serve(address, 8080, 'udp', address)
+resolv('nameserver 127.0.0.1\n')
+process = kakoi({RESOLVER_APP:?}, stdin=subprocess.PIPE)
+print('first', ask(process, 'resolve'), ask(process, 'open 11.0.0.5'))
+resolv('nameserver 127.0.0.2\n')
+print('changed', until_resolved(process, '11.0.0.6'), ask(process, 'kept 11.0.0.5'), ask(process, 'new 11.0.0.5'))
+resolv('nothing usable\n')
+print('unusable', until_resolved(process, 'failed gaierror'), ask(process, 'kept 11.0.0.5'), ask(process, 'new 11.0.0.5'))
+process.stdin.close()
+assert finish(process) == 0
+"#
+    ));
+    assert_eq!(
+        output,
+        "first 11.0.0.5 11.0.0.5 11.0.0.5\n\
+         changed 11.0.0.6 11.0.0.5 11.0.0.5 11.0.0.5\n\
+         unusable failed gaierror 11.0.0.5 11.0.0.5 11.0.0.5\n",
+        "{output}"
+    );
+}
+
+// An upstream written in the policy is the only one asked: a change of the
+// host's resolv.conf does not move it.
+// @kotowari[EX-233]
+#[test]
+fn a_written_upstream_ignores_the_host_resolver() {
+    let host = FakeHost::new(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &["11.0.0.5/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+import time
+dns({{('app.example', 1): [('11.0.0.5', 1)]}}, '127.0.0.1')
+dns({{('app.example', 1): [('11.0.0.6', 1)]}}, '127.0.0.2')
+resolv('nameserver 127.0.0.1\n')
+process = kakoi({RESOLVER_APP:?}, stdin=subprocess.PIPE)
+print('first', ask(process, 'resolve'))
+resolv('nameserver 127.0.0.2\n')
+# Past the reading interval and the answer's time to live.
+time.sleep(3)
+print('after', ask(process, 'resolve'))
+process.stdin.close()
+assert finish(process) == 0
+"#
+    ));
+    assert_eq!(output, "first 11.0.0.5\nafter 11.0.0.5\n", "{output}");
+}
+
+// A time to live of 0 permits new connections for the grace (5 seconds
+// here) from the answer; after it a new one is refused, while those begun
+// within it carry on.
+// @kotowari[EX-719]
+#[test]
+fn a_zero_ttl_answer_permits_only_within_its_grace() {
+    let host = FakeHost::new(
+        "dns-zero-ttl-grace-milliseconds = 5000\n\
+         \n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n\
+         \n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'udp'\nports = ['8080']\n",
+        &["11.0.0.5/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+import time
+dns({{('app.example', 1): [('11.0.0.5', 0)]}})
+serve('11.0.0.5', 8080, 'tcp', 'tcp')
+serve('11.0.0.5', 8080, 'udp', 'udp')
+process = kakoi({RESOLVER_APP:?}, stdin=subprocess.PIPE)
+print(ask(process, 'resolve'), ask(process, 'open 11.0.0.5'))
+time.sleep(6)
+print(ask(process, 'kept 11.0.0.5'), ask(process, 'refused 11.0.0.5').startswith('failed'))
+process.stdin.close()
+assert finish(process) == 0
+"#
+    ));
+    assert_eq!(output, "11.0.0.5 tcp udp\ntcp udp True\n", "{output}");
+}
+
+// Only what kakoi's own resolver answered opens an address: the application
+// knowing the address by other means (its own table, its own lookup) gets
+// nothing, before and after asking kakoi for another name.
+// @kotowari[REQ-029, EX-047, EX-050]
+#[test]
+fn an_address_the_application_knows_by_itself_is_not_opened() {
+    let host = FakeHost::new(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &["11.0.0.5/32", "11.0.0.6/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+dns({{('app.example', 1): [('11.0.0.5', 300)]}})
+serve('11.0.0.5', 8080, 'tcp', 'resolved')
+serve('11.0.0.6', 8080, 'tcp', 'claimed')
+process = kakoi({RESOLVER_APP:?}, stdin=subprocess.PIPE)
+print('before', ask(process, 'refused 11.0.0.5').startswith('failed'), ask(process, 'refused 11.0.0.6').startswith('failed'))
+print('resolved', ask(process, 'resolve'), ask(process, 'new 11.0.0.5'), ask(process, 'refused 11.0.0.6').startswith('failed'))
+process.stdin.close()
+assert finish(process) == 0
+print('received', sorted(received))
+"#
+    ));
+    assert_eq!(
+        output, "before True True\nresolved 11.0.0.5 resolved True\nreceived ['resolved']\n",
         "{output}"
     );
 }

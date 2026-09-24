@@ -119,12 +119,12 @@ def serve(address, port, kind, reply):
     threading.Thread(target=loop, daemon=True).start()
     return server
 
-def dns(records):
-    """Answers the managed resolver's plain queries on 127.0.0.1:53 from
-    `records`, which maps a name and a record type (1 or 28) to its addresses
-    and time to live. An unknown name does not exist."""
+def dns(records, address='127.0.0.1'):
+    """Answers plain queries on `address`:53 from `records`, which maps a
+    name and a record type (1 or 28) to its addresses and time to live. An
+    unknown name does not exist."""
     server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server.bind(('127.0.0.1', 53))
+    server.bind((address, 53))
 
     def loop():
         while True:
@@ -147,6 +147,22 @@ def dns(records):
                 response += ttl.to_bytes(4, 'big') + len(data).to_bytes(2, 'big') + data
             server.sendto(response, peer)
     threading.Thread(target=loop, daemon=True).start()
+
+RESOLV = os.environ['HOME_DIR'] + '/resolv.conf'
+
+def resolv(text):
+    """Sets the host's /etc/resolv.conf, as this namespace sees it. The file
+    is bound in place, so a change rewrites it: always the same length, in one
+    write, so that a reader never sees it half written."""
+    padded = text.ljust(256, '#').encode()
+    assert len(padded) == 256
+    if not os.path.exists(RESOLV):
+        with open(RESOLV, 'wb') as new:
+            new.write(padded)
+        subprocess.run(['/usr/bin/mount', '--bind', RESOLV, '/etc/resolv.conf'], check=True)
+    else:
+        with open(RESOLV, 'r+b', buffering=0) as current:
+            current.write(padded)
 
 def kakoi(app, stdin=subprocess.DEVNULL, options=()):
     """Starts kakoi with `options` and `app` as the sandbox's Python program."""
@@ -202,7 +218,8 @@ pub(crate) struct FakeHost {
 }
 
 impl FakeHost {
-    /// `network` is appended to a filtered profile's `[network]` table; the
+    /// `network` follows the mode in a filtered profile's `[network]` table,
+    /// so that its plain keys belong to that table; the
     /// managed resolver's upstream is the host's 127.0.0.1:53, where the
     /// script can start its `dns` helper.
     /// `remote` are the host's addresses, with prefixes, that stand for remote
@@ -210,14 +227,27 @@ impl FakeHost {
     /// need an explicit permission when a name resolves to them. Nothing leaves
     /// the namespace, so they reach no real host.
     pub(crate) fn new(network: &str, remote: &[&'static str]) -> Self {
+        Self::with_profile(
+            &format!(
+                "{network}\n[[network.dns-upstream]]\ntransport = 'plain'\nip = '127.0.0.1'\nport = 53\n"
+            ),
+            remote,
+        )
+    }
+
+    /// As [`Self::new`], but the managed resolver follows the host's
+    /// `/etc/resolv.conf`, which the script sets with its `resolv` helper.
+    pub(crate) fn following_host_dns(network: &str, remote: &[&'static str]) -> Self {
+        Self::with_profile(network, remote)
+    }
+
+    fn with_profile(network: &str, remote: &[&'static str]) -> Self {
         let home = TempDir::new();
         let workspace = home.path().join("ws");
         std::fs::create_dir(&workspace).unwrap();
         home.write(
             ".config/kakoi/profile/default.toml",
-            format!(
-                "{RW_WORKSPACE}\n[network]\nmode = 'filtered'\n\n[[network.dns-upstream]]\ntransport = 'plain'\nip = '127.0.0.1'\nport = 53\n{network}"
-            ),
+            format!("{RW_WORKSPACE}\n[network]\nmode = 'filtered'\n\n{network}"),
         );
         let bin = TempDir::new();
         // pasta selects its mode by the name it is started under.
