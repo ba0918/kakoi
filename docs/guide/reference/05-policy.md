@@ -53,7 +53,7 @@
 
 `network.allow`、`network.publish`、`network.dns-upstream` の各項目の中のキーと、`network` と `process` のキーを書いたときに `network.mode` の明示が要る条件は、それぞれの詳細の章が定める。
 
-`env.mode` と `network.mode` を省略したときの値は、このガイドが根拠とする仕様（IR）には書かれていない。
+`env.mode` と `network.mode` を省略したときの値は、このガイドが根拠とする仕様（IR）には書かれていない（旧仕様の定めは[旧仕様にだけあった規則](../appendix/open-issues.md#省略時のモードの既定値)）。
 同梱プロファイルは両方を明示している（`env.mode = "inherit"`、`network.mode = "host"`）。
 
 ## ファイルの形式
