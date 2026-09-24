@@ -168,3 +168,20 @@ fn closed_output_is_only_notification_loss_and_writer_can_be_reaped() {
     assert!(start.elapsed() < Duration::from_secs(1));
     assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
 }
+
+// Over the bounds, the oldest notices go: the newest is what remains, and
+// the count of the others is reported with it.
+// @kotowari[EX-320]
+#[test]
+fn overflow_drops_the_oldest_notices() {
+    let mut notices = Notifications::default();
+    for index in 0..300 {
+        notices.update(NetworkState::Isolated, &format!("failure {index}"));
+    }
+    assert_eq!(notices.pending(), 256);
+    let summary = notices.pop().unwrap();
+    assert_eq!(
+        &*summary,
+        "kakoi: 299 network notifications omitted; current isolated: failure 299\n"
+    );
+}

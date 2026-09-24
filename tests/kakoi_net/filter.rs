@@ -944,3 +944,124 @@ for address in [('fd00:1::2', 8080), ('fd00:1::2', 8081), ('fe80::2%app0', 8080)
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// A client namespace joined to a server namespace by a veth pair, with
+/// fd00:1::1 and fd00:1::2, and a UDP echo on the server's port 8080.
+fn udp_echo_pair() -> (NetworkNamespace, NetworkNamespace, Server) {
+    let client = NetworkNamespace::create().unwrap();
+    let server = NetworkNamespace::create_within(&client).unwrap();
+    ip(
+        &client,
+        &[
+            "link",
+            "add",
+            "app0",
+            "type",
+            "veth",
+            "peer",
+            "name",
+            "srv0",
+            "netns",
+            &server.keeper_pid().to_string(),
+        ],
+    );
+    for (namespace, interface, suffix) in [(&client, "app0", "1"), (&server, "srv0", "2")] {
+        ip(namespace, &["link", "set", "lo", "up"]);
+        ip(namespace, &["link", "set", interface, "up"]);
+        ip(
+            namespace,
+            &[
+                "-6",
+                "addr",
+                "add",
+                &format!("fd00:1::{suffix}/64"),
+                "dev",
+                interface,
+                "nodad",
+            ],
+        );
+    }
+    let mut echo = Server(
+        server
+            .command("/usr/bin/python3")
+            .unwrap()
+            .args([
+                "-c",
+                "import socket, sys\ns = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)\ns.bind(('fd00:1::2', 8080))\nprint('ready', flush=True)\nwhile True:\n    data, peer = s.recvfrom(64)\n    s.sendto(data, peer)\n",
+            ])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut ready = String::new();
+    BufReader::new(echo.0.stdout.take().unwrap())
+        .read_line(&mut ready)
+        .unwrap();
+    assert_eq!(ready, "ready\n");
+    (client, server, echo)
+}
+
+// With a 3 second idle limit and the permission withdrawn, an exchange that
+// keeps going outlives the limit many times over, and another process taking
+// up the same pair of addresses and ports within the limit continues it.
+// @kotowari[REQ-018, EX-029, EX-200]
+#[test]
+fn a_udp_flow_lives_while_it_is_used_whoever_uses_it() {
+    let (client, _server, _echo) = udp_echo_pair();
+    let script = filter::compile_static(
+        &[FilterRule {
+            network: "fd00:1::2/128".parse().unwrap(),
+            protocol: Protocol::Udp,
+            ports: Ports::try_from(vec!["8080".into()]).unwrap(),
+        }],
+        3,
+    )
+    .unwrap();
+    nft::apply(
+        &client,
+        Path::new("/usr/sbin/nft"),
+        &script,
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    let exchange = r#"
+import socket, sys, time
+s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('fd00:1::1', 20001))
+s.connect(('fd00:1::2', 8080))
+s.settimeout(.5)
+for _ in range(int(sys.argv[1])):
+    try:
+        s.send(b'x')
+        s.recv(64)
+    except OSError as error:
+        print('failed', type(error).__name__)
+        sys.exit()
+    time.sleep(.3)
+print('ok')
+"#;
+    let run = |count: &str| {
+        let output = client
+            .command("/usr/bin/python3")
+            .unwrap()
+            .args(["-c", exchange, count])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+    assert_eq!(run("1"), "ok\n");
+    nft::apply(
+        &client,
+        Path::new("/usr/sbin/nft"),
+        "flush chain inet kakoi_policy permitted\n",
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    // Another process, the same pair, within the idle limit: 20 exchanges
+    // 0.3 seconds apart span 6 seconds.
+    assert_eq!(run("20"), "ok\n");
+    // Idle past the limit: a new flow, which nothing permits.
+    std::thread::sleep(Duration::from_secs(4));
+    assert_eq!(run("1"), "failed PermissionError\n");
+}

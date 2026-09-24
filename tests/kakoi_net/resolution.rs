@@ -116,3 +116,19 @@ fn written_dns_waits_bound_each_candidate_and_the_whole() {
         Err(ResolutionLimit::Deadline)
     );
 }
+
+// The final address expires first: its expiry, not the alias's, bounds the
+// permission.
+// @kotowari[EX-037]
+#[test]
+fn the_earlier_address_expiry_bounds_a_long_alias() {
+    let start = Instant::now();
+    let mut chain = CnameChain::new("a.example.", 16).unwrap();
+    chain
+        .follow("b.example.", start + Duration::from_secs(300))
+        .unwrap();
+    assert_eq!(
+        chain.permission_deadline(start + Duration::from_secs(60)),
+        start + Duration::from_secs(60)
+    );
+}

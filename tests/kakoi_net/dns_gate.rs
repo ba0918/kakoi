@@ -656,3 +656,90 @@ fn a_valid_answer_is_reused_until_its_time_to_live_runs_out() {
         AcceptedRequest::Start(_)
     ));
 }
+
+// Joining a resolution shares its first deadline: at that deadline every
+// waiter, the one that joined late included, is answered.
+// @kotowari[EX-287]
+#[test]
+fn a_late_join_keeps_the_shared_deadline() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests =
+        DnsRequests::new(vec![rule("*.example.com")], 7, 4, 4, Duration::from_secs(2)).unwrap();
+    let question = query("api.example.com", 1);
+    assert!(matches!(
+        requests.accept(&question, 1, now).unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+    assert!(matches!(
+        requests
+            .accept(&question, 2, now + Duration::from_millis(1900))
+            .unwrap(),
+        AcceptedRequest::Waiting
+    ));
+    assert!(requests
+        .expire(now + Duration::from_millis(1999))
+        .is_empty());
+    let expired = requests.expire(now + Duration::from_secs(2));
+    assert_eq!(
+        expired
+            .iter()
+            .map(|reply| reply.recipient)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
+}
+
+// Two questions from one application count as two waiters.
+// @kotowari[EX-292]
+#[test]
+fn each_question_of_one_application_is_a_waiter() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    // One recipient stands for one application's socket.
+    let mut requests =
+        DnsRequests::new(vec![rule("*.example.com")], 7, 4, 2, Duration::from_secs(2)).unwrap();
+    let question = query("api.example.com", 1);
+    assert!(matches!(
+        requests.accept(&question, 1, now).unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+    assert!(matches!(
+        requests.accept(&question, 1, now).unwrap(),
+        AcceptedRequest::Waiting
+    ));
+    let AcceptedRequest::Answer(reply) = requests.accept(&question, 1, now).unwrap() else {
+        panic!("a third waiter was admitted")
+    };
+    assert_eq!(reply.wire[3] & 15, 2);
+}
+
+// Each environment has its own requests: one full of work and one resolving
+// the same name share neither slots nor resolutions.
+// @kotowari[EX-283, EX-288]
+#[test]
+fn environments_share_neither_slots_nor_resolutions() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut first =
+        DnsRequests::new(vec![rule("*.example.com")], 7, 1, 4, Duration::from_secs(2)).unwrap();
+    let mut second =
+        DnsRequests::new(vec![rule("*.example.com")], 7, 1, 4, Duration::from_secs(2)).unwrap();
+    let question = query("api.example.com", 1);
+    assert!(matches!(
+        first.accept(&question, 1, now).unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+    // The first is full; the second starts the same name on its own.
+    assert!(matches!(
+        first.accept(&query("www.example.com", 1), 2, now).unwrap(),
+        AcceptedRequest::Answer(_)
+    ));
+    assert!(matches!(
+        second.accept(&question, 3, now).unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+}
