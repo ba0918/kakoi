@@ -615,9 +615,42 @@ fn an_inherited_none_ignores_a_publication_above_it() {
     );
 }
 
+// A host-interface destination is refused while the policy is merged, before
+// anything starts: the launch and the plan alike end with a policy diagnostic.
+// @kotowari[REQ-428, EX-820, EX-822]
+#[test]
+fn filtered_refuses_a_host_interface_destination_as_a_policy_error() {
+    let filtered = Filtered::new(
+        "\n[[network.allow]]\ndestination = { ip = 'fe80::1', host-interface = 'eth0' }\nprotocol = 'tcp'\nports = ['443']\n",
+    );
+    for arguments in [&[][..], &["--print-plan"][..]] {
+        let output = binary(filtered.home.path())
+            .env(
+                "PATH",
+                format!("{}:/usr/sbin:/usr/bin:/bin", filtered.bin.path().display()),
+            )
+            .current_dir(&filtered.workspace)
+            .args(arguments)
+            .args(["--", "/bin/sh", "-c", "echo ran"])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            (
+                output.status.code(),
+                output.stdout.as_slice(),
+                stderr.starts_with("kakoi: policy: "),
+                stderr.lines().count()
+            ),
+            (Some(125), b"".as_slice(), true, 1),
+            "{arguments:?}: {stderr}"
+        );
+    }
+}
+
 // Unused settings are not looked into: an interface that does not exist is
 // not checked in host mode, and a name is not asked about in none mode.
-// @kotowari[EX-173, EX-174]
+// @kotowari[EX-173, EX-174, EX-823]
 #[test]
 fn unused_settings_are_neither_checked_nor_resolved() {
     let output = launched(
