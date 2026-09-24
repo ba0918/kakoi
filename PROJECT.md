@@ -3,16 +3,15 @@
 ## Purpose
 
 `kakoi` runs a command inside a bubblewrap (`bwrap`) mount namespace shaped by a
-layered policy, and returns the command's exit code unchanged. It is a Rust command-line tool
-for Linux on x86_64.
+layered policy, and returns the command's exit code unchanged. Its network mode is `host`,
+`none`, or `filtered` (kakoi-net: outbound traffic limited to allowed destinations and fixed
+ports published to the host's localhost, built on pasta and nftables). It is a Rust
+command-line tool for Linux on x86_64.
 
 The specification index, [`docs/spec/kakoi.md`](docs/spec/kakoi.md), and its linked
 responsibility-specific documents under `docs/spec/kakoi/` are the canonical source
-for product, implementation, verification, and release requirements. The kakoi-net responsibility-specific specification has been approved in the conversation.
-The core IR extraction and test annotations were also approved on 2026-09-16.
-Further prose editing is deferred; product behavior remains unchanged. The next priority is
-kakoi-net implementation, starting with the initial-release feasibility gate; see the reviewed scope in
-`docs/spec/kakoi/network/initial-release.md`.
+for product, implementation, verification, and release requirements. The scope of the first
+kakoi-net release is `docs/spec/kakoi/network/initial-release.md`.
 [`CONTEXT.md`](CONTEXT.md) is the glossary: the project's reading of terms such as "policy",
 "layer", "workspace", and "worktree", and the words not to use for them.
 
@@ -68,13 +67,28 @@ on `PATH` for the hook to run. Install the hook once per clone:
 lefthook install
 ```
 
+## Workflow: kotowari
+
+This repository uses kotowari (`.kotowari/config.yaml`). Which kotowari skill to read, and
+when, is in the routing table of `AGENTS.md`.
+
+- The specification's canonical source stays `docs/spec/kakoi.md` and its linked documents.
+  The IR under `docs/ir/` (`core/` for the existing product, `network/` for kakoi-net) is the
+  checkable counterpart of that specification and must not become a second source of truth.
+  Keep existing behavior; a brainstorm names every clause it changes. IR not yet approved is
+  a draft.
+- Decision records go in `docs/decision/brainstorm/`, ADRs in `docs/decision/adr/`, and
+  implementation plans in `docs/plans/`.
+- The tests kotowari reads are set in `.kotowari/config.yaml` (currently `tests/*.rs` and
+  `tests/**/*.rs`). If a change moves tests elsewhere, update that file too.
+- Mark a test only with the requirements it actually verifies.
+
 ## Project constraints
 
 - The specification's section 14 is authoritative for runtime boundaries: no persistent state.
-  Host/none retain the `bwrap`-only execution boundary. Filtered dependencies and their
-  supported environment must pass the implementation-entry conditions in
-  `docs/spec/kakoi/proof-gate.md` before product implementation. Product integration checks
-  in that document remain mandatory before the initial filtered release. A launch that wraps a command (including
+  Host/none retain the `bwrap`-only execution boundary. For filtered, its dependencies and
+  supported environment are governed by `docs/spec/kakoi/proof-gate.md`, including the product
+  integration checks required before the initial filtered release. A launch that wraps a command (including
   `--print-plan`) writes no files; `init` is the only form that writes files, and only within
   the paths section 14 allows.
 - The specification's section 18 is authoritative for features excluded from version 0.3.

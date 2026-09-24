@@ -1,11 +1,37 @@
 # Agent Instructions
 
-プロジェクト固有の契約は PROJECT.md を読む。
+## Core
 
-## kotowari
+- 依頼された目的に仕える。依頼の範囲を勝手に広げない。
+- 確認済みのこと、推測したこと、未確認のことを区別する。
+- 何かを変えたら、変更に見合った手段で確かめる。
+- 不可逆・破壊的・外部から見える操作は、承認なしに行わない。
+- プロジェクト固有の指示がこれより具体的な場合は、そちらを適用する。
 
-kakoi-net の壁打ちで kotowari 0.1.0 を試走中。brainstorm、plan、cycle、implement の各席では `kotowari` スキルを読み、場面に応じた reference に従う。
+## Rule Routing
 
-IR（検査できる形に整理した仕様）は `docs/ir/`、判断の記録は `docs/decision/brainstorm/` に置く。対象は kakoi-net の追加・改訂部分と、利用者が追加で依頼した本体既存仕様のIR抽出・既存テストの対応付け。既存仕様は維持し、変更する条項は壁打ちで明示する。承認前の IR は草案として扱い、仕様の正本は `docs/spec/kakoi.md` を入口とする責務別のspec文書群。IRは対応する検査用表現で、正本を増やさない。kakoi-netの責務別仕様は会話で承認済み。本体IR抽出と既存テストの対応付けも承認済み。文章の追加校正は別件とし、既存の製品挙動は変更しない。
+| When | Read |
+|---|---|
+| Always | ba0918-design, ba0918-placement, ba0918-readability, ba0918-secrets |
+| commit | ba0918-commit |
+| delegate | ba0918-delegation |
+| design | ba0918-reuse |
+| diff-review | ba0918-diff-review |
+| implement | ba0918-tdd |
+| release | ba0918-release |
+| review | ba0918-verification |
+| writing or revising IR or decision records, acting on `kotowari check`, placing `@kotowari` marks in tests, or reading `kotowari mutants` | kotowari |
+| deciding where a new request starts (use this, not ba0918-using-workflow) | kotowari-using-workflow |
 
-kotowari のテスト検査対象は `tests/*.rs` と `tests/**/*.rs`。既存テストは実際に確認している要求だけに印を付ける。今回の機能のテスト配置を変える場合は `.kotowari/config.yaml` も更新する。
+各ルールはスキル名で参照する。該当するルールは、それが律する作業を始める前にすべて読む。
+一度読んだルールはそのコンテキストの間有効で、読み直すのはコンテキストが圧縮・消去された後か、
+ルール自体が変わったときだけ。委譲された作業では、委譲プロンプトが展開済みと明示したルールは
+そのプロンプトから有効で、読み直さない。それ以外のルールは、この表に従って通常どおり読む。
+
+kotowari の 2 行はスキルのメタデータから生成したものではなく、このリポジトリで手で維持している。
+表を作り直すときは残す。
+
+## Project Context
+
+このリポジトリが何か、どうビルド・テストするか、ここだけに適用する約束事は `PROJECT.md` にある。
+変更の前に読む。
