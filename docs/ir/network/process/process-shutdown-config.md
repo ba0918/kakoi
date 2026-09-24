@@ -26,7 +26,7 @@
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A102
 - verification: unit
 
-"process.shutdown-grace-seconds" は上位の明示値で上書きし、省略なら継承、全段省略なら5秒とする。"host"・"none" でも整数かつ1〜300秒の範囲を検査する。猶予設定がある場合は "network.mode" の明示を必須とし、別レイヤからの継承も認める。
+"process.shutdown-grace-seconds" は上位の明示値で上書きし、省略なら下の段の値を使い、全段省略なら5秒とする。"host"・"none" でも整数かつ1〜300秒の範囲を検査する。猶予設定がある場合は "network.mode" の明示を必須とし、別の段からの引き継ぎも認める。
 
 ## Examples
 
@@ -71,13 +71,13 @@ Scenario: noneでも終了方式を変更しない
 
 @id=EX-210 @about=REQ-097 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A102
 Scenario: 終了猶予は上位の明示値で上書きする
-  Given 下のレイヤの終了猶予は5秒で上のレイヤは10秒である
+  Given 下の段の終了猶予は5秒で上の段は10秒である
   When 設定を合成する
   Then 終了猶予は10秒になる
 
 @id=EX-211 @about=REQ-097 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A102
 Scenario: 上位で省略すれば下位の終了猶予を使う
-  Given 下のレイヤの終了猶予は10秒で上のレイヤには指定がない
+  Given 下の段の終了猶予は10秒で上の段には指定がない
   When 設定を合成する
   Then 終了猶予は10秒になる
 
@@ -89,7 +89,7 @@ Scenario: hostでも終了猶予の範囲外指定を拒否する
 
 @id=EX-213 @about=REQ-097 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A102
 Scenario: 終了猶予を指定したらmodeの明示を求める
-  Given どのレイヤにもmodeが指定されていない
+  Given どの段にもmodeが指定されていない
   And process.shutdown-grace-secondsに5を指定している
   When 起動前に設定を検査する
   Then modeの未指定を設定エラーにする

@@ -27,10 +27,11 @@ kakoiはRust製CLIとして、指定したポリシーとワークスペース�
 
 ### REQ-353: 対象外の機能
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A18
 - verification: review
+- how_to_verify: ヘルプの出力とポリシーの固定キーに、下の機能を提供するオプションやキーが無いことを確かめる。同梱するシムの雛形のツール節の値がcodexのものだけで、他のツールの節の値を同梱物に含めていないことを確かめる。
 
-0.3ではcgroup資源制限、削除演算子、default.tomlの常時合成、cwdからのポリシー自動探索、bwrapのnew-session、二重隔離、環境変数以外の入れ子検出、git hooks/configの保護、ポリシーのro重ね掛け、separate-git-dirのメインワークツリーの第三の相互リンク形式、initの強制上書きを提供しない。初版のマルチキャスト・ブロードキャストとDoHの扱いは承認済みネットワーク仕様と実証条件を維持する。
+0.3ではcgroup資源制限、削除演算子、default.tomlの常時合成、cwdからのポリシー自動探索、bwrapのnew-session、二重隔離、環境変数以外の入れ子検出、git hooks/configの保護、ポリシーのro重ね掛け、separate-git-dirのメインワークツリーの第三の相互リンク形式、initの強制上書き、codex以外のツール節の値を提供しない。ツール節の値は実測していないものを同梱せず、codex以外のツールでは利用者が雛形を写してツール節を埋める。初版のマルチキャスト・ブロードキャストとDoHの扱いは承認済みネットワーク仕様と実証条件を維持する。
 
 ## Examples
 
@@ -82,5 +83,17 @@ Scenario: 対象外の機能・反例
   Given ヘルプとポリシーの固定キーを調べる
   When 契約への適合を確認する
   Then 非公開のキーでdefault.tomlを常時合成することは契約違反である
+
+@id=EX-773 @about=REQ-353 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A18
+Scenario: codex以外のツール節・成功
+  Given 同梱物のシムの雛形とセットアップスキルの写しを調べる
+  When 契約への適合を確認する
+  Then ツール節の値はcodexのものだけである
+
+@id=EX-774 @about=REQ-353 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A18
+Scenario: codex以外のツール節・反例
+  Given 同梱物のシムの雛形とセットアップスキルの写しを調べる
+  When 契約への適合を確認する
+  Then 実測していないopencodeのツール節の値を同梱することは契約違反である
 
 ```

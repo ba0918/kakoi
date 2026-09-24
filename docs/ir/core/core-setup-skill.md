@@ -88,6 +88,22 @@ CLI側で写しを見つけない場合はPATH変更が未反映の可能性を�
 
 スキルは第15節のテスト対象にせず、人が指示の存在と実際の試行を確認する。通常・内容先指定での差分承認、最初の提案前の正本質問、未作成時のinit確認、別正本への非書込、写せない引数の説明、設置後の経路確認、設定不可読時のコメント不明の告知を観測する。
 
+### REQ-405: initが書き出す内容の案内
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A16
+- verification: review
+- how_to_verify: SKILL.mdのinitの実行を尋ねる手順が、書き出す内容を組み込みの既定そのものでありfull計画の合成後ポリシーと同じだと示すことを読む。設定ディレクトリが無い状態の kakoi --print-plan=full -- true の合成後ポリシーと、その後にinitを実行して同じ計画を出したときの合成後ポリシーが一致することを確かめる。
+
+initが書き出すのは組み込みの既定そのもので、他の段が無いときのfull計画の合成後ポリシーと同じ内容である。スキルはinitの実行を尋ねるとき、書き出す内容をこの形で利用者に示す。
+
+### REQ-406: エージェントCLI以外の対象
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A16
+- verification: review
+- how_to_verify: SKILL.mdの導入済みのコマンドを調べる手順が、対象をエージェントCLIに限らず利用者が隔離の中で動かしたいコマンドとしていることを読む。
+
+スキルは導入済みの対象コマンドを調べてプロファイルの項目を提案する。対象は利用者が隔離の中で動かしたいコマンドで、エージェントCLI以外も含む。
+
 ## Examples
 
 ```gherkin
@@ -240,5 +256,29 @@ Scenario: スキルの人による検証・反例
   Given 内容を先に指定した試行を確認する
   When 契約への適合を確認する
   Then SKILL.mdに指示があるだけで遵守したとすることは契約違反である
+
+@id=EX-763 @about=REQ-405 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A16
+Scenario: initが書き出す内容の案内・成功
+  Given プロファイルが存在せずinitの実行を尋ねる
+  When 契約への適合を確認する
+  Then 組み込みの既定そのものでfull計画の合成後ポリシーと同じ内容を書くと伝える
+
+@id=EX-764 @about=REQ-405 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A16
+Scenario: initが書き出す内容の案内・反例
+  Given プロファイルが存在せずinitの実行を尋ねる
+  When 契約への適合を確認する
+  Then 組み込みの既定と異なる内容を書くと案内することは契約違反である
+
+@id=EX-765 @about=REQ-406 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A16
+Scenario: エージェントCLI以外の対象・成功
+  Given 利用者がエージェントCLIでないコマンドも隔離の中で動かしたい
+  When 契約への適合を確認する
+  Then そのコマンドの状態置き場と設定も提案の対象にする
+
+@id=EX-766 @about=REQ-406 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A16
+Scenario: エージェントCLI以外の対象・反例
+  Given 利用者がエージェントCLIでないコマンドも隔離の中で動かしたい
+  When 契約への適合を確認する
+  Then エージェントCLIでないことを理由に提案から外すことは契約違反である
 
 ```

@@ -71,10 +71,18 @@ DNS由来の許可は、応答の受信とTTLから決まる期限より後に�
 ### REQ-398: アプリへ返す応答のTTLを最短に揃える
 
 - kind: event_driven
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A171
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A171, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A5
 - verification: unit
 
-アドレスの問い合わせへの応答をアプリへ返すとき、回答部の各レコードのTTLを、その応答の回答部で最も短いTTLに揃える。メッセージ署名付きの応答は元のTTLのまま返す。
+アドレスの問い合わせへの応答をアプリへ返すとき、回答部の各レコードのTTLを、その応答の回答部で最も短いTTLに揃える。メッセージ署名（TSIG）付きの応答は元のTTLのまま返す。ここでのメッセージ署名はTSIGだけを指し、DNSSECの署名（RRSIG）だけを持つ応答のTTLは揃える。
+
+### REQ-420: 許可の登録が間に合わなければ見込む時間を倍にする
+
+- kind: event_driven
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A15
+- verification: unit
+
+DNS由来の許可のカーネルへの登録が見込んだ時間の内に終わらなければ、見込む時間を倍にして登録し直す。見込む時間の上限は、登録する許可のうち最も早い期限までの残り時間の半分とする。
 
 ## Examples
 
@@ -175,4 +183,27 @@ Scenario: 別名の短いTTLに最終IPのTTLを揃える
   When その応答をアプリへ返す
   Then アプリが受け取る最終IPのTTLは10秒以下である
 
+@id=EX-802 @about=REQ-398 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A5
+Scenario: メッセージ署名付きの応答は元のTTLのまま返す
+  Given 上流の応答がTSIGのメッセージ署名付きで許可された二つのIPをTTL30秒と300秒で返す
+  When その応答をアプリへ返す
+  Then アプリが受け取る二つのIPのTTLは30秒と300秒のままである
+
+@id=EX-803 @about=REQ-398 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A5
+Scenario: DNSSECの署名だけを持つ応答はTTLを揃える
+  Given 上流の応答がRRSIGを含みTSIGのメッセージ署名は無く許可された二つのIPをTTL30秒と300秒で返す
+  When その応答をアプリへ返す
+  Then アプリが受け取る二つのIPのTTLはどちらも30秒以下である
+
+@id=EX-804 @about=REQ-420 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A15
+Scenario: 登録が間に合わなければ見込む時間を倍にして登録し直す
+  Given 許可の期限まで残り10秒あり見込んだ時間の内にカーネルへの登録が終わらなかった
+  When 許可を登録し直す
+  Then 前回の倍の時間を見込んで登録する
+
+@id=EX-805 @about=REQ-420 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A15
+Scenario: 見込む時間を残り時間の半分より長くしない
+  Given 登録する許可のうち最も早い期限まで残り1秒あり見込んだ時間の内に登録が終わらなかった
+  When 見込む時間を倍にすると0.5秒を超える
+  Then 見込む時間を0.5秒より長くして登録しない
 ```

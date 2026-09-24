@@ -149,6 +149,12 @@ Limits of `filtered`, as it stands:
     Even without links, renaming an ancestor directory and placing another file at the same path
     changes what the next launch reads. What `ro` guarantees is that the content the agent reads
     is not changed under it, not that the agent cannot be steered into reading something else.
+16. The shim template does not know which of the wrapped command's options take a value, so a
+    word equal to the name of an option it copies is read as that option wherever it stands,
+    as the value of another option or as a positional argument, and `--workspace` or `--rw`
+    widens to the word that follows it: `codex -m --cd /etc exec` sends `kakoi`
+    `--workspace /etc`. This misreading is accepted; the other misreadings of the template
+    only leave a directory out.
 
 ## Not in 0.3
 

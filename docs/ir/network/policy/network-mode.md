@@ -18,7 +18,7 @@
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A88
 - verification: unit
 
-採用されたモードが利用者の設定レイヤで明示された "host" または "none" なら、残る通信許可・公開設定を無視する旨を警告し、指定モードで起動する。別レイヤから継承したモードも明示に含む。どのレイヤにもモード指定がなく、空でない通信許可・公開設定がある場合は起動前エラーにする。"filtered" の準備失敗から "host" へは自動移行しない。
+採用されたモードが利用者の段で明示された "host" または "none" なら、残る通信許可・公開設定を無視する旨を警告し、指定モードで起動する。別の段から引き継いだモードも明示に含む。どの段にもモード指定がなく、空でない通信許可・公開設定がある場合は起動前エラーにする。"filtered" の準備失敗から "host" へは自動移行しない。
 
 ### REQ-084: 非使用設定の入力形式検査と環境検査の省略
 
@@ -58,15 +58,15 @@ Scenario: 許可設定を残して明示的にhostへ切り替える
 
 @id=EX-169 @about=REQ-083 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A88
 Scenario: modeを指定せず許可設定だけ書いた場合は止める
-  Given どの設定レイヤにもmodeを指定していない
+  Given どの段にもmodeを指定していない
   And 空でない通信許可設定がある
   When 起動前に設定を検査する
   Then 設定エラーにしてアプリを実行しない
 
 @id=EX-170 @about=REQ-083 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A88
-Scenario: 継承したnoneも明示モードとして扱う
-  Given 下のレイヤでmodeにnoneを指定している
-  And 上のレイヤに有効な公開設定がありmodeの上書きはない
+Scenario: 下の段から引き継いだnoneも明示モードとして扱う
+  Given 下の段でmodeにnoneを指定している
+  And 上の段に有効な公開設定がありmodeの上書きはない
   When 起動する
   Then 公開設定を無視する旨を警告してnoneで起動する
 

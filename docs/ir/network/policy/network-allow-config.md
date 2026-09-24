@@ -12,13 +12,13 @@
 
 通信許可はTOMLの "[[network.allow]]" に "destination"・"protocol"・"ports" を記述し、3項目とも必須とする。一般宛先は "destination" 内の "dns"・"ip"・"cidr" のいずれか1つで指定する。"protocol" は "tcp" または "udp"、"ports" はnetwork-ports.mdで定める文字列配列を使う。IPv6リンクローカルの "host-interface" は "destination" 内に置く。
 
-### REQ-092: 通信許可リストのレイヤ間連結
+### REQ-092: 通信許可リストを段の間で連結
 
 - kind: ubiquitous
 - source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
 - verification: unit
 
-"network.allow" はレイヤ間で追加して合成し、各許可のいずれかに一致する通信を許可する。重複はまとめ、空配列では元の許可を消さない。許可を減らす場合は元の設定を編集するか別プロファイルを使う。
+"network.allow" は段の間で追加して合成し、各許可のいずれかに一致する通信を許可する。重複はまとめ、空配列では元の許可を消さない。許可を減らす場合は元の設定を編集するか別プロファイルを使う。
 
 ## Examples
 
@@ -48,22 +48,22 @@ Scenario: protocolの省略を拒否する
   Then 必須項目の欠落として入力エラーにする
 
 @id=EX-195 @about=REQ-092 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
-Scenario: 別レイヤの通信許可を追加する
-  Given filteredで下のレイヤにAPIへのTCP443番の許可がある
-  And 上のレイヤにホストIPv4ループバックのTCP5432番の許可がある
+Scenario: 別の段の通信許可を追加する
+  Given filteredで下の段にAPIへのTCP443番の許可がある
+  And 上の段にホストIPv4ループバックのTCP5432番の許可がある
   When 許可設定を合成する
   Then 両方の許可を残す
 
 @id=EX-196 @about=REQ-092 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
 Scenario: 空配列を許可の削除と解釈しない
-  Given 下のレイヤに通信許可がある
-  And 上のレイヤのnetwork.allowは空配列である
+  Given 下の段に通信許可がある
+  And 上の段のnetwork.allowは空配列である
   When 許可設定を合成する
-  Then 下のレイヤの許可を維持する
+  Then 下の段の許可を維持する
 
 @id=EX-197 @about=REQ-092 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
 Scenario: 同じ許可の重複をまとめる
-  Given 2つのレイヤに同じ宛先とprotocolとportsの許可がある
+  Given 2つの段に同じ宛先とprotocolとportsの許可がある
   When 許可設定を合成する
   Then その重複を1つの許可にまとめる
 ```

@@ -88,7 +88,7 @@ shutdown-grace-seconds = 10
 | `host`、`none` | 使われない旨を警告し、従来の終了の仕方を保つ |
 
 ## 段の合成と検査
-<!-- @kotowari[REQ-097:07fa270d, EX-210:2a6abe28, EX-211:71950ff7, EX-212:b3d9c7e6, EX-213:031a7bb8] -->
+<!-- @kotowari[REQ-097:6567293a, EX-210:eb296b64, EX-211:bf0e259e, EX-212:b3d9c7e6, EX-213:82a1d46c] -->
 
 `process.shutdown-grace-seconds` は段ごとに書ける（段は[用語](../02-terms.md)を参照）。
 合成は次のとおり。

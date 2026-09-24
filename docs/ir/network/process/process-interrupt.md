@@ -1,6 +1,6 @@
 # 対話中の割り込み
 
-filteredでのCtrl+Cの意味を定義する草案。シグナル配送の実現方式、外部からの終了要求の扱いは未決。
+filteredでのCtrl+Cの意味を定義する草案。シグナル配送の実現方式は未決。外部からの終了要求はprocess-termination.mdで定義する。
 
 ## Requirements
 

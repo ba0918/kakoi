@@ -20,6 +20,14 @@ DNS名の許可を使う "filtered" でホストDNSを選び、起動時にホ�
 
 ホストDNSは、ホストの名前解決設定の "nameserver" を記載順に通常DNSの上流として使う。記載がsystemd-resolvedのスタブ127.0.0.53だけの場合は、中継窓口127.0.0.54を使う。
 
+### REQ-417: ホストのループバック上のDNSを上流に使う
+
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+- verification: unit
+
+ホストDNSの上流への問い合わせは、隔離環境の中ではなくkakoi自身のネットワークから送る。このため、ホストの名前解決設定の "nameserver" がループバックのアドレスであれば、ホストのループバック上のDNSを上流に使う。
+
 ## Examples
 
 ```gherkin
@@ -48,4 +56,16 @@ Scenario: systemd-resolvedのスタブだけなら中継窓口を使う
   Given ホストの名前解決設定のnameserverは127.0.0.53だけである
   When アプリの名前解決のために上流へ問い合わせる
   Then 127.0.0.54へ問い合わせる
+
+@id=EX-796 @about=REQ-417 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+Scenario: ホストのループバック上のDNSへ問い合わせる
+  Given ホストの名前解決設定の "nameserver" は 127.0.0.1 だけで、ホストの 127.0.0.1 の53番でDNSが待ち受けている
+  When アプリの名前解決のために上流へ問い合わせる
+  Then ホストの 127.0.0.1 のDNSへ問い合わせて応答を得る
+
+@id=EX-797 @about=REQ-417 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A14
+Scenario: ループバックの上流を隔離環境の中のアドレスとして扱わない
+  Given ホストの名前解決設定の "nameserver" は 127.0.0.1 だけである
+  When アプリの名前解決のために上流へ問い合わせる
+  Then 隔離環境の中の 127.0.0.1 へは問い合わせを送らない
 ```
