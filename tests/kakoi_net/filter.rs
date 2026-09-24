@@ -870,8 +870,11 @@ exec /usr/sbin/nft "$@"
 // twice the reserve. A measured reserve also carries the cost of starting
 // and discarding nft, so the doubling is judged on how much each reserve grew
 // over the one before it: a growth is a difference of two measurements, the
-// cost drops out of it, and each growth is twice the one before. Growths too
-// short to show above the jitter of that cost are not compared.
+// cost drops out of it, and each growth is twice the one before. Only runs
+// whose first reserve is already long enough for its growth to stand above
+// the jitter of that cost are compared, and they are picked by that reserve
+// alone: picking them by the growth itself would keep just the short growths
+// that the jitter inflated, and pull their ratios below two.
 // @kotowari[REQ-420, EX-804]
 #[test]
 fn a_late_staging_is_tried_again_with_twice_the_reserve() {
@@ -880,7 +883,7 @@ fn a_late_staging_is_tried_again_with_twice_the_reserve() {
     let compared: Vec<f64> = stagings
         .windows(3)
         .filter(|run| {
-            run[1].reserve.saturating_sub(run[0].reserve) >= Duration::from_millis(75)
+            run[0].reserve >= Duration::from_millis(150)
                 && run[0].reserve * 2 <= run[1].left / 2
                 && run[1].reserve * 2 <= run[2].left / 2
         })
