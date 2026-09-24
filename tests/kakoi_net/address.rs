@@ -66,3 +66,27 @@ fn cidr_requires_canonical_network_bits_and_normalizes_mapped_ranges() {
     let error = "2001:db8::1/64".parse::<IpNetwork>().unwrap_err();
     assert!(error.contains("2001:db8::/64"), "{error}");
 }
+
+// One destination, however it is written: a mapped IPv4 address meets the
+// IPv4 rule, an expanded IPv6 rule meets the compressed destination, and a
+// /128 holds one address only.
+// @kotowari[EX-080, EX-091, EX-094, EX-095]
+#[test]
+fn a_destination_meets_the_same_rule_whatever_its_notation() {
+    let ipv4: IpNetwork = "192.168.1.10/32".parse().unwrap();
+    assert!(ipv4.contains(parse_ip("::ffff:192.168.1.10").unwrap()));
+    assert!(ipv4.contains("::ffff:192.168.1.10".parse().unwrap()));
+    let expanded: IpNetwork = format!(
+        "{}/128",
+        parse_ip("FD00:0000:0000:0000:0000:0000:0000:0001").unwrap()
+    )
+    .parse()
+    .unwrap();
+    assert!(expanded.contains(parse_ip("fd00::1").unwrap()));
+    let single: IpNetwork = "fd00::1/128".parse().unwrap();
+    assert!(single.contains(parse_ip("fd00::1").unwrap()));
+    assert!(!single.contains(parse_ip("fd00::2").unwrap()));
+    assert!(!single.contains(parse_ip("fd00::").unwrap()));
+    assert!(parse_ip("fd00::1::2").is_err());
+    assert!("fd00::1::2/128".parse::<IpNetwork>().is_err());
+}

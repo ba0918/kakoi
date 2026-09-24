@@ -106,3 +106,47 @@ fn limits_inherit_then_override_and_validate_the_merged_dns_deadline() {
     assert_eq!(merged.network_limits.dns_resolution_timeout_seconds, 30);
     assert!(merge(&[layer("[network]\ndns-max-cname-hops=16")]).is_err());
 }
+
+// Every limit written only in a lower layer is inherited; the upper layer
+// sets nothing but the mode.
+// @kotowari[EX-202, EX-263, EX-269, EX-285, EX-294]
+#[test]
+fn every_limit_is_inherited_from_a_lower_layer() {
+    let merged = merge(&[
+        layer(
+            "[network]\nudp-idle-timeout-seconds=33\ndns-max-cname-hops=5\ndns-max-upstream-queries=7\ndns-max-concurrent-resolutions=9\ndns-max-waiters-per-resolution=11",
+        ),
+        layer("[network]\nmode='filtered'"),
+    ])
+    .unwrap()
+    .network_limits;
+    assert_eq!(
+        (
+            merged.udp_idle_timeout_seconds,
+            merged.dns_max_cname_hops,
+            merged.dns_max_upstream_queries,
+            merged.dns_max_concurrent_resolutions,
+            merged.dns_max_waiters_per_resolution,
+        ),
+        (33, 5, 7, 9, 11)
+    );
+}
+
+// The smallest and the largest waits, each pair within its overall limit.
+// @kotowari[EX-256]
+#[test]
+fn the_extreme_dns_waits_are_accepted_together() {
+    for (server, resolution) in [(1, 1), (300, 3600)] {
+        let merged = merge(&[layer(&format!(
+            "[network]\nmode='filtered'\ndns-server-timeout-seconds={server}\ndns-resolution-timeout-seconds={resolution}"
+        ))])
+        .unwrap();
+        assert_eq!(
+            (
+                merged.network_limits.dns_server_timeout_seconds,
+                merged.network_limits.dns_resolution_timeout_seconds
+            ),
+            (server, resolution)
+        );
+    }
+}

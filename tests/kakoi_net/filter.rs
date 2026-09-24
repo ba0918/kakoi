@@ -837,9 +837,10 @@ fn staging_that_cannot_finish_before_the_answer_expires_fails_only_that_answer()
     assert_eq!(dns_sets(&namespace).len(), 1);
 }
 
-// A rule for all of IPv6 does not reach a link-local neighbour: only a rule
-// naming the interface could, and the initial release has none.
-// @kotowari[REQ-141, EX-314]
+// A rule for all of IPv6 keeps its port, and does not reach a link-local
+// neighbour: only a rule naming the interface could, and the initial release
+// has none.
+// @kotowari[REQ-141, EX-314, EX-085]
 #[test]
 fn a_rule_for_all_of_ipv6_does_not_reach_link_local() {
     let client = NetworkNamespace::create().unwrap();
@@ -893,15 +894,16 @@ fn a_rule_for_all_of_ipv6_does_not_reach_link_local() {
                 "-c",
                 r#"
 import socket, sys, threading
-listener = socket.socket(socket.AF_INET6)
-listener.bind(('::', 8080))
-listener.listen()
-def serve():
+def serve(listener):
     while True:
         connection, _ = listener.accept()
         with connection:
             connection.sendall(b'served')
-threading.Thread(target=serve, daemon=True).start()
+for port in (8080, 8081):
+    listener = socket.socket(socket.AF_INET6)
+    listener.bind(('::', port))
+    listener.listen()
+    threading.Thread(target=serve, args=(listener,), daemon=True).start()
 print('ready', flush=True)
 sys.stdin.read()
 "#,
@@ -923,21 +925,21 @@ sys.stdin.read()
             "-c",
             r#"
 import socket
-for address in [('fd00:1::2', 8080), ('fe80::2%app0', 8080)]:
+for address in [('fd00:1::2', 8080), ('fd00:1::2', 8081), ('fe80::2%app0', 8080)]:
     with socket.socket(socket.AF_INET6) as sock:
         sock.settimeout(1)
         try:
             sock.connect(socket.getaddrinfo(*address, socket.AF_INET6, socket.SOCK_STREAM)[0][4])
-            print(address[0], sock.recv(16).decode())
+            print(*address, sock.recv(16).decode())
         except OSError as error:
-            print(address[0], 'failed', type(error).__name__)
+            print(*address, 'failed', type(error).__name__)
 "#,
         ])
         .output()
         .unwrap();
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "fd00:1::2 served\nfe80::2%app0 failed TimeoutError\n",
+        "fd00:1::2 8080 served\nfd00:1::2 8081 failed TimeoutError\nfe80::2%app0 8080 failed TimeoutError\n",
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );

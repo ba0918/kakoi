@@ -141,3 +141,45 @@ fn broad_cidrs_do_not_authorize_host_aliases_or_unscoped_link_local_routes() {
         DnsAdmission::Denied
     );
 }
+
+// A DNS answer alone never opens an internal, shared, or special-purpose
+// address, in whatever notation; an explicit rule for all of IPv4 does.
+// @kotowari[EX-077, EX-078, EX-080, EX-081, EX-084, EX-312]
+#[test]
+fn internal_and_special_answers_need_an_explicit_rule() {
+    let context = AddressContext::default();
+    let origin = rule("dns='api.example.com'", "tcp", "'443'");
+    for ip in [
+        "::ffff:192.168.1.10",
+        "100.64.0.1",
+        "fd00::1",
+        "198.18.0.1",
+        "192.0.0.9",
+    ] {
+        assert_eq!(
+            context.admit_dns(&origin, ip.parse().unwrap(), None, &[]),
+            DnsAdmission::Denied,
+            "{ip}"
+        );
+    }
+    let explicit = rule("ip='192.168.1.10'", "tcp", "'443'");
+    assert_eq!(
+        context.admit_dns(
+            &origin,
+            "::ffff:192.168.1.10".parse().unwrap(),
+            None,
+            &[explicit]
+        ),
+        DnsAdmission::ExistingOnly
+    );
+    let everything = rule("cidr='0.0.0.0/0'", "tcp", "'443'");
+    assert_eq!(
+        context.admit_dns(
+            &origin,
+            "192.168.1.10".parse().unwrap(),
+            None,
+            &[everything]
+        ),
+        DnsAdmission::ExistingOnly
+    );
+}

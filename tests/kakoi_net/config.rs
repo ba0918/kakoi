@@ -167,3 +167,25 @@ fn fixed_publication_rejects_unsupported_forms_even_when_inactive() {
         }
     }
 }
+
+// Allow rules written with no mode in any layer stop the start.
+// @kotowari[EX-169]
+#[test]
+fn allow_rules_without_a_mode_anywhere_are_an_error() {
+    let rules = layer(
+        "[[network.allow]]\ndestination = { dns = 'example.com' }\nprotocol = 'tcp'\nports = ['443']\n",
+    );
+    assert!(kakoi_core::layers::merge(std::slice::from_ref(&rules)).is_err());
+    assert!(kakoi_core::layers::merge(&[layer(""), rules]).is_err());
+}
+
+// An unused rule's form is checked in none mode too.
+// @kotowari[EX-172]
+#[test]
+fn an_invalid_port_is_refused_in_none_mode() {
+    assert!(parse_policy(
+        "[network]\nmode = 'none'\n\n[[network.allow]]\ndestination = { ip = '192.0.2.1' }\nprotocol = 'tcp'\nports = ['65536']\n",
+        Path::new("none.toml"),
+    )
+    .is_err());
+}

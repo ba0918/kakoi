@@ -567,3 +567,103 @@ fn host_and_none_keep_the_exec_contract_and_ignore_the_grace() {
         );
     }
 }
+
+const UNUSED: &str = "kakoi: warning: network/process settings are unused outside filtered mode\n";
+
+/// Runs `sh -c script` under kakoi with the default profile `profile` and,
+/// when given, a policy file holding `upper`.
+fn launched(profile: &str, upper: Option<&str>, script: &str) -> std::process::Output {
+    let home = TempDir::new();
+    let workspace = home.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}\n{profile}"),
+    );
+    let mut command = binary(home.path());
+    command.current_dir(&workspace);
+    if let Some(upper) = upper {
+        command
+            .arg("--policy-file")
+            .arg(home.write("upper.toml", upper));
+    }
+    command
+        .args(["--", "/bin/sh", "-c", script])
+        .output()
+        .unwrap()
+}
+
+// none written in a lower layer is still a written mode: a publication above
+// it is only warned about.
+// @kotowari[EX-170]
+#[test]
+fn an_inherited_none_ignores_a_publication_above_it() {
+    let output = launched(
+        "[network]\nmode = 'none'\n",
+        Some("[[network.publish]]\nmode = 'fixed'\nprotocol = 'tcp'\nport = 8000\nhost-port = 18000\n"),
+        "echo ran",
+    );
+    assert_eq!(
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+            String::from_utf8_lossy(&output.stderr).into_owned()
+        ),
+        (Some(0), "ran\n".into(), UNUSED.into())
+    );
+}
+
+// Unused settings are not looked into: an interface that does not exist is
+// not checked in host mode, and a name is not asked about in none mode.
+// @kotowari[EX-173, EX-174]
+#[test]
+fn unused_settings_are_neither_checked_nor_resolved() {
+    let output = launched(
+        "[network]\nmode = 'host'\n\n[[network.allow]]\ndestination = { ip = 'fe80::1', host-interface = 'kakoi-absent0' }\nprotocol = 'tcp'\nports = ['443']\n",
+        None,
+        "echo ran",
+    );
+    assert_eq!(
+        (output.status.code(), output.stderr.as_slice()),
+        (Some(0), UNUSED.as_bytes()),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let upstream = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    upstream.set_nonblocking(true).unwrap();
+    let output = launched(
+        &format!(
+            "[network]\nmode = 'none'\n\n[[network.dns-upstream]]\ntransport = 'plain'\nip = '127.0.0.1'\nport = {}\n\n[[network.allow]]\ndestination = {{ dns = 'app.example.com' }}\nprotocol = 'tcp'\nports = ['443']\n",
+            upstream.local_addr().unwrap().port()
+        ),
+        None,
+        "echo ran",
+    );
+    assert_eq!(
+        (output.status.code(), output.stderr.as_slice()),
+        (Some(0), UNUSED.as_bytes())
+    );
+    let mut bytes = [0; 512];
+    assert!(upstream.recv_from(&mut bytes).is_err(), "a name was asked");
+}
+
+// Standard error is closed from the start: the notices are lost, and the
+// command runs and ends as usual.
+// @kotowari[EX-131]
+#[test]
+fn a_closed_standard_error_loses_notices_without_ending_the_command() {
+    let filtered = Filtered::new("");
+    let mut command = filtered.with_pasta(&["/bin/sh", "-c", "sleep 1; echo out"]);
+    // SAFETY: only closes a descriptor between fork and exec.
+    unsafe {
+        std::os::unix::process::CommandExt::pre_exec(&mut command, || {
+            libc::close(2);
+            Ok(())
+        });
+    }
+    let output = command.stderr(Stdio::null()).output().unwrap();
+    assert_eq!(
+        (output.status.code(), output.stdout.as_slice()),
+        (Some(0), b"out\n".as_slice())
+    );
+}

@@ -131,3 +131,47 @@ print('upstream queries', len(asked))
         "{output}"
     );
 }
+
+// Nothing but the mode: the command runs, and reaches neither a remote
+// service, nor the host's loopback (by its own localhost or by the host's
+// name), nor is anything inside published.
+// @kotowari[REQ-085, EX-175, EX-054]
+#[test]
+fn filtered_alone_starts_and_opens_nothing() {
+    let host = FakeHost::new("", &["11.0.0.5/32"]);
+    let app = r#"
+import sys
+print('remote', exchange('11.0.0.5', 8080, 'tcp', REFUSED))
+print('localhost', exchange('127.0.0.1', 5432, 'tcp', REFUSED))
+address = socket.getaddrinfo('host-v4.kakoi.internal', 5432, socket.AF_INET)[0][4][0]
+print('host name', exchange(address, 5432, 'tcp', REFUSED))
+server = socket.socket()
+server.bind(('127.0.0.1', 8000))
+server.listen()
+print('listening', flush=True)
+sys.stdin.readline()
+"#;
+    let output = host.run(&format!(
+        r#"
+serve('11.0.0.5', 8080, 'tcp', 'remote')
+serve('127.0.0.1', 5432, 'tcp', 'host-db')
+process = kakoi({app:?}, stdin=subprocess.PIPE)
+for _ in range(4):
+    print(line(process.stdout), end='')
+print('published', exchange('127.0.0.1', 8000, 'tcp', REFUSED), exchange('127.0.0.1', 18000, 'tcp', REFUSED))
+process.stdin.write(b'end\n')
+process.stdin.flush()
+print('exit', finish(process), 'received', received)
+"#
+    ));
+    assert_eq!(
+        output,
+        "remote failed TimeoutError\n\
+         localhost failed ConnectionRefusedError\n\
+         host name failed TimeoutError\n\
+         listening\n\
+         published failed ConnectionRefusedError failed ConnectionRefusedError\n\
+         exit 0 received []\n",
+        "{output}"
+    );
+}
