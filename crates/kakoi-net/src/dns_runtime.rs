@@ -235,6 +235,13 @@ impl DnsRuntime {
         self.follow(now)?;
         // Collect before admitting more work so physical slots are reclaimed
         // without confusing an expired request with a finished worker.
+        self.collect_adoptions(now)?;
+        self.collect_workers(now)?;
+        self.admit_new(now)
+    }
+
+    /// Answers the questions whose permissions were adopted, or failed.
+    fn collect_adoptions(&mut self, now: Instant) -> io::Result<()> {
         for completed in self.adoption.poll()? {
             let answer = match completed.answer {
                 Ok(wire) => Ok(wire),
@@ -248,6 +255,12 @@ impl DnsRuntime {
         if self.adoption.is_faulted() && !self.stopping {
             return Err(io::Error::other("DNS permission executor faulted"));
         }
+        Ok(())
+    }
+
+    /// Takes the finished resolutions: a retired one is asked again under the new
+    /// settings, a candidate goes to adoption, and a failure is answered.
+    fn collect_workers(&mut self, now: Instant) -> io::Result<()> {
         for completed in self.workers.collect() {
             let task = self.inflight.remove(&completed.id);
             if self.retired.remove(&completed.id) && !self.stopping {
@@ -271,17 +284,20 @@ impl DnsRuntime {
                 continue;
             }
             match answer {
-                Ok(candidate) => {
-                    if let Err(error) = self.adoption.submit(completed.id, candidate) {
-                        if error.kind() != io::ErrorKind::WouldBlock {
-                            return Err(error);
-                        }
-                        self.fail_busy(completed.id, now)?;
+                Ok(candidate) => match self.adoption.submit(completed.id, candidate) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                        self.fail_busy(completed.id, now)?
                     }
-                }
+                    Err(error) => return Err(error),
+                },
                 Err(error) => self.service.complete(completed.id, Err(error), now)?,
             }
         }
+        Ok(())
+    }
+
+    fn admit_new(&mut self, now: Instant) -> io::Result<()> {
         if !self.stopping {
             for task in self.service.poll(now)? {
                 let queries = QueryAllowance::new(&self.limits);
