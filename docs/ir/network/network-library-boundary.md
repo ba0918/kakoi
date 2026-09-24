@@ -7,11 +7,11 @@ coreとnetの分担と、CLIを通さない利用の契約を定義する草案�
 ### REQ-150: 計画と実行の責務を分ける
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A153, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-25-library-boundary.md#A1
 - verification: review
-- how_to_verify: crates/kakoi-coreを読み、設定の検査・合成・計画を担当し環境へ直接アクセスしないことを確かめる。crates/kakoi-netが通信の起動・監督・停止を担い、CLIを通さずRustプログラムから使える公開の入口を持つこと、DNS応答の採否と許可期限の判断がOS操作と分かれて単独で検証できる構造であることを確かめる。
+- how_to_verify: crates/kakoi-coreを読み、設定の検査・合成・計画を担当し、引数の解釈、プロセスの環境変数とカレントディレクトリの読み取り、標準出力と標準エラーへの書き込み、コマンドの実行、通信の起動・監督・停止をしないことを確かめる。crates/kakoi-netが通信の起動・監督・停止を担い、CLIを通さずRustプログラムから使える公開の入口を持つこと、DNS応答の採否と許可期限の判断がOS操作と分かれて単独で検証できる構造であることを確かめる。
 
-kakoi-coreは設定の検査・合成・計画を担当し、環境へ直接アクセスしない。kakoi-netが通信の起動・監督・停止を担い、CLI以外のRustプログラムからも使える形にする。DNS応答の採否や許可期限の判断はOS操作と分けて検証できる構造にする。
+kakoi-coreは設定の検査・合成・計画を担当する。kakoi-coreは引数を解釈せず、プロセスの環境変数とカレントディレクトリを読まず、標準出力と標準エラーに書かず、コマンドを実行せず、通信を起動・監督・停止しない。パスの事実とマウント一覧とrw-copyの複製元を読むこと、bwrapに渡す記述子を用意すること、bwrapのコマンドを組み立てることはkakoi-coreが行う。kakoi-netが通信の起動・監督・停止を担い、CLI以外のRustプログラムからも使える形にする。DNS応答の採否や許可期限の判断はOS操作と分けて検証できる構造にする。
 
 ## Examples
 
