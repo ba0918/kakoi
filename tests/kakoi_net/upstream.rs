@@ -55,7 +55,27 @@ fn an_internationalized_tls_name_is_matched_in_its_ascii_form() {
     );
 }
 
-// @kotowari[REQ-146, REQ-087, EX-324, EX-325, REQ-416, EX-794, EX-795]
+// @kotowari[REQ-416, EX-794]
+#[test]
+fn upstream_candidates_keep_their_written_order_and_duplicates_across_layers() {
+    let plain =
+        |ip: &str| format!("[[network.dns-upstream]]\ntransport='plain'\nip='{ip}'\nport=53\n");
+    let lower = layer(&format!("{}{}", plain("192.0.2.1"), plain("192.0.2.2")));
+    let upper = layer(&plain("192.0.2.1"));
+    let mode = layer("[network]\nmode='host'");
+    let merged = merge(&[mode, lower, upper]).unwrap();
+    let addresses: Vec<std::net::IpAddr> = merged
+        .dns_upstream
+        .iter()
+        .map(|upstream| upstream.address)
+        .collect();
+    assert_eq!(
+        addresses,
+        ["192.0.2.1", "192.0.2.2", "192.0.2.1"].map(|ip| ip.parse::<std::net::IpAddr>().unwrap())
+    );
+}
+
+// @kotowari[REQ-146, REQ-087, EX-324, EX-325, REQ-416, EX-795]
 #[test]
 fn upstream_layers_append_preserving_order_and_reject_mixed_transport() {
     let mode = layer("[network]\nmode='host'");
