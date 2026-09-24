@@ -743,3 +743,57 @@ fn environments_share_neither_slots_nor_resolutions() {
         AcceptedRequest::Start(_)
     ));
 }
+
+// A resolution asked again under new settings belongs to them once it is
+// re-keyed: its answer then serves the new settings' questions. Without the
+// re-keying it serves nothing, since it may carry the old settings' answer.
+// A local overload fails its question without being held as a failure.
+// @kotowari[REQ-108, REQ-133, REQ-134]
+#[test]
+fn only_answers_under_the_current_settings_are_kept() {
+    use kakoi_net::dns::{AcceptedRequest, DnsError, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests = DnsRequests::new(
+        vec![rule("*.example.com")],
+        7,
+        4,
+        4,
+        Duration::from_secs(10),
+    )
+    .unwrap()
+    .with_failure_hold(Duration::from_secs(5));
+    for rekeyed in [false, true] {
+        let question = query(
+            if rekeyed {
+                "a.example.com"
+            } else {
+                "b.example.com"
+            },
+            1,
+        );
+        let AcceptedRequest::Start(task) = requests.accept(&question, 1, now).unwrap() else {
+            panic!()
+        };
+        requests.advance_generation();
+        if rekeyed {
+            requests.rekey(task.id);
+        }
+        requests.complete(task.id, Ok(answered(&question, 30)), now);
+        let reused = matches!(
+            requests.accept(&question, 2, now).unwrap(),
+            AcceptedRequest::Answer(_)
+        );
+        assert_eq!(reused, rekeyed);
+    }
+    let question = query("c.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&question, 1, now).unwrap() else {
+        panic!()
+    };
+    let replies = requests.complete(task.id, Err(DnsError::Overloaded), now);
+    assert_eq!(replies[0].wire[3] & 15, 2);
+    assert!(matches!(
+        requests.accept(&question, 2, now).unwrap(),
+        AcceptedRequest::Start(_)
+    ));
+}

@@ -33,6 +33,9 @@ pub enum DnsError {
     IncompleteResponse,
     LifetimeOverflow,
     PolicyDenied,
+    /// The environment had no room for the work just now; not a failure of
+    /// the name.
+    Overloaded,
 }
 
 pub struct Question {

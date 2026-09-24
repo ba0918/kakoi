@@ -43,6 +43,10 @@ impl DnsService {
         self.requests.advance_generation();
     }
 
+    pub fn rekey(&mut self, id: ResolutionId) {
+        self.requests.rekey(id);
+    }
+
     /// Enforcement failures belong to the supervisor and must close traffic;
     /// callers must not turn uncertain kernel state into an ordinary DNS error.
     pub fn complete(

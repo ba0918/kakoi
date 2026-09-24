@@ -207,7 +207,7 @@ impl DnsRuntime {
                 Ok(())
             }
             Err((_, error)) if error.kind() == io::ErrorKind::BrokenPipe => Err(error),
-            Err(_) => self.fail_query(id, now),
+            Err(_) => self.fail_busy(id, now),
         }
     }
 
@@ -235,6 +235,7 @@ impl DnsRuntime {
                 if let (Some((wire, deadline, queries)), false) =
                     (task, matches!(completed.result, WorkResult::Panicked))
                 {
+                    self.service.rekey(completed.id);
                     self.dispatch(completed.id, wire, deadline, queries, now)?;
                     continue;
                 }
@@ -255,7 +256,7 @@ impl DnsRuntime {
                         if error.kind() != io::ErrorKind::WouldBlock {
                             return Err(error);
                         }
-                        self.fail_query(completed.id, now)?;
+                        self.fail_busy(completed.id, now)?;
                     }
                 }
                 Err(error) => self.service.complete(completed.id, Err(error), now)?,
@@ -273,6 +274,11 @@ impl DnsRuntime {
     fn fail_query(&mut self, id: ResolutionId, now: Instant) -> io::Result<()> {
         self.service
             .complete(id, Err(DnsError::IncompleteResponse), now)
+    }
+
+    /// Fails a question for want of room, which is not held as a failure.
+    fn fail_busy(&mut self, id: ResolutionId, now: Instant) -> io::Result<()> {
+        self.service.complete(id, Err(DnsError::Overloaded), now)
     }
 
     /// The caller closes transit first; keep polling until `is_finished` before

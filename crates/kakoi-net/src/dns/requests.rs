@@ -165,6 +165,16 @@ impl<W> DnsRequests<W> {
         }
     }
 
+    /// The running resolution `id` is being asked again under the current
+    /// settings: what it finds from now on belongs to them.
+    pub fn rekey(&mut self, id: ResolutionId) {
+        if let Some(running) = self.running.iter_mut().find(|entry| entry.id == id) {
+            if let Ok(key) = running.question.resolution_key(self.generation) {
+                running.key = key;
+            }
+        }
+    }
+
     /// Unknown or already expired task IDs have no recipients. They cannot consume
     /// a newer slot, nor cause a second answer to an earlier requester.
     pub fn complete(
@@ -191,11 +201,17 @@ impl<W> DnsRequests<W> {
         // upstream's, failed; a negative answer or a refusal did not.
         let failed = match &result {
             Ok(answer) => answer.wire.get(3).is_some_and(|flags| flags & 15 == 2),
+            Err(DnsError::Overloaded) => false,
             Err(_) => code == ResponseCode::ServFail,
         };
-        if failed {
+        // Work of replaced settings informs nothing: its answer may be theirs.
+        let current = running
+            .question
+            .resolution_key(self.generation)
+            .is_ok_and(|key| key == running.key);
+        if current && failed {
             self.hold(running.key.clone(), now);
-        } else if let Ok(answer) = &result {
+        } else if let (true, Ok(answer)) = (current, &result) {
             self.keep(running.key.clone(), &answer.message, running.started, now);
         }
         self.pool
