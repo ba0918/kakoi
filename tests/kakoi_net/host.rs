@@ -159,7 +159,7 @@ fn a_dns_wildcard_does_not_permit_the_host_loopback() {
 // An address the host itself holds, outside loopback, is reached only through
 // an IP permission: a name permitted by `dns` that resolves to it opens nothing,
 // whereas the same answer for a remote address does.
-// @kotowari[REQ-139]
+// @kotowari[REQ-139, REQ-425, EX-816]
 #[test]
 fn a_dns_permission_does_not_open_an_address_the_host_holds() {
     let dns_only =
@@ -198,5 +198,37 @@ for name in ('own.example', 'far.example'):
             "{dns_only}\n[[network.allow]]\ndestination = {{ ip = '11.0.0.7' }}\nprotocol = 'tcp'\nports = ['8080']\n"
         )),
         "own.example host-lan\nfar.example remote\n"
+    );
+}
+
+// The host's own addresses are read once, at the start: an address the host
+// gains later, as a VPN connection gives it one, is like any other and a
+// `dns` permission opens it.
+// @kotowari[REQ-425, EX-817]
+#[test]
+fn an_address_the_host_gains_after_the_start_opens_by_a_dns_permission() {
+    use crate::publish::{CONTROL, SERVICES};
+    let host = FakeHost::new(
+        "\n[[network.allow]]\ndestination = { dns = '*.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &["11.0.0.5/32"],
+    );
+    let output = host.run(&format!(
+        r#"{CONTROL}
+dns({{('own.example', 1): [('11.0.0.7', 300)], ('far.example', 1): [('11.0.0.5', 300)]}})
+process = kakoi({SERVICES:?}, stdin=subprocess.PIPE)
+# The application answers, so kakoi has read the host's addresses.
+print('started', ask(process, 'resolve far.example'))
+ip('link', 'add', 'lan0', 'type', 'dummy')
+ip('link', 'set', 'lan0', 'up')
+ip('-4', 'addr', 'add', '11.0.0.7/32', 'dev', 'lan0')
+serve('11.0.0.7', 8080, 'tcp', 'host-lan')
+print('gained', ask(process, 'resolve own.example'), ask(process, 'remote 11.0.0.7 permitted'))
+process.stdin.close()
+assert finish(process) == 0
+"#
+    ));
+    assert_eq!(
+        output, "started 11.0.0.5\ngained 11.0.0.7 host-lan\n",
+        "{output}"
     );
 }
