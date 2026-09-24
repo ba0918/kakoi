@@ -32,6 +32,8 @@ pub fn read_copy_sources(items: &[ResolvedItem]) -> Result<CopySources, Diagnost
         let mut budget = Budget::new(item);
         let source = match item.kind {
             EntryKind::Directory => {
+                let metadata = fs::metadata(&item.real)
+                    .map_err(|error| unreadable(item, &item.real, error))?;
                 let mut entries = Vec::new();
                 read_directory(
                     &item.real,
@@ -41,7 +43,10 @@ pub fn read_copy_sources(items: &[ResolvedItem]) -> Result<CopySources, Diagnost
                     &mut entries,
                     &mut collected.not_copied,
                 )?;
-                CopySource::Directory(entries)
+                CopySource::Directory {
+                    mode: mode_of(&metadata),
+                    entries,
+                }
             }
             EntryKind::NotDirectory => {
                 let (mode, content) = read_file(&item.real, item, &mut budget)?;

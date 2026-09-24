@@ -76,8 +76,12 @@ impl CopiedEntry {
 pub enum CopySource {
     /// A regular file: the mode to give the copy and the bytes to fill it with.
     File { mode: u32, content: FileContent },
-    /// A directory: the entries under it, each directory before what is under it.
-    Directory(Vec<CopiedEntry>),
+    /// A directory: its own mode, and the entries under it, each directory before what is
+    /// under it.
+    Directory {
+        mode: u32,
+        entries: Vec<CopiedEntry>,
+    },
 }
 
 /// An entry a copy left out, with the reason: a kind no bwrap argument can recreate in a

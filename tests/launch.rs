@@ -1075,6 +1075,22 @@ fn an_rw_copy_directory_carries_the_host_tree_and_keeps_every_change_inside() {
     assert_eq!(tree_snapshot(home.path()), before);
 }
 
+// The copy's own directory takes the host directory's mode, as every directory under it
+// does.
+// @kotowari[REQ-167]
+#[test]
+fn an_rw_copy_directory_keeps_the_mode_of_the_directory_itself() {
+    let (home, workspace) = home_with_workspace();
+    directory(&home, "conf", 0o700);
+    directory(&home, "conf/sub", 0o750);
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+    let output = run_script(&home, &workspace, "stat -c %a ~/conf ~/conf/sub");
+    assert_eq!(assert_ran_clean(&output), "700\n750\n");
+}
+
 // @kotowari[REQ-167]
 #[test]
 fn an_rw_copy_directory_reproduces_a_symbolic_link_as_a_link() {

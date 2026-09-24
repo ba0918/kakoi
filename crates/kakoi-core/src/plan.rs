@@ -332,8 +332,13 @@ fn copy_arguments(item: &ResolvedItem, source: Option<&CopySource>) -> Vec<Argum
             Argument::CopiedFile(content.clone()),
             real(),
         ],
-        (Some(CopySource::Directory(entries)), _) => {
-            let mut arguments = vec![Argument::text("--tmpfs"), real()];
+        (Some(CopySource::Directory { mode, entries }), _) => {
+            let mut arguments = vec![
+                Argument::text("--perms"),
+                Argument::text(octal(*mode)),
+                Argument::text("--tmpfs"),
+                real(),
+            ];
             for entry in entries {
                 let destination = Argument::text(item.real.join(entry.relative()).into_os_string());
                 match entry {
