@@ -14,7 +14,7 @@
 6. 変更前後の計画で、提案が反映されたことを確かめる。
 
 ## スキルの置き場と配布
-<!-- @kotowari[REQ-374:a16e67cd, EX-688:311b79fd, EX-689:d006497c] -->
+<!-- @kotowari[REQ-374:2b4e9aa8, EX-688:311b79fd, EX-689:d006497c] -->
 
 スキルは `skills/kakoi-setup/SKILL.md` に置き、Agent Skills の共通仕様に従う。
 
@@ -32,7 +32,7 @@ gh skill install ba0918/kakoi kakoi-setup
 ```
 
 ## 隔離の外で動くことと承認の境界
-<!-- @kotowari[REQ-378:e75628a0, EX-696:2def9bb4, EX-697:883ff7ae] -->
+<!-- @kotowari[REQ-378:34e27240, EX-696:2def9bb4, EX-697:883ff7ae] -->
 
 スキルは隔離の外で動く。
 設定ディレクトリは書き込める項目の中に置けないので、隔離の中のエージェントは自分のプロファイルを編集できないためである（[ポリシーを保護する配置](06-policy-placement.md)）。
@@ -47,7 +47,7 @@ gh skill install ba0918/kakoi kakoi-setup
 - エージェント CLI の側に書き込みの承認がある場合。
 
 ## 書き先の範囲と別の正本
-<!-- @kotowari[REQ-379:d2394fbe, EX-698:fe0868a1, EX-699:4f9f16b3] -->
+<!-- @kotowari[REQ-379:ffbf324a, EX-698:fe0868a1, EX-699:4f9f16b3] -->
 
 スキルが書いてよい場所は次の 2 つに限る。
 
@@ -66,7 +66,7 @@ gh skill install ba0918/kakoi kakoi-setup
 | シム | 置く内容と、実行可能にすること | 正本への反映と実行可能ビットの設定 |
 
 ## 正本とプロファイルの有無の確認
-<!-- @kotowari[REQ-375:6d918496, REQ-405:c9addfe0, EX-690:425efe19, EX-691:a4b995db, EX-763:2488de19, EX-764:a496be69] -->
+<!-- @kotowari[REQ-375:9d6cdfc5, REQ-405:c9addfe0, EX-690:425efe19, EX-691:a4b995db, EX-763:2488de19, EX-764:a496be69] -->
 
 スキルは、プロファイルとシムのそれぞれについて、最初の変更提案より前に、別の正本があるかを利用者に尋ねる。
 答えはファイルの印や内容から推測せず、利用者の答えだけを根拠にする。
@@ -83,7 +83,7 @@ gh skill install ba0918/kakoi kakoi-setup
 組み込みの既定を想定してプロファイルへの提案を先に出すことはしない。
 
 ## 対象に合わせた提案
-<!-- @kotowari[REQ-376:18438f33, REQ-406:ebf31001, EX-692:c6b13980, EX-693:964fd0c8, EX-765:aae6b8d9, EX-766:d36784a9] -->
+<!-- @kotowari[REQ-376:3d1285f7, REQ-406:ebf31001, EX-692:c6b13980, EX-693:964fd0c8, EX-765:aae6b8d9, EX-766:d36784a9] -->
 
 スキルは導入済みの対象コマンドを調べ、次を提案する。
 対象コマンドは、利用者が隔離の中で動かしたいコマンドであり、エージェント CLI に限らない。
@@ -104,7 +104,7 @@ gh skill install ba0918/kakoi kakoi-setup
 記憶したフラグを実測済みとして加えることはしない。
 
 ## 雛形で写せない引数の説明
-<!-- @kotowari[REQ-377:ae77c356, EX-694:1a8105fa, EX-695:c925b125] -->
+<!-- @kotowari[REQ-377:2d8ed791, EX-694:1a8105fa, EX-695:c925b125] -->
 
 対象の `--help` に次の形があれば、スキルはどのオプションがなぜ写らないかを示し、回避策を案内する。
 黙って取りこぼさない。
@@ -120,7 +120,7 @@ gh skill install ba0918/kakoi kakoi-setup
 `path` の診断の終了コードは[入れ子、並列、出力、診断と終了コード](10-process.md)を参照。
 
 ## 設定ディレクトリを読めない場合
-<!-- @kotowari[REQ-380:afeac5a3, EX-700:afab8838, EX-701:0ea01451] -->
+<!-- @kotowari[REQ-380:0c62ea63, EX-700:afab8838, EX-701:0ea01451] -->
 
 設定ディレクトリを読めない場合、スキルは `--print-plan=full` の計画から合成後のポリシーと出所を読み、コメントは見えていないことを利用者に伝える（計画は[計画の表示](04-plan.md)）。
 現在のファイルの内容を、組み込みの既定や記憶で補わない。
@@ -128,7 +128,7 @@ gh skill install ba0918/kakoi kakoi-setup
 差分を作れないので、プロファイルに書き込める場合でも書かず、足す行の提案にとどめる。
 
 ## シムが選ばれることの確認
-<!-- @kotowari[REQ-382:7047c90c, EX-704:d0c2b03c, EX-705:957e55c3] -->
+<!-- @kotowari[REQ-382:44b58880, EX-704:d0c2b03c, EX-705:957e55c3] -->
 
 シムの写しは実行可能にする。
 差分はファイルのモードを運ばないので、スキルはシムの差分を示すときに、実行可能にもすることを伝える。
@@ -149,7 +149,7 @@ gh skill install ba0918/kakoi kakoi-setup
 `command -v` が関数や alias をどう扱うかの説明には未決の問題があり、付録で追跡している（[未決事項](../appendix/open-issues.md)）。
 
 ## PATH の不一致と隔離内の PATH
-<!-- @kotowari[REQ-383:600c6c0d, EX-706:4853fcfa, EX-707:7d64360e] -->
+<!-- @kotowari[REQ-383:6c16ff96, EX-706:4853fcfa, EX-707:7d64360e] -->
 
 エージェント CLI の側だけが写しを見つけない場合、スキルは次を案内する。
 
@@ -160,7 +160,7 @@ gh skill install ba0918/kakoi kakoi-setup
 ホスト側でシムを見つける探索順とは別のもので、`path-prepend` を足してもホストでシムが見つからない問題は直らない（`path-prepend` は[環境変数、認証情報、Git の URL 書き換え](08-environment.md)）。
 
 ## 計画での反映の確認
-<!-- @kotowari[REQ-384:a3eef16e, EX-708:821d2084, EX-709:ed2425f6] -->
+<!-- @kotowari[REQ-384:ca1b749b, EX-708:821d2084, EX-709:ed2425f6] -->
 
 スキルは変更の前後で計画を取り、並べて比べる。
 前後とも `--print-plan=full` を使い、提案した項目が合成後のポリシーに現れることを確かめる。
@@ -177,7 +177,7 @@ kakoi --print-plan=full -- true
 どちらにするかの判断は利用者に委ねる。
 
 ## 秘密に触れないこと
-<!-- @kotowari[REQ-381:e12741f8, EX-702:42153b96, EX-703:03f1ac3b] -->
+<!-- @kotowari[REQ-381:282c0cad, EX-702:42153b96, EX-703:03f1ac3b] -->
 
 スキルは `secrets/` の中を一覧せず、読まず、書かない。
 置き場とモードの案内にとどめる。
@@ -197,7 +197,7 @@ kakoi --print-plan=full -- true
 秘密の項目は[環境変数、認証情報、Git の URL 書き換え](08-environment.md)を参照。
 
 ## スキルの人による確認
-<!-- @kotowari[REQ-385:1cda341a, EX-710:4a07aa16, EX-711:1d4453a2] -->
+<!-- @kotowari[REQ-385:d9a70b62, EX-710:4a07aa16, EX-711:1d4453a2] -->
 
 スキルは自動テストの対象にせず、人が確かめる（自動テストの範囲は[検証の契約](../maintainer/verification.md)）。
 SKILL.md に指示が書かれていることに加え、実際にスキルを動かす試行で次を観測する。

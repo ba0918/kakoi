@@ -387,7 +387,7 @@ pass = ["LANG", "TERM"]
 ```
 
 ## 同梱プロファイル
-<!-- @kotowari[REQ-364:5d9b86a5, REQ-365:adbf7e87, EX-668:a25e360a, EX-669:32ebabe3, EX-670:8abcc2dc, EX-671:05b0e052] -->
+<!-- @kotowari[REQ-364:60bdcba9, REQ-365:d660467f, EX-668:a25e360a, EX-669:32ebabe3, EX-670:8abcc2dc, EX-671:05b0e052] -->
 
 同梱プロファイル `examples/profile/default.toml` は、WSL2 向けの出発点である。
 組み込みの既定はこれと同じ内容で、`kakoi init` がファイルとして書き出す（[コマンドライン](03-cli.md)）。
