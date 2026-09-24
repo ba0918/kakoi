@@ -50,24 +50,41 @@ impl ValidatedResponse {
                 .chain(&self.message.authorities)
                 .chain(&self.message.additionals)
                 .any(|record| record.record_type() == RecordType::RRSIG);
-        let wire = if signed || denied.is_empty() {
+        // Permissions end with the shortest time to live in the answer; a longer
+        // one would let the application keep an address past its permission.
+        let shortest = self.message.answers.iter().map(|record| record.ttl).min();
+        let align = self.message.signature.is_none()
+            && self
+                .message
+                .answers
+                .iter()
+                .any(|record| Some(record.ttl) > shortest);
+        let filter = !signed && !denied.is_empty();
+        let wire = if !align && !filter {
             self.wire.clone()
         } else {
             let mut message = self.message.clone();
-            message.answers.retain(|record| {
-                if record.dns_class != DNSClass::IN {
-                    return true;
+            if filter {
+                message.answers.retain(|record| {
+                    if record.dns_class != DNSClass::IN {
+                        return true;
+                    }
+                    let ip = match &record.data {
+                        RData::A(address) => IpAddr::V4(address.0),
+                        RData::AAAA(address) => IpAddr::V6(address.0).to_canonical(),
+                        _ => return true,
+                    };
+                    !denied.contains(&ip)
+                });
+                // After rewriting unsigned data, do not claim the original upstream's
+                // authenticated-data status for the modified answer.
+                message.metadata.authentic_data = false;
+            }
+            if let (true, Some(shortest)) = (align, shortest) {
+                for record in &mut message.answers {
+                    record.ttl = shortest;
                 }
-                let ip = match &record.data {
-                    RData::A(address) => IpAddr::V4(address.0),
-                    RData::AAAA(address) => IpAddr::V6(address.0).to_canonical(),
-                    _ => return true,
-                };
-                !denied.contains(&ip)
-            });
-            // After rewriting unsigned data, do not claim the original upstream's
-            // authenticated-data status for the modified answer.
-            message.metadata.authentic_data = false;
+            }
             message.to_vec().map_err(|_| DnsError::Malformed)?
         };
         Ok(ScreenedAnswer {

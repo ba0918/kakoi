@@ -561,3 +561,104 @@ fn the_zero_ttl_grace_counts_from_the_reception() {
         received + Duration::from_millis(1000)
     );
 }
+
+/// The time to live of every answer record in `wire`, in order.
+fn answer_ttls(wire: &[u8]) -> Vec<u32> {
+    fn skip_name(wire: &[u8], mut at: usize) -> usize {
+        loop {
+            match wire[at] {
+                0 => return at + 1,
+                length if length & 0xc0 == 0xc0 => return at + 2,
+                length => at += 1 + usize::from(length),
+            }
+        }
+    }
+    let count = |at: usize| usize::from(u16::from_be_bytes([wire[at], wire[at + 1]]));
+    let mut at = 12;
+    for _ in 0..count(4) {
+        at = skip_name(wire, at) + 4;
+    }
+    (0..count(6))
+        .map(|_| {
+            at = skip_name(wire, at) + 4;
+            let ttl = u32::from_be_bytes(wire[at..at + 4].try_into().unwrap());
+            at += 6 + count(at + 4);
+            ttl
+        })
+        .collect()
+}
+
+// @kotowari[REQ-398, EX-734]
+#[test]
+fn every_answer_reaches_the_application_with_the_shortest_time_to_live() {
+    let question = Question::parse(&query(1)).unwrap();
+    let start = Instant::now();
+    for signed in [false, true] {
+        let mut wire = response(1, 0x80);
+        answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
+        answer(&mut wire, "api.example.com", 1, 300, &[1, 1, 1, 2]);
+        if signed {
+            // Syntactic RRSIG fixture: a record signature does not bind its TTL.
+            answer(
+                &mut wire,
+                "api.example.com",
+                46,
+                300,
+                &[
+                    0, 1, 8, 3, 0, 0, 1, 44, 255, 255, 255, 255, 0, 0, 0, 1, 0, 1, 0, 1, 2, 3, 4,
+                ],
+            );
+        }
+        let response = question.validate_response(&wire).unwrap();
+        let AddressProgress::Complete(candidates) = question
+            .address_chain(16)
+            .unwrap()
+            .consume(&response, start, Duration::from_secs(1))
+            .unwrap()
+        else {
+            panic!("no addresses")
+        };
+        let screened = response
+            .screen_addresses(&candidates, |_| DnsAdmission::Dynamic)
+            .unwrap();
+        let ttls = answer_ttls(&screened.wire);
+        assert_eq!(ttls.len(), if signed { 3 } else { 2 });
+        assert!(ttls.iter().all(|ttl| *ttl <= 30), "{ttls:?}");
+    }
+}
+
+// @kotowari[REQ-398, EX-735]
+#[test]
+fn an_address_behind_a_shorter_alias_reaches_the_application_with_the_alias_time_to_live() {
+    use kakoi_core::network::NetworkLimits;
+    use kakoi_net::{dns::resolve_addresses, resolution::ResolutionBudget};
+    let limits = NetworkLimits::default();
+    let start = Instant::now();
+    let mut budget = ResolutionBudget::new(start, &limits).unwrap();
+    let mut calls = 0;
+    let resolved = resolve_addresses(&query(1), &limits, &mut budget, |request, _| {
+        let mut response = request.to_vec();
+        response[2] |= 0x80;
+        if calls == 0 {
+            answer(
+                &mut response,
+                "api.example.com",
+                5,
+                10,
+                &name("target.example.net"),
+            );
+        } else {
+            answer(&mut response, "target.example.net", 1, 300, &[1, 1, 1, 1]);
+        }
+        calls += 1;
+        Ok((response, start))
+    })
+    .unwrap();
+    let screened = resolved
+        .response
+        .screen_addresses(&resolved.candidates, |_| DnsAdmission::Dynamic)
+        .unwrap();
+    let ttls = answer_ttls(&screened.wire);
+    assert_eq!(ttls.len(), 2);
+    assert!(ttls.iter().all(|ttl| *ttl <= 10), "{ttls:?}");
+}
