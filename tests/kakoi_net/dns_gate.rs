@@ -797,3 +797,34 @@ fn only_answers_under_the_current_settings_are_kept() {
         AcceptedRequest::Start(_)
     ));
 }
+
+// A re-keyed resolution is the one the new settings share: a question asked
+// under them joins it instead of starting a second upstream resolution, or
+// being refused for want of a slot while the same work is running.
+// @kotowari[REQ-127, REQ-135]
+#[test]
+fn a_question_under_new_settings_joins_the_resolution_re_keyed_for_them() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests = DnsRequests::new(
+        vec![rule("*.example.com")],
+        7,
+        1,
+        4,
+        Duration::from_secs(10),
+    )
+    .unwrap();
+    let question = query("a.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&question, 1, now).unwrap() else {
+        panic!()
+    };
+    requests.advance_generation();
+    requests.rekey(task.id);
+    assert!(matches!(
+        requests.accept(&question, 2, now).unwrap(),
+        AcceptedRequest::Waiting
+    ));
+    let replies = requests.complete(task.id, Ok(answered(&question, 30)), now);
+    assert_eq!(replies.len(), 2);
+}

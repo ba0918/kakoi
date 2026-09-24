@@ -96,6 +96,28 @@ impl<K: Eq + Hash, W> ResolutionPool<K, W> {
         Ok(Admission::Start(id))
     }
 
+    /// Moves the resolution `id` under `key`, so that later questions with that
+    /// key join it. When another resolution already runs under `key`, `id` keeps
+    /// its old key: two resolutions cannot share one.
+    pub fn rekey(&mut self, id: ResolutionId, key: K)
+    where
+        K: Clone,
+    {
+        if self.pending.contains_key(&key) {
+            return;
+        }
+        let Some(old) = self
+            .pending
+            .iter()
+            .find(|(_, pending)| pending.id == id)
+            .map(|(old, _)| old.clone())
+        else {
+            return;
+        };
+        let pending = self.pending.remove(&old).expect("the key was just found");
+        self.pending.insert(key, pending);
+    }
+
     /// A stale completion cannot remove a newer resolution for the same key.
     pub fn complete(&mut self, id: ResolutionId) -> Vec<W> {
         let mut waiters = Vec::new();

@@ -170,6 +170,7 @@ impl<W> DnsRequests<W> {
     pub fn rekey(&mut self, id: ResolutionId) {
         if let Some(running) = self.running.iter_mut().find(|entry| entry.id == id) {
             if let Ok(key) = running.question.resolution_key(self.generation) {
+                self.pool.rekey(id, key.clone());
                 running.key = key;
             }
         }
