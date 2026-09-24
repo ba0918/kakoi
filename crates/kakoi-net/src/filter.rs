@@ -44,21 +44,33 @@ pub fn compile_static(rules: &[FilterRule], udp_idle_seconds: u32) -> Result<Str
 "#
     );
     for rule in rules {
-        let (family, timeout) = if rule.network.address().is_ipv4() {
-            ("ip", "udp4")
-        } else {
-            ("ip6", "udp6")
-        };
-        let _ = write!(
-            script,
-            "  {family} daddr {} {} dport {{ {} }} ",
-            rule.network, rule.protocol, rule.ports
-        );
-        if rule.protocol == Protocol::Udp {
-            let _ = write!(script, "ct timeout set \"{timeout}\" ");
-        }
-        script.push_str("ct mark set 1 accept\n");
+        let ipv4 = rule.network.address().is_ipv4();
+        let _ = write!(script, "  {} daddr {} ", family(ipv4), rule.network);
+        write_permit(&mut script, rule.protocol, &rule.ports, ipv4);
     }
     script.push_str("  jump dns_permitted\n }\n chain dns_permitted { }\n}\n");
     Ok(script)
+}
+
+/// The nft address family of a rule for IPv4 or IPv6 destinations.
+pub(crate) fn family(ipv4: bool) -> &'static str {
+    if ipv4 {
+        "ip"
+    } else {
+        "ip6"
+    }
+}
+
+/// Ends a permitting rule: its protocol and ports, the idle timeout of a UDP flow,
+/// and the mark that lets the flow's replies back.
+pub(crate) fn write_permit(script: &mut String, protocol: Protocol, ports: &Ports, ipv4: bool) {
+    let _ = write!(script, "{protocol} dport {{ {ports} }} ");
+    if protocol == Protocol::Udp {
+        let _ = write!(
+            script,
+            "ct timeout set \"udp{}\" ",
+            if ipv4 { 4 } else { 6 }
+        );
+    }
+    script.push_str("ct mark set 1 accept\n");
 }

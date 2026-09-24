@@ -2,11 +2,12 @@
 //! sets, then exposed only after their application latency has been bounded.
 
 use crate::{
+    filter,
     leases::{ActiveGrant, LeaseBook},
     namespace::NetworkNamespace,
     nft,
 };
-use kakoi_core::network::{Allow, Destination, Protocol};
+use kakoi_core::network::{Allow, Destination};
 use std::{
     collections::BTreeMap,
     fmt::Write,
@@ -163,7 +164,6 @@ impl<'ns> DynamicPermissions<'ns> {
         let mut activation = String::from("flush chain inet kakoi_policy dns_permitted\n");
         let mut sets = Vec::new();
         for ((index, ipv4), elements) in grouped {
-            let family = if ipv4 { "ip" } else { "ip6" };
             let datatype = if ipv4 { "ipv4_addr" } else { "ipv6_addr" };
             let set = format!(
                 "dns_{}_{}_{}",
@@ -187,19 +187,11 @@ impl<'ns> DynamicPermissions<'ns> {
             let rule = &self.rules[index];
             write!(
                 activation,
-                "add rule inet kakoi_policy dns_permitted {family} daddr @{set} {} dport {{ {} }} ",
-                rule.protocol, rule.ports
+                "add rule inet kakoi_policy dns_permitted {} daddr @{set} ",
+                filter::family(ipv4)
             )
             .unwrap();
-            if rule.protocol == Protocol::Udp {
-                write!(
-                    activation,
-                    "ct timeout set \"udp{}\" ",
-                    if ipv4 { 4 } else { 6 }
-                )
-                .unwrap();
-            }
-            activation.push_str("ct mark set 1 accept\n");
+            filter::write_permit(&mut activation, rule.protocol, &rule.ports, ipv4);
             sets.push(set);
         }
         Ok(Attempt {
