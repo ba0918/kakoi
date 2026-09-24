@@ -662,3 +662,34 @@ fn an_address_behind_a_shorter_alias_reaches_the_application_with_the_alias_time
     assert_eq!(ttls.len(), 2);
     assert!(ttls.iter().all(|ttl| *ttl <= 10), "{ttls:?}");
 }
+
+// Only the addresses screened for the question reach the application: an
+// address record of another name, or of the other family, was never screened.
+// @kotowari[REQ-020, EX-031]
+#[test]
+fn address_records_outside_the_question_do_not_reach_the_application() {
+    let question = Question::parse(&query(1)).unwrap();
+    let start = Instant::now();
+    let mut wire = response(1, 0x80);
+    answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
+    answer(&mut wire, "other.example.com", 1, 30, &[10, 0, 0, 1]);
+    let mut v6 = [0; 16];
+    v6[0] = 0xfd;
+    v6[15] = 1;
+    answer(&mut wire, "api.example.com", 28, 30, &v6);
+    let response = question.validate_response(&wire).unwrap();
+    let AddressProgress::Complete(candidates) = question
+        .address_chain(16)
+        .unwrap()
+        .consume(&response, start, Duration::from_secs(1))
+        .unwrap()
+    else {
+        panic!("no addresses")
+    };
+    let screened = response
+        .screen_addresses(&candidates, |_| DnsAdmission::Dynamic)
+        .unwrap();
+    assert_eq!(answer_ttls(&screened.wire).len(), 1);
+    assert!(!screened.wire.windows(4).any(|data| data == [10, 0, 0, 1]));
+    assert!(!screened.wire.windows(16).any(|data| data == v6));
+}
