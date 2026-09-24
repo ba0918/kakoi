@@ -868,10 +868,10 @@ exec /usr/sbin/nft "$@"
 
 // While half the time left allows, each late staging is tried again with
 // twice the reserve. A measured reserve also carries the cost of starting
-// nft, which would pull the ratio of short reserves below two, so a pair is
-// compared only when the earlier reserve grew by enough over the one before
-// it; that growth is a difference of two measurements and carries no such
-// cost.
+// and discarding nft, so the doubling is judged on how much each reserve grew
+// over the one before it: a growth is a difference of two measurements, the
+// cost drops out of it, and each growth is twice the one before. Growths too
+// short to show above the jitter of that cost are not compared.
 // @kotowari[REQ-420, EX-804]
 #[test]
 fn a_late_staging_is_tried_again_with_twice_the_reserve() {
@@ -881,9 +881,14 @@ fn a_late_staging_is_tried_again_with_twice_the_reserve() {
         .windows(3)
         .filter(|run| {
             run[1].reserve.saturating_sub(run[0].reserve) >= Duration::from_millis(75)
+                && run[0].reserve * 2 <= run[1].left / 2
                 && run[1].reserve * 2 <= run[2].left / 2
         })
-        .map(|run| run[2].reserve.as_secs_f64() / run[1].reserve.as_secs_f64())
+        .map(|run| {
+            let earlier = run[1].reserve - run[0].reserve;
+            let later = run[2].reserve.saturating_sub(run[1].reserve);
+            later.as_secs_f64() / earlier.as_secs_f64()
+        })
         .collect();
     assert!(compared.len() >= 2, "{compared:?}");
     assert!(
