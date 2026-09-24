@@ -46,6 +46,10 @@ pub struct DnsRuntimeConfig {
 pub struct HostDns {
     pub path: PathBuf,
     pub parse: fn(&str) -> Result<Vec<DnsUpstream>, String>,
+    /// The contents `upstreams` were parsed from, or `None` when they could
+    /// not be read. A later read that differs is a change, even one made
+    /// before the runtime started.
+    pub read: Option<String>,
 }
 
 struct Following {
@@ -106,7 +110,7 @@ impl DnsRuntime {
             config.trust.clone(),
         )?);
         let following = config.host_dns.map(|source| Following {
-            text: std::fs::read_to_string(&source.path).ok(),
+            text: source.read.clone(),
             source,
             next: Instant::now() + FOLLOW_INTERVAL,
         });

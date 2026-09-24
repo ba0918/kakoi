@@ -93,11 +93,13 @@ pub fn start(
     } else if names {
         let text = std::fs::read_to_string(host_dns::RESOLV_CONF)
             .map_err(|error| failure("read the host DNS configuration", error))?;
+        let upstreams = host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?;
         following = Some(HostDns {
             path: host_dns::RESOLV_CONF.into(),
             parse: host_dns::upstreams_from_resolv_conf,
+            read: Some(text),
         });
-        host_dns::upstreams_from_resolv_conf(&text).map_err(Diagnostic::bwrap)?
+        upstreams
     } else {
         // Without DNS names the managed resolver refuses every name by itself.
         Vec::new()

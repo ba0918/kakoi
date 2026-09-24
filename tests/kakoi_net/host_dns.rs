@@ -102,6 +102,20 @@ mod following {
     }
 
     fn runtime_with(file: &Path, limits: NetworkLimits) -> (Arc<NetworkNamespace>, DnsRuntime) {
+        start(file, limits, None)
+    }
+
+    /// Reads `file` for the upstreams, then, when `change` is given, rewrites it
+    /// before the runtime starts: a change made while kakoi is still starting.
+    fn start(
+        file: &Path,
+        limits: NetworkLimits,
+        change: Option<&str>,
+    ) -> (Arc<NetworkNamespace>, DnsRuntime) {
+        let read = std::fs::read_to_string(file).unwrap();
+        if let Some(change) = change {
+            std::fs::write(file, change).unwrap();
+        }
         let ns = Arc::new(NetworkNamespace::create().unwrap());
         assert!(ns
             .command("/usr/sbin/ip")
@@ -120,6 +134,7 @@ mod following {
         let host_dns = HostDns {
             path: file.to_owned(),
             parse: fixture_parse,
+            read: Some(read.clone()),
         };
         let runtime = DnsRuntime::new(
             Arc::clone(&ns),
@@ -129,7 +144,7 @@ mod following {
                     protocol: Protocol::Tcp,
                     ports: vec!["443".into()].try_into().unwrap(),
                 }],
-                upstreams: fixture_parse(&std::fs::read_to_string(file).unwrap()).unwrap(),
+                upstreams: fixture_parse(&read).unwrap(),
                 limits,
                 nft: "/usr/sbin/nft".into(),
                 trust: None,
@@ -241,6 +256,36 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
             !rules.contains("2.2.2.2"),
             "an answer from before the change was adopted"
         );
+    }
+
+    // The upstreams in force came from the content read at start-up; a change
+    // made before the runtime started is a change to follow like any other.
+    // @kotowari[REQ-107]
+    #[test]
+    fn a_host_dns_change_during_start_up_is_followed() {
+        let temp = TempDir::new();
+        let (_old, old_port) = upstream();
+        let (new, new_port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+        let (ns, mut runtime) = start(
+            &file,
+            NetworkLimits {
+                dns_resolution_timeout_seconds: 30,
+                dns_server_timeout_seconds: 30,
+                ..NetworkLimits::default()
+            },
+            Some(&format!("upstream {new_port}\n")),
+        );
+        // Let the content be read again before the application asks.
+        let noticed = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < noticed {
+            runtime.poll(Instant::now()).unwrap();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let app = client(&ns);
+        let (query, peer) = received(&new, &mut runtime);
+        new.send_to(&answer(&query, [1, 1, 1, 1]), peer).unwrap();
+        assert_eq!(finish(app, &mut runtime), "0 1.1.1.1\n");
     }
 
     // @kotowari[EX-239, EX-240]
