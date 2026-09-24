@@ -165,6 +165,7 @@ impl Pasta {
         }
         // try_wait observes exit, not SIGSTOP. Preserve stop notifications so
         // repeated polls cannot mistake a stopped forwarder for a healthy one.
+        // SAFETY: all-zero bytes are a valid siginfo_t for waitid to fill.
         let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
         let result = unsafe {
             libc::waitid(

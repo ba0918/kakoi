@@ -90,7 +90,9 @@ extern "C" fn on_signal(signal: libc::c_int) {
 
 fn run(arguments: Arguments) -> u8 {
     let control = arguments.control;
-    // SAFETY: plain descriptor and process-attribute calls on values this process owns.
+    // SAFETY: plain descriptor and process-attribute calls on values this process
+    // owns. SIGNAL_PIPE is stored before `on_signal` is installed, and the handler
+    // only writes to it.
     let pipe = unsafe {
         libc::close(arguments.executable);
         libc::fcntl(control, libc::F_SETFD, libc::FD_CLOEXEC);

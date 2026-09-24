@@ -95,8 +95,9 @@ impl NetworkNamespace {
         let (parent, child) = UnixStream::pair()?;
         parent.set_read_timeout(Some(Duration::from_secs(5)))?;
         let child = duplicate_above_stdio(child.as_raw_fd())?;
-        // SAFETY: the child uses only raw syscalls, stack data and _exit. It never
-        // allocates, takes a Rust lock, unwinds, or runs inherited destructors.
+        // SAFETY: the child uses only raw syscalls, stack data, the maps prepared
+        // before fork (read only), and _exit. It never allocates, takes a Rust
+        // lock, unwinds, or runs inherited destructors.
         let pid = unsafe { libc::fork() };
         if pid < 0 {
             return Err(io::Error::last_os_error());
@@ -185,6 +186,10 @@ impl Drop for Keeper {
     }
 }
 
+/// # Safety
+///
+/// Call only in the child of a fork, which this never returns to: it uses only
+/// async-signal-safe calls on data prepared before the fork.
 unsafe fn hold_namespace(
     control: RawFd,
     parent: RawFd,

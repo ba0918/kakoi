@@ -31,6 +31,8 @@ impl NotificationWriter {
         let output_fd = duplicate_above_stdio(output.as_raw_fd())?;
         let control_fd = duplicate_above_stdio(child.as_raw_fd())?;
         let parent_pid = unsafe { libc::getpid() };
+        // SAFETY: the child runs only `writer`, which allocates nothing and uses
+        // raw syscalls on descriptors prepared before fork.
         let pid = unsafe { libc::fork() };
         if pid < 0 {
             return Err(io::Error::last_os_error());
@@ -131,6 +133,10 @@ impl Drop for NotificationWriter {
     }
 }
 
+/// # Safety
+///
+/// Call only in the child of a fork, which this never returns to: it uses only
+/// async-signal-safe calls on descriptors prepared before the fork.
 unsafe fn writer(output: libc::c_int, control: libc::c_int, parent: libc::pid_t) -> ! {
     // All allocations happen before fork. Child setup and writes use stack data
     // and raw syscalls only; never run inherited handlers, locks or destructors.

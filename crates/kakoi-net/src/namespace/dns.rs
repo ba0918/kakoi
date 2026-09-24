@@ -37,7 +37,7 @@ impl DnsSockets {
         let control = endpoint.as_raw_fd();
         let user = namespace.user.as_raw_fd();
         let net = namespace.net.as_raw_fd();
-        // The short-lived child uses only raw syscalls and stack memory. Keeping
+        // SAFETY: the short-lived child uses only raw syscalls and stack memory. Keeping
         // the host thread outside the child user namespace also preserves its
         // access to host DNS and avoids changing other threads' credentials.
         let pid = unsafe { libc::fork() };
@@ -66,6 +66,7 @@ fn receive(socket: &UnixDatagram) -> io::Result<[OwnedFd; 2]> {
         iov_base: (&mut status as *mut i32).cast(),
         iov_len: 4,
     };
+    // SAFETY: all-zero bytes are a valid, empty msghdr.
     let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
     message.msg_iov = &mut vector;
     message.msg_iovlen = 1;
@@ -78,6 +79,8 @@ fn receive(socket: &UnixDatagram) -> io::Result<[OwnedFd; 2]> {
     let mut descriptors = Vec::new();
     // Only the forked helper possesses the sending endpoint. Adopt all received
     // rights before validating the envelope so any error closes them via RAII.
+    // SAFETY: the headers come from CMSG_FIRSTHDR/CMSG_NXTHDR over the control
+    // buffer recvmsg filled, and each read stays within its header's length.
     unsafe {
         let mut header = libc::CMSG_FIRSTHDR(&message);
         while !header.is_null() {
@@ -106,6 +109,10 @@ fn receive(socket: &UnixDatagram) -> io::Result<[OwnedFd; 2]> {
         .map_err(|_: Vec<OwnedFd>| io::Error::other("expected two DNS sockets"))
 }
 
+/// # Safety
+///
+/// Call only in the child of a fork, which this never returns to: it uses only
+/// async-signal-safe calls.
 unsafe fn bind_child(control: RawFd, user: RawFd, net: RawFd) -> ! {
     let mut error = 0;
     if libc::setns(user, libc::CLONE_NEWUSER) != 0 || libc::setns(net, libc::CLONE_NEWNET) != 0 {

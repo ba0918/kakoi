@@ -89,7 +89,8 @@ impl TransitWatchdog {
             .collect::<io::Result<_>>()?;
         let sent = monotonic_millis()?;
         parent.send(&sent.to_ne_bytes())?;
-        // After fork the child uses raw syscalls/stack data only, never Rust
+        // SAFETY: after fork the child uses raw syscalls, stack data and the
+        // descriptors and path prepared before fork (read only), never Rust
         // allocation, locks, unwinding or inherited destructors.
         let pid = unsafe { libc::fork() };
         if pid < 0 {
@@ -206,6 +207,10 @@ fn monotonic_millis() -> io::Result<u64> {
         .saturating_add(time.tv_nsec as u64 / 1_000_000))
 }
 
+/// # Safety
+///
+/// Call only in the child of a fork, which this never returns to: it uses only
+/// async-signal-safe calls on data prepared before the fork.
 unsafe fn monitor(fds: &[OwnedFd], executable: *const libc::c_char, timeout: u64) -> ! {
     // Duplicate only from reserved high descriptors so setup cannot clobber a
     // later source, then discard every unrelated inherited capability.
@@ -299,6 +304,9 @@ unsafe fn monitor(fds: &[OwnedFd], executable: *const libc::c_char, timeout: u64
     libc::_exit(125)
 }
 
+/// # Safety
+///
+/// For the forked child: a clock failure ends the process with `_exit`.
 unsafe fn raw_millis() -> u64 {
     let mut time = libc::timespec {
         tv_sec: 0,
