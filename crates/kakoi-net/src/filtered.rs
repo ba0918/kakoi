@@ -29,6 +29,10 @@ use std::{
 
 const PASTA_STARTUP: Duration = Duration::from_secs(10);
 
+/// The instructions for installing a pasta filtered mode can use, on the main
+/// branch so that a released binary still points at the current advice.
+pub const PASTA_GUIDE: &str = "https://github.com/ba0918/kakoi/blob/main/docs/pasta.md";
+
 /// The external programs a filtered run needs, found on the host's `PATH` the
 /// way `bwrap` is.
 pub struct Tools {
@@ -38,16 +42,16 @@ pub struct Tools {
 
 impl Tools {
     pub fn locate(host: &BTreeMap<OsString, OsString>) -> Result<Self, Diagnostic> {
-        let find = |name: &str| {
+        let find = |name: &str, advice: &str| {
             locate_command(name.as_ref(), host).map_err(|_| {
                 Diagnostic::bwrap(format!(
-                    "filtered network mode needs `{name}`, which is not on PATH"
+                    "filtered network mode needs `{name}`, which is not on PATH{advice}"
                 ))
             })
         };
         Ok(Self {
-            pasta: find("pasta")?,
-            nft: find("nft")?,
+            pasta: find("pasta", &format!("; see {PASTA_GUIDE}"))?,
+            nft: find("nft", "")?,
         })
     }
 }

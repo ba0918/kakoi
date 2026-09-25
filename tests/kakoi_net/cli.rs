@@ -100,19 +100,30 @@ fn a_policy_without_dns_names_needs_no_dns_upstream() {
     assert_eq!(output.stdout, b"ran\n");
 }
 
-// @kotowari[REQ-057, EX-106]
-#[test]
-fn a_missing_pasta_ends_the_start_before_the_application_runs() {
-    let filtered = Filtered::new("");
-    let marker = filtered.workspace.join("ran");
-    // Only bwrap and nft are reachable, whatever else this machine has installed.
-    let tools = TempDir::new();
+/// Where the diagnostics send a user whose pasta is missing or too old.
+const PASTA_GUIDE: &str = "https://github.com/ba0918/kakoi/blob/main/docs/pasta.md";
+
+/// A directory holding only `bwrap` and the given tools, whatever else this
+/// machine has installed.
+fn only_bwrap_and(tools: &[(&str, &str)]) -> TempDir {
+    let directory = TempDir::new();
     let bwrap = std::env::split_paths(&std::env::var_os("PATH").unwrap())
         .map(|directory| directory.join("bwrap"))
         .find(|candidate| candidate.is_file())
         .unwrap();
-    std::os::unix::fs::symlink(bwrap, tools.path().join("bwrap")).unwrap();
-    std::os::unix::fs::symlink("/usr/sbin/nft", tools.path().join("nft")).unwrap();
+    std::os::unix::fs::symlink(bwrap, directory.path().join("bwrap")).unwrap();
+    for (name, target) in tools {
+        std::os::unix::fs::symlink(target, directory.path().join(name)).unwrap();
+    }
+    directory
+}
+
+// @kotowari[REQ-057, EX-106, REQ-429, EX-824, EX-825]
+#[test]
+fn a_missing_pasta_ends_the_start_before_the_application_runs() {
+    let filtered = Filtered::new("");
+    let marker = filtered.workspace.join("ran");
+    let tools = only_bwrap_and(&[("nft", "/usr/sbin/nft")]);
     let output = filtered
         .command(
             tools.path().to_str().unwrap(),
@@ -121,13 +132,27 @@ fn a_missing_pasta_ends_the_start_before_the_application_runs() {
         )
         .output()
         .unwrap();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.code(), Some(125), "{stderr}");
-    assert!(
-        stderr.contains("kakoi: bwrap: ") && stderr.contains("pasta"),
-        "{stderr}"
-    );
+    let diagnostic = assert_diagnostic(&output, 125, "bwrap");
+    assert!(diagnostic.contains("pasta"), "{diagnostic}");
+    assert!(diagnostic.contains(PASTA_GUIDE), "{diagnostic}");
     assert!(!marker.exists());
+}
+
+// @kotowari[REQ-429, EX-839]
+#[test]
+fn a_missing_pasta_is_reported_before_a_missing_nft() {
+    let filtered = Filtered::new("");
+    let tools = only_bwrap_and(&[]);
+    let output = filtered
+        .command(tools.path().to_str().unwrap(), &[], &["/bin/true"])
+        .output()
+        .unwrap();
+    let diagnostic = assert_diagnostic(&output, 125, "bwrap");
+    assert!(
+        diagnostic.contains("pasta") && !diagnostic.contains("nft"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains(PASTA_GUIDE), "{diagnostic}");
 }
 
 // @kotowari[REQ-102, EX-221]
