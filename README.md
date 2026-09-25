@@ -33,6 +33,8 @@ that carry them.
   [Allowing the user namespace](docs/getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
 - For the `filtered` network mode only: `pasta` (the `passt` package; tested with Debian
   trixie-backports `0.0~git20260728.f8df3f1-1~bpo13+1`), `nft` (nftables), and `/dev/net/tun`.
+  A distribution's `pasta` can be too old; [Installing pasta](docs/pasta.md) shows how to check
+  yours and build a newer one.
   On Ubuntu 24.04 and later it also needs the user namespace restriction turned off: the
   `bwrap` profile is not enough. `host` and `none` need none of them.
 - A Rust toolchain, 1.88 or later, only to build from source
