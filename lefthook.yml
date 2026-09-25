@@ -1,5 +1,13 @@
 # Git hooks (lefthook). Install once per clone: `lefthook install`.
-# Each command is guarded by run-if-present so the hooks are inert until Cargo.toml exists.
+# The Rust commands are guarded by run-if-present so the hooks are inert until Cargo.toml exists.
+#
+# kotowari-check (the IR under docs/ir against the tests):
+# - pre-commit stops on a stop (exit code 2) and on every error except the test-side ones
+#   (requirement_without_test, scenario_without_test, test_without_id, invalid_marker,
+#   unparsable_file, and unresolved_reference from a test file). A specification is approved
+#   and committed before the tests that cover it exist, so a commit cannot require them.
+# - pre-push requires `kotowari check` to exit 0: by push, every requirement has its test.
+# Neither is guarded: a clone without kotowari on PATH cannot commit or push, as intended.
 pre-commit:
   parallel: false
   commands:
@@ -9,3 +17,18 @@ pre-commit:
     clippy:
       glob: "{*.rs,*Cargo.toml,Cargo.lock}"
       run: run-if-present path Cargo.toml -- cargo clippy --workspace --all-targets --locked -- -D warnings
+    kotowari-check:
+      run: |
+        out=$(kotowari check --format json); code=$?
+        if [ "$code" -eq 2 ]; then exit 2; fi
+        rest=$(printf '%s' "$out" | jq -r '
+          [ .findings[]
+            | select(.severity == "error")
+            | select((.kind | IN("requirement_without_test", "scenario_without_test", "test_without_id", "invalid_marker", "unparsable_file")) | not)
+            | select((.kind == "unresolved_reference" and ((.path | startswith("docs/ir/")) | not)) | not)
+          ] | .[] | "\(.path):\(.line // "-") \(.kind) \(.detail)"')
+        if [ -n "$rest" ]; then printf '%s\n' "$rest"; exit 1; fi
+pre-push:
+  commands:
+    kotowari-check:
+      run: kotowari check --format text
