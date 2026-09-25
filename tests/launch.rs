@@ -2481,6 +2481,59 @@ fn a_workspace_or_path_prepend_entry_behind_more_than_40_links_counts_as_missing
     }
 }
 
+// @kotowari[REQ-313]
+#[test]
+fn a_protected_path_behind_more_than_40_links_is_checked_up_to_where_it_stopped() {
+    // `l1` of the 41 links sits in the `rw` workspace and is followed second; the rest sit
+    // outside every writable item. The resolution stops before the 41st link, but what it
+    // referenced until then is still checked.
+    let (home, workspace) = home_with_workspace();
+    let outside = home.path().join("outside");
+    let inside = workspace.join("mid");
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::create_dir(&inside).unwrap();
+    let target = home.path().join("elsewhere");
+    std::fs::create_dir(&target).unwrap();
+    let place = |index: usize| {
+        if index == 1 {
+            inside.join(format!("l{index}"))
+        } else {
+            outside.join(format!("l{index}"))
+        }
+    };
+    for index in 0..41 {
+        let next = if index == 40 {
+            target.clone()
+        } else {
+            place(index + 1)
+        };
+        std::os::unix::fs::symlink(next, place(index)).unwrap();
+    }
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}[env]\npath-prepend = [\"{}\"]\n",
+            place(0).display()
+        ),
+    );
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ])
+        .output()
+        .unwrap();
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(
+        diagnostic.contains(place(1).to_str().unwrap()),
+        "{diagnostic}"
+    );
+}
+
 // @kotowari[EX-549]
 #[test]
 fn a_plan_without_a_command_has_no_argv0_and_no_trailing_separator() {
