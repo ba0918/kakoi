@@ -520,7 +520,7 @@ fn home_with_workspace() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
-// @kotowari[REQ-307]
+// @kotowari[REQ-307, EX-540]
 #[test]
 fn a_missing_bwrap_is_a_bwrap_diagnostic() {
     let (home, workspace) = home_with_workspace();

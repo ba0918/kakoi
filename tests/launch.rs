@@ -180,7 +180,7 @@ fn a_fifo_policy_file_ends_in_a_diagnostic_from_the_binary() {
     assert_diagnostic(&output, 125, "policy");
 }
 
-// @kotowari[REQ-311]
+// @kotowari[REQ-311, EX-544]
 #[test]
 fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
     let (home, workspace) = home_with_workspace();
@@ -252,7 +252,7 @@ fn command_arguments_arrive_unchanged() {
     assert_eq!(stdout, expected, "{}", output_report(&output));
 }
 
-// @kotowari[REQ-315]
+// @kotowari[REQ-315, EX-548]
 #[test]
 fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
     // Specification section 4.2: a COMMAND containing `/` is used as that path. A relative
@@ -465,7 +465,7 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     assert_eq!(through_kakoi.stderr, bwrap_alone.stderr, "{report}");
 }
 
-// @kotowari[REQ-287]
+// @kotowari[REQ-287, EX-523]
 #[test]
 fn two_concurrent_launches_both_pass_their_status_through() {
     let (home, workspace) = home_with_workspace();
@@ -932,7 +932,7 @@ fn tiocsti_is_denied_with_eperm() {
     assert_eq!(assert_ran_clean(&output), format!("-1 {}\n", libc::EPERM));
 }
 
-// @kotowari[REQ-282]
+// @kotowari[REQ-282, EX-518]
 #[test]
 fn tiocsti_with_high_bits_is_denied_with_eperm() {
     let (home, workspace) = home_with_workspace();
@@ -955,7 +955,7 @@ fn tiocsti_with_high_bits_is_denied_with_eperm() {
     assert_eq!(assert_ran_clean(&output), format!("-1 {}\n", libc::EPERM));
 }
 
-// @kotowari[REQ-281]
+// @kotowari[REQ-281, EX-517]
 #[test]
 fn an_x32_syscall_kills_the_process() {
     let (home, workspace) = home_with_workspace();
@@ -1948,4 +1948,558 @@ fn a_work_place_under_rw_copy_only_warns_and_starts() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert_eq!(stderr.lines().count(), 1, "{report}");
     assert!(stderr.starts_with("kakoi: warning: "), "{report}");
+}
+
+// The seccomp filter, the process, and the runtime (specification:
+// `docs/ir/core/core-terminal.md`, `core-process.md`, `core-runtime.md`).
+
+/// A Python program that makes the i386 `getpid` system call with `int 0x80` from a second
+/// thread and prints `survived` once that thread is joined.
+const I386_SYSCALL_FROM_A_THREAD: &str = "\
+import ctypes, mmap, threading
+code = bytes([0xb8, 20, 0, 0, 0, 0xcd, 0x80, 0xc3])
+page = mmap.mmap(-1, mmap.PAGESIZE, prot=mmap.PROT_READ | mmap.PROT_WRITE | mmap.PROT_EXEC)
+page.write(code)
+call = ctypes.CFUNCTYPE(ctypes.c_long)(ctypes.addressof(ctypes.c_char.from_buffer(page)))
+thread = threading.Thread(target=call)
+thread.start()
+thread.join()
+print('survived')
+";
+
+// @kotowari[EX-516]
+#[test]
+fn an_i386_system_call_ends_the_whole_process() {
+    let (home, workspace) = home_with_workspace();
+    let program = home.write("ws/i386.py", I386_SYSCALL_FROM_A_THREAD);
+    // The host kernel runs i386 system calls, so what ends the process inside is the filter.
+    let on_the_host = Command::new("/usr/bin/python3")
+        .arg(&program)
+        .output()
+        .unwrap();
+    assert_eq!(
+        (on_the_host.status.code(), on_the_host.stdout.as_slice()),
+        (Some(0), b"survived\n".as_slice()),
+        "{}",
+        output_report(&on_the_host)
+    );
+
+    let output = run_script(&home, &workspace, "exec /usr/bin/python3 i386.py");
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(128 + libc::SIGSYS), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+}
+
+// @kotowari[EX-519, REQ-283]
+#[test]
+fn a_terminal_size_ioctl_is_allowed() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "/usr/bin/python3 -c \"\
+         import os, fcntl, termios; controller, terminal = os.openpty(); \
+         fcntl.ioctl(terminal, termios.TIOCGWINSZ, bytes(8)); print('allowed')\"",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "allowed\n");
+}
+
+/// A Python program that runs its arguments on a new pseudo-terminal, as a user's shell
+/// would under a terminal, and passes on what they printed and their exit code.
+const UNDER_A_TERMINAL: &str = "\
+import os, pty, sys
+pid, controller = pty.fork()
+if pid == 0:
+    os.execvp(sys.argv[1], sys.argv[1:])
+out = b''
+while True:
+    try:
+        chunk = os.read(controller, 4096)
+    except OSError:
+        break
+    if not chunk:
+        break
+    out += chunk
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(out.decode())
+sys.exit(os.waitstatus_to_exitcode(status))
+";
+
+// @kotowari[REQ-283]
+#[test]
+fn the_command_keeps_the_controlling_terminal() {
+    let (home, workspace) = home_with_workspace();
+    let runner = home.write("under-a-terminal.py", UNDER_A_TERMINAL);
+    let opens_the_terminal = "exec 3</dev/tty && echo has-a-terminal";
+    // A new session loses the controlling terminal, and `/dev/tty` cannot be opened.
+    let new_session = Command::new("/usr/bin/python3")
+        .arg(&runner)
+        .args(["bwrap", "--ro-bind", "/", "/", "--dev", "/dev"])
+        .args(["--new-session", "/bin/sh", "-c", opens_the_terminal])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&new_session.stdout).contains("has-a-terminal"),
+        "{}",
+        output_report(&new_session)
+    );
+
+    let output = Command::new("/usr/bin/python3")
+        .arg(&runner)
+        .arg(env!("CARGO_BIN_EXE_kakoi"))
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            opens_the_terminal,
+        ])
+        .env_clear()
+        .envs(
+            binary(home.path())
+                .get_envs()
+                .filter_map(|(name, value)| value.map(|value| (name, value))),
+        )
+        .current_dir(&workspace)
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("has-a-terminal"),
+        "{report}"
+    );
+}
+
+// @kotowari[EX-520, EX-522, EX-547, REQ-286]
+#[test]
+fn kakoi_1_on_the_host_runs_the_command_itself_with_the_environment_as_received() {
+    let home = TempDir::new();
+    let empty_path = TempDir::new();
+    let mut command = binary(home.path());
+    command
+        .env("KAKOI", "1")
+        .env("PATH", empty_path.path())
+        .env("MARKER", "kept as is");
+    let expected: std::collections::BTreeSet<String> = command
+        .get_envs()
+        .map(|(name, value)| {
+            format!(
+                "{}={}",
+                name.to_str().unwrap(),
+                value.unwrap().to_str().unwrap()
+            )
+        })
+        .collect();
+
+    // The shell prints its own process ID, the process kakoi became if it executed the
+    // command itself rather than starting an isolation around it, and the environment it
+    // was started with (not its own, to which it adds `PWD`).
+    let child = command
+        .args([
+            "--",
+            "/bin/sh",
+            "-c",
+            "echo $$; /usr/bin/tr '\\0' '\\n' < /proc/$$/environ",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let pid = child.id();
+    let output = child.wait_with_output().unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
+    let mut lines = stdout.lines();
+    assert_eq!(lines.next(), Some(pid.to_string().as_str()), "{report}");
+    let inside: std::collections::BTreeSet<String> = lines.map(str::to_string).collect();
+    assert_eq!(inside, expected, "{report}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 1, "{report}");
+    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
+}
+
+// @kotowari[EX-521]
+#[test]
+fn a_nested_plan_of_a_missing_named_profile_is_a_policy_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = binary(home.path())
+        .env("KAKOI", "1")
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--profile",
+            "missing",
+            "--print-plan",
+        ])
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[REQ-286]
+#[test]
+fn a_kakoi_started_inside_without_kakoi_1_isolates_again_within_the_outer_boundary() {
+    let (home, workspace) = home_with_workspace();
+    home.write("box/file", "hidden outside\n");
+    std::fs::create_dir(home.path().join("data")).unwrap();
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}hide = [\"{}\"]\n",
+            home.path().join("box").display()
+        ),
+    );
+
+    // The inner run asks for `~/data` as `rw`; the outer isolation has it read-only.
+    let output = run_script(
+        &home,
+        &workspace,
+        &format!(
+            "env -u KAKOI {} --rw {} -- /bin/sh -c \
+             'test ! -e {} && echo still-hidden; echo x > {} || echo not-writable'",
+            env!("CARGO_BIN_EXE_kakoi"),
+            home.path().join("data").display(),
+            home.path().join("box/file").display(),
+            home.path().join("data/file").display(),
+        ),
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"still-hidden\nnot-writable\n", "{report}");
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("kakoi: warning:"),
+        "{report}"
+    );
+    assert!(!home.path().join("data/file").exists());
+}
+
+// @kotowari[REQ-286]
+#[test]
+fn a_kakoi_started_inside_without_kakoi_1_finds_the_secret_emptied() {
+    let (home, workspace) = home_with_workspace();
+    home.write("token", "FAKE-TOKEN\n");
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/token\"\n"),
+    );
+
+    let output = run_script(
+        &home,
+        &workspace,
+        &format!("env -u KAKOI {} -- /bin/true", env!("CARGO_BIN_EXE_kakoi")),
+    );
+
+    assert_diagnostic(&output, 125, "secret");
+}
+
+// @kotowari[REQ-314]
+#[test]
+fn the_host_environment_chooses_the_profile_the_nesting_and_the_work_place() {
+    let home = TempDir::new();
+    let first = home.write("first/kakoi/profile/default.toml", RW_WORKSPACE);
+    let second = home.write("second/kakoi/profile/default.toml", RW_WORKSPACE);
+    let place = home.path().join("place");
+    std::fs::create_dir(&place).unwrap();
+    let bin = TempDir::new();
+    let tool = bin.write_executable("tool", "#!/bin/sh\n");
+    let mut path = vec![bin.path().to_path_buf()];
+    path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let plan = |config_home: &str, nested: bool| {
+        let mut command = binary(home.path());
+        if nested {
+            command.env("KAKOI", "1");
+        }
+        let output = command
+            .env("XDG_CONFIG_HOME", home.path().join(config_home))
+            .env("PATH", std::env::join_paths(&path).unwrap())
+            .current_dir(&place)
+            .args(["--print-plan=json", "--", "tool"])
+            .output()
+            .unwrap();
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{report}");
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+    };
+
+    let from_first = plan("first", false);
+    let from_second = plan("second", true);
+
+    assert_eq!(
+        from_first["policy_sources"][0]["path"],
+        first.to_str().unwrap()
+    );
+    assert_eq!(
+        from_second["policy_sources"][0]["path"],
+        second.to_str().unwrap()
+    );
+    assert_eq!(from_first["nested"], false);
+    assert_eq!(from_second["nested"], true);
+    let place = place.canonicalize().unwrap();
+    assert_eq!(
+        from_first["variables"]["workspace"],
+        place.to_str().unwrap()
+    );
+    assert_eq!(
+        from_first["home"],
+        home.path().canonicalize().unwrap().to_str().unwrap()
+    );
+    assert_eq!(
+        from_first["command"]["path"],
+        tool.canonicalize().unwrap().to_str().unwrap()
+    );
+}
+
+// @kotowari[EX-541]
+#[test]
+fn the_full_plan_shows_descriptors_as_symbols_not_numbers() {
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/copied", "content\n");
+    home.write("ws/.env", "SECRET=x\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n\
+         [[mounts.scan]]\nroot = \"${workspace}\"\nnames = [\".env\"]\n",
+    );
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=full",
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan = String::from_utf8(output.stdout).unwrap();
+    let arguments: Vec<&str> = plan
+        .split_once("bwrap arguments:\n")
+        .unwrap_or_else(|| panic!("no bwrap arguments: {report}"))
+        .1
+        .lines()
+        .map(str::trim)
+        .collect();
+    // The bwrap options whose first value is a file descriptor.
+    let taking_a_descriptor = ["--seccomp", "--file", "--ro-bind-data", "--bind-data"];
+    let descriptors: Vec<&str> = arguments
+        .windows(2)
+        .filter(|pair| taking_a_descriptor.contains(&pair[0]))
+        .map(|pair| pair[1])
+        .collect();
+    assert!(descriptors.len() >= 3, "{report}");
+    for descriptor in descriptors {
+        assert!(
+            descriptor.parse::<u64>().is_err(),
+            "{descriptor} is a number: {report}"
+        );
+    }
+}
+
+// @kotowari[EX-542]
+#[test]
+fn more_hidden_files_than_the_soft_limit_start_and_the_command_gets_the_raised_limit() {
+    let (home, workspace) = home_with_many_env_files(1100);
+
+    let output = run_script_under_soft_limit_1024(&home, &workspace, "ulimit -Sn; ulimit -Hn");
+
+    let stdout = assert_ran_clean(&output);
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 2, "{}", output_report(&output));
+    assert_eq!(lines[0], lines[1], "{}", output_report(&output));
+}
+
+// @kotowari[EX-543]
+#[test]
+fn a_fifo_policy_file_is_a_policy_diagnostic_without_waiting() {
+    let (home, workspace) = home_with_workspace();
+    let fifo = home.path().join("policy.fifo");
+    let name = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+    // SAFETY: `mkfifo` reads the NUL-terminated path and makes the FIFO.
+    assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+
+    // Nothing ever opens the FIFO for writing.
+    let mut child = binary(home.path())
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--policy-file",
+            fifo.to_str().unwrap(),
+            "--",
+            "/bin/true",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while child.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() > deadline {
+            child.kill().unwrap();
+            panic!("kakoi waited on the FIFO");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let output = child.wait_with_output().unwrap();
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-545]
+#[test]
+fn a_secret_file_behind_a_link_gives_the_value_of_its_target() {
+    let (home, workspace) = home_with_workspace();
+    let target = home.write("secret-target", "from-the-target\n");
+    std::os::unix::fs::symlink(&target, home.path().join("secret-link")).unwrap();
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/secret-link\"\n"),
+    );
+
+    let output = run_script(&home, &workspace, "printf '[%s]' \"$TOKEN\"");
+
+    assert_eq!(assert_ran_clean(&output), "[from-the-target]");
+}
+
+/// Makes a chain of `count` symbolic links in `dir`, `l0` to `l1` and so on, the last one
+/// pointing at `target`, and returns `l0`: a path that takes `count` links to resolve.
+fn chain_of_links(dir: &Path, count: usize, target: &Path) -> PathBuf {
+    std::fs::create_dir_all(dir).unwrap();
+    for index in 0..count {
+        let next = if index + 1 == count {
+            target.to_path_buf()
+        } else {
+            dir.join(format!("l{}", index + 1))
+        };
+        std::os::unix::fs::symlink(next, dir.join(format!("l{index}"))).unwrap();
+    }
+    dir.join("l0")
+}
+
+// @kotowari[EX-546, REQ-313]
+#[test]
+fn a_written_item_behind_more_than_40_links_is_skipped_as_having_no_real_path() {
+    let (home, workspace) = home_with_workspace();
+    let real = home.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    let forty = chain_of_links(&home.path().join("forty"), 40, &real);
+    let forty_one = chain_of_links(&home.path().join("forty-one"), 41, &real);
+
+    for (start, reached) in [(&forty, true), (&forty_one, false)] {
+        profile(
+            &home,
+            &format!("{RW_WORKSPACE}ro = [\"{}\"]\n", start.display()),
+        );
+
+        let plan = json_plan(&home, &workspace);
+
+        let mounted = directives_at(&plan, &real.canonicalize().unwrap()) == ["ro"];
+        let skipped = plan["skipped_mounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| {
+                entry["written"] == start.to_str().unwrap()
+                    && !entry["reason"].as_str().unwrap_or_default().is_empty()
+            });
+        assert_eq!((mounted, skipped), (reached, !reached), "{plan}");
+    }
+}
+
+// @kotowari[REQ-313]
+#[test]
+fn a_workspace_or_path_prepend_entry_behind_more_than_40_links_counts_as_missing() {
+    let (home, workspace) = home_with_workspace();
+    let bin = workspace.join("bin");
+    std::fs::create_dir(&bin).unwrap();
+
+    // The workspace: 40 links resolve, 41 are a workspace that does not exist.
+    for (count, resolves) in [(40, true), (41, false)] {
+        let start = chain_of_links(&home.path().join(format!("ws{count}")), count, &workspace);
+        let output = binary(home.path())
+            .current_dir(&workspace)
+            .args(["--workspace", start.to_str().unwrap(), "--print-plan=json"])
+            .output()
+            .unwrap();
+        if resolves {
+            assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+        } else {
+            assert_diagnostic(&output, 125, "path");
+        }
+    }
+
+    // A protected path: behind 40 links the resolution reaches the `rw` workspace and is
+    // refused; behind 41 it stops before it, and the entry is skipped as missing.
+    for (count, reaches_the_workspace) in [(40, true), (41, false)] {
+        let start = chain_of_links(&home.path().join(format!("bin{count}")), count, &bin);
+        profile(
+            &home,
+            &format!(
+                "{RW_WORKSPACE}[env]\npath-prepend = [\"{}\"]\n",
+                start.display()
+            ),
+        );
+        let output = binary(home.path())
+            .current_dir(&workspace)
+            .args([
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--print-plan=json",
+            ])
+            .output()
+            .unwrap();
+        if reaches_the_workspace {
+            assert_diagnostic(&output, 125, "path");
+        } else {
+            let report = output_report(&output);
+            assert_eq!(output.status.code(), Some(0), "{report}");
+            let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert!(
+                plan["skipped_paths"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|entry| entry["written"] == start.to_str().unwrap()),
+                "{report}"
+            );
+        }
+    }
+}
+
+// @kotowari[EX-549]
+#[test]
+fn a_plan_without_a_command_has_no_argv0_and_no_trailing_separator() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for argument in plan["bwrap_arguments"].as_array().unwrap() {
+        assert_ne!(argument["value"], "--argv0", "{report}");
+        assert_ne!(argument["value"], "--", "{report}");
+    }
 }

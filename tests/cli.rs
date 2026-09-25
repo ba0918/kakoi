@@ -407,7 +407,7 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     assert_diagnostic(&output, 125, "policy");
 }
 
-// @kotowari[REQ-288, REQ-290]
+// @kotowari[REQ-288, REQ-290, EX-524]
 #[test]
 fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
     let (home, workspace) = home_with_workspace();
@@ -2090,4 +2090,39 @@ fn a_mount_from_a_secret_carries_its_origin_kind_and_name_in_json() {
         .unwrap_or_else(|| panic!("the secret file is not mounted: {plan}"));
     assert_eq!(item["origin"]["kind"], "secret", "{plan}");
     assert_eq!(item["origin"]["name"], "TOKEN", "{plan}");
+}
+
+// @kotowari[EX-538]
+#[test]
+fn two_print_plans_keep_nothing_and_give_the_same_plan() {
+    let (home, workspace) = home_with_workspace();
+    home.write("ws/.env", "SECRET=x\n");
+    home.write(".config/kakoi/secrets/token", "FAKE-TOKEN\n");
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "{RW_WORKSPACE}hide = [\"~/missing\"]\n\
+             [[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env\"]\n\
+             [secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"
+        ),
+    );
+    let arguments = [
+        "--workspace",
+        workspace.to_str().unwrap(),
+        "--print-plan=full",
+        "--",
+        "/bin/true",
+    ];
+    let before = tree(home.path());
+
+    let first = run(home.path(), arguments);
+    let after_first = tree(home.path());
+    let second = run(home.path(), arguments);
+
+    let report = format!("{}\n{}", output_report(&first), output_report(&second));
+    assert_eq!(first.status.code(), Some(0), "{report}");
+    assert_eq!(second.status.code(), Some(0), "{report}");
+    assert_eq!(after_first, before, "{report}");
+    assert_eq!(tree(home.path()), before, "{report}");
+    assert_eq!(first.stdout, second.stdout, "{report}");
 }
