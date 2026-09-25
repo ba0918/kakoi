@@ -12,6 +12,7 @@ use std::{
     collections::BTreeMap,
     fmt::Write,
     io,
+    net::IpAddr,
     path::Path,
     time::{Duration, Instant},
 };
@@ -163,6 +164,7 @@ impl<'ns> DynamicPermissions<'ns> {
         let mut discard = String::new();
         let mut activation = String::from("flush chain inet kakoi_policy dns_permitted\n");
         let mut sets = Vec::new();
+        let mut expected_elements = Vec::new();
         for ((index, ipv4), elements) in grouped {
             let datatype = if ipv4 { "ipv4_addr" } else { "ipv6_addr" };
             let set = format!(
@@ -173,6 +175,10 @@ impl<'ns> DynamicPermissions<'ns> {
             );
             let declaration =
                 format!("add set inet kakoi_policy {set} {{ type {datatype}; flags timeout; }}\n");
+            expected_elements.push((
+                set.clone(),
+                elements.iter().map(|(address, _)| *address).collect(),
+            ));
             stage.push_str(&declaration);
             // Whether or not a late staging committed, this removes the set.
             discard.push_str(&declaration);
@@ -197,6 +203,7 @@ impl<'ns> DynamicPermissions<'ns> {
         Ok(Attempt {
             leases,
             sets,
+            expected_elements,
             stage,
             discard,
             activation,
@@ -219,7 +226,7 @@ impl<'ns> DynamicPermissions<'ns> {
         nft::apply(self.namespace, self.nft, &attempt.stage, deadline).map_err(late)?;
         let json =
             nft::inspect(self.namespace, self.nft, "kakoi_policy", deadline).map_err(late)?;
-        verify_expirations(&json, &attempt.sets).map_err(Staging::Fault)?;
+        verify_expirations(&json, &attempt.expected_elements).map_err(Staging::Fault)?;
         if Instant::now() > deadline {
             return Err(Staging::Late);
         }
@@ -233,6 +240,7 @@ const INITIAL_RESERVE: Duration = Duration::from_millis(50);
 struct Attempt {
     leases: LeaseBook,
     sets: Vec<String>,
+    expected_elements: Vec<(String, Vec<IpAddr>)>,
     stage: String,
     discard: String,
     activation: String,
@@ -255,29 +263,46 @@ fn discard_sets(namespace: &NetworkNamespace, executable: &Path, script: &str) -
     )
 }
 
-fn verify_expirations(json: &[u8], sets: &[String]) -> io::Result<()> {
+fn verify_expirations(json: &[u8], sets: &[(String, Vec<IpAddr>)]) -> io::Result<()> {
     let invalid = || {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            "DNS candidate lacks a verified kernel expiration",
+            "DNS candidate lacks a verified kernel permission or expiration",
         )
     };
     let value: serde_json::Value = serde_json::from_slice(json).map_err(io::Error::other)?;
     let entries = value["nftables"].as_array().ok_or_else(invalid)?;
-    for name in sets {
+    for (name, expected) in sets {
         let set = entries
             .iter()
             .filter_map(|entry| entry.get("set"))
             .find(|set| set["name"].as_str() == Some(name.as_str()))
             .ok_or_else(invalid)?;
-        if let Some(elements) = set.get("elem") {
-            for element in elements.as_array().ok_or_else(invalid)? {
-                // nft JSON reports whole seconds, so zero is a valid subsecond
-                // remainder. Absence means no expiration extension exists at all.
-                if element["elem"]["expires"].as_u64().is_none() {
-                    return Err(invalid());
-                }
+        let elements = set
+            .get("elem")
+            .and_then(|value| value.as_array())
+            .ok_or_else(invalid)?;
+        if elements.len() != expected.len() {
+            return Err(invalid());
+        }
+        let mut actual = Vec::with_capacity(elements.len());
+        for element in elements {
+            // nft JSON reports whole seconds, so zero is a valid subsecond
+            // remainder. Absence means no expiration extension exists at all.
+            if element["elem"]["expires"].as_u64().is_none() {
+                return Err(invalid());
             }
+            let address = element["elem"]["val"]
+                .as_str()
+                .and_then(|value| value.parse::<IpAddr>().ok())
+                .ok_or_else(invalid)?;
+            actual.push(address);
+        }
+        actual.sort_unstable();
+        let mut expected = expected.clone();
+        expected.sort_unstable();
+        if actual != expected {
+            return Err(invalid());
         }
     }
     Ok(())
@@ -341,4 +366,52 @@ fn remove_sets(namespace: &NetworkNamespace, executable: &Path, sets: &[String])
         &script,
         Instant::now() + Duration::from_secs(2),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::verify_expirations;
+    use std::net::IpAddr;
+
+    #[test]
+    fn an_empty_kernel_set_cannot_confirm_a_staged_dns_permission() {
+        let readback = br#"{"nftables":[{"set":{"name":"dns_1_0_4"}}]}"#;
+        let error = verify_expirations(readback, &[("dns_1_0_4".into(), addresses(&["1.1.1.1"]))])
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn a_partially_populated_kernel_set_cannot_confirm_all_staged_permissions() {
+        let readback = br#"{"nftables":[{"set":{"name":"dns_1_0_4","elem":[{"elem":{"val":"1.1.1.1","expires":10}}]}}]}"#;
+        let error = verify_expirations(
+            readback,
+            &[("dns_1_0_4".into(), addresses(&["1.1.1.1", "2.2.2.2"]))],
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn all_staged_permissions_with_finite_expiration_are_confirmed() {
+        let readback = br#"{"nftables":[{"set":{"name":"dns_1_0_4","elem":[{"elem":{"val":"1.1.1.1","expires":0}},{"elem":{"val":"2.2.2.2","expires":10}}]}}]}"#;
+        verify_expirations(
+            readback,
+            &[("dns_1_0_4".into(), addresses(&["1.1.1.1", "2.2.2.2"]))],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn an_unexpected_kernel_address_does_not_confirm_the_staged_permission() {
+        let readback = br#"{"nftables":[{"set":{"name":"dns_1_0_4","elem":[{"elem":{"val":"2.2.2.2","expires":10}}]}}]}"#;
+        let error = verify_expirations(readback, &[("dns_1_0_4".into(), addresses(&["1.1.1.1"]))])
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("permission"));
+    }
+
+    fn addresses(values: &[&str]) -> Vec<IpAddr> {
+        values.iter().map(|value| value.parse().unwrap()).collect()
+    }
 }
