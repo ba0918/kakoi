@@ -6,7 +6,7 @@ use crate::{
     dns_transport::TlsClient,
     filter::FilterRule,
     host::{self, HOST_LOOPBACK_V4, HOST_LOOPBACK_V6},
-    host_dns,
+    host_dns, pasta,
     scope::AddressContext,
     session::Session,
     supervisor::Application,
@@ -24,10 +24,14 @@ use std::{
     ffi::OsString,
     path::{Path, PathBuf},
     process::Stdio,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const PASTA_STARTUP: Duration = Duration::from_secs(10);
+
+/// The instructions for installing a pasta filtered mode can use, on the main
+/// branch so that a released binary still points at the current advice.
+pub const PASTA_GUIDE: &str = "https://github.com/ba0918/kakoi/blob/main/docs/pasta.md";
 
 /// The external programs a filtered run needs, found on the host's `PATH` the
 /// way `bwrap` is.
@@ -38,16 +42,16 @@ pub struct Tools {
 
 impl Tools {
     pub fn locate(host: &BTreeMap<OsString, OsString>) -> Result<Self, Diagnostic> {
-        let find = |name: &str| {
+        let find = |name: &str, advice: &str| {
             locate_command(name.as_ref(), host).map_err(|_| {
                 Diagnostic::bwrap(format!(
-                    "filtered network mode needs `{name}`, which is not on PATH"
+                    "filtered network mode needs `{name}`, which is not on PATH{advice}"
                 ))
             })
         };
         Ok(Self {
-            pasta: find("pasta")?,
-            nft: find("nft")?,
+            pasta: find("pasta", &format!("; see {PASTA_GUIDE}"))?,
+            nft: find("nft", "")?,
         })
     }
 }
@@ -99,7 +103,12 @@ pub fn start(
         &policy.network_publish,
         PASTA_STARTUP,
     )
-    .map_err(|error| failure("start pasta", error))?;
+    .map_err(|error| match pasta::early_exit(&error) {
+        Some(deadline) => {
+            outdated(&tools.pasta, deadline).unwrap_or_else(|| failure("start pasta", error))
+        }
+        None => failure("start pasta", error),
+    })?;
     let mut session = Session::prepare(transport, config, &rules, |_| None)
         .map_err(|error| failure("prepare the network policy", error))?;
     session
@@ -116,6 +125,23 @@ pub fn start(
         stdout,
     )?;
     Ok((session, application))
+}
+
+/// The diagnostic for a pasta that ended during its start because it is too
+/// old: one whose `--help`, run by `deadline`, does not list every long option
+/// kakoi passes. `None` when the help cannot tell. Leaves pasta's own output
+/// out, which only repeats its usage text.
+fn outdated(executable: &Path, deadline: Instant) -> Option<Diagnostic> {
+    let help = pasta::help(executable, deadline)?;
+    let missing = pasta::missing_long_options(&help);
+    if missing.is_empty() {
+        return None;
+    }
+    Some(Diagnostic::bwrap(format!(
+        "{} is too old for filtered network mode: it lacks {}; see {PASTA_GUIDE}",
+        executable.display(),
+        missing.join(", ")
+    )))
 }
 
 /// Where a fixed publication is reachable on the host, and where it leads.

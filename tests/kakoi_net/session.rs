@@ -20,17 +20,21 @@ pub(crate) fn transport(directory: &TempDir) -> (Transport, Vec<(i32, i32)>) {
 
 pub(crate) fn transport_with_nft(directory: &TempDir, nft: &Path) -> (Transport, Vec<(i32, i32)>) {
     let records = directory.path().join("processes");
+    let calls = directory.path().join("calls");
     let executable = directory.write_executable(
         "pasta",
         format!(
             r#"#!/usr/bin/python3
 import os, sys, time
+with open({:?}, 'a') as out:
+    out.write(' '.join(sys.argv[1:]) + '\n')
 target = sys.argv[sys.argv.index('--netns') + 1].split('/')[2]
 with open({:?}, 'a') as out:
     out.write(str(os.getpid()) + ' ' + target + '\n')
 print(os.getpid(), flush=True)
 time.sleep(60)
 "#,
+            calls.to_str().unwrap(),
             records.to_str().unwrap()
         ),
     );
@@ -623,7 +627,7 @@ sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).re
     assert!(left.is_empty(), "left running after the drop: {left:?}");
 }
 
-// @kotowari[REQ-058, REQ-066, REQ-067, REQ-143, EX-123]
+// @kotowari[REQ-058, REQ-066, REQ-067, REQ-143, EX-123, REQ-431]
 #[test]
 fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     let directory = TempDir::new();
@@ -689,6 +693,10 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     }
     let records = std::fs::read_to_string(directory.path().join("processes")).unwrap();
     assert_eq!(records.lines().count(), 6);
+    // The failed restart is not taken for an old pasta.
+    let calls = std::fs::read_to_string(directory.path().join("calls")).unwrap();
+    assert_eq!(calls.lines().count(), 6);
+    assert!(!calls.contains("--help"), "{calls}");
     drop(session);
     for pid in records.split_whitespace() {
         assert!(!Path::new(&format!("/proc/{pid}")).exists());

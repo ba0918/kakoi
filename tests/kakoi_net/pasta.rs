@@ -159,3 +159,29 @@ fn stopped_pasta_is_not_healthy_and_is_reaped_on_drop() {
     drop(pasta);
     assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
 }
+
+// The usage text of the verified pasta, saved from its `--help`.
+const VERIFIED_HELP: &str =
+    include_str!("pasta_help/debian-trixie-backports-passt-0.0-git20260728.f8df3f1-1-bpo13+1.txt");
+// The usage text of Ubuntu 24.04's pasta, saved from its `--help`. It is saved
+// rather than run because the machines running the tests need not have it.
+const UBUNTU_24_04_HELP: &str =
+    include_str!("pasta_help/ubuntu-24.04-passt-0.0-git20240220.1e6f92b-1.txt");
+
+// @kotowari[REQ-430]
+#[test]
+fn the_verified_pasta_lists_every_long_option_kakoi_passes() {
+    assert_eq!(
+        kakoi_net::pasta::missing_long_options(VERIFIED_HELP.as_bytes()),
+        Vec::<&str>::new()
+    );
+}
+
+// @kotowari[REQ-430]
+#[test]
+fn ubuntu_24_04_pasta_lacks_exactly_the_two_host_loopback_options() {
+    assert_eq!(
+        kakoi_net::pasta::missing_long_options(UBUNTU_24_04_HELP.as_bytes()),
+        vec!["--host-lo-to-ns-lo", "--map-host-loopback"]
+    );
+}
