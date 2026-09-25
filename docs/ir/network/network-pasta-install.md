@@ -48,11 +48,11 @@ kakoiはpastaをホストのPATHだけから探し、ポリシーと環境変数
 ### REQ-434: pastaの導入手順の文書
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A2, docs/decision/brainstorm/2026-09-25-pasta-install.md#A7, docs/decision/brainstorm/2026-09-25-pasta-install.md#A12, docs/decision/brainstorm/2026-09-25-pasta-install.md#A16, docs/decision/brainstorm/2026-09-25-pasta-install.md#A17, docs/decision/brainstorm/2026-09-25-pasta-install.md#A21, docs/decision/brainstorm/2026-09-25-pasta-install.md#A20, docs/decision/brainstorm/2026-09-25-pasta-install.md#A8, docs/decision/brainstorm/2026-09-25-pasta-install.md#A15
+- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A2, docs/decision/brainstorm/2026-09-25-pasta-install.md#A7, docs/decision/brainstorm/2026-09-25-pasta-install.md#A12, docs/decision/brainstorm/2026-09-25-pasta-install.md#A16, docs/decision/brainstorm/2026-09-25-pasta-install.md#A17, docs/decision/brainstorm/2026-09-25-pasta-install.md#A21, docs/decision/brainstorm/2026-09-25-pasta-install.md#A20, docs/decision/brainstorm/2026-09-25-pasta-install.md#A8, docs/decision/brainstorm/2026-09-25-pasta-install.md#A15, docs/decision/brainstorm/2026-09-25-pasta-install.md#A25
 - verification: review
-- how_to_verify: "docs/pasta.md" を読み、英語で書かれ、次の4つを載せていることを確かめる。導入済みのpastaの "--help" の出力に、kakoiが長い名前で渡すオプションの名前がすべて載っているかで確かめる方法と、その名前の一覧がcrates/kakoi-netのpastaの引数を組み立てる一覧の長い名前と一致すること。オプションが揃う最低の版 "2024_10_30"、推奨する版 "2026_07_16" 以降、確かめた版 "2026_07_28.f8df3f1"。上流のpasstのgitからタグを指定してソースビルドし "~/.local/bin" に置く手順と、それがPATHで古いpastaより前に来る必要があること。Ubuntu 23.10以降では非特権のuser名前空間の制限を外す必要があるという一文と "docs/getting-started.md" の該当節へのリンク。podman-staticから取り出す手順とディストリごとの例や版の一覧が無いことを確かめる。READMEから "docs/pasta.md" へリンクしていることを確かめる。ソースビルドの手順は、公開前に書かれたとおりに実行して、置いたpastaの "--help" に文書が載せた名前がすべて載ることを観測する。
+- how_to_verify: "docs/pasta.md" を読み、英語で書かれ、次の4つを載せていることを確かめる。導入済みのpastaの "--help" の出力に、kakoiが長い名前で渡すオプションの名前がすべて載っているかで確かめる方法と、その名前の一覧がcrates/kakoi-netのpastaの引数を組み立てる一覧の長い名前と一致すること。オプションが揃う最低の版 "2024_10_30"、推奨する版 "2026_07_16" 以降、確かめた版 "2026_07_28.f8df3f1"。上流のpasstのgitからタグを指定してソースビルドし "~/.local/bin" に置く手順と、それがPATHで古いpastaより前に来る必要があること。Ubuntu 24.04以降では非特権のuser名前空間の制限を外す必要があるという一文と "docs/getting-started.md" の該当節へのリンク。podman-staticから取り出す手順とディストリごとの例や版の一覧が無いことを確かめる。READMEから "docs/pasta.md" へリンクしていることを確かめる。ソースビルドの手順は、公開前に書かれたとおりに実行して、置いたpastaの "--help" に文書が載せた名前がすべて載ることを観測する。
 
-"docs/pasta.md" に英語で、導入済みのpastaの確かめ方（kakoiが長い名前で渡すオプションの名前をすべて載せる）、必要な版、足りない場合のソースビルドの手順、Ubuntu 23.10以降のuser名前空間の制限への案内を載せる。READMEからこの文書へ案内する。
+"docs/pasta.md" に英語で、導入済みのpastaの確かめ方（kakoiが長い名前で渡すオプションの名前をすべて載せる）、必要な版、足りない場合のソースビルドの手順、Ubuntu 24.04以降のuser名前空間の制限への案内を載せる。READMEからこの文書へ案内する。
 
 ### REQ-435: セットアップスキルのpastaの確認
 

@@ -75,8 +75,8 @@ export PATH="$HOME/.local/bin:$PATH"
 Then run the check above again: `command -v pasta` prints the one in `~/.local/bin`, and no name
 is missing.
 
-## Ubuntu 23.10 and later
+## Ubuntu 24.04 and later
 
-On Ubuntu 23.10 and later, a new `pasta` is not enough: `filtered` also needs the restriction on
+On Ubuntu 24.04 and later, a new `pasta` is not enough: `filtered` also needs the restriction on
 unprivileged user namespaces turned off. See
 [Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
