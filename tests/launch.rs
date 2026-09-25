@@ -506,7 +506,7 @@ fn a_worktree_at_home_exits_125() {
     assert_diagnostic(&output, 125, "path");
 }
 
-// @kotowari[REQ-173]
+// @kotowari[REQ-173, EX-349]
 #[test]
 fn a_cwd_inside_a_hide_exits_125() {
     let (home, workspace) = home_with_workspace();
@@ -1650,4 +1650,302 @@ fn an_empty_git_config_count_without_instead_of_is_kept_as_is() {
     );
 
     assert_eq!(assert_ran_clean(&output), "[]");
+}
+
+// Mount items (specification: `docs/ir/core/core-mounts.md`).
+
+/// The JSON plan of `home`'s profile with the workspace at `workspace`, after checking the
+/// binary exited 0.
+fn json_plan(home: &TempDir, workspace: &Path) -> serde_json::Value {
+    let output = binary(home.path())
+        .current_dir(workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+            "--",
+            "/bin/true",
+        ])
+        .output()
+        .unwrap();
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
+}
+
+/// The items of `plan` mounted at `path`, as their directives.
+fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
+    plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["path"] == path.to_str().unwrap())
+        .map(|item| item["directive"].as_str().unwrap())
+        .collect()
+}
+
+/// The position of the item mounted at `path` in the mount order of `plan`.
+fn mount_position(plan: &serde_json::Value, path: &Path) -> usize {
+    plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|item| item["path"] == path.to_str().unwrap())
+        .unwrap_or_else(|| panic!("nothing is mounted at {}: {plan}", path.display()))
+}
+
+// @kotowari[EX-336]
+#[test]
+fn an_rw_directory_is_written_through_to_the_host() {
+    let (home, workspace) = home_with_workspace();
+    std::fs::create_dir(home.path().join("data")).unwrap();
+    profile(&home, "[mounts]\nrw = [\"${workspace}\", \"~/data\"]\n");
+
+    let output = run_script(&home, &workspace, "echo inside > ~/data/made && echo done");
+
+    assert_eq!(assert_ran_clean(&output), "done\n");
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("data/made")).unwrap(),
+        "inside\n"
+    );
+}
+
+// @kotowari[EX-337]
+#[test]
+fn rw_on_a_regular_file_is_a_path_diagnostic_pointing_to_rw_file() {
+    let (home, workspace) = home_with_workspace();
+    home.write("state.json", "{}\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\", \"~/state.json\"]\n",
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains("rw-file"), "{diagnostic}");
+}
+
+// @kotowari[EX-338]
+#[test]
+fn a_file_in_an_rw_copy_directory_is_renamed_inside_only() {
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/before", "host\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let output = run_script(
+        &home,
+        &workspace,
+        "mv ~/conf/before ~/conf/after && test ! -e ~/conf/before && cat ~/conf/after",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "host\n");
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("conf/before")).unwrap(),
+        "host\n"
+    );
+    assert!(home.path().join("conf/after").symlink_metadata().is_err());
+}
+
+// @kotowari[EX-339]
+#[test]
+fn an_rw_copy_of_more_than_4096_entries_is_a_path_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    for index in 0..4097 {
+        home.write(format!("conf/f{index}"), "x\n");
+    }
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    assert_diagnostic(&output, 125, "path");
+}
+
+// @kotowari[EX-340]
+#[test]
+fn an_item_is_mounted_at_the_real_path_behind_its_link() {
+    let (home, workspace) = home_with_workspace();
+    let real = home.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    std::os::unix::fs::symlink(&real, home.path().join("link")).unwrap();
+    profile(&home, &format!("{RW_WORKSPACE}ro = [\"~/link\"]\n"));
+
+    let plan = json_plan(&home, &workspace);
+
+    let real = real.canonicalize().unwrap();
+    assert_eq!(directives_at(&plan, &real), ["ro"], "{plan}");
+    assert!(
+        directives_at(&plan, &home.path().join("link")).is_empty(),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-341]
+#[test]
+fn a_hide_whose_target_does_not_exist_is_skipped_with_a_reason_and_not_created() {
+    let (home, workspace) = home_with_workspace();
+    profile(&home, &format!("{RW_WORKSPACE}hide = [\"~/missing\"]\n"));
+
+    let plan = json_plan(&home, &workspace);
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let skipped = plan["skipped_mounts"].as_array().unwrap();
+    let entry = skipped
+        .iter()
+        .find(|entry| entry["directive"] == "hide" && entry["written"] == "~/missing")
+        .unwrap_or_else(|| panic!("the hide is not skipped: {plan}"));
+    assert!(
+        !entry["reason"].as_str().unwrap_or_default().is_empty(),
+        "{plan}"
+    );
+    assert_ran_clean(&output);
+    assert!(home.path().join("missing").symlink_metadata().is_err());
+}
+
+// @kotowari[EX-342]
+#[test]
+fn the_secrets_directory_of_the_configuration_directory_is_hidden() {
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/kakoi/secrets/unreferenced", "FAKE\n");
+
+    let plan = json_plan(&home, &workspace);
+
+    let secrets = home
+        .path()
+        .join(".config/kakoi/secrets")
+        .canonicalize()
+        .unwrap();
+    assert_eq!(directives_at(&plan, &secrets), ["hide"], "{plan}");
+}
+
+// @kotowari[EX-343]
+#[test]
+fn a_scanned_link_to_a_directory_is_not_hidden() {
+    let (home, workspace) = home_with_workspace();
+    let target = home.path().join("target");
+    std::fs::create_dir(&target).unwrap();
+    std::os::unix::fs::symlink(&target, workspace.join(".env")).unwrap();
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env\"]\n"),
+    );
+
+    let plan = json_plan(&home, &workspace);
+
+    let hidden: Vec<&serde_json::Value> = plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["directive"] == "hide")
+        .collect();
+    assert!(hidden.is_empty(), "{plan}");
+}
+
+// @kotowari[EX-344]
+#[test]
+fn a_generated_hide_replaces_a_written_ro_on_the_same_real_path() {
+    let (home, workspace) = home_with_workspace();
+    let env_file = home.write("ws/.env", "SECRET=x\n");
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nro = [\"${workspace}/.env\"]\n\
+         [[mounts.scan]]\nroot = \"${workspace}\"\nnames = [\".env\"]\n",
+    );
+
+    let plan = json_plan(&home, &workspace);
+
+    assert_eq!(
+        directives_at(&plan, &env_file.canonicalize().unwrap()),
+        ["hide"],
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-345]
+#[test]
+fn a_scan_root_under_an_rw_the_generation_will_hide_is_checked_against_the_rw() {
+    let (home, workspace) = home_with_workspace();
+    let root = home.path().join(".config/kakoi/secrets/sub");
+    std::fs::create_dir_all(&root).unwrap();
+    profile(
+        &home,
+        &format!(
+            "[mounts]\nrw = [\"${{workspace}}\", \"${{config_dir}}/secrets\"]\n\
+             [[mounts.scan]]\nroot = \"{}\"\nnames = [\".env\"]\n",
+            root.display()
+        ),
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains(root.to_str().unwrap()), "{diagnostic}");
+}
+
+// @kotowari[EX-346]
+#[test]
+fn a_narrower_rw_is_mounted_after_the_hide_around_it() {
+    let (home, workspace) = home_with_workspace();
+    let wide = home.path().join("t");
+    let narrow = wide.join("kakoi");
+    std::fs::create_dir_all(&narrow).unwrap();
+    profile(
+        &home,
+        &format!(
+            "[mounts]\nrw = [\"${{workspace}}\", \"{}\"]\nhide = [\"{}\"]\n",
+            narrow.display(),
+            wide.display()
+        ),
+    );
+
+    let plan = json_plan(&home, &workspace);
+
+    let (wide, narrow) = (wide.canonicalize().unwrap(), narrow.canonicalize().unwrap());
+    assert_eq!(directives_at(&plan, &wide), ["hide"], "{plan}");
+    assert_eq!(directives_at(&plan, &narrow), ["rw"], "{plan}");
+    assert!(
+        mount_position(&plan, &wide) < mount_position(&plan, &narrow),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-347]
+#[test]
+fn siblings_are_mounted_in_the_byte_order_of_their_real_paths() {
+    let (home, workspace) = home_with_workspace();
+    let first = home.path().join("a");
+    let second = home.path().join("b");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    profile(&home, &format!("{RW_WORKSPACE}ro = [\"~/b\", \"~/a\"]\n"));
+
+    let plan = json_plan(&home, &workspace);
+
+    assert!(
+        mount_position(&plan, &first.canonicalize().unwrap())
+            < mount_position(&plan, &second.canonicalize().unwrap()),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-348]
+#[test]
+fn a_work_place_under_rw_copy_only_warns_and_starts() {
+    let (home, workspace) = home_with_workspace();
+    profile(&home, "[mounts]\nrw-copy = [\"${workspace}\"]\n");
+
+    let output = run_script(&home, &workspace, "echo ran");
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"ran\n", "{report}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 1, "{report}");
+    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }
