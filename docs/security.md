@@ -156,7 +156,7 @@ Limits of `filtered`, as it stands:
     `--workspace /etc`. This misreading is accepted; the other misreadings of the template
     only leave a directory out.
 
-## Not in 0.3
+## Not supported yet
 
 - cgroup limits on CPU or memory
 - multicast and broadcast traffic from the isolation

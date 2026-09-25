@@ -14,11 +14,11 @@
 
 ### REQ-175: 隔離
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-25-release-0-4.md#A1
 - verification: review
 - how_to_verify: IR（docs/ir）、ガイド（docs/guide）、用語集（"CONTEXT.md"）で「隔離」が使われている箇所を検索し、ファイルシステム、ネットワーク、環境変数、認証情報の 4 つの次元を持つ境界の意味で使われていること、プロセス ID・IPC・UTS・ユーザーの名前空間と cgroup の名前空間が次元として選べるものと書かれていないこと、UNIX ソケットの経路を止める手段が "hide" で "env.unset" は補助と書かれていることを確かめる。同梱プロファイル（examples/profile）を読み、ソケットのパスへの "hide" と "env.unset" の両方があることを確かめる。
 
-プロセスを実行するとき、利用者が安全を確保できるかどうかの境界。0.3 では 4 つの次元を持つ。ファイルシステム（見える範囲と書ける範囲）、ネットワーク（ホストと共有するか、切るか、filteredで許可範囲を制限するか）、環境変数（ホストから何を引き継ぎ、何を足すか）、認証情報（隠すファイルと注入する秘密）。
+プロセスを実行するとき、利用者が安全を確保できるかどうかの境界。今の版では 4 つの次元を持つ。ファイルシステム（見える範囲と書ける範囲）、ネットワーク（ホストと共有するか、切るか、filteredで許可範囲を制限するか）、環境変数（ホストから何を引き継ぎ、何を足すか）、認証情報（隠すファイルと注入する秘密）。
 
 プロセス ID、IPC、UTS、ユーザーの各名前空間は必ず切る。ユーザー名前空間を作れない環境では起動が拒否される。cgroup の名前空間はカーネルが対応しない場合には切らない。いずれも次元として選べない。認証情報の次元が扱うのはファイルと環境変数だけである。UNIX ソケットを通した認証の転送（ssh-agent、gpg-agent、D-Bus 等）は、そのソケットのパスが隔離の中から見えれば、環境変数を消してもパスを直接指定して使える。
 

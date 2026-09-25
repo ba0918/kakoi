@@ -101,6 +101,6 @@ when, is in the routing table of `AGENTS.md`.
   before the initial filtered release. A launch that wraps a command (including
   `--print-plan`) writes no files; `init` is the only form that writes files, and only within
   the paths the runtime boundary allows.
-- `docs/ir/core/core-product.md` (old section 18) is authoritative for features excluded from
-  version 0.3.
+- `docs/ir/core/core-product.md` (old section 18) is authoritative for features the current version
+  excludes.
 - The version lives in `Cargo.toml` only (`docs/ir/core/core-release.md`, old section 17).
