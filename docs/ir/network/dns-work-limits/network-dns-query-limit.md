@@ -48,12 +48,6 @@ Scenario: 設定変更によるやり直しでも残り回数を引き継ぐ
   Then あと1回だけ上流問い合わせを送信できる
   And さらに送信が必要になれば解決失敗とする
 
-@id=EX-271 @about=REQ-122 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124
-Scenario: 通信層の再送をDNS問い合わせとして重複計上しない
-  Given kakoi-netがDNS問い合わせを1回送った
-  When 通信層がそのパケットを再送する
-  Then DNS問い合わせの送信回数は1回のままとする
-
 @id=EX-272 @about=REQ-122 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A124
 Scenario: 回数が残っていても時間上限を超えて続行しない
   Given 上流問い合わせ回数に余裕がある

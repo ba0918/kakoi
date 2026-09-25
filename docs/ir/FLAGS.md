@@ -44,13 +44,6 @@ tests/placement.rs の an_ro_written_through_a_writable_link_is_accepted_whereve
 
 既存テストはTIOCSTIとx32の拒否を確認しているが、端末サイズ取得のioctlの許容と制御端末の維持を直接確認するテストを今回の対応付けでは発見できなかった。拒否対象を広げ過ぎて通常の端末操作を壊す退行の検出が不足する可能性がある。実際に壊れているという証拠ではない。
 
-### FLAG-007: 既存テストが仕様以上の細部を確認する
-- kind: gap
-- related: REQ-155, REQ-170
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A3
-
-tests/mounts.rsのa_name_the_isolation_planted_cannot_stall_a_pattern_with_many_starsは、星の多いパターンが255文字の名前に一致しないという結果に加え1秒以内の完了を確認する。既存仕様は照合の意味を定めるが1秒という上限を定めていない。a_mount_point_with_a_byte_that_is_not_utf8_does_not_empty_the_mount_listは非UTF-8のマウント名を保持することを確認するが、既存仕様ではその入力境界を明示していない。両テストの動作は維持し、特定の上限や表現を今回の新要求として追認しないため印を付けていない。テスト不在ではなく、テストと明文化された要求の対応不足である。
-
 ### FLAG-008: ホーム全体の複製が必ず上限超過するとは限らない
 - kind: ambiguity
 - related: REQ-161, REQ-168

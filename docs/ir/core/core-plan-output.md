@@ -27,10 +27,10 @@
 
 ### REQ-297: 全量と共通表示
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-last-four.md#A1
 - verification: unit
 
-全量は合成後ポリシー、マウント実体パスと出所、秘密を伏せた全環境、解決コマンド、bwrap引数を示す。要約と全量は飛ばした項目と理由、複製できなかったエントリと理由、rw-copyがホスト内容で始まり書込みがホストに出ず終了時消える説明、入れ子の印を共通して持つ。
+全量は合成後ポリシー、マウント実体パスと出所、秘密を伏せた全環境、解決コマンド、bwrap引数を示す。要約と全量は飛ばした項目と理由、複製できなかったエントリと理由、入れ子の印を共通して持つ。
 
 ### REQ-298: JSONの外形と版
 - kind: ubiquitous
@@ -74,6 +74,14 @@ REQ-294の3番目の生成の段では、生成に加えて次を検査し、ど
 
 REQ-294の9番目のrw-copyの読み込みの段では、適用するrw-copyの項目ごとに、対象の種類、読めない複製元、量の上限を検査し、どれも種類pathの診断で終わる。項目の実体がディレクトリでも通常ファイルでもないとき、一覧できないディレクトリか読めないファイルがあるとき、REQ-311の上限（項目あたり4096エントリ、通常ファイルの内容の合計64MiB）を超えるときである。
 
+### REQ-436: rw-copyの性質の説明
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-last-four.md#A1
+- verification: review
+- how_to_verify: "rw-copy" の項目を含むポリシーで "--print-plan" と "--print-plan=full" を実際に実行し、どちらの出力にも、その項目がホストの内容で始まること、隔離の中の書き込みがホストに出ないこと、終了時に消えることの3点の説明があるかを読んで確かめる。言い回しは問わない。
+
+要約と全量は、"rw-copy" の項目について、ホストの内容で始まり、隔離の中の書き込みはホストに出ず、終了時に消えることを説明する。
+
 ## Examples
 
 ```gherkin
@@ -95,11 +103,11 @@ Scenario: 要約の内容
   When ホストと同じKEPTと追加NEWを持つ計画を見る
   Then KEPTは件数に含めNEWの値を示す
 
-@id=EX-533 @about=REQ-297 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+@id=EX-533 @about=REQ-297 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-last-four.md#A1
 Scenario: 全量と共通表示
   Given 本体の既存仕様を適用する
   When rw-copyを含む全量計画を見る
-  Then 複製の性質と複製できなかった項目を表示する
+  Then 複製できなかった項目のパスを表示する
 
 @id=EX-534 @about=REQ-298 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 Scenario: JSONの外形と版
