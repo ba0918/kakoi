@@ -11,6 +11,32 @@ use std::process::{Child, ChildStderr, ChildStdout, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+// The options kakoi passes to pasta by their long names. A pasta older than
+// these names is told apart by its usage text (see `LONG_OPTIONS`).
+const FOREGROUND: &str = "--foreground";
+const PID: &str = "--pid";
+const CONFIG_NET: &str = "--config-net";
+const QUIET: &str = "--quiet";
+const HOST_LO_TO_NS_LO: &str = "--host-lo-to-ns-lo";
+const USERNS: &str = "--userns";
+const NETNS: &str = "--netns";
+const NO_MAP_GW: &str = "--no-map-gw";
+const MAP_HOST_LOOPBACK: &str = "--map-host-loopback";
+
+/// Every option either stage passes to pasta by a long name. The arguments
+/// are built from these same names.
+pub const LONG_OPTIONS: [&str; 9] = [
+    FOREGROUND,
+    PID,
+    CONFIG_NET,
+    QUIET,
+    HOST_LO_TO_NS_LO,
+    USERNS,
+    NETNS,
+    NO_MAP_GW,
+    MAP_HOST_LOOPBACK,
+];
+
 #[derive(Debug, Clone, Copy)]
 pub enum PastaStage {
     Outer,
@@ -68,35 +94,35 @@ impl Pasta {
         };
         let target_pid = target.keeper_pid();
         command.args([
-            "--foreground",
-            "--pid",
+            FOREGROUND,
+            PID,
             "/proc/self/fd/1",
-            "--config-net",
+            CONFIG_NET,
             // Only errors: the rest describes the host's network, which a
             // failed start would otherwise repeat in its diagnostic.
-            "--quiet",
-            "--host-lo-to-ns-lo",
+            QUIET,
+            HOST_LO_TO_NS_LO,
             "-T",
             "none",
             "-U",
             "none",
         ]);
         command
-            .arg("--userns")
+            .arg(USERNS)
             .arg(format!("/proc/{target_pid}/ns/user"))
-            .arg("--netns")
+            .arg(NETNS)
             .arg(format!("/proc/{target_pid}/ns/net"));
         // Neither stage reads the gateway as the host: the inner stage would take it
         // to the middle namespace's loopback. Only the outer stage maps the
         // dedicated addresses to the host's loopback.
-        command.arg("--no-map-gw");
+        command.arg(NO_MAP_GW);
         match stage {
             PastaStage::Outer => {
                 command.args(["-I", TRANSIT_INTERFACE]);
                 command
-                    .arg("--map-host-loopback")
+                    .arg(MAP_HOST_LOOPBACK)
                     .arg(HOST_LOOPBACK_V4.to_string())
-                    .arg("--map-host-loopback")
+                    .arg(MAP_HOST_LOOPBACK)
                     .arg(HOST_LOOPBACK_V6.to_string());
             }
             PastaStage::Inner => {
