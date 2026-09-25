@@ -84,8 +84,10 @@ when, is in the routing table of `AGENTS.md`.
 - The guide under `docs/guide/` is listed in `guides.files`. Each section carries guide marks
   naming the IR items it explains; when `kotowari check` reports `guide_stale`, review that
   section against the IR before copying the new fingerprint.
-- Decision records go in `docs/decision/brainstorm/`, ADRs in `docs/decision/adr/`, and
-  implementation plans in `docs/plans/`.
+- Decision records go in `docs/decision/brainstorm/` and implementation plans in `docs/plans/`.
+  The project keeps no ADRs: kotowari has no way to leave `decisions.adr` unset, so
+  `.kotowari/config.yaml` points it at the decision records directory rather than at an empty
+  directory git does not keep, which would stop `kotowari check` in a fresh clone.
 - The tests kotowari reads are set in `.kotowari/config.yaml` (currently `tests/*.rs` and
   `tests/**/*.rs`). If a change moves tests elsewhere, update that file too.
 - Mark a test only with the requirements it actually verifies.
