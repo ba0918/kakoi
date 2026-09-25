@@ -835,7 +835,7 @@ fn a_secret_is_readable_as_a_variable_and_the_file_is_empty() {
     assert_eq!(assert_ran_clean(&output), format!("{value}\n0\ntoken\n"));
 }
 
-// @kotowari[REQ-271]
+// @kotowari[REQ-271, EX-508]
 #[test]
 fn a_secret_whose_file_is_missing_is_not_set_from_the_host() {
     let (home, workspace) = home_with_workspace();
@@ -1423,4 +1423,231 @@ fn a_copied_file_is_a_mount_point_but_an_entry_of_a_copied_directory_is_not() {
         std::fs::read_to_string(home.path().join("d/inner.toml")).unwrap(),
         "host\n"
     );
+}
+
+// The environment handed to the command (specification: `docs/ir/core/core-environment.md`).
+
+/// Runs `script` with `/bin/sh -c` in the isolation of `home`'s profile, with `variables`
+/// added to the environment the binary starts with.
+fn run_script_with_env(
+    home: &TempDir,
+    workspace: &Path,
+    variables: &[(&str, &str)],
+    script: &str,
+) -> Output {
+    let mut command = binary(home.path());
+    for (name, value) in variables {
+        command.env(name, value);
+    }
+    command
+        .current_dir(workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            script,
+        ])
+        .output()
+        .unwrap()
+}
+
+// @kotowari[EX-505]
+#[test]
+fn a_name_both_unset_and_set_carries_the_set_value() {
+    let (home, workspace) = home_with_workspace();
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[env]\nunset = [\"FOO\"]\nset = {{ FOO = \"from-set\" }}\n"),
+    );
+
+    let output = run_script_with_env(
+        &home,
+        &workspace,
+        &[("FOO", "from-the-host")],
+        "printf '[%s]' \"$FOO\"",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "[from-set]");
+}
+
+// @kotowari[EX-506]
+#[test]
+fn the_bwrap_arguments_carry_neither_environment_flags_nor_values() {
+    let (home, workspace) = home_with_workspace();
+    let secret = "FAKE-SECRET-VALUE-not-a-real-credential";
+    let set = "a-value-set-by-the-policy";
+    home.write(".config/kakoi/secrets/token", format!("{secret}\n"));
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}[env]\nset = {{ SET_BY_POLICY = \"{set}\" }}\n\
+             [secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"
+        ),
+    );
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let arguments = plan["bwrap_arguments"].as_array().unwrap();
+    for argument in arguments {
+        let text = argument.to_string();
+        for flag in ["--setenv", "--unsetenv", "--clearenv"] {
+            assert_ne!(argument["value"], flag, "{report}");
+        }
+        assert!(!text.contains(secret), "{report}");
+        assert!(!text.contains(set), "{report}");
+    }
+}
+
+// @kotowari[EX-507]
+#[test]
+fn clear_without_path_and_without_path_prepend_leaves_path_unset_without_a_warning() {
+    let (home, workspace) = home_with_workspace();
+    profile(&home, &format!("{RW_WORKSPACE}[env]\nmode = \"clear\"\n"));
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/usr/bin/env",
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+    let environment = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        !environment.lines().any(|line| line.starts_with("PATH=")),
+        "{report}"
+    );
+}
+
+// @kotowari[EX-509]
+#[test]
+fn a_secret_loses_only_one_trailing_line_feed() {
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/kakoi/secrets/token", "v\n\n");
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
+    );
+
+    let output = run_script(&home, &workspace, "printf '[%s]' \"$TOKEN\"");
+
+    assert_eq!(assert_ran_clean(&output), "[v\n]");
+}
+
+// @kotowari[EX-510]
+#[test]
+fn a_secret_of_65537_bytes_is_a_secret_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/kakoi/secrets/token", "v".repeat(65537));
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    assert_diagnostic(&output, 125, "secret");
+}
+
+// @kotowari[EX-511]
+#[test]
+fn a_non_numeric_git_config_count_from_a_secret_is_an_env_diagnostic_without_its_value() {
+    let (home, workspace) = home_with_workspace();
+    let value = "FAKE-SECRET-VALUE-not-a-number";
+    home.write(".config/kakoi/secrets/count", format!("{value}\n"));
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}[secrets]\nGIT_CONFIG_COUNT = \"${{config_dir}}/secrets/count\"\n\
+             [git.instead-of]\n\"git@example.com:\" = \"https://example.com/\"\n"
+        ),
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "env");
+    assert!(!diagnostic.contains(value), "{diagnostic}");
+}
+
+// @kotowari[EX-512]
+#[test]
+fn an_inherited_variable_no_unset_pattern_matches_stays() {
+    let (home, workspace) = home_with_workspace();
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[env]\nmode = \"inherit\"\nunset = [\"*_TOKEN\"]\n"),
+    );
+
+    let output = run_script_with_env(
+        &home,
+        &workspace,
+        &[("TOKEN", "from-the-host")],
+        "printf '[%s]' \"$TOKEN\"",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "[from-the-host]");
+}
+
+// @kotowari[EX-513]
+#[test]
+fn instead_of_is_numbered_after_the_host_entries_it_keeps() {
+    let (home, workspace) = home_with_workspace();
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}[git.instead-of]\n\"git@example.com:\" = \"https://example.com/\"\n"
+        ),
+    );
+
+    let output = run_script_with_env(
+        &home,
+        &workspace,
+        &[
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", "host.key"),
+            ("GIT_CONFIG_VALUE_0", "from-the-host"),
+        ],
+        "printf '%s\\n' \"$GIT_CONFIG_KEY_0\" \"$GIT_CONFIG_VALUE_0\" \
+         \"$GIT_CONFIG_KEY_1\" \"$GIT_CONFIG_VALUE_1\"",
+    );
+
+    assert_eq!(
+        assert_ran_clean(&output),
+        "host.key\nfrom-the-host\nurl.https://example.com/.insteadof\ngit@example.com:\n"
+    );
+}
+
+// @kotowari[EX-514]
+#[test]
+fn an_empty_git_config_count_without_instead_of_is_kept_as_is() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = run_script_with_env(
+        &home,
+        &workspace,
+        &[("GIT_CONFIG_COUNT", "")],
+        "if [ \"${GIT_CONFIG_COUNT+set}\" = set ]; then printf '[%s]' \"$GIT_CONFIG_COUNT\"; fi",
+    );
+
+    assert_eq!(assert_ran_clean(&output), "[]");
 }
