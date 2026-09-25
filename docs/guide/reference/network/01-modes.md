@@ -105,6 +105,79 @@ DNS 名の問い合わせも、`host-interface` に書いたインターフェ�
 `filtered` の通信制限の準備に失敗しても、`host` へ自動で切り替えて起動することはない。
 準備の失敗時の扱いは [filtered のプロセス監督](07-lifecycle.md)で定める。
 
+## pasta が PATH に無い場合
+<!-- @kotowari[REQ-429:4323f9b3, EX-824:332879e1, EX-825:7a383e6b, EX-839:4d2d0678] -->
+
+`filtered` は pasta と nft をホストの `PATH` から探す。
+pasta が見つからなければ、種類 `bwrap` の診断を出して終了コード 125 で終わり、アプリを実行しない。
+診断の説明文は、pasta の導入手順の文書の URL "https://github.com/ba0918/kakoi/blob/main/docs/pasta.md" を含む。
+URL を含まない診断は、この契約に反する。
+
+pasta と nft がともに無いときは、pasta について報告する。
+`--print-plan` は pasta の所在を確かめない。
+
+## 必要なオプションを持たない pasta
+<!-- @kotowari[REQ-430:7c94e3b7, EX-826:f47a3fc2, EX-827:f53cb09d, EX-828:d4fbef83, EX-840:bdaaa865, EX-841:1563b37e] -->
+
+主要なディストリビューションの標準の pasta には、kakoi が渡すオプションを持たない古いものがある。
+Ubuntu 24.04 の標準の pasta は `--host-lo-to-ns-lo` と `--map-host-loopback` を知らず、起動してすぐ使い方の文を出して終了する。
+
+`filtered` の最初の起動で、準備完了の合図より前に pasta が終了したとき、kakoi は同じ pasta を `--help` 付きで実行する。
+起動用のパイプが先に閉じた場合も、残りの起動の期限の中で pasta の終了を待ち、終了すればこの場合に含める。
+待つ間も pasta の標準エラーを読み続ける。
+
+`--help` の標準出力と標準エラーを合わせた出力に、確かめる名前がそれぞれ載っているかを調べる。
+確かめる名前は、2 段の pasta に kakoi が `--` で始まる長い名前で渡すオプションのすべてで、pasta の引数を組み立てるときと同じ一覧から取る。
+足りないと分かっていた 2 つに限らず、たとえば `--no-map-gw` だけが無い pasta も見分ける。
+名前は、前後が空白、カンマ、行の端のどれかである出現だけを載っているとみなす。
+`--host-lo-to-ns-lo-extra` は `--host-lo-to-ns-lo` を載せたことにならない。
+
+載っていない名前が 1 つ以上あれば、種類 `bwrap` の診断を出して終了コード 125 で終わる。
+説明文は、載っていない名前のすべてと導入手順の文書の URL を含み、pasta の出力（知らないオプションへの苦情や使い方の文）を含まない。
+
+```
+kakoi: bwrap: /usr/bin/pasta is too old for filtered network mode: it lacks --host-lo-to-ns-lo, --map-host-loopback; see https://github.com/ba0918/kakoi/blob/main/docs/pasta.md
+```
+
+## 古さ以外で終了した pasta
+<!-- @kotowari[REQ-432:f300696e, EX-831:19bd9e45, EX-832:6f3d32f9, EX-844:e33dbb6b, EX-845:712c9de5] -->
+
+次の場合は古いと決めつけず、種類 `bwrap` の診断に pasta が終了時に出した理由を付けて、終了コード 125 で終わる。
+この診断は導入手順の文書へ案内しない。
+
+| `--help` 付きの実行 | 例 |
+|---|---|
+| 実行できなかった | — |
+| 残りの起動の期限を過ぎても終わらなかった | 何も出さずに動き続ける。起動の期限を過ぎたところで診断を出す |
+| 標準出力と標準エラーを合わせた出力が空だった | 何も出さずに 0 で終わる |
+| 確かめる名前がすべて載っていた | 権限の不足など古さ以外の理由で起動に失敗した |
+
+`--help` 付きの実行の終了コードでは判定しない。
+名前がすべて載った使い方を出して 1 で終わる pasta も、古いとはみなさない。
+
+## 古さを確かめない場合
+<!-- @kotowari[REQ-431:a5dff52d, EX-829:acb3e438, EX-830:49c9690d, EX-842:85b64bc2, EX-843:d9f1b149] -->
+
+kakoi は次の場合に pasta を `--help` 付きで実行しない。
+
+- `filtered` の起動で pasta が起動に成功したとき（その後の成否は問わない）。
+- pasta の起動がタイムアウト、PID の不正、取り消しで終わったとき。
+- 起動用のパイプが閉じた後、残りの起動の期限までに pasta が終了しなかったとき。
+- 通信障害から立ち直るときの pasta の再起動が失敗したとき（[filtered のプロセス監督](07-lifecycle.md)）。
+- `--print-plan` のとき。計画の表示は pasta を呼ばない。
+
+起動に成功した pasta に `--help` を求めることは、この契約に反する。
+
+## pasta の探し方
+<!-- @kotowari[REQ-433:bf624806, EX-833:d77e8688, EX-834:6c6848d3] -->
+
+kakoi は pasta をホストの `PATH` だけから探す。
+ポリシーにも環境変数にも、pasta の場所を指定する項目は無い。
+そうした項目を持つことは、この契約に反する。
+
+新しい pasta を使うには、`PATH` で古い pasta より前に来る場所に置く。
+たとえば `~/.local/bin` の新しい pasta が `PATH` で `/usr/bin` より前に来れば、kakoi は `~/.local/bin` の pasta を起動する。
+
 ## 許可も公開も空の filtered
 <!-- @kotowari[REQ-085:61b5a958, EX-175:114921ef, EX-176:e01d9f35] -->
 
