@@ -63,9 +63,12 @@ the network mode). Tests point `HOME` and
 `XDG_CONFIG_HOME` at a temporary directory, hand the binary only `PATH` from the developer's
 environment, and never read the developer's real configuration directory.
 
-Formatting and lint are enforced by a pre-commit hook managed by lefthook. Each hook command is
-wrapped in `run-if-present`, installed with `mise` as `github:ba0918/run-if-present`; it must be
-on `PATH` for the hook to run. Install the hook once per clone:
+Formatting and lint are enforced by a pre-commit hook managed by lefthook. Each Rust hook
+command is wrapped in `run-if-present`, installed with `mise` as `github:ba0918/run-if-present`;
+it must be on `PATH` for the hook to run. `kotowari check` runs unguarded, so `kotowari` and
+`jq` must be on `PATH` too: a commit stops on any error except the test-side ones, and a push
+stops unless the check exits 0 (the comment in `lefthook.yml` lists which kinds are test-side
+and why). Install the hook once per clone:
 
 ```text
 lefthook install
