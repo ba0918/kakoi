@@ -778,7 +778,7 @@ fn a_host_socket_visible_read_only_is_connectable() {
     server.join().unwrap();
 }
 
-// @kotowari[REQ-388, EX-167]
+// @kotowari[REQ-388, EX-167, EX-716]
 #[test]
 fn network_none_has_no_route() {
     let (home, workspace) = home_with_workspace();
@@ -2502,4 +2502,35 @@ fn a_plan_without_a_command_has_no_argv0_and_no_trailing_separator() {
         assert_ne!(argument["value"], "--argv0", "{report}");
         assert_ne!(argument["value"], "--", "{report}");
     }
+}
+
+// @kotowari[EX-717]
+#[test]
+fn network_host_reaches_a_listener_on_the_host_loopback() {
+    let (home, workspace) = home_with_workspace();
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[network]\nmode = \"host\"\n"),
+    );
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0; 5];
+        std::io::Read::read_exact(&mut stream, &mut buffer).unwrap();
+        std::io::Write::write_all(&mut stream, &buffer).unwrap();
+    });
+
+    let output = run_script(
+        &home,
+        &workspace,
+        &format!(
+            "/usr/bin/python3 -c \"\
+             import socket; s = socket.create_connection(('127.0.0.1', {port}), timeout=5); \
+             s.sendall(b'hello'); print(s.recv(5).decode())\""
+        ),
+    );
+
+    assert_eq!(assert_ran_clean(&output), "hello\n");
+    server.join().unwrap();
 }
