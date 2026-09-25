@@ -216,7 +216,7 @@ fn a_command_signal_passes_through_as_128_plus_s() {
     assert_eq!(output.status.code(), Some(128 + libc::SIGTERM), "{report}");
 }
 
-// @kotowari[REQ-250]
+// @kotowari[REQ-250, EX-490]
 #[test]
 fn command_arguments_arrive_unchanged() {
     let (home, workspace) = home_with_workspace();
@@ -280,7 +280,7 @@ fn a_command_path_starting_with_a_dash_is_executed_as_a_path() {
     assert_eq!(stdout, "ran\n", "{}", output_report(&output));
 }
 
-// @kotowari[REQ-263]
+// @kotowari[REQ-263, EX-503]
 #[test]
 fn the_command_sees_the_given_name_as_argv0() {
     // Specification sections 1 and 4.2: argv[0] is the `COMMAND` string as given, not the
@@ -415,7 +415,7 @@ fn a_bwrap_that_cannot_be_executed_is_a_bwrap_diagnostic() {
     assert_diagnostic(&output, 125, "bwrap");
 }
 
-// @kotowari[REQ-264, REQ-401, EX-756]
+// @kotowari[REQ-264, REQ-401, EX-756, EX-504]
 #[test]
 fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
