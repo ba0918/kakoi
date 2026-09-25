@@ -22,7 +22,7 @@ Scenario: IPv6全体の指定だけではリンクローカルへ通さない
   Then そのルールからリンクローカルへの許可を与えない
   And ::/0の設定全体は入力エラーにしない
 
-@id=EX-315 @about=REQ-141 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A139
+@id=EX-315 @about=REQ-052 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A139,docs/decision/brainstorm/2026-09-25-deferred-drafts.md#A3,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A93,docs/decision/brainstorm/2026-09-15-kakoi-net.md#A97
 Scenario: 接続口付きの別ルールでリンクローカルを許可する
   Given 接続口指定のない::/0と接続口付きリンクローカルCIDRの別ルールがある
   When 別ルールの範囲とTCP/UDPとポートに一致するリンクローカル通信を判定する

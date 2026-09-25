@@ -4,6 +4,8 @@ host・noneで使用しない公開設定同士の検査を定義する草案。
 
 後続の動的公開の入力検査。初版の固定公開の入力検査はnetwork/network-initial-release.mdで定義する。
 
+- deferred: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A158, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159
+
 ## Requirements
 
 ### REQ-086: 非使用の公開設定同士の競合拒否
