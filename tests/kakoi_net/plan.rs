@@ -4,7 +4,7 @@ fn profile(mode: &str) -> String {
     format!("[network]\nmode='{mode}'\n[[network.allow]]\ndestination={{dns='ＥＸＡＭＰＬＥ.com'}}\nprotocol='tcp'\nports=['443']\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nport=8000\nhost-port=18000\n")
 }
 
-// @kotowari[REQ-013, REQ-390, REQ-394, EX-165]
+// @kotowari[REQ-013, REQ-390, REQ-394, EX-165, REQ-431, EX-843]
 #[test]
 fn filtered_plan_shows_normalized_intent_without_starting_network_tools() {
     let home = TempDir::new();

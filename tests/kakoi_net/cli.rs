@@ -927,3 +927,73 @@ fn a_help_that_never_ends_is_given_up_at_the_startup_deadline() {
         "{elapsed:?}"
     );
 }
+
+/// Writes a pasta that records each call's arguments in `calls` beside it and
+/// then runs `behaviour`, a Python fragment.
+fn recording_pasta(filtered: &Filtered, behaviour: &str) -> PathBuf {
+    let calls = filtered.bin.path().join("calls");
+    filtered.bin.write_executable(
+        "pasta",
+        format!(
+            "#!/usr/bin/python3\nimport os, sys, time\nwith open({:?}, 'a') as out:\n    out.write(' '.join(sys.argv[1:]) + '\\n')\n{behaviour}\n",
+            calls.to_str().unwrap()
+        ),
+    );
+    calls
+}
+
+/// Asserts that pasta was called, and never with `--help`.
+fn assert_no_help(calls: &Path) {
+    let calls = std::fs::read_to_string(calls).unwrap();
+    assert!(!calls.is_empty());
+    assert!(
+        calls
+            .lines()
+            .all(|call| !call.split(' ').any(|word| word == "--help")),
+        "{calls}"
+    );
+}
+
+// @kotowari[REQ-431, EX-829, EX-830]
+#[test]
+fn a_pasta_that_starts_is_not_asked_for_help() {
+    let filtered = Filtered::new("");
+    let calls = recording_pasta(&filtered, "print(os.getpid(), flush=True)\ntime.sleep(600)");
+    let output = filtered_start(&filtered);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_no_help(&calls);
+}
+
+// kakoi waits for the 10 second startup deadline.
+// @kotowari[REQ-431, EX-842]
+#[test]
+fn a_pasta_start_that_times_out_is_not_asked_for_help() {
+    let filtered = Filtered::new("");
+    let calls = recording_pasta(&filtered, "time.sleep(600)");
+    assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    assert_no_help(&calls);
+}
+
+// @kotowari[REQ-431]
+#[test]
+fn a_pasta_that_signals_another_pid_is_not_asked_for_help() {
+    let filtered = Filtered::new("");
+    let calls = recording_pasta(&filtered, "print(1, flush=True)\ntime.sleep(600)");
+    assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    assert_no_help(&calls);
+}
+
+// kakoi waits for the 10 second startup deadline.
+// @kotowari[REQ-431]
+#[test]
+fn a_pasta_that_closes_its_startup_pipe_and_keeps_running_is_not_asked_for_help() {
+    let filtered = Filtered::new("");
+    let calls = recording_pasta(&filtered, "os.close(1)\ntime.sleep(600)");
+    assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    assert_no_help(&calls);
+}
