@@ -1,0 +1,118 @@
+Usage: pasta [OPTION]... [COMMAND] [ARGS]...
+       pasta [OPTION]... PID
+       pasta [OPTION]... --netns [PATH|NAME]
+
+Without PID or --netns, run the given command or a
+default shell in a new network and user namespace, and
+connect it via pasta.
+
+  -d, --debug		Be verbose
+      --trace		Be extra verbose, implies --debug
+  -q, --quiet		Don't print informational messages
+  -f, --foreground	Don't run in background
+    default: run in background if started from a TTY
+  -e, --stderr		Log to stderr too
+    default: log to system logger only if started from a TTY
+  -l, --log-file PATH	Log (only) to given file
+  --log-size BYTES	Maximum size of log file
+    default: 1 MiB
+  --runas UID|UID:GID 	Run as given UID, GID, which can be
+    numeric, or login and group names
+    default: drop to user "nobody"
+  -h, --help		Display this help message and exit
+  --version		Show version and exit
+  -I, --ns-ifname NAME	namespace interface name
+    default: same interface name as external one
+  -F, --fd FD		Use FD as pre-opened connected socket
+  -p, --pcap FILE	Log tap-facing traffic to pcap file
+  -P, --pid FILE	Write own PID to the given file
+  -m, --mtu MTU	Assign MTU via DHCP/NDP
+    a zero value disables assignment
+    default: 65520: maximum 802.3 MTU minus 802.3 header
+                    length, rounded to 32 bits (IPv4 words)
+  -a, --address ADDR	Assign IPv4 or IPv6 address ADDR
+    can be specified zero to two times (for IPv4 and IPv6)
+    default: use addresses from interface with default route
+  -n, --netmask MASK	Assign IPv4 MASK, dot-decimal or bits
+    default: netmask from matching address on the host
+  -M, --mac-addr ADDR	Use source MAC address ADDR
+    default: MAC address from interface with default route
+  -g, --gateway ADDR	Pass IPv4 or IPv6 address as gateway
+    default: gateway from interface with default route
+  -i, --interface NAME	Interface for addresses and routes
+    default: from --outbound-if4 and --outbound-if6, if any
+             otherwise interface with first default route
+  -o, --outbound ADDR	Bind to address as outbound source
+    can be specified zero to two times (for IPv4 and IPv6)
+    default: use source address from routing tables
+  --outbound-if4 NAME	Bind to outbound interface for IPv4
+    default: use interface from default route
+  --outbound-if6 NAME	Bind to outbound interface for IPv6
+    default: use interface from default route
+  -D, --dns ADDR	Use IPv4 or IPv6 address as DNS
+    can be specified multiple times
+    a single, empty option disables DNS information
+    default: don't use any addresses
+  -S, --search LIST	Space-separated list, search domains
+    a single, empty option disables the DNS search list
+    default: don't use any search list
+  --dhcp-dns		Pass DNS list via DHCP/DHCPv6/NDP
+  --dhcp-search	Pass list via DHCP/DHCPv6/NDP
+  --dns-forward ADDR	Forward DNS queries sent to ADDR
+    can be specified zero to two times (for IPv4 and IPv6)
+    default: don't forward DNS queries
+  --no-tcp		Disable TCP protocol handler
+  --no-udp		Disable UDP protocol handler
+  --no-icmp		Disable ICMP/ICMPv6 protocol handler
+  --no-dhcp		Disable DHCP server
+  --no-ndp		Disable NDP responses
+  --no-dhcpv6		Disable DHCPv6 server
+  --no-ra		Disable router advertisements
+  --no-map-gw		Don't map gateway address to host
+  -4, --ipv4-only	Enable IPv4 operation only
+  -6, --ipv6-only	Enable IPv6 operation only
+  -t, --tcp-ports SPEC	TCP port forwarding to namespace
+    can be specified multiple times
+    SPEC can be:
+      'none': don't forward any ports
+      'auto': forward all ports currently bound in namespace
+      a comma-separated list, optionally ranged with '-'
+        and optional target ports after ':', with optional
+        address specification suffixed by '/' and optional
+        interface prefixed by '%'. Examples:
+        -t 22	Forward local port 22 to port 22 in netns
+        -t 22:23	Forward local port 22 to port 23
+        -t 22,25	Forward ports 22, 25 to ports 22, 25
+        -t 22-80	Forward ports 22 to 80
+        -t 22-80:32-90	Forward ports 22 to 80 to
+			corresponding port numbers plus 10
+        -t 192.0.2.1/5	Bind port 5 of 192.0.2.1 to namespace
+        -t 5-25,~10-20	Forward ports 5 to 9, and 21 to 25
+        -t ~25		Forward all bound ports except for 25
+    default: auto
+    IPv6 bound ports are also forwarded for IPv4
+  -u, --udp-ports SPEC	UDP port forwarding to namespace
+    SPEC is as described for TCP above
+    default: auto
+    IPv6 bound ports are also forwarded for IPv4
+    unless specified, with '-t auto', UDP ports with numbers
+    corresponding to forwarded TCP port numbers are
+    forwarded too
+  -T, --tcp-ns SPEC	TCP port forwarding to init namespace
+    SPEC is as described above
+    default: auto
+  -U, --udp-ns SPEC	UDP port forwarding to init namespace
+    SPEC is as described above
+    default: auto
+  --userns NSPATH 	Target user namespace to join
+  --netns PATH|NAME	Target network namespace to join
+  --netns-only		Don't join existing user namespace
+    implied if PATH or NAME are given without --userns
+  --no-netns-quit	Don't quit if filesystem-bound target
+  			network namespace is deleted
+  --config-net		Configure tap interface in namespace
+  --no-copy-routes	DEPRECATED:
+			Don't copy all routes to namespace
+  --no-copy-addrs	DEPRECATED:
+			Don't copy all addresses to namespace
+  --ns-mac-addr ADDR	Set MAC address on tap interface

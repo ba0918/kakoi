@@ -37,6 +37,27 @@ pub const LONG_OPTIONS: [&str; 9] = [
     MAP_HOST_LOOPBACK,
 ];
 
+/// The names in `LONG_OPTIONS` that `help`, a pasta's usage text, does not
+/// list. A name is listed where it stands between spaces, tabs, commas, or the
+/// ends of a line, so `--netns` is not found in `--netns-only`.
+pub fn missing_long_options(help: &[u8]) -> Vec<&'static str> {
+    let help = String::from_utf8_lossy(help);
+    let separator = |character: char| matches!(character, ' ' | '\t' | ',');
+    let listed = |name: &str| {
+        help.lines().any(|line| {
+            line.match_indices(name).any(|(start, _)| {
+                let before = line[..start].chars().next_back();
+                let after = line[start + name.len()..].chars().next();
+                before.is_none_or(separator) && after.is_none_or(separator)
+            })
+        })
+    };
+    LONG_OPTIONS
+        .into_iter()
+        .filter(|name| !listed(name))
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum PastaStage {
     Outer,
