@@ -2322,6 +2322,10 @@ fn more_hidden_files_than_the_soft_limit_start_and_the_command_gets_the_raised_l
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "{}", output_report(&output));
     assert_eq!(lines[0], lines[1], "{}", output_report(&output));
+    let soft: u64 = lines[0]
+        .parse()
+        .unwrap_or_else(|_| panic!("{}", output_report(&output)));
+    assert!(soft > 1024, "{}", output_report(&output));
 }
 
 // @kotowari[EX-543]
