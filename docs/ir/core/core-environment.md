@@ -6,10 +6,10 @@
 
 ### REQ-268: 環境の7段階
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A28
 - verification: unit
 
-環境をinheritのホスト全体またはclearのpass対象だけから始め、unset、set、secrets、git書き換え、PATH先頭追加、KAKOI=1の順に組み立てる。
+環境をinheritのホスト全体またはclearのpass対象だけから始め、unset、set、secrets、git書き換え、PATH先頭追加、見張り役の場所の追加（PATHがあるときだけ、PATHの最も先頭へ）、KAKOI=1の順に組み立てる。
 
 ### REQ-269: 環境の受け渡し
 - kind: ubiquitous

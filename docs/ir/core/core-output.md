@@ -13,10 +13,10 @@ kakoi自身の出力へ埋め込む値の0x00〜0x1Fと0x7Fを見える表記に
 
 ### REQ-290: 診断の終了コード
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A10, docs/decision/brainstorm/2026-09-25-command-policy.md#A37
 - verification: unit
 
-usage、policy、path、secret、env、bwrapは125、command not foundは127、入れ子のcommand not executableは126で終わり標準出力を出さない。診断条件の詳細は各責務の検査規則に従う。
+usage、policy、path、secret、env、bwrapは125、command not foundは127、入れ子のcommand not executableと見張り役のguardは126で終わり標準出力を出さない。診断条件の詳細は各責務の検査規則に従う。
 
 ### REQ-291: コマンドとbwrapの終了
 - kind: ubiquitous

@@ -180,11 +180,11 @@
 
 ### REQ-195: 診断
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-25-command-policy.md#A35
 - verification: review
 - how_to_verify: IR（docs/ir）、ガイド（docs/guide）、用語集（"CONTEXT.md"）で「診断」が使われている箇所を検索し、"kakoi" 自身の失敗を伝える標準エラーへの 1 行の意味で使われていることを確かめる。
 
-"kakoi" 自身の失敗を伝える標準エラーへの 1 行（第 13 節）。
+"kakoi" 自身の失敗、または見張り役がガードレールの規則で起動を禁じたことを伝える標準エラーへの 1 行（第 13 節）。
 
 ### REQ-196: 入れ子
 - kind: ubiquitous
