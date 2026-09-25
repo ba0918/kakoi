@@ -1,7 +1,7 @@
 ir: docs/ir
 decisions:
   records: docs/decision/brainstorm
-  adr: docs/decision/adr
+  adr: docs/decision/brainstorm
 tests:
   files:
     - "tests/*.rs"
