@@ -5,6 +5,7 @@
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 
 use crate::mount_list::{read_mount_list, MOUNTINFO};
@@ -137,7 +138,11 @@ fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
             remaining.push_front(name);
         }
     }
-    let real = complete.then_some(resolved);
+    let directory_required =
+        path.as_os_str().as_bytes().ends_with(b"/") || path.as_os_str().as_bytes().ends_with(b"/.");
+    let real = (complete
+        && (!directory_required || fs::metadata(&resolved).is_ok_and(|entry| entry.is_dir())))
+    .then_some(resolved);
     (traversal, real)
 }
 
@@ -150,4 +155,20 @@ fn names_of(path: &Path) -> VecDeque<OsString> {
             Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve;
+    use std::path::Path;
+
+    #[test]
+    fn a_regular_file_with_a_trailing_directory_component_has_no_real_path() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        for suffix in ["/", "/."] {
+            let path = format!("{}{suffix}", manifest.display());
+            assert!(std::fs::metadata(&path).is_err());
+            assert_eq!(resolve(Path::new(&path)), None, "{path}");
+        }
+    }
 }
