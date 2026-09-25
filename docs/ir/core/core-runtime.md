@@ -88,6 +88,13 @@ host/noneの固定引数は--ro-bind / /、--dev /dev、--proc /proc、--unshare
 
 計画表示でCOMMAND省略時は--argv0とその値、末尾の--とその後を引数列から省く。filteredの接続機構と起動順序は既存の実証工程で確認する。
 
+### REQ-437: マウント一覧のパスをバイト列として扱う
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-25-last-four.md#A4
+- verification: unit
+
+マウント一覧を読むとき、各項目のマウント先のパスはバイト列として扱い、UTF-8として読めない名前の項目も落とさずに一覧に残す。
+
 ## Examples
 
 ```gherkin
