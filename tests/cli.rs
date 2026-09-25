@@ -1930,28 +1930,61 @@ fn the_summary_counts_a_variable_as_on_the_host_and_shows_an_added_one() {
             .unwrap()
     };
 
-    let summary = plan("--print-plan", true);
-    let report = output_report(&summary);
-    assert_eq!(summary.status.code(), Some(0), "{report}");
-    let text = String::from_utf8(summary.stdout).unwrap();
-    assert!(text.contains("NEW"), "{report}");
-    assert!(text.contains("new-value"), "{report}");
-    assert!(!text.contains("KEPT"), "{report}");
-    assert!(!text.contains("as-on-the-host"), "{report}");
+    let summary = |kept: bool| {
+        let output = plan("--print-plan", kept);
+        assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+        String::from_utf8(output.stdout).unwrap()
+    };
 
-    let with_kept = json_plan(&plan("--print-plan=json", true));
-    let without_kept = json_plan(&plan("--print-plan=json", false));
-    let (with_changes, without_changes) = (
-        &with_kept["environment_changes"],
-        &without_kept["environment_changes"],
-    );
+    let with_kept = summary(true);
+    assert!(with_kept.contains("NEW"), "{with_kept}");
+    assert!(with_kept.contains("new-value"), "{with_kept}");
+    assert!(!with_kept.contains("KEPT"), "{with_kept}");
+    assert!(!with_kept.contains("as-on-the-host"), "{with_kept}");
+
+    // Counted: the only difference KEPT makes is one number that grows by one.
+    let without_kept = summary(false);
+    let (with_parts, without_parts) = (digit_runs(&with_kept), digit_runs(&without_kept));
     assert_eq!(
-        with_changes["kept"].as_u64().unwrap(),
-        without_changes["kept"].as_u64().unwrap() + 1,
-        "{with_changes} {without_changes}"
+        with_parts.len(),
+        without_parts.len(),
+        "{with_kept}\n{without_kept}"
     );
-    assert_eq!(with_changes["set"]["NEW"], "new-value", "{with_changes}");
-    assert!(!with_changes.to_string().contains("KEPT"), "{with_changes}");
+    let differences: Vec<(&str, &str)> = with_parts
+        .iter()
+        .zip(&without_parts)
+        .filter(|(with, without)| with != without)
+        .map(|(with, without)| (*with, *without))
+        .collect();
+    let [(with, without)] = differences[..] else {
+        panic!("not one difference: {differences:?}\n{with_kept}\n{without_kept}");
+    };
+    let count = |part: &str| -> u64 {
+        part.parse()
+            .unwrap_or_else(|_| panic!("{part:?} is not a number\n{with_kept}\n{without_kept}"))
+    };
+    assert_eq!(
+        count(with),
+        count(without) + 1,
+        "{with_kept}\n{without_kept}"
+    );
+}
+
+/// `text` split into its maximal runs of ASCII digits and the runs between them, in order.
+fn digit_runs(text: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    for (index, character) in text.char_indices().skip(1) {
+        let previous = text[..index].chars().next_back().unwrap();
+        if previous.is_ascii_digit() != character.is_ascii_digit() {
+            parts.push(&text[start..index]);
+            start = index;
+        }
+    }
+    if start < text.len() {
+        parts.push(&text[start..]);
+    }
+    parts
 }
 
 /// A home whose profile copies `~/conf` (a regular file and a FIFO in it) and injects the
