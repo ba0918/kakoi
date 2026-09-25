@@ -194,9 +194,24 @@ impl Pasta {
         for fd in [pasta.readiness.as_raw_fd(), pasta.stderr.as_raw_fd()] {
             child_output::nonblocking(fd)?;
         }
-        if let Err(error) = pasta.await_ready(timeout, cancellation) {
+        let deadline = Instant::now().checked_add(timeout).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "pasta startup timeout overflow",
+            )
+        })?;
+        if let Err(failure) = pasta.await_ready(deadline, cancellation) {
             let _ = pasta.drain_diagnostics();
-            return Err(child_output::with_diagnostic(error, &pasta.diagnostics));
+            return Err(match failure {
+                Failure::Exited => io::Error::other(EarlyExit {
+                    deadline,
+                    message: child_output::described(
+                        &"pasta exited during startup",
+                        &pasta.diagnostics,
+                    ),
+                }),
+                Failure::Other(error) => child_output::with_diagnostic(error, &pasta.diagnostics),
+            });
         }
         Ok(pasta)
     }
@@ -234,57 +249,139 @@ impl Pasta {
 
     fn await_ready(
         &mut self,
-        timeout: Duration,
+        deadline: Instant,
         cancellation: Option<&crate::dns_workers::Cancellation>,
-    ) -> io::Result<()> {
-        let deadline = Instant::now().checked_add(timeout).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "pasta startup timeout overflow",
-            )
-        })?;
+    ) -> Result<(), Failure> {
         let mut received = Vec::new();
+        // An exiting pasta may close its end of the pipe before its exit is
+        // seen, so a closed pipe is a failure only if pasta outlives the deadline.
+        let mut pipe_closed = false;
         loop {
             if cancellation.is_some_and(|cancel| cancel.is_cancelled()) {
-                return Err(io::Error::new(
+                return Err(Failure::Other(io::Error::new(
                     io::ErrorKind::Interrupted,
                     "pasta startup cancelled",
-                ));
+                )));
             }
             if !self.is_running()? {
-                return Err(io::Error::other("pasta exited during startup"));
+                return Err(Failure::Exited);
             }
             let mut buffer = [0; 32];
-            match self.readiness.read(&mut buffer) {
-                Ok(0) => return Err(io::Error::other("pasta closed its startup pipe")),
-                Ok(count) => {
+            match (!pipe_closed).then(|| self.readiness.read(&mut buffer)) {
+                None => {}
+                Some(Ok(0)) => pipe_closed = true,
+                Some(Ok(count)) => {
                     received.extend_from_slice(&buffer[..count]);
                     if received.contains(&b'\n') {
                         if received == format!("{}\n", self.pid()).as_bytes() {
                             return Ok(());
                         }
-                        return Err(io::Error::other("invalid pasta startup PID"));
+                        return Err(io::Error::other("invalid pasta startup PID").into());
                     }
                     if received.len() > 16 {
-                        return Err(io::Error::other("oversized pasta startup PID"));
+                        return Err(io::Error::other("oversized pasta startup PID").into());
                     }
                 }
-                Err(error)
+                Some(Err(error))
                     if matches!(
                         error.kind(),
                         io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
                     ) => {}
-                Err(error) => return Err(error),
+                Some(Err(error)) => return Err(error.into()),
             }
             if Instant::now() >= deadline {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "pasta startup timed out",
-                ));
+                return Err(if pipe_closed {
+                    io::Error::other("pasta closed its startup pipe")
+                } else {
+                    io::Error::new(io::ErrorKind::TimedOut, "pasta startup timed out")
+                }
+                .into());
             }
             std::thread::sleep(Duration::from_millis(5));
         }
     }
+}
+
+/// How a start that did not reach readiness ended.
+enum Failure {
+    /// pasta ended before it signalled readiness.
+    Exited,
+    Other(io::Error),
+}
+
+impl From<io::Error> for Failure {
+    fn from(error: io::Error) -> Self {
+        Self::Other(error)
+    }
+}
+
+/// The error of a pasta that ended before it signalled readiness. Its text is
+/// the one of any other start failure; it also keeps the startup's deadline.
+#[derive(Debug)]
+struct EarlyExit {
+    deadline: Instant,
+    message: String,
+}
+
+impl std::fmt::Display for EarlyExit {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for EarlyExit {}
+
+/// When `error` is the start failure of a pasta that ended before it signalled
+/// readiness, the deadline of that start.
+pub fn early_exit(error: &io::Error) -> Option<Instant> {
+    let exit = error.get_ref()?.downcast_ref::<EarlyExit>()?;
+    Some(exit.deadline)
+}
+
+/// What `executable --help` writes on its standard output and then its
+/// standard error, or `None` if it cannot be run, does not end by `deadline`,
+/// or writes nothing.
+pub fn help(executable: &Path, deadline: Instant) -> Option<Vec<u8>> {
+    // Far above any usage text, so that no name is cut off.
+    const LIMIT: usize = 1 << 20;
+    let mut child = Command::new(executable)
+        .arg("--help")
+        .process_group(0)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .ok()?;
+    let mut stdout = child.stdout.take()?;
+    let mut stderr = child.stderr.take()?;
+    let (mut out, mut err) = (Vec::new(), Vec::new());
+    let read = (|| {
+        for fd in [stdout.as_raw_fd(), stderr.as_raw_fd()] {
+            child_output::nonblocking(fd).ok()?;
+        }
+        loop {
+            child_output::drain_keeping(&mut stdout, &mut out, LIMIT).ok()?;
+            child_output::drain_keeping(&mut stderr, &mut err, LIMIT).ok()?;
+            if child.try_wait().ok()?.is_some() {
+                child_output::drain_keeping(&mut stdout, &mut out, LIMIT).ok()?;
+                child_output::drain_keeping(&mut stderr, &mut err, LIMIT).ok()?;
+                return Some(());
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    })();
+    let _ = child.kill();
+    let _ = child.wait();
+    read?;
+    if out.is_empty() && err.is_empty() {
+        return None;
+    }
+    out.push(b'\n');
+    out.append(&mut err);
+    Some(out)
 }
 
 impl Drop for Pasta {

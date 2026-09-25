@@ -746,3 +746,184 @@ fn a_closed_standard_error_loses_notices_without_ending_the_command() {
         (Some(0), b"out\n".as_slice())
     );
 }
+
+/// Usage text in the shape of the real pasta's `--help`: one line per option,
+/// the long name followed by a tab, listing every long name kakoi passes but
+/// those in `absent`, and then the lines in `extra`.
+fn usage(absent: &[&str], extra: &[&str]) -> String {
+    let mut text = String::from("Usage: pasta [OPTION]... [COMMAND] [ARGS]...\n\n");
+    for name in kakoi_net::pasta::LONG_OPTIONS {
+        if !absent.contains(&name) {
+            text.push_str(&format!("  {name}\tAn option kakoi passes\n"));
+        }
+    }
+    for line in extra {
+        text.push_str(&format!("  {line}\tAnother option\n"));
+    }
+    text
+}
+
+/// Writes a pasta that fails its start with `startup`, a shell fragment, and
+/// answers `--help` with `help`, another.
+fn failing_pasta(filtered: &Filtered, startup: &str, help: &str) {
+    filtered.bin.write_executable(
+        "pasta",
+        format!("#!/bin/sh\nif [ \"$1\" = --help ]; then\n{help}\nfi\n{startup}\n"),
+    );
+}
+
+/// A `--help` fragment printing `text` on standard output and ending with `code`.
+fn prints(text: &str, code: i32) -> String {
+    format!("cat <<'USAGE'\n{text}USAGE\nexit {code}")
+}
+
+/// The first lines of an old pasta's complaint about an option it does not know.
+const COMPLAINT: [&str; 3] = [
+    "pasta: unrecognized option by test",
+    "Usage: pasta [OPTION]... [COMMAND] [ARGS]...",
+    "Without PID or --netns, run the given command or a",
+];
+
+/// A startup fragment that complains as an old pasta does and ends.
+fn complains() -> String {
+    format!(
+        "cat >&2 <<'COMPLAINT'\n{}\nCOMPLAINT\nexit 1",
+        COMPLAINT.join("\n")
+    )
+}
+
+fn filtered_start(filtered: &Filtered) -> std::process::Output {
+    filtered.with_pasta(&["/bin/true"]).output().unwrap()
+}
+
+// @kotowari[REQ-430, EX-826, EX-827]
+#[test]
+fn an_old_pasta_is_named_by_its_missing_options_without_its_own_output() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        &complains(),
+        &prints(
+            &usage(&["--host-lo-to-ns-lo", "--map-host-loopback"], &[]),
+            0,
+        ),
+    );
+    let diagnostic = assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    for expected in ["--host-lo-to-ns-lo", "--map-host-loopback", PASTA_GUIDE] {
+        assert!(diagnostic.contains(expected), "{expected}: {diagnostic}");
+    }
+    for line in COMPLAINT {
+        assert!(!diagnostic.contains(line), "{line}: {diagnostic}");
+    }
+}
+
+// @kotowari[REQ-430, EX-828]
+#[test]
+fn every_long_option_is_checked_not_only_the_two_known_to_be_missing() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        &complains(),
+        &prints(&usage(&["--no-map-gw"], &[]), 0),
+    );
+    let diagnostic = assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    assert!(diagnostic.contains("--no-map-gw"), "{diagnostic}");
+    assert!(diagnostic.contains(PASTA_GUIDE), "{diagnostic}");
+}
+
+// @kotowari[REQ-430, EX-840]
+#[test]
+fn a_longer_name_that_starts_with_an_option_does_not_list_it() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        &complains(),
+        &prints(
+            &usage(&["--host-lo-to-ns-lo"], &["--host-lo-to-ns-lo-extra"]),
+            0,
+        ),
+    );
+    let diagnostic = assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    assert!(diagnostic.contains("--host-lo-to-ns-lo"), "{diagnostic}");
+    assert!(diagnostic.contains(PASTA_GUIDE), "{diagnostic}");
+}
+
+// The pipe closes half a second before the exit, so that the closed pipe is
+// seen first.
+// @kotowari[REQ-430, EX-841]
+#[test]
+fn an_old_pasta_that_closes_its_startup_pipe_before_ending_is_told_apart() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        "exec >&-\nsleep 0.5\nexit 1",
+        &prints(&usage(&["--map-host-loopback"], &[]), 0),
+    );
+    let diagnostic = assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
+    assert!(diagnostic.contains("--map-host-loopback"), "{diagnostic}");
+    assert!(diagnostic.contains(PASTA_GUIDE), "{diagnostic}");
+}
+
+/// Asserts the diagnostic of a pasta that failed for another reason than its
+/// age: its own reason, and no pointer to the installation guide.
+fn assert_start_failure(output: &std::process::Output, reason: &str) {
+    let diagnostic = assert_diagnostic(output, 125, "bwrap");
+    assert!(diagnostic.contains(reason), "{diagnostic}");
+    assert!(!diagnostic.contains(PASTA_GUIDE), "{diagnostic}");
+}
+
+// @kotowari[REQ-432, EX-831]
+#[test]
+fn a_pasta_with_every_option_keeps_its_own_startup_failure() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        "echo 'permission denied by test' >&2\nexit 1",
+        &prints(&usage(&[], &[]), 0),
+    );
+    assert_start_failure(&filtered_start(&filtered), "permission denied by test");
+}
+
+// @kotowari[REQ-432, EX-832]
+#[test]
+fn an_empty_help_does_not_make_pasta_old() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        "echo 'startup failed by test' >&2\nexit 1",
+        "exit 0",
+    );
+    assert_start_failure(&filtered_start(&filtered), "startup failed by test");
+}
+
+// @kotowari[REQ-432, EX-844]
+#[test]
+fn the_exit_code_of_help_is_not_what_tells_pasta_old() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        "echo 'startup failed by test' >&2\nexit 1",
+        &prints(&usage(&[], &[]), 1),
+    );
+    assert_start_failure(&filtered_start(&filtered), "startup failed by test");
+}
+
+// The help is given up at the 10 second startup deadline.
+// @kotowari[REQ-432, EX-845]
+#[test]
+fn a_help_that_never_ends_is_given_up_at_the_startup_deadline() {
+    let filtered = Filtered::new("");
+    failing_pasta(
+        &filtered,
+        "echo 'startup failed by test' >&2\nexit 1",
+        "exec sleep 600",
+    );
+    let started = Instant::now();
+    let output = filtered_start(&filtered);
+    let elapsed = started.elapsed();
+    assert_start_failure(&output, "startup failed by test");
+    assert!(
+        (Duration::from_secs(9)..HANG).contains(&elapsed),
+        "{elapsed:?}"
+    );
+}
