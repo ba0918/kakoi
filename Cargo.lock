@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "kakoi"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "kakoi-core",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "kakoi-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "idna",
  "libc",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "kakoi-net"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hickory-proto",
  "kakoi-core",

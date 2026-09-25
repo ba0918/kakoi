@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.4.0] - 2026-09-25
+
+### Added
+
+- A third network mode, `filtered`: new connections leave the isolation only when their
+  destination, protocol, and port match a rule under `[[network.allow]]`, and a failure of the
+  enforcement blocks all traffic rather than letting it through. It is chosen only by writing
+  `network.mode = "filtered"`; `host` stays the default, and a policy that writes the new
+  network settings without any `mode` stops before the launch. `filtered` needs `pasta` (from
+  the `passt` package), `nft`, and `/dev/net/tun`; on Ubuntu 24.04 and later it also needs the
+  unprivileged user namespace restriction turned off. `host` and `none` need none of them.
+  - Destinations are an IP address, a CIDR, a DNS name (`example.com`, or `*.example.com` for
+    every name below it), or `host-loopback` to reach a service on the host's own loopback
+    through `host-v4.kakoi.internal` and `host-v6.kakoi.internal`.
+  - Names resolve through a resolver `kakoi` runs, which checks every answer and allows an
+    address only while the answer's time to live lasts. It follows the host's
+    `/etc/resolv.conf`, including changes while running, unless `[[network.dns-upstream]]`
+    names plain or TLS upstreams.
+  - `[[network.publish]]` with `mode = "fixed"` publishes a port inside the isolation to the
+    host's `127.0.0.1` or `::1`, taken before the command starts and announced on standard
+    error.
+  - When the main command ends, the network is stopped first, and the processes left behind get
+    one common grace, `process.shutdown-grace-seconds` (default 5), before they are killed.
+  - IPv6 link-local destinations (`host-interface`) are not available yet: a rule with one is
+    refused before the launch.
+- When `pasta` is missing from `PATH`, or is too old for the options `kakoi` passes (Ubuntu
+  24.04's own is), the launch stops with a `bwrap` diagnostic that names the missing options and
+  points to [Installing pasta](docs/pasta.md), which tells how to check the `pasta` you have and
+  how to build the tested release from source into `~/.local/bin`. The setup skill checks the
+  installed `pasta` the same way when you use or want `filtered`, and shows those steps; it
+  installs nothing itself.
+- `--print-plan=json` gains the network settings of the merged policy (`network_allow`,
+  `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`);
+  `format_version` stays `1`, as these are additions.
+
+### Fixed
+
+- An `rw-copy` of a directory now gives the copy's top directory the permission bits of the
+  source, like every entry below it.
+- A path reached through exactly 40 symbolic links is now resolved by the released static
+  binary as the specification states; it had been treated as missing, since the C library the
+  binary links stops one link sooner.
+- For programs using the library: the in-memory files holding the seccomp filter and the
+  `rw-copy` contents are no longer inherited by another isolation the same process starts at
+  the same time.
+
 ## [0.3.0] - 2026-09-10
 
 ### Added
@@ -99,7 +145,8 @@ layered policy, and returns the command's exit code unchanged.
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
 
-[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ba0918/kakoi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ba0918/kakoi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ba0918/kakoi/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/ba0918/process-wrap/compare/v0.1.0...v0.1.1
