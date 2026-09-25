@@ -107,6 +107,9 @@ fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
             complete = false;
             break;
         }
+        if name == "." {
+            continue;
+        }
         if name == ".." {
             resolved.pop();
             continue;
@@ -134,16 +137,22 @@ fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
         if target.is_absolute() {
             resolved = PathBuf::from("/");
         }
+        if requires_directory(&target) {
+            remaining.push_front(OsString::from("."));
+        }
         for name in names_of(&target).into_iter().rev() {
             remaining.push_front(name);
         }
     }
-    let directory_required =
-        path.as_os_str().as_bytes().ends_with(b"/") || path.as_os_str().as_bytes().ends_with(b"/.");
     let real = (complete
-        && (!directory_required || fs::metadata(&resolved).is_ok_and(|entry| entry.is_dir())))
+        && (!requires_directory(path)
+            || fs::metadata(&resolved).is_ok_and(|entry| entry.is_dir())))
     .then_some(resolved);
     (traversal, real)
+}
+
+fn requires_directory(path: &Path) -> bool {
+    path.as_os_str().as_bytes().ends_with(b"/") || path.as_os_str().as_bytes().ends_with(b"/.")
 }
 
 /// The names of `path` in order, `..` included and `.` and the root left out.
@@ -169,6 +178,28 @@ mod tests {
             let path = format!("{}{suffix}", manifest.display());
             assert!(std::fs::metadata(&path).is_err());
             assert_eq!(resolve(Path::new(&path)), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn a_link_target_requiring_a_directory_does_not_resolve_to_a_file() {
+        let directory = std::env::temp_dir().join(format!(
+            "kakoi-link-target-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let mut resolved = Vec::new();
+        for (name, suffix) in [("slash", "/"), ("dot", "/.")] {
+            let link = directory.join(name);
+            std::os::unix::fs::symlink(format!("{}{suffix}", manifest.display()), &link).unwrap();
+            assert!(std::fs::metadata(&link).is_err());
+            resolved.push((link.clone(), resolve(&link)));
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+        for (link, actual) in resolved {
+            assert_eq!(actual, None, "{}", link.display());
         }
     }
 }
