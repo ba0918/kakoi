@@ -1398,3 +1398,21 @@ GitHub Actionsのubuntu-24.04（`kernel.apparmor_restrict_unprivileged_userns`�
 制限を外すとfilteredは許可した宛先に届いた。制限の下でも通信制限なしで動くことはない。
 filteredには制限を外す必要があると利用者向け文書に書き、CIの`userns-restriction`ジョブで
 この3通りを毎回確かめる。kakoiとpasta用のAppArmorプロファイルは用意しておらず、後続とする。
+
+## 0.4.0 の前の、提供前の条件と試験の対応（2026-09-25）
+
+ガイド "maintainer/library.md" の提供前の条件 6 つを、試験の印と本文から試験と CI のジョブに対応付けた（別コンテキストの調査、読み取りのみ）。試験はどれも CI の check（GNU と musl、ubuntu-24.04、ユーザー名前空間の制限を外した設定、Debian trixie-backports の pasta）で走り、飛ばす試験は無い。
+本物の pasta を使う製品試験は tests/kakoi_net の outbound、host、publish、faults、controllers と host_dns の 1 件。偽の pasta（準備完了の合図を返すだけ）の試験は cli、session、run、pasta。pasta を使わずカーネルと nft と名前空間だけを使う試験は health、watchdog、nft、filter、namespace、application、supervisor、dns の各試験。
+
+| 条件 | 本物の pasta で確かめているもの | それ以外で確かめているもの |
+|---|---|---|
+| 全経路の判定、解除も迂回もできない、全許可の瞬間が無い | 外向き（IPv4/IPv6、TCP/UDP）、host-loopback、固定公開、アプリが自分で知ったアドレスや署名付き応答の内部アドレスを開かない、故障中と復帰後 | アプリから nft・unshare・raw ソケット・resolv.conf を使えない（application）、起動時と復帰時に門が閉じている（session、health、watchdog） |
+| DNS の検査、ホスト DNS の構成と追従、上流と TLS、有限の期限 | 名前の許可と期限、TTL ゼロ、resolv.conf への追従、名前別の振り分け（127.0.0.54 の代役）、明示の上流、TLS の CA と平文への非切替 | 応答の検査、ホスト DNS の解析と追従、期限の読み戻し |
+| 制御役・監視役・更新の故障、書き込み失敗、応答の喪失、競合 | 制御役の停止と強制終了、監視役の停止と強制終了、両者の停止での期限による遮断、nft を壊した故障で 125 | nft の書き込み失敗、遅れた応答、復帰の試行の重なり、停止中の更新 |
+| 遮断→猶予→回収、端末・シグナル・終了コード・通知の詰まり | 主コマンド終了で猶予の前に遮断、SIGTERM で遮断してから 143、pasta が残らない、通知の詰まり | Ctrl+C と端末、猶予切れの強制終了、SIGTERM の組み合わせ、終了コードの優先順位 |
+| 固定公開の寿命、競合、回収、複数環境の独立 | 起動前の確保と環境終了までの保持、使用中の番号で 125、一部だけ確保できた分の回収、再利用、2 環境の同時実行で片方の終了が他方に影響しない | 設定の競合、環境間で解決と枠を共有しない |
+| 標準導入環境で製品の試験と回帰検査 | CI の ubuntu-24.04（GNU と musl）、userns-restriction ジョブの実ホスト起動 | このWSL2（Ubuntu 24.04.4）での全体実行 |
+
+本物の pasta では確かめていない範囲: 故障時の遮断は新規 TCP の外向きと公開だけで、host-loopback の経路、確立済みの接続、UDP、サーバーからの一方的な送信は偽の pasta の試験で見ている。起動と復帰の途中に全許可の瞬間が無いこと、アプリが制限を解除できないこと、更新の故障、端末と Ctrl+C、猶予切れの強制終了は、偽の pasta か pasta を使わない試験だけ。本物の systemd-resolved は使わず、名前別の振り分けは代役で確かめた。起動時にホストの名前解決設定を読めない場合の試験は無い。kakoi どうしのホスト番号の競合と、2 環境同時実行での UDP と IPv6 の独立は確かめていない。pasta は Ubuntu のパッケージとしては導入しておらず（Ubuntu 24.04 の標準の pasta は古い。"docs/pasta.md"）、Debian そのものは CI に無い。
+
+これらはどれも、遮断と許可を担うのが pasta ではなくカーネルの nft と名前空間である機構か、pasta の種類によらない監督の処理で、偽の pasta でも本物のカーネルと nft で確かめている。本物の systemd-resolved は Ubuntu の既定の構成で現実に使われるが、kakoi が読むのは resolv.conf の nameserver と、スタブの 127.0.0.53 だけのときに中継窓口 127.0.0.54 を使うことで、代役で確かめたのはその読み方と振り分けである。
