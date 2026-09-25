@@ -1,6 +1,6 @@
 ---
 name: kakoi-setup
-description: "Adapt a kakoi installation to this machine: propose profile entries for the commands that are installed, a copy of the shim template with its tool section filled in for the command being wrapped, a check that every route to the command finds the copy first, path-prepend entries for replacement commands, and where a command that broke inside the isolation belongs; asks first whether the profile or the shim is kept elsewhere and then proposes instead of writing. Use when the user asks to set up, adjust, or review their kakoi profile, install a shim for a command, or work out why a command inside the isolation cannot see, write, or reach something."
+description: "Adapt a kakoi installation to this machine: propose profile entries for the commands that are installed, a copy of the shim template with its tool section filled in for the command being wrapped, a check that every route to the command finds the copy first, path-prepend entries for replacement commands, where a command that broke inside the isolation belongs, and, for filtered network mode, whether the installed pasta is new enough; asks first whether the profile or the shim is kept elsewhere and then proposes instead of writing. Use when the user asks to set up, adjust, or review their kakoi profile, install a shim for a command, or work out why a command inside the isolation cannot see, write, or reach something."
 ---
 
 # kakoi setup
@@ -142,6 +142,20 @@ mode that asks for approval before a write.
    lines and the configuration directory reflects them, use `--print-plan=full` for both
    plans, check that the items you proposed appear in the merged policy, and say so if they
    do not.
+
+8. **When the user uses the `filtered` network mode or wants to, check that `pasta` is new
+   enough.** Do this only then: `host` and `none` do not use `pasta`, so otherwise skip it.
+   The check and the install steps live in one document, "docs/pasta.md", at
+   https://github.com/ba0918/kakoi/blob/main/docs/pasta.md (the page `kakoi`'s own diagnostic
+   names). Read it each time; do not work from a copy of its names or steps in this skill or
+   from memory. Take from it the long option names `kakoi` passes to `pasta`, run
+   `pasta --help` on the host, and check that its output lists every one of those names as a
+   whole word, the way the document's check does. Say which `pasta` you checked
+   (`command -v pasta`). If any name is missing, tell the user which ones, and show the steps
+   the document gives for installing a newer `pasta`, pointing them to the document. The user
+   installs it: do not install a package, build, copy, or download `pasta` yourself, and do not
+   change their `PATH` (item 2 of "What to keep to"). Once they say it is done, run the check
+   again.
 
 ## What to keep to
 
