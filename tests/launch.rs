@@ -2288,16 +2288,10 @@ fn the_full_plan_shows_descriptors_as_symbols_not_numbers() {
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
     let plan = String::from_utf8(output.stdout).unwrap();
-    let arguments: Vec<&str> = plan
-        .split_once("bwrap arguments:\n")
-        .unwrap_or_else(|| panic!("no bwrap arguments: {report}"))
-        .1
-        .lines()
-        .map(str::trim)
-        .collect();
+    let words: Vec<&str> = plan.split_whitespace().collect();
     // The bwrap options whose first value is a file descriptor.
     let taking_a_descriptor = ["--seccomp", "--file", "--ro-bind-data", "--bind-data"];
-    let descriptors: Vec<&str> = arguments
+    let descriptors: Vec<&str> = words
         .windows(2)
         .filter(|pair| taking_a_descriptor.contains(&pair[0]))
         .map(|pair| pair[1])
