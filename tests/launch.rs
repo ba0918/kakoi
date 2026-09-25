@@ -205,7 +205,7 @@ fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
     assert_diagnostic(&output, 125, "policy");
 }
 
-// @kotowari[REQ-291]
+// @kotowari[REQ-291, EX-527]
 #[test]
 fn a_command_signal_passes_through_as_128_plus_s() {
     let (home, workspace) = home_with_workspace();
