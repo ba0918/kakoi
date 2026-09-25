@@ -3,7 +3,7 @@
 /// The managed resolver inside each filtered application network namespace.
 pub const DNS_RESOLVER_ADDRESS: std::net::Ipv4Addr = std::net::Ipv4Addr::new(127, 0, 0, 53);
 
-use std::num::NonZeroU16;
+use std::{collections::HashMap, num::NonZeroU16};
 
 use serde::{Deserialize, Serialize};
 
@@ -16,14 +16,14 @@ pub use address::{parse_ip, IpNetwork};
 mod allow;
 pub use allow::{Allow, Destination};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
     Tcp,
     Udp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IpFamily {
     #[default]
@@ -82,20 +82,25 @@ pub fn merge_publications(
     entries: impl IntoIterator<Item = FixedPublication>,
 ) -> Result<Vec<FixedPublication>, String> {
     let mut merged: Vec<FixedPublication> = Vec::new();
+    let mut ports = HashMap::new();
+    let mut host_ports = HashMap::new();
     for entry in entries {
-        if merged.contains(&entry) {
+        let port = (entry.protocol, entry.family, entry.port);
+        let host_port = (entry.protocol, entry.family, entry.host_port);
+        if ports
+            .get(&port)
+            .is_some_and(|&index| merged[index] == entry)
+        {
             continue;
         }
-        if merged.iter().any(|existing| {
-            existing.protocol == entry.protocol
-                && existing.family == entry.family
-                && (existing.port == entry.port || existing.host_port == entry.host_port)
-        }) {
+        if ports.contains_key(&port) || host_ports.contains_key(&host_port) {
             return Err(format!(
                 "conflicting `network.publish` assignment: {:?} {:?} port {} host-port {}",
                 entry.protocol, entry.family, entry.port, entry.host_port
             ));
         }
+        ports.insert(port, merged.len());
+        host_ports.insert(host_port, merged.len());
         merged.push(entry);
     }
     Ok(merged)
