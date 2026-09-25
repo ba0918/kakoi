@@ -264,7 +264,12 @@ impl Pasta {
                 )));
             }
             if !self.is_running()? {
-                return Err(Failure::Exited);
+                // A stopped pasta has not exited, so its options say nothing
+                // about its age; it fails with the same text but no diagnosis.
+                if self.child.try_wait()?.is_some() {
+                    return Err(Failure::Exited);
+                }
+                return Err(io::Error::other("pasta exited during startup").into());
             }
             let mut buffer = [0; 32];
             match (!pipe_closed).then(|| self.readiness.read(&mut buffer)) {
