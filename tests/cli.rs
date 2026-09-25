@@ -1075,7 +1075,7 @@ fn home_without_a_configuration_directory() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
-// @kotowari[REQ-154]
+// @kotowari[REQ-154, EX-356]
 #[test]
 fn the_built_in_default_is_used_when_default_toml_is_absent() {
     // The state of a new machine: nothing has been written to the configuration directory,
