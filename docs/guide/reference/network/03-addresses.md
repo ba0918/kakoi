@@ -171,7 +171,7 @@ IPv6 のリンクローカル宛先は、どのネットワークにつながる
 初版の filtered は、`host-interface` を含む宛先を書いたポリシーを、ポリシーの合成の段階で種類 `policy` の診断として拒否する（[ネットワークモード](01-modes.md)）。
 
 ### 接続口の指定
-<!-- @kotowari[REQ-052:fc9e8a7f, REQ-053:68d80a0e, EX-099:89d14907, EX-100:26183afb, EX-101:8fb69689, EX-102:4912bc67] -->
+<!-- @kotowari[REQ-052:c1e9d298, REQ-053:f85af996, EX-099:89d14907, EX-100:26183afb, EX-101:8fb69689, EX-102:4912bc67] -->
 
 IPv6 のリンクローカル宛先を個別に許可するときは、接続先が属する接続口の名前を `destination` の `host-interface` に書く。
 `host-interface` が無ければ入力エラーになる。
@@ -217,7 +217,7 @@ ports = ["443"]
 1 つ目の許可だけでは通らない。
 
 ### 接続口が無いとき、消えたとき、戻ったとき
-<!-- @kotowari[REQ-054:0a25334b, REQ-055:0c4551e6, REQ-056:c1b2cace, EX-103:1674e7bc, EX-104:f418605c, EX-105:5cae3364] -->
+<!-- @kotowari[REQ-054:aff2ad9c, REQ-055:81479900, REQ-056:1796ad6c, EX-103:1674e7bc, EX-104:f418605c, EX-105:5cae3364] -->
 
 `host-interface` に書いた接続口の有無によって、kakoi は次のように動く。
 

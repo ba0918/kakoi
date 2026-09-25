@@ -4,6 +4,8 @@ UDP公開の対応範囲と対象を定義する草案。ソケットの検出�
 
 後続の動的公開の要求。A158/A159により初版の対象から分離した。本文の初版は動的公開の初回提供を指す。初版の固定公開はnetwork/network-initial-release.mdで定義する。
 
+- deferred: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A158, docs/decision/brainstorm/2026-09-15-kakoi-net.md#A159
+
 ## Requirements
 
 ### REQ-040: UDP公開の初版対応
