@@ -77,17 +77,34 @@ pub struct Traversal {
 /// existing part of a missing secret file's path is checked too (specification
 /// section 5.6). A relative path is not walked.
 pub fn traverse(path: &Path) -> Traversal {
+    walk(path).0
+}
+
+/// The real path behind the absolute `path`, found by the same walk as [`traverse`] and so
+/// with the same limit of `LINK_LIMIT` links, whatever the C library's `realpath` allows;
+/// `None` when the walk stops before the last name.
+pub fn resolve(path: &Path) -> Option<PathBuf> {
+    walk(path).1
+}
+
+fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
     let mut traversal = Traversal::default();
     if !path.is_absolute() {
-        return traversal;
+        return (traversal, None);
     }
     let mut resolved = PathBuf::from("/");
     let mut remaining = names_of(path);
     let mut followed = 0;
+    let mut complete = true;
     while let Some(name) = remaining.pop_front() {
         // `name` (`..` included) is looked up in `resolved`, so `resolved` is consulted.
         if !traversal.directories.contains(&resolved) {
             traversal.directories.push(resolved.clone());
+        }
+        // A name after one that is not a directory, `..` included, names nothing.
+        if !fs::metadata(&resolved).is_ok_and(|metadata| metadata.is_dir()) {
+            complete = false;
+            break;
         }
         if name == ".." {
             resolved.pop();
@@ -95,6 +112,7 @@ pub fn traverse(path: &Path) -> Traversal {
         }
         let candidate = resolved.join(&name);
         let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+            complete = false;
             break;
         };
         if !metadata.file_type().is_symlink() {
@@ -103,11 +121,13 @@ pub fn traverse(path: &Path) -> Traversal {
         }
         followed += 1;
         if followed > LINK_LIMIT {
+            complete = false;
             break;
         }
         let target = fs::read_link(&candidate);
         traversal.links.push(candidate);
         let Ok(target) = target else {
+            complete = false;
             break;
         };
         if target.is_absolute() {
@@ -117,7 +137,8 @@ pub fn traverse(path: &Path) -> Traversal {
             remaining.push_front(name);
         }
     }
-    traversal
+    let real = complete.then_some(resolved);
+    (traversal, real)
 }
 
 /// The names of `path` in order, `..` included and `.` and the root left out.

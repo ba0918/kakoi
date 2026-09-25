@@ -15,7 +15,17 @@ use crate::variables::{
 
 /// What exists behind `path`, following symbolic links.
 pub fn real_entry(path: &Path) -> RealEntry {
-    let Ok(real) = fs::canonicalize(path) else {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        match std::env::current_dir() {
+            Ok(cwd) => cwd.join(path),
+            Err(_) => return RealEntry::Missing,
+        }
+    };
+    // Not `fs::canonicalize`: the C library's `realpath` has its own link limit (musl stops
+    // one link sooner than glibc), and specification section 5.6 fixes the limit at 40.
+    let Some(real) = crate::mount_facts::resolve(&absolute) else {
         return RealEntry::Missing;
     };
     match fs::metadata(&real) {
