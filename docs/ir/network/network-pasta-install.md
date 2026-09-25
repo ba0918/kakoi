@@ -15,26 +15,26 @@ filteredの起動でホストのPATHにpastaが見つからないとき、kakoi�
 ### REQ-430: 必要なオプションを持たないpastaの診断
 
 - kind: event_driven
-- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A1, docs/decision/brainstorm/2026-09-25-pasta-install.md#A4, docs/decision/brainstorm/2026-09-25-pasta-install.md#A5, docs/decision/brainstorm/2026-09-25-pasta-install.md#A10, docs/decision/brainstorm/2026-09-25-pasta-install.md#A18, docs/decision/brainstorm/2026-09-25-pasta-install.md#A19, docs/decision/brainstorm/2026-09-25-pasta-install.md#A20, docs/decision/brainstorm/2026-09-25-pasta-install.md#A22, docs/decision/brainstorm/2026-09-25-pasta-install.md#A7
+- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A1, docs/decision/brainstorm/2026-09-25-pasta-install.md#A4, docs/decision/brainstorm/2026-09-25-pasta-install.md#A5, docs/decision/brainstorm/2026-09-25-pasta-install.md#A10, docs/decision/brainstorm/2026-09-25-pasta-install.md#A18, docs/decision/brainstorm/2026-09-25-pasta-install.md#A19, docs/decision/brainstorm/2026-09-25-pasta-install.md#A20, docs/decision/brainstorm/2026-09-25-pasta-install.md#A22, docs/decision/brainstorm/2026-09-25-pasta-install.md#A7, docs/decision/brainstorm/2026-09-25-pasta-install.md#A23
 - verification: unit
 
-filteredの最初の起動で、準備完了の合図より前にpastaのプロセスが終了したとき（起動用のパイプが先に閉じてから終了を確かめた場合を含む）、kakoiは同じpastaを "--help" 付きで実行し、標準出力と標準エラーを合わせた出力に、確かめる名前がそれぞれ載っているかを確かめる。確かめる名前は、filteredの2段のpastaにkakoiが "--" で始まる長い名前で渡すオプションを合わせたもので、pastaの引数を組み立てるときと同じ一覧から取る。名前は、前後が空白、カンマ、行の端のどれかである出現を載っているとみなす。載っていない名前が1つ以上あれば、種類bwrapの診断を出して125で終わる。その説明文は載っていない名前をすべてと、導入手順の文書のURL "https://github.com/ba0918/kakoi/blob/main/docs/pasta.md" を含み、pastaの出力を含まない。
+filteredの最初の起動で、準備完了の合図より前にpastaのプロセスが終了したとき（起動用のパイプが先に閉じてから、残りの起動の期限の中で終了を確かめた場合を含む。待つ間もpastaの標準エラーを読み続ける）、kakoiは同じpastaを "--help" 付きで実行し、標準出力と標準エラーを合わせた出力に、確かめる名前がそれぞれ載っているかを確かめる。確かめる名前は、filteredの2段のpastaにkakoiが "--" で始まる長い名前で渡すオプションを合わせたもので、pastaの引数を組み立てるときと同じ一覧から取る。名前は、前後が空白、カンマ、行の端のどれかである出現を載っているとみなす。載っていない名前が1つ以上あれば、種類bwrapの診断を出して125で終わる。その説明文は載っていない名前をすべてと、導入手順の文書のURL "https://github.com/ba0918/kakoi/blob/main/docs/pasta.md" を含み、pastaの出力を含まない。
 
 ### REQ-431: 古さを確かめない場合
 
 - kind: prohibition
-- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A4, docs/decision/brainstorm/2026-09-25-pasta-install.md#A19, docs/decision/brainstorm/2026-09-25-pasta-install.md#A22
+- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A4, docs/decision/brainstorm/2026-09-25-pasta-install.md#A19, docs/decision/brainstorm/2026-09-25-pasta-install.md#A22, docs/decision/brainstorm/2026-09-25-pasta-install.md#A23
 - verification: unit
 
-kakoiは次の場合にpastaを "--help" 付きで実行しない。filteredの起動でpastaが起動に成功したとき。pastaの起動がタイムアウト、PIDの不正、取り消しで終わったとき。通信障害から立ち直るときのpastaの再起動が失敗したとき。"--print-plan" のとき。
+kakoiは次の場合にpastaを "--help" 付きで実行しない。filteredの起動でpastaが起動に成功したとき。pastaの起動がタイムアウト、PIDの不正、取り消しで終わったとき。起動用のパイプが閉じた後、残りの起動の期限までにpastaが終了しなかったとき。通信障害から立ち直るときのpastaの再起動が失敗したとき。"--print-plan" のとき。
 
 ### REQ-432: 古さ以外で終了したpastaの診断
 
 - kind: event_driven
-- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A11, docs/decision/brainstorm/2026-09-25-pasta-install.md#A18, docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-25-pasta-install.md#A11, docs/decision/brainstorm/2026-09-25-pasta-install.md#A18, docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-pasta-install.md#A24
 - verification: unit
 
-REQ-430の "--help" 付きの実行が失敗したとき（実行できなかった、または標準出力と標準エラーを合わせた出力が空だった）、または確かめる名前がすべて載っていたとき、kakoiは種類bwrapの診断に、pastaが終了時に出した理由を付けて125で終わる。この場合、診断は導入手順の文書へ案内しない。"--help" 付きの実行の終了コードでは判定しない。
+REQ-430の "--help" 付きの実行が失敗したとき（実行できなかった、残りの起動の期限を過ぎても終わらなかった、または標準出力と標準エラーを合わせた出力が空だった）、または確かめる名前がすべて載っていたとき、kakoiは種類bwrapの診断に、pastaが終了時に出した理由を付けて125で終わる。この場合、診断は導入手順の文書へ案内しない。"--help" 付きの実行の終了コードでは判定しない。
 
 ### REQ-433: pastaをPATHだけから探す
 
@@ -159,6 +159,13 @@ Scenario: helpの終了コードでは判定しない
   Given PATHのpastaは起動で "startup failed by test" を出して終了し、"--help" では標準出力にkakoiが長い名前で渡すオプションをすべて載せて1で終わる
   When filteredで起動する
   Then 説明文に "startup failed by test" が含まれ、導入手順の文書のURLは含まれない
+
+@id=EX-845 @about=REQ-432 @source=docs/decision/brainstorm/2026-09-25-pasta-install.md#A24,docs/decision/brainstorm/2026-09-25-pasta-install.md#A11,docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+Scenario: 終わらないhelpでは古いと決めつけない
+  Given PATHのpastaは起動で "startup failed by test" を出して終了し、"--help" では何も出さずに動き続ける
+  When filteredで起動する
+  Then 起動の期限を過ぎたところで種類bwrapの診断を出して125で終わる
+  And 説明文に "startup failed by test" が含まれ、導入手順の文書のURLは含まれない
 
 @id=EX-833 @about=REQ-433 @source=docs/decision/brainstorm/2026-09-25-pasta-install.md#A8
 Scenario: PATHの前に置いた新しいpastaを使う
