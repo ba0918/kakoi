@@ -520,7 +520,7 @@ fn home_with_workspace() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
-// @kotowari[REQ-307]
+// @kotowari[REQ-307, EX-540]
 #[test]
 fn a_missing_bwrap_is_a_bwrap_diagnostic() {
     let (home, workspace) = home_with_workspace();
@@ -866,7 +866,7 @@ fn a_workspace_under_an_rw_cache_given_from_elsewhere_is_accepted_until_rewired(
     }
 }
 
-// @kotowari[REQ-160]
+// @kotowari[REQ-160, EX-368]
 #[test]
 fn a_workspace_under_an_rw_worktree_is_accepted_only_from_inside_it() {
     let home = TempDir::new();
@@ -944,7 +944,7 @@ fn a_workspace_under_an_rw_worktree_rewired_to_elsewhere_is_a_path_diagnostic_na
     }
 }
 
-// @kotowari[REQ-160]
+// @kotowari[REQ-160, EX-369]
 #[test]
 fn a_rewired_workspace_is_not_vouched_for_by_a_literal_form_merging_into_the_same_item() {
     // `rw = ["${worktree}", "~/proj/sub"]` after `proj/sub` was replaced by a link to
@@ -1032,7 +1032,7 @@ fn a_workspace_resolved_only_through_places_that_are_no_item_is_accepted() {
     assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
 }
 
-// @kotowari[REQ-159]
+// @kotowari[REQ-159, EX-366]
 #[test]
 fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
     for (name, directive) in [("hide", "hide"), ("rw-file", "rw-file")] {
@@ -1155,4 +1155,438 @@ fn a_missing_configuration_directory_leaves_config_dir_valueless() {
         "{:?}",
         isolation.mounts.items
     );
+}
+
+// Loading and merging the policy, and the placement checks, seen from the built binary
+// (specification: `docs/ir/core/core-policy.md`, `docs/ir/core/core-policy-placement.md`).
+
+/// A home whose profile is `profile`, with a workspace directory `ws` under it.
+fn home_with_profile(profile: &str) -> (TempDir, PathBuf) {
+    let (home, workspace) = home_with_workspace();
+    home.write(".config/kakoi/profile/default.toml", profile);
+    (home, workspace)
+}
+
+const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
+
+/// The binary started from `workspace` with `--workspace workspace`, `arguments` after it,
+/// and `--print-plan=json`.
+fn plan_output(home: &TempDir, workspace: &Path, arguments: &[&str]) -> std::process::Output {
+    binary(home.path())
+        .current_dir(workspace)
+        .args(["--workspace", workspace.to_str().unwrap()])
+        .args(arguments)
+        .arg("--print-plan=json")
+        .output()
+        .unwrap()
+}
+
+/// The JSON plan of a run that exited 0.
+fn plan_json(output: &std::process::Output) -> serde_json::Value {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
+}
+
+/// The directives of the items `plan` mounts at `path`.
+fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
+    plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["path"] == path.to_str().unwrap())
+        .map(|item| item["directive"].as_str().unwrap())
+        .collect()
+}
+
+// @kotowari[EX-350]
+#[test]
+fn an_empty_policy_file_is_accepted() {
+    let (home, workspace) = home_with_profile(RW_WORKSPACE);
+    let empty = home.write("empty.toml", "");
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", empty.to_str().unwrap()],
+    );
+
+    let plan = plan_json(&output);
+    assert!(
+        plan["policy_sources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|source| source["path"] == empty.to_str().unwrap()),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-351]
+#[test]
+fn an_unknown_fixed_key_is_a_policy_diagnostic() {
+    let (home, workspace) = home_with_profile(RW_WORKSPACE);
+    let unknown = home.write("unknown.toml", "mount = []\n");
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", unknown.to_str().unwrap()],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-352]
+#[test]
+fn a_tilde_expands_to_the_real_path_of_home() {
+    let base = TempDir::new();
+    let real_home = base.path().join("real");
+    let workspace = real_home.join("ws");
+    let cache = real_home.join("cache");
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::create_dir(&cache).unwrap();
+    base.write(
+        "real/.config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}ro = [\"~/cache\"]\n"),
+    );
+    let linked_home = base.path().join("link");
+    std::os::unix::fs::symlink(&real_home, &linked_home).unwrap();
+
+    let output = binary(&linked_home)
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ])
+        .output()
+        .unwrap();
+
+    let plan = plan_json(&output);
+    assert_eq!(
+        directives_at(&plan, &cache.canonicalize().unwrap()),
+        ["ro"],
+        "{plan}"
+    );
+}
+
+/// Runs git in `cwd` with no configuration but its own.
+fn git(cwd: &Path, arguments: &[&str]) {
+    let output = std::process::Command::new("git")
+        .current_dir(cwd)
+        .args(arguments)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+        .env("GIT_COMMITTER_NAME", "test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "git {arguments:?}: {output:?}");
+}
+
+// @kotowari[EX-353, EX-539]
+#[test]
+fn a_linked_worktree_needs_a_regular_head_in_the_common_directory_but_not_its_content() {
+    use std::os::unix::fs::PermissionsExt;
+    let (home, _) = home_with_profile("[mounts]\nrw = [\"${worktree}\"]\n");
+    let main = home.path().join("main");
+    std::fs::create_dir(&main).unwrap();
+    git(&main, &["init", "-q"]);
+    git(&main, &["commit", "-q", "--allow-empty", "-m", "first"]);
+    git(&main, &["worktree", "add", "-q", "../linked"]);
+    let linked = home.path().join("linked");
+    let common = main.join(".git").canonicalize().unwrap();
+    let head = common.join("HEAD");
+
+    let as_made = plan_json(&plan_output(&home, &linked, &[]));
+    assert_eq!(
+        as_made["variables"]["git_common_dir"],
+        common.to_str().unwrap(),
+        "{as_made}"
+    );
+
+    std::fs::set_permissions(&head, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let unreadable = plan_output(&home, &linked, &[]);
+    std::fs::set_permissions(&head, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let unreadable = plan_json(&unreadable);
+    assert_eq!(
+        unreadable["variables"]["git_common_dir"],
+        common.to_str().unwrap(),
+        "{unreadable}"
+    );
+
+    let content = std::fs::read(&head).unwrap();
+    std::fs::remove_file(&head).unwrap();
+    assert_diagnostic(&plan_output(&home, &linked, &[]), 125, "path");
+
+    std::fs::create_dir(&head).unwrap();
+    assert_diagnostic(&plan_output(&home, &linked, &[]), 125, "path");
+    std::fs::remove_dir(&head).unwrap();
+    std::fs::write(&head, content).unwrap();
+}
+
+// @kotowari[EX-354]
+#[test]
+fn an_item_with_a_valueless_variable_is_skipped_with_a_reason() {
+    let (home, workspace) =
+        home_with_profile("[mounts]\nrw = [\"${workspace}\", \"${git_common_dir}\"]\n");
+
+    let plan = plan_json(&plan_output(&home, &workspace, &[]));
+
+    assert_eq!(plan["variables"]["git_common_dir"], serde_json::Value::Null);
+    let skipped = plan["skipped_mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["written"] == "${git_common_dir}")
+        .unwrap_or_else(|| panic!("the item is not skipped: {plan}"));
+    assert!(
+        !skipped["reason"].as_str().unwrap_or_default().is_empty(),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-355, EX-515]
+#[test]
+fn a_variable_in_an_env_set_value_is_not_expanded() {
+    let (home, workspace) = home_with_profile(&format!(
+        "{RW_WORKSPACE}[env]\nset = {{ FOO = \"${{worktree}}\" }}\n"
+    ));
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            "printf '[%s]' \"$FOO\"",
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"[${worktree}]", "{report}");
+}
+
+// @kotowari[EX-357]
+#[test]
+fn a_broken_link_at_default_toml_is_a_policy_diagnostic_not_the_built_in_default() {
+    let (home, workspace) = home_with_workspace();
+    let profile = home.path().join(".config/kakoi/profile/default.toml");
+    std::fs::remove_file(&profile).unwrap();
+    std::os::unix::fs::symlink(home.path().join("nowhere"), &profile).unwrap();
+
+    let output = plan_output(&home, &workspace, &[]);
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-358]
+#[test]
+fn star_matches_a_name_with_a_leading_dot() {
+    let (home, workspace) = home_with_profile(&format!(
+        "{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\"*\"]\n"
+    ));
+    let env_file = home.write("ws/.env", "SECRET=x\n");
+
+    let plan = plan_json(&plan_output(&home, &workspace, &[]));
+
+    assert_eq!(
+        directives_at(&plan, &env_file.canonicalize().unwrap()),
+        ["hide"],
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-359]
+#[test]
+fn a_key_in_both_env_set_and_secrets_after_merging_is_a_policy_diagnostic() {
+    let (home, workspace) =
+        home_with_profile(&format!("{RW_WORKSPACE}[env]\nset = {{ TOKEN = \"x\" }}\n"));
+    home.write(".config/kakoi/secrets/token", "FAKE\n");
+    let policy_file = home.write(
+        "p.toml",
+        "[secrets]\nTOKEN = \"${config_dir}/secrets/token\"\n",
+    );
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-360]
+#[test]
+fn an_upper_layer_rw_replaces_a_lower_layer_hide_on_the_same_real_path() {
+    let (home, workspace) = home_with_profile(&format!("{RW_WORKSPACE}hide = [\"~/d\"]\n"));
+    let directory = home.path().join("d");
+    std::fs::create_dir(&directory).unwrap();
+    let policy_file = home.write("p.toml", "[mounts]\nrw = [\"~/d\"]\n");
+
+    let plan = plan_json(&plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    ));
+
+    assert_eq!(
+        directives_at(&plan, &directory.canonicalize().unwrap()),
+        ["rw"],
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-361]
+#[test]
+fn rw_and_hide_on_one_real_path_in_a_policy_file_is_a_policy_diagnostic() {
+    let (home, workspace) = home_with_profile(RW_WORKSPACE);
+    std::fs::create_dir(home.path().join("d")).unwrap();
+    let policy_file = home.write("p.toml", "[mounts]\nrw = [\"~/d\"]\nhide = [\"~/d\"]\n");
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-362]
+#[test]
+fn pass_is_accepted_when_an_upper_layer_writes_clear_over_a_lower_inherit() {
+    let (home, workspace) =
+        home_with_profile(&format!("{RW_WORKSPACE}[env]\nmode = \"inherit\"\n"));
+    let policy_file = home.write("p.toml", "[env]\nmode = \"clear\"\npass = [\"FOO\"]\n");
+
+    let output = binary(home.path())
+        .env("FOO", "passed")
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--policy-file",
+            policy_file.to_str().unwrap(),
+            "--print-plan=json",
+        ])
+        .output()
+        .unwrap();
+
+    let plan = plan_json(&output);
+    assert_eq!(plan["environment"]["FOO"], "passed", "{plan}");
+}
+
+// @kotowari[EX-363]
+#[test]
+fn pass_under_a_merged_inherit_is_a_policy_diagnostic() {
+    let (home, workspace) =
+        home_with_profile(&format!("{RW_WORKSPACE}[env]\nmode = \"inherit\"\n"));
+    let policy_file = home.write("p.toml", "[env]\npass = [\"FOO\"]\n");
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-364]
+#[test]
+fn a_policy_file_whose_parent_is_rw_copy_is_not_refused_for_it() {
+    let (home, workspace) = home_with_profile(&format!("{RW_WORKSPACE}rw-copy = [\"~/pdir\"]\n"));
+    let policy_file = home.write("pdir/p.toml", "");
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+// @kotowari[EX-365]
+#[test]
+fn a_policy_file_whose_parent_is_rw_is_a_path_diagnostic() {
+    let (home, workspace) = home_with_profile("[mounts]\nrw = [\"${workspace}\", \"~/pdir\"]\n");
+    let policy_file = home.write("pdir/p.toml", "");
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    );
+
+    assert_diagnostic(&output, 125, "path");
+}
+
+// @kotowari[EX-367]
+#[test]
+fn a_hide_through_a_link_inside_an_rw_is_a_path_diagnostic_even_landing_inside_it() {
+    let (home, workspace) = home_with_profile(RW_WORKSPACE);
+    std::fs::create_dir(workspace.join("real")).unwrap();
+    let link = workspace.join("link");
+    std::os::unix::fs::symlink(workspace.join("real"), &link).unwrap();
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}hide = [\"{}\"]\n", link.display()),
+    );
+
+    let output = plan_output(&home, &workspace, &[]);
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains(link.to_str().unwrap()), "{diagnostic}");
+}
+
+// @kotowari[EX-370]
+#[test]
+fn an_ro_through_a_link_inside_an_rw_over_another_ro_is_not_refused_for_it() {
+    let (home, workspace) = home_with_profile(&format!("{RW_WORKSPACE}ro = [\"~/r\"]\n"));
+    let target = home.path().join("r");
+    std::fs::create_dir(&target).unwrap();
+    let link = workspace.join("link");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let policy_file = home.write(
+        "p.toml",
+        format!("[mounts]\nro = [\"{}\"]\n", link.display()),
+    );
+
+    let output = plan_output(
+        &home,
+        &workspace,
+        &["--policy-file", policy_file.to_str().unwrap()],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+}
+
+// @kotowari[EX-371]
+#[test]
+fn an_ro_through_a_link_inside_an_rw_into_a_hide_is_a_path_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    std::fs::create_dir_all(home.path().join("h/sub")).unwrap();
+    let link = workspace.join("link");
+    std::os::unix::fs::symlink(home.path().join("h/sub"), &link).unwrap();
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "{RW_WORKSPACE}hide = [\"~/h\"]\nro = [\"{}\"]\n",
+            link.display()
+        ),
+    );
+
+    let output = plan_output(&home, &workspace, &[]);
+
+    assert_diagnostic(&output, 125, "path");
 }

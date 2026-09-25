@@ -318,7 +318,7 @@ fn the_equals_form_means_the_same_as_the_separated_form() {
     assert_eq!(invocation.workspace, Some(PathBuf::from("w")));
 }
 
-// @kotowari[REQ-255]
+// @kotowari[REQ-255, EX-495]
 #[test]
 fn help_from_a_deleted_current_directory_exits_zero() {
     let home = TempDir::new();
@@ -376,7 +376,7 @@ fn a_relative_home_under_a_usable_current_directory_is_an_env_diagnostic() {
     assert_diagnostic(&output, 125, "env");
 }
 
-// @kotowari[REQ-293]
+// @kotowari[REQ-293, EX-529]
 #[test]
 fn a_bad_home_beside_a_broken_profile_is_an_env_diagnostic() {
     let home = TempDir::new();
@@ -407,7 +407,7 @@ fn a_broken_profile_beside_a_missing_workspace_is_a_policy_diagnostic() {
     assert_diagnostic(&output, 125, "policy");
 }
 
-// @kotowari[REQ-288, REQ-290]
+// @kotowari[REQ-288, REQ-290, EX-524]
 #[test]
 fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
     let (home, workspace) = home_with_workspace();
@@ -429,7 +429,7 @@ fn a_policy_diagnostic_exits_125_with_one_stderr_line() {
     assert_diagnostic(&output, 125, "policy");
 }
 
-// @kotowari[REQ-292]
+// @kotowari[REQ-292, EX-528]
 #[test]
 fn print_plan_with_a_diagnostic_prints_no_plan() {
     let (home, workspace) = home_with_workspace();
@@ -730,7 +730,7 @@ fn the_summary_shows_the_changes_to_the_environment_and_shortens_the_home() {
     );
 }
 
-// @kotowari[REQ-289]
+// @kotowari[REQ-289, EX-525]
 #[test]
 fn a_control_character_in_a_warning_is_escaped() {
     let (home, workspace) = home_with_workspace();
@@ -874,7 +874,7 @@ fn a_nested_launch_passes_the_given_name_as_argv0() {
     assert_eq!(output.stdout, b"sh\n", "{report}");
 }
 
-// @kotowari[REQ-262, REQ-290]
+// @kotowari[REQ-262, REQ-290, EX-502]
 #[test]
 fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
     // The command is found, but its exec fails (specification sections 4.2 and 12.1): one
@@ -1075,7 +1075,7 @@ fn home_without_a_configuration_directory() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
-// @kotowari[REQ-154]
+// @kotowari[REQ-154, EX-356]
 #[test]
 fn the_built_in_default_is_used_when_default_toml_is_absent() {
     // The state of a new machine: nothing has been written to the configuration directory,
@@ -1311,7 +1311,7 @@ fn bundled_profile() -> Vec<u8> {
     .unwrap()
 }
 
-// @kotowari[REQ-256]
+// @kotowari[REQ-256, EX-496]
 #[test]
 fn init_writes_the_built_in_default_and_prints_its_path() {
     let home = TempDir::new();
@@ -1384,7 +1384,7 @@ fn init_takes_a_profile_name() {
     );
 }
 
-// @kotowari[REQ-257]
+// @kotowari[REQ-257, EX-497]
 #[test]
 fn init_narrows_an_existing_secrets_directory_to_0700() {
     // The install instructions before `init` had the user make the directory by hand, where
@@ -1616,4 +1616,546 @@ fn the_built_in_default_starts_without_a_warning() {
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
     assert!(output.stderr.is_empty(), "{report}");
+}
+
+/// The plan the binary prints with `--print-plan=json`, after checking it exited 0.
+fn json_plan(output: &std::process::Output) -> serde_json::Value {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
+}
+
+// @kotowari[EX-491]
+#[test]
+fn init_with_a_name_that_climbs_out_of_profile_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    let output = run(home.path(), ["init", "../x"]);
+
+    assert_diagnostic(&output, 125, "usage");
+}
+
+// @kotowari[EX-492]
+#[test]
+fn repeated_rw_options_are_all_kept_in_the_order_given() {
+    let (home, workspace) = home_with_workspace();
+    let first = home.path().join("a");
+    let second = home.path().join("b");
+
+    for order in [[&first, &second], [&second, &first]] {
+        let output = run(
+            home.path(),
+            [
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--rw",
+                order[0].to_str().unwrap(),
+                "--rw",
+                order[1].to_str().unwrap(),
+                "--print-plan=json",
+            ],
+        );
+
+        let plan = json_plan(&output);
+        let from_the_command_line: Vec<&str> = plan["policy"]["mounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["origin"]["kind"] == "command-line")
+            .map(|entry| {
+                assert_eq!(entry["directive"], "rw");
+                entry["path"].as_str().unwrap()
+            })
+            .collect();
+        assert_eq!(
+            from_the_command_line,
+            [order[0].to_str().unwrap(), order[1].to_str().unwrap()],
+            "{}",
+            output_report(&output)
+        );
+    }
+}
+
+// @kotowari[EX-493]
+#[test]
+fn a_print_plan_form_given_as_a_separate_word_is_a_usage_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan",
+            "full",
+        ],
+    );
+
+    assert_diagnostic(&output, 125, "usage");
+}
+
+// @kotowari[EX-494]
+#[test]
+fn a_tilde_in_a_command_line_path_is_a_name_under_the_current_directory() {
+    let (home, workspace) = home_with_workspace();
+    let current = home.path().join("cwd");
+    std::fs::create_dir_all(current.join("~/x")).unwrap();
+    std::fs::create_dir(home.path().join("x")).unwrap();
+
+    let output = binary(home.path())
+        .current_dir(&current)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--hide",
+            "~/x",
+            "--print-plan=json",
+        ])
+        .output()
+        .unwrap();
+
+    let plan = json_plan(&output);
+    let report = output_report(&output);
+    let hidden: Vec<&str> = plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["directive"] == "hide")
+        .map(|item| item["path"].as_str().unwrap())
+        .collect();
+    let under_current = current.canonicalize().unwrap().join("~/x");
+    assert_eq!(hidden, [under_current.to_str().unwrap()], "{report}");
+}
+
+// @kotowari[EX-498]
+#[test]
+fn init_leaves_the_target_of_a_broken_link_at_the_profile_uncreated() {
+    let home = TempDir::new();
+    let profile = home.path().join(".config/kakoi/profile/default.toml");
+    std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+    let target = home.path().join("target.toml");
+    std::os::unix::fs::symlink(&target, &profile).unwrap();
+
+    let output = run(home.path(), ["init"]);
+
+    assert_diagnostic(&output, 125, "path");
+    assert!(
+        target.symlink_metadata().is_err(),
+        "{}",
+        output_report(&output)
+    );
+}
+
+// @kotowari[EX-499]
+#[test]
+fn init_under_kakoi_1_without_bwrap_succeeds_without_the_nesting_warning() {
+    let home = TempDir::new();
+    let empty_path = TempDir::new();
+
+    let output = binary(home.path())
+        .env("KAKOI", "1")
+        .env("PATH", empty_path.path())
+        .args(["init"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("kakoi: warning:"),
+        "{report}"
+    );
+    assert!(
+        home.path()
+            .join(".config/kakoi/profile/default.toml")
+            .is_file(),
+        "{report}"
+    );
+}
+
+// @kotowari[EX-500, EX-526]
+#[test]
+fn a_command_that_is_nowhere_is_command_not_found_with_127() {
+    let (home, workspace) = home_with_workspace();
+    let absent = home.path().join("opt/tool");
+
+    for command in [absent.to_str().unwrap(), "no-such-tool-anywhere"] {
+        let output = run(
+            home.path(),
+            ["--workspace", workspace.to_str().unwrap(), "--", command],
+        );
+
+        assert_diagnostic(&output, 127, "command not found");
+    }
+}
+
+// @kotowari[EX-501]
+#[test]
+fn a_nested_plan_shows_the_command_found_on_the_host_path() {
+    let (home, workspace) = home_with_workspace();
+    let host_bin = TempDir::new();
+    let host_tool = host_bin.write_executable("tool", "#!/bin/sh\n");
+    let isolated_bin = TempDir::new();
+    isolated_bin.write_executable("tool", "#!/bin/sh\n");
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "{RW_WORKSPACE}[env]\npath-prepend = [\"{}\"]\n",
+            isolated_bin.path().display()
+        ),
+    );
+    let mut host_path = vec![host_bin.path().to_path_buf()];
+    host_path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let host_path = std::env::join_paths(host_path).unwrap();
+
+    let output = binary(home.path())
+        .env("KAKOI", "1")
+        .env("PATH", &host_path)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+            "--",
+            "tool",
+        ])
+        .output()
+        .unwrap();
+
+    let plan = json_plan(&output);
+    let report = output_report(&output);
+    assert_ne!(
+        plan["environment"]["PATH"].as_str(),
+        host_path.to_str(),
+        "the isolated PATH should differ from the host's: {report}"
+    );
+    assert_eq!(
+        plan["command"]["path"],
+        host_tool.canonicalize().unwrap().to_str().unwrap(),
+        "{report}"
+    );
+}
+
+// @kotowari[EX-530]
+#[test]
+fn a_collision_in_identity_comes_before_placement_and_secret_diagnostics() {
+    // The two directives name one real path through different spellings, so only the
+    // identity of stage 7 finds the collision; the policy file inside the `rw` workspace
+    // and the empty secret would be diagnosed later in the same stage.
+    let (home, workspace) = home_with_workspace();
+    std::fs::create_dir(home.path().join("d")).unwrap();
+    std::os::unix::fs::symlink(home.path().join("d"), home.path().join("d-link")).unwrap();
+    home.write("empty-secret", "");
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        "[mounts]\nrw = [\"${workspace}\", \"~/d\"]\nhide = [\"~/d-link\"]\n\
+         [secrets]\nEMPTY = \"~/empty-secret\"\n",
+    );
+    let policy_file = home.write("ws/p.toml", "");
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--policy-file",
+            policy_file.to_str().unwrap(),
+            "--print-plan",
+        ],
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-531]
+#[test]
+fn of_two_bad_scan_links_the_first_in_byte_order_is_named() {
+    // The scan roots are walked in the order written, `s2` first, so the link under `s2`
+    // is found before the one under `s1`; both land in an `ro` item written through a link
+    // inside the `rw` workspace, which could be re-pointed from inside.
+    let (home, workspace) = home_with_workspace();
+    home.write("t/x", "kept\n");
+    std::os::unix::fs::symlink(home.path().join("t"), workspace.join("ro-link")).unwrap();
+    let mut links = Vec::new();
+    for root in ["s2", "s1"] {
+        std::fs::create_dir(home.path().join(root)).unwrap();
+        let link = home.path().join(root).join(".env");
+        std::os::unix::fs::symlink(home.path().join("t/x"), &link).unwrap();
+        links.push(link);
+    }
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "[mounts]\nrw = [\"${{workspace}}\"]\nro = [\"{}\"]\n\
+             [[mounts.scan]]\nroot = \"~/s2\"\nnames = [\".env\"]\n\
+             [[mounts.scan]]\nroot = \"~/s1\"\nnames = [\".env\"]\n",
+            workspace.join("ro-link").display()
+        ),
+    );
+
+    let output = run(
+        home.path(),
+        ["--workspace", workspace.to_str().unwrap(), "--print-plan"],
+    );
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    let (found_first, first_in_byte_order) = (&links[0], &links[1]);
+    assert!(
+        diagnostic.contains(first_in_byte_order.to_str().unwrap()),
+        "{diagnostic}"
+    );
+    assert!(
+        !diagnostic.contains(found_first.to_str().unwrap()),
+        "{diagnostic}"
+    );
+}
+
+// @kotowari[EX-532]
+#[test]
+fn the_summary_counts_a_variable_as_on_the_host_and_shows_an_added_one() {
+    let (home, workspace) = home_with_workspace();
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}[env]\nset = {{ NEW = \"new-value\" }}\n"),
+    );
+    let plan = |form: &str, kept: bool| {
+        let mut command = binary(home.path());
+        if kept {
+            command.env("KEPT", "as-on-the-host");
+        }
+        command
+            .args(["--workspace", workspace.to_str().unwrap(), form])
+            .output()
+            .unwrap()
+    };
+
+    let summary = |kept: bool| {
+        let output = plan("--print-plan", kept);
+        assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    let with_kept = summary(true);
+    assert!(with_kept.contains("NEW"), "{with_kept}");
+    assert!(with_kept.contains("new-value"), "{with_kept}");
+    assert!(!with_kept.contains("KEPT"), "{with_kept}");
+    assert!(!with_kept.contains("as-on-the-host"), "{with_kept}");
+
+    // Counted: the only difference KEPT makes is one number that grows by one.
+    let without_kept = summary(false);
+    let (with_parts, without_parts) = (digit_runs(&with_kept), digit_runs(&without_kept));
+    assert_eq!(
+        with_parts.len(),
+        without_parts.len(),
+        "{with_kept}\n{without_kept}"
+    );
+    let differences: Vec<(&str, &str)> = with_parts
+        .iter()
+        .zip(&without_parts)
+        .filter(|(with, without)| with != without)
+        .map(|(with, without)| (*with, *without))
+        .collect();
+    let [(with, without)] = differences[..] else {
+        panic!("not one difference: {differences:?}\n{with_kept}\n{without_kept}");
+    };
+    let count = |part: &str| -> u64 {
+        part.parse()
+            .unwrap_or_else(|_| panic!("{part:?} is not a number\n{with_kept}\n{without_kept}"))
+    };
+    assert_eq!(
+        count(with),
+        count(without) + 1,
+        "{with_kept}\n{without_kept}"
+    );
+}
+
+/// `text` split into its maximal runs of ASCII digits and the runs between them, in order.
+fn digit_runs(text: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    for (index, character) in text.char_indices().skip(1) {
+        let previous = text[..index].chars().next_back().unwrap();
+        if previous.is_ascii_digit() != character.is_ascii_digit() {
+            parts.push(&text[start..index]);
+            start = index;
+        }
+    }
+    if start < text.len() {
+        parts.push(&text[start..]);
+    }
+    parts
+}
+
+/// A home whose profile copies `~/conf` (a regular file and a FIFO in it) and injects the
+/// secret `TOKEN` from `~/token`.
+fn home_with_a_copy_and_a_secret(copied: &str, secret: &str) -> (TempDir, PathBuf) {
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/copied", copied);
+    let fifo = std::ffi::CString::new(home.path().join("conf/pipe").to_str().unwrap()).unwrap();
+    // SAFETY: `mkfifo` reads the NUL-terminated path and makes the FIFO.
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    home.write("token", format!("{secret}\n"));
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n\
+         [secrets]\nTOKEN = \"~/token\"\n",
+    );
+    (home, workspace)
+}
+
+// @kotowari[EX-534]
+#[test]
+fn a_json_plan_with_not_copied_and_copied_files_stays_at_format_version_1() {
+    let (home, workspace) = home_with_a_copy_and_a_secret("content\n", "FAKE-TOKEN");
+
+    let plan = json_plan(&run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ],
+    ));
+
+    assert!(!plan["not_copied"].as_array().unwrap().is_empty(), "{plan}");
+    assert!(
+        plan["bwrap_arguments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|argument| argument["kind"] == "copied-file"),
+        "{plan}"
+    );
+    assert_eq!(plan["format_version"], 1, "{plan}");
+}
+
+// @kotowari[EX-535]
+#[test]
+fn a_json_plan_without_a_command_has_a_null_command_and_the_four_variables() {
+    let (home, workspace) = home_with_workspace();
+
+    let plan = json_plan(&run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ],
+    ));
+
+    assert_eq!(plan["command"], serde_json::Value::Null, "{plan}");
+    let names: std::collections::BTreeSet<&str> = plan["variables"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        names,
+        ["config_dir", "git_common_dir", "workspace", "worktree"].into(),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-536]
+#[test]
+fn a_json_plan_shows_the_kind_and_length_of_descriptors_but_no_secret_or_copied_content() {
+    let copied = "COPIED-CONTENT-not-to-be-shown\n";
+    let secret = "FAKE-SECRET-VALUE-not-a-real-credential";
+    let (home, workspace) = home_with_a_copy_and_a_secret(copied, secret);
+
+    let output = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    let plan = json_plan(&output);
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(!text.contains(secret), "{text}");
+    assert!(!text.contains(copied.trim_end()), "{text}");
+    assert_eq!(plan["environment"]["TOKEN"], serde_json::Value::Null);
+    let arguments = plan["bwrap_arguments"].as_array().unwrap();
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument["kind"] == "copied-file" && argument["bytes"] == copied.len()),
+        "{plan}"
+    );
+    for kind in ["seccomp-filter", "empty-file"] {
+        assert!(
+            arguments.iter().any(|argument| argument["kind"] == kind),
+            "{kind}: {plan}"
+        );
+    }
+}
+
+// @kotowari[EX-537]
+#[test]
+fn a_mount_from_a_secret_carries_its_origin_kind_and_name_in_json() {
+    let (home, workspace) = home_with_workspace();
+    let token = home.write("token", "FAKE-TOKEN\n");
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/token\"\n"),
+    );
+
+    let plan = json_plan(&run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ],
+    ));
+
+    let item = plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["path"] == token.canonicalize().unwrap().to_str().unwrap())
+        .unwrap_or_else(|| panic!("the secret file is not mounted: {plan}"));
+    assert_eq!(item["origin"]["kind"], "secret", "{plan}");
+    assert_eq!(item["origin"]["name"], "TOKEN", "{plan}");
+}
+
+// @kotowari[EX-538]
+#[test]
+fn two_print_plans_keep_nothing_and_give_the_same_plan() {
+    let (home, workspace) = home_with_workspace();
+    home.write("ws/.env", "SECRET=x\n");
+    home.write(".config/kakoi/secrets/token", "FAKE-TOKEN\n");
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "{RW_WORKSPACE}hide = [\"~/missing\"]\n\
+             [[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env\"]\n\
+             [secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"
+        ),
+    );
+    let arguments = [
+        "--workspace",
+        workspace.to_str().unwrap(),
+        "--print-plan=full",
+        "--",
+        "/bin/true",
+    ];
+    let before = tree(home.path());
+
+    let first = run(home.path(), arguments);
+    let after_first = tree(home.path());
+    let second = run(home.path(), arguments);
+
+    let report = format!("{}\n{}", output_report(&first), output_report(&second));
+    assert_eq!(first.status.code(), Some(0), "{report}");
+    assert_eq!(second.status.code(), Some(0), "{report}");
+    assert_eq!(after_first, before, "{report}");
+    assert_eq!(tree(home.path()), before, "{report}");
+    assert_eq!(first.stdout, second.stdout, "{report}");
 }

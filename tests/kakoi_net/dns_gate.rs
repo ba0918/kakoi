@@ -828,3 +828,49 @@ fn a_question_under_new_settings_joins_the_resolution_re_keyed_for_them() {
     let replies = requests.complete(task.id, Ok(answered(&question, 30)), now);
     assert_eq!(replies.len(), 2);
 }
+
+// A question arriving while a resolution it could share is running is checked
+// against the allow rules first: an allowed one joins, a refused one is answered
+// on its own and never joins, even with every resolution slot taken.
+// @kotowari[EX-290]
+#[test]
+fn every_question_is_authorized_before_it_may_join_a_running_resolution() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests = DnsRequests::new(
+        vec![rule("api.example.com")],
+        7,
+        1,
+        4,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    let allowed = query("api.example.com", 1);
+    let AcceptedRequest::Start(task) = requests.accept(&allowed, 1, now).unwrap() else {
+        panic!("the first question did not start a resolution")
+    };
+
+    assert!(matches!(
+        requests.accept(&allowed, 2, now).unwrap(),
+        AcceptedRequest::Waiting
+    ));
+    let AcceptedRequest::Answer(refused) =
+        requests.accept(&query("evil.invalid", 1), 3, now).unwrap()
+    else {
+        panic!("a refused question was admitted")
+    };
+    assert_eq!(refused.recipient, 3);
+    assert_eq!(refused.wire[3] & 15, 5);
+
+    let mut answer = allowed.clone();
+    answer[2] |= 0x80;
+    let replies = requests.complete(task.id, Ok(answer), now);
+    assert_eq!(
+        replies
+            .iter()
+            .map(|reply| reply.recipient)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
+}
