@@ -1180,6 +1180,37 @@ fn an_entry_an_rw_copy_cannot_reproduce_is_reported_in_the_plan_and_left_out() {
     assert_eq!(assert_ran_clean(&output), "host\nkeep.txt\n");
 }
 
+// @kotowari[EX-533]
+#[test]
+fn the_full_plan_names_an_entry_an_rw_copy_cannot_reproduce() {
+    // A socket cannot be copied into the isolation. The full plan must name it; only its
+    // path is checked, since the wording of the report is not part of the contract.
+    let (home, workspace) = home_with_workspace();
+    home.write("conf/keep.txt", "host\n");
+    let socket_path = home.path().join("conf/ipc.sock");
+    let _listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let plan = run(
+        home.path(),
+        [
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=full",
+            "--",
+            "/bin/true",
+        ],
+    );
+
+    let report = output_report(&plan);
+    assert_eq!(plan.status.code(), Some(0), "{report}");
+    let text = String::from_utf8(plan.stdout).unwrap();
+    assert!(text.contains(socket_path.to_str().unwrap()), "{report}");
+}
+
 // @kotowari[REQ-169]
 #[test]
 fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {

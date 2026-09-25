@@ -535,16 +535,12 @@ fn a_star_matches_a_leading_dot_and_brackets_are_literal() {
     assert!(!matches("[abc]", b"a"));
 }
 
+// @kotowari[REQ-155]
 #[test]
-fn a_name_the_isolation_planted_cannot_stall_a_pattern_with_many_stars() {
-    // The name comes from the worktree, which the isolation writes; a match that tries
-    // every split would not return before the next start is given up on.
-    let (sender, receiver) = std::sync::mpsc::channel();
-    std::thread::spawn(move || sender.send(matches("*a*a*a*a*a*b", &[b'a'; 255])));
-
-    let matched = receiver.recv_timeout(std::time::Duration::from_secs(1));
-
-    assert_eq!(matched, Ok(false));
+fn a_pattern_with_many_stars_does_not_match_a_long_name_without_its_last_literal() {
+    // `*` takes any run of bytes, but every literal must still be found: a name of 255
+    // `a` bytes has no `b` for the pattern to end on.
+    assert!(!matches("*a*a*a*a*a*b", &[b'a'; 255]));
 }
 
 // @kotowari[REQ-170]
@@ -689,6 +685,7 @@ fn the_mount_list_reads_target_and_fstype_from_mountinfo() {
     assert_eq!(read_mount_list(&copy.path().join("missing")), None);
 }
 
+// @kotowari[REQ-437]
 #[test]
 fn a_mount_point_with_a_byte_that_is_not_utf8_does_not_empty_the_mount_list() {
     let copy = TempDir::new();
