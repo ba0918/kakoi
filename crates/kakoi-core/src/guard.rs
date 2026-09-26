@@ -168,43 +168,45 @@ impl GuardRule {
     /// Each example is denied (`examples.deny`) or not (`examples.allow`) by this rule
     /// alone, in the environment of its own leading `NAME=value` words.
     fn check_examples(&self) -> Result<(), String> {
-        let lists = [(true, &self.examples.deny), (false, &self.examples.allow)];
-        for (expected, example) in lists.into_iter().flat_map(|(expected, list)| {
-            list.iter()
-                .flatten()
-                .map(move |example| (expected, example))
-        }) {
-            let unexpected = |why: &str| {
-                Err(format!(
-                    "`commands.guard` for `{}`: the example {example:?} {why}",
-                    self.program
-                ))
-            };
-            let Some(words) = shlex::split(example) else {
-                return unexpected("cannot be split into words");
-            };
-            let command_start = words
-                .iter()
-                .position(|word| !is_assignment(word))
-                .unwrap_or(words.len());
-            let (assignments, command) = words.split_at(command_start);
-            if command.first() != Some(&self.program) {
-                return unexpected("does not start with the rule's program");
+        for (expected, list) in [(true, &self.examples.deny), (false, &self.examples.allow)] {
+            for example in list.iter().flatten() {
+                self.check_example(example, expected)?;
             }
-            let environment: Vec<OsString> = assignments
-                .iter()
-                .filter_map(|word| word.split_once('='))
-                .map(|(name, _)| OsString::from(name))
-                .collect();
-            let arguments: Vec<OsString> = command[1..].iter().map(OsString::from).collect();
-            let denied = evaluate([self], &arguments, &environment).is_some();
-            if denied != expected {
-                return unexpected(if expected {
-                    "is not denied by the rule"
-                } else {
-                    "is denied by the rule"
-                });
-            }
+        }
+        Ok(())
+    }
+
+    /// `example` is denied by this rule alone when `denied`, and not denied otherwise.
+    fn check_example(&self, example: &str, denied: bool) -> Result<(), String> {
+        let unexpected = |why: &str| {
+            Err(format!(
+                "`commands.guard` for `{}`: the example {example:?} {why}",
+                self.program
+            ))
+        };
+        let Some(words) = shlex::split(example) else {
+            return unexpected("cannot be split into words");
+        };
+        let command_start = words
+            .iter()
+            .position(|word| !is_assignment(word))
+            .unwrap_or(words.len());
+        let (assignments, command) = words.split_at(command_start);
+        if command.first() != Some(&self.program) {
+            return unexpected("does not start with the rule's program");
+        }
+        let environment: Vec<OsString> = assignments
+            .iter()
+            .filter_map(|word| word.split_once('='))
+            .map(|(name, _)| OsString::from(name))
+            .collect();
+        let arguments: Vec<OsString> = command[1..].iter().map(OsString::from).collect();
+        if evaluate([self], &arguments, &environment).is_some() != denied {
+            return unexpected(if denied {
+                "is not denied by the rule"
+            } else {
+                "is denied by the rule"
+            });
         }
         Ok(())
     }
