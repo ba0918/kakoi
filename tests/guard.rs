@@ -607,7 +607,7 @@ fn the_guard_location_goes_first_on_path_in_front_of_path_prepend() {
     );
 }
 
-// @kotowari[REQ-446]
+// @kotowari[REQ-446, REQ-450]
 #[test]
 fn a_command_found_on_path_is_started_through_its_guard() {
     let scene = Scene::new(&["git"]);
