@@ -1093,3 +1093,20 @@ fn the_guard_denies_with_network_mode_none() {
 
     assert_denied(&output, GIT_PUSH_DENIED);
 }
+
+// @kotowari[REQ-448, REQ-446]
+#[test]
+fn a_run_not_denied_under_guard_absolute_path_reaches_the_relocated_real_program() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!("{GIT_PUSH}guard-absolute-path = true\n"));
+
+    let by_path = run_script(&scene, &policy, "git --version");
+    let absolute = run_script(
+        &scene,
+        &policy,
+        &format!("{}/git --version", scene.bin.display()),
+    );
+
+    assert_passed(&by_path, "real --version\n");
+    assert_passed(&absolute, "real --version\n");
+}
