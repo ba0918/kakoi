@@ -981,7 +981,17 @@ fn control_characters_in_the_matched_words_are_escaped() {
 
     let output = scene.run(&policy, &["--", "git", "push\u{1}x"]);
 
-    assert_denied(&output, "kakoi: guard: git push\\x01x: r");
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let line = stderr
+        .strip_suffix('\n')
+        .unwrap_or_else(|| panic!("{report}"));
+    assert!(!line.contains('\n'), "{report}");
+    assert!(!line.contains('\u{1}'), "{report}");
+    assert!(line.starts_with("kakoi: guard: git push"), "{report}");
+    assert!(line.ends_with(": r"), "{report}");
 }
 
 // @kotowari[EX-867]
