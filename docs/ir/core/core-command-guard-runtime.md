@@ -7,10 +7,10 @@
 ### REQ-446: 見張り役を置く
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A3, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A29, docs/decision/brainstorm/2026-09-25-command-policy.md#A20, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#D1, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A43
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A3, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A29, docs/decision/brainstorm/2026-09-25-command-policy.md#A20, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#D1, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A43, docs/decision/brainstorm/2026-09-25-command-policy.md#A44
 - verification: unit
 
-合成したポリシーに規則のあるプログラムごとに、kakoiは隔離へ渡すPATH（path-prepend を足した後で、見張り役の場所を除く）でそのプログラムの本物を探し（本物は、隔離の中でその名前で起動されるもので、PATHの項目の順に見て、その名前の場所がマウントの "hide" で隠されず、リンクを解決した先が実行できる通常ファイルである最初の同じ名前とする。ディレクトリ、行き先の無いリンク、実行できない通常ファイル、隠された場所の名前は飛ばして先を探す）、kakoi専用のtmpfsの中の見張り役の場所に同じ名前の見張り役を置き、その場所をPATHの最も先頭に足す。規則が "guard-absolute-path" を真にしているときは、本物のリンクを解決した実体のパスにも見張り役を重ね、本物をそのtmpfsの中に置き直す。見張り役はkakoi自身の実行ファイルで、見張り役、規則、置き直した本物は、見張り役の場所を通しては隔離の中から書き換えられない（kakoi自身の実行ファイルが書ける項目の下にあるときは、その項目を通して見張り役の中身が変わる）。見張り役を置くのにkakoi自身の実行ファイルの場所が分からないときは、種類bwrapの診断を出して125で終わる。これらは利用者のマウントより後に重ね、host、none、filteredのすべてで同じにする。kakoiに直接渡したコマンドも、隔離の中で起動される以上この見張り役の置き方に従う。
+合成したポリシーに規則のあるプログラムごとに、kakoiは隔離へ渡すPATH（path-prepend を足した後で、見張り役の場所を除く）でそのプログラムの本物を探し（本物は、隔離の中でその名前で起動されるもので、PATHの項目の順に見て、その名前の場所もリンクを解決した実体もマウントの "hide" で隠されず（自動で生成された "hide" を含め、それを含む項目のうちマウント順で最後に効くものが "hide" でない）、リンクを解決した先が実行できる通常ファイルである最初の同じ名前とする。ディレクトリ、行き先の無いリンク、実行できない通常ファイル、場所か実体が隠される名前は飛ばして先を探す）、kakoi専用のtmpfsの中の見張り役の場所に同じ名前の見張り役を置き、その場所をPATHの最も先頭に足す。規則が "guard-absolute-path" を真にしているときは、本物のリンクを解決した実体のパスにも見張り役を重ね、本物をそのtmpfsの中に置き直す。見張り役はkakoi自身の実行ファイルで、見張り役、規則、置き直した本物は、見張り役の場所を通しては隔離の中から書き換えられない（kakoi自身の実行ファイルが書ける項目の下にあるときは、その項目を通して見張り役の中身が変わる）。見張り役を置くのにkakoi自身の実行ファイルの場所が分からないときは、種類bwrapの診断を出して125で終わる。これらは利用者のマウントより後に重ね、host、none、filteredのすべてで同じにする。kakoiに直接渡したコマンドも、隔離の中で起動される以上この見張り役の置き方に従う。
 
 ### REQ-453: 見張り役としての起動を見分ける
 
@@ -39,10 +39,10 @@ kakoiは、起動された実行ファイルの場所が、自分が置いた見
 ### REQ-449: 見張り役を置かないプログラム
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A13, docs/decision/brainstorm/2026-09-25-command-policy.md#A19, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A32, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A38
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A13, docs/decision/brainstorm/2026-09-25-command-policy.md#A19, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A32, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A44
 - verification: unit
 
-規則のあるプログラムについて、本物が隔離へ渡すPATHに見つからないとき、本物がマウントの "hide" で隠されるとき（自動で生成された "hide" を含め、本物を含む項目のうちマウント順で最後に効くものが "hide" であるとき）、本物がkakoi自身の実行ファイルであるとき、隔離へ渡す環境にPATHが無いときは、そのプログラムに見張り役を置かず、理由を付けて飛ばす。規則の形と例の検証は行う。本物を探すことと隠されるかの判定は、マウントの解決の後に行う。
+規則のあるプログラムについて、本物が隔離へ渡すPATHに見つからないとき、本物がkakoi自身の実行ファイルであるとき、隔離へ渡す環境にPATHが無いときは、そのプログラムに見張り役を置かず、理由を付けて飛ばす。規則の形と例の検証は行う。本物を探すことと隠されるかの判定は、マウントの解決の後に行う。
 
 ### REQ-450: 計画表示
 
