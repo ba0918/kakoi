@@ -96,8 +96,8 @@ GH_TOKEN = "${config_dir}/secrets/gh-token"
 The bundled [`examples/profile/default.toml`](examples/profile/default.toml) is the WSL2-oriented
 built-in default, and [Writing a policy](docs/policy.md) explains each key. It uses `mounts`
 (`rw`, `rw-file`, `ro`, `hide`, `scan`, `hide-mounts`), `network.mode`, and `env.mode` and
-`env.unset`; `secrets` is a commented example, and `rw-copy`, `env.pass`, `env.set`,
-`env.path-prepend`, and `git.instead-of` are not used.
+`env.unset`; `secrets` and a `commands.guard` rule for `git` are commented examples, and
+`rw-copy`, `env.pass`, `env.set`, `env.path-prepend`, and `git.instead-of` are not used.
 
 ## How it works
 
@@ -138,6 +138,11 @@ directory inside it. Paths can use `~` and the variables `${workspace}`, `${work
   host's loopback only when you name them. See [Network](docs/policy.md#network).
 - **Environment** is inherited or cleared, then shaped by `unset` patterns, `set`, secrets, and
   `path-prepend`. `KAKOI=1` marks the inside.
+- **Command guards** stop one way of using a program the isolated process starts, such as
+  `git push`, while the rest of the program stays usable: a rule under `[[commands.guard]]`
+  puts a guard first on `PATH`, and a denied run ends with one line naming the reason and exit
+  code 126. A guard is a guardrail against mistakes, not a boundary. See
+  [Command guards](docs/policy.md#command-guards).
 
 The process ID, IPC, UTS, and user namespaces are always unshared: a launch is refused where the
 kernel cannot create a user namespace. The cgroup namespace is unshared too, except where the
@@ -187,7 +192,7 @@ What `kakoi` guarantees, when the launch is not refused:
 - `ioctl(TIOCSTI)` is blocked, so keystrokes cannot be pushed into your terminal that way;
 - in `filtered` mode, new connections leave only for what the policy allows, and a failure of
   the enforcement blocks all traffic rather than letting it through;
-- the exit code you get is the command's own.
+- the exit code you get is the command's own, or 126 when a command guard denies the run.
 
 What it does not guarantee:
 
@@ -195,6 +200,8 @@ What it does not guarantee:
   environment it starts in;
 - resource limits (no cgroups) or kernel isolation;
 - what an allowed network destination does with the traffic it receives;
+- that a command guard stops a process that means to get around it: guards catch mistakes, and
+  a use that must not happen needs a narrower token or `filtered` rules;
 - that an `rw` area stays harmless afterwards: `.git/hooks` and `.git/config` in a repository
   you later use on the host are yours to review.
 
