@@ -5,12 +5,28 @@ use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
+use crate::guard_placement::ProgramFact;
+
 /// The first of `candidates` that is a regular file this process may execute.
 pub fn first_executable(candidates: &[PathBuf]) -> Option<PathBuf> {
     candidates
         .iter()
         .find(|candidate| is_executable_file(candidate))
         .cloned()
+}
+
+/// The first of `candidates` that names anything, looked at without following a link,
+/// with what it resolves to: the program a guard is placed in front of (specification
+/// REQ-449 skips it when it is not a regular file, rather than searching on).
+pub fn first_named(candidates: &[PathBuf]) -> ProgramFact {
+    candidates
+        .iter()
+        .find(|candidate| std::fs::symlink_metadata(candidate).is_ok())
+        .map_or(ProgramFact::NotFound, |candidate| ProgramFact::Found {
+            candidate: candidate.clone(),
+            real: std::fs::canonicalize(candidate).ok(),
+            regular: std::fs::metadata(candidate).is_ok_and(|metadata| metadata.is_file()),
+        })
 }
 
 fn is_executable_file(path: &Path) -> bool {

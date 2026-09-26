@@ -5,7 +5,7 @@ mod common;
 
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 
 use common::{assert_diagnostic, home_with_workspace, output_report, run, TempDir};
@@ -451,4 +451,305 @@ fn ex_861_an_upper_layer_rule_does_not_remove_a_lower_layer_rule() {
     let rules: Vec<GuardRule> = policy.guards.into_iter().map(|entry| entry.rule).collect();
     assert!(denies_with(&rules, "git push", &[]));
     assert!(denies_with(&rules, "git fetch", &[]));
+}
+
+/// A program that stands in for the real one: prints its name and arguments.
+const FAKE_PROGRAM: &str = "#!/bin/sh\necho \"real $0 $*\"\n";
+
+/// A home with the `RW_WORKSPACE` profile, a workspace, and a directory `bin` of fake
+/// programs that the policy puts in front of `PATH`.
+struct Scene {
+    home: TempDir,
+    workspace: PathBuf,
+    bin: PathBuf,
+}
+
+impl Scene {
+    fn new(programs: &[&str]) -> Self {
+        let (home, workspace) = home_with_workspace();
+        let bin = home.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        for program in programs {
+            common::write_executable(&bin.join(program), FAKE_PROGRAM);
+        }
+        Self {
+            home,
+            workspace,
+            bin,
+        }
+    }
+
+    /// Writes the policy file: `bin` in front of `PATH`, then `rest`.
+    fn policy(&self, rest: &str) -> PathBuf {
+        self.home.write(
+            "policy.toml",
+            format!("[env]\npath-prepend = [\"{}\"]\n{rest}", self.bin.display()),
+        )
+    }
+
+    /// The binary on the workspace with the policy file and `arguments`.
+    fn command(&self, policy: &Path, arguments: &[&str]) -> std::process::Command {
+        let mut command = common::binary(self.home.path());
+        command
+            .arg("--workspace")
+            .arg(&self.workspace)
+            .arg("--policy-file")
+            .arg(policy)
+            .args(arguments);
+        command
+    }
+
+    fn run(&self, policy: &Path, arguments: &[&str]) -> Output {
+        self.command(policy, arguments).output().unwrap()
+    }
+
+    /// The JSON plan, with `command` after `--` when not empty.
+    fn json_plan(&self, policy: &Path, command: &[&str]) -> serde_json::Value {
+        let mut arguments = vec!["--print-plan=json"];
+        if !command.is_empty() {
+            arguments.push("--");
+            arguments.extend(command);
+        }
+        let output = self.run(policy, &arguments);
+        assert_loads(&output);
+        serde_json::from_slice(&output.stdout).unwrap()
+    }
+}
+
+const GIT_PUSH: &str =
+    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
+
+/// The entries of `key` (`guards` or `skipped_guards`) for `program`.
+fn entries<'a>(
+    plan: &'a serde_json::Value,
+    key: &str,
+    program: &str,
+) -> Vec<&'a serde_json::Value> {
+    plan[key]
+        .as_array()
+        .unwrap_or_else(|| panic!("{key} is not a list: {plan}"))
+        .iter()
+        .filter(|entry| entry["program"] == program)
+        .collect()
+}
+
+/// The one guard placed for `program`.
+fn guard<'a>(plan: &'a serde_json::Value, program: &str) -> &'a serde_json::Value {
+    let guards = entries(plan, "guards", program);
+    assert_eq!(guards.len(), 1, "{plan}");
+    guards[0]
+}
+
+/// The one skipped guard of `program`, with a reason.
+fn assert_skipped(plan: &serde_json::Value, program: &str) {
+    let skipped = entries(plan, "skipped_guards", program);
+    assert_eq!(skipped.len(), 1, "{plan}");
+    assert!(
+        skipped[0]["reason"]
+            .as_str()
+            .is_some_and(|reason| !reason.is_empty()),
+        "{plan}"
+    );
+    assert!(entries(plan, "guards", program).is_empty(), "{plan}");
+}
+
+fn host_path() -> String {
+    std::env::var("PATH").unwrap()
+}
+
+// @kotowari[EX-870]
+#[test]
+fn ex_870_the_json_plan_shows_the_guard_location_and_the_rule_origin() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    let git = guard(&plan, "git");
+    assert!(
+        git["location"]
+            .as_str()
+            .is_some_and(|location| location.starts_with('/')),
+        "{plan}"
+    );
+    let sources = git["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 1, "{plan}");
+    assert_eq!(sources[0]["kind"], "policy-file", "{plan}");
+    assert_eq!(sources[0]["path"], policy.to_str().unwrap(), "{plan}");
+    assert_eq!(plan["format_version"], 1, "{plan}");
+}
+
+// @kotowari[REQ-446, REQ-268]
+#[test]
+fn the_guard_location_goes_first_on_path_in_front_of_path_prepend() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    let location = guard(&plan, "git")["location"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        plan["environment"]["PATH"],
+        format!("{location}:{}:{}", scene.bin.display(), host_path()),
+        "{plan}"
+    );
+}
+
+// @kotowari[REQ-446]
+#[test]
+fn a_command_found_on_path_is_started_through_its_guard() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let plan = scene.json_plan(&policy, &["git", "push"]);
+
+    let location = guard(&plan, "git")["location"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(plan["command"]["path"], format!("{location}/git"), "{plan}");
+    assert_eq!(plan["command"]["given"], "git", "{plan}");
+}
+
+// @kotowari[REQ-446, REQ-450]
+#[test]
+fn guard_absolute_path_relocates_the_real_program_and_the_plan_shows_where() {
+    let scene = Scene::new(&["git", "hg"]);
+    let policy = scene.policy(&format!(
+        "{GIT_PUSH}guard-absolute-path = true\n\
+         [[commands.guard]]\nprogram = \"hg\"\ndeny = [[\"push\"]]\nreason = \"r\"\n"
+    ));
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    let relocated = guard(&plan, "git")["relocated"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(relocated.starts_with('/'), "{plan}");
+    assert_ne!(relocated, scene.bin.join("git").to_str().unwrap(), "{plan}");
+    assert_eq!(
+        guard(&plan, "hg")["relocated"],
+        serde_json::Value::Null,
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-868]
+#[test]
+fn ex_868_a_program_not_on_path_is_skipped_with_a_reason_and_the_run_goes_on() {
+    let scene = Scene::new(&[]);
+    let policy = scene
+        .policy("[[commands.guard]]\nprogram = \"nosuchtool\"\ndeny = [[\"x\"]]\nreason = \"r\"\n");
+
+    let plan = scene.json_plan(&policy, &[]);
+    let summary = scene.run(&policy, &["--print-plan"]);
+    let run = scene.run(&policy, &["--", "/bin/true"]);
+
+    assert_skipped(&plan, "nosuchtool");
+    assert_loads(&summary);
+    assert!(
+        String::from_utf8_lossy(&summary.stdout).contains("nosuchtool"),
+        "{}",
+        output_report(&summary)
+    );
+    assert_eq!(run.status.code(), Some(0), "{}", output_report(&run));
+}
+
+// @kotowari[REQ-268]
+#[test]
+fn path_is_left_as_it_is_when_every_guard_is_skipped() {
+    let scene = Scene::new(&[]);
+    let policy = scene
+        .policy("[[commands.guard]]\nprogram = \"nosuchtool\"\ndeny = [[\"x\"]]\nreason = \"r\"\n");
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    assert_eq!(
+        plan["environment"]["PATH"],
+        format!("{}:{}", scene.bin.display(), host_path()),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-869]
+#[test]
+fn ex_869_a_hidden_program_gets_no_guard() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!(
+        "[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}",
+        scene.bin.join("git").display()
+    ));
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    assert_skipped(&plan, "git");
+}
+
+// @kotowari[EX-883]
+#[test]
+fn ex_883_without_path_no_guard_is_placed() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.home.write(
+        "policy.toml",
+        format!("[env]\nmode = \"clear\"\n{GIT_PUSH}"),
+    );
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    assert_skipped(&plan, "git");
+    assert!(plan["environment"].get("PATH").is_none(), "{plan}");
+}
+
+// @kotowari[REQ-449]
+#[test]
+fn a_program_that_is_not_a_regular_file_gets_no_guard() {
+    let scene = Scene::new(&[]);
+    std::fs::create_dir(scene.bin.join("git")).unwrap();
+    let policy = scene.policy(GIT_PUSH);
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    assert_skipped(&plan, "git");
+}
+
+// @kotowari[REQ-449]
+#[test]
+fn a_program_that_is_kakoi_itself_gets_no_guard() {
+    let scene = Scene::new(&[]);
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_kakoi"), scene.bin.join("git")).unwrap();
+    let policy = scene.policy(GIT_PUSH);
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    assert_skipped(&plan, "git");
+}
+
+// @kotowari[REQ-450]
+#[test]
+fn the_summary_and_the_full_plan_show_guards_and_skipped_guards_and_the_full_plan_the_rules() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!(
+        "{GIT_PUSH}[[commands.guard]]\nprogram = \"nosuchtool\"\ndeny = [[\"x\"]]\nreason = \"never\"\n"
+    ));
+    let plan = scene.json_plan(&policy, &[]);
+    let location = guard(&plan, "git")["location"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    for form in ["--print-plan", "--print-plan=full"] {
+        let output = scene.run(&policy, &[form]);
+        assert_loads(&output);
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains(&location), "{text}");
+        assert!(text.contains("nosuchtool"), "{text}");
+    }
+    let full = String::from_utf8(scene.run(&policy, &["--print-plan=full"]).stdout).unwrap();
+    assert!(full.contains("push は人が行う"), "{full}");
+    assert!(full.contains("never"), "{full}");
+    assert!(full.contains(policy.to_str().unwrap()), "{full}");
 }

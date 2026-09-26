@@ -102,6 +102,7 @@ where
         command: invocation.command.clone(),
         current_dir: current_dir.clone(),
         host,
+        executable: std::env::current_exe().ok(),
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,

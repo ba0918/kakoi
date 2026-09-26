@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
+use crate::guard_placement::GuardPlan;
 use crate::isolated_env::{
     assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
 };
@@ -147,6 +148,8 @@ pub struct Plan {
     pub bwrap: PathBuf,
     /// The command as given and resolved; none when `--print-plan` was given without one.
     pub command: Option<ResolvedCommand>,
+    /// The command guards placed and skipped.
+    pub guards: GuardPlan,
     pub arguments: Vec<Argument>,
 }
 
@@ -159,6 +162,7 @@ pub fn plan(
     copies: CopySources,
     bwrap: PathBuf,
     command: Option<ResolvedCommand>,
+    guards: GuardPlan,
 ) -> Plan {
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
@@ -190,6 +194,7 @@ pub fn plan(
         warnings,
         bwrap,
         command,
+        guards,
         arguments,
     }
 }

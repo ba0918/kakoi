@@ -51,6 +51,16 @@ impl Environment {
         &self.values
     }
 
+    /// Puts `entry` first on `PATH`; an absent `PATH` stays absent.
+    pub fn put_first_on_path(&mut self, entry: &Path) {
+        if let Some(path) = self.values.get_mut(OsStr::new("PATH")) {
+            let mut value = entry.as_os_str().to_os_string();
+            value.push(":");
+            value.push(&*path);
+            *path = value;
+        }
+    }
+
     /// The environment as it may be shown: a secret's value is `None` (specification
     /// section 9).
     pub fn shown(&self) -> BTreeMap<OsString, Option<OsString>> {
