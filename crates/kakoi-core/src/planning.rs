@@ -129,8 +129,8 @@ fn plan_guards(
         .iter()
         .map(|entry| {
             let program = &entry.rule.program;
-            let fact = named(&real_candidates(OsStr::new(program), path));
-            (program.clone(), fact)
+            let names = named(&real_candidates(OsStr::new(program), path));
+            (program.clone(), names)
         })
         .collect();
     let kakoi = executable.and_then(|path| std::fs::canonicalize(path).ok());
