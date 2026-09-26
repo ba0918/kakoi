@@ -36,7 +36,7 @@ IR は `docs/ir/`。根拠の決定記録は `docs/decision/brainstorm/2026-09-2
 - 時間に依存するテストは書かない。
 - 例に出てくるパス（`/usr/bin/git`、`/opt/tools/bin`、`/w/sub` など）は例の値で、テストではテストの一時ディレクトリの中のパスに置き換え、Then の値も置き換えた値で主張する。
 - 通過の例（EX-867、EX-879、EX-882）は、見張り役が介在しなくても同じ結果になるので、同じ設定で見張り役が介在していることも併せて確かめる（隔離の中の `command -v <名前>` が `--print-plan=json` の `guards` にある見張り役の場所と一致する、同じ規則で禁止の起動が 126 になる、など）。EX-882 のコマンドは PATH 経由で起動させる。
-- 例の無い要求の句は、次のテストで確かめる。REQ-439 の UTF-8 として読めない語は当たらない（照合の関数へのテスト）。REQ-447 の制御文字を見える表記に逃がす（引数に制御文字を含む禁止の起動）。REQ-448 の同じ環境（隔離の中で決めた変数が本物に届く）。REQ-449 の本物が通常ファイルでない、kakoi 自身であるとき飛ばす（計画表示）。REQ-453 の同じ本物を複数の名前が指すとき（2 つの名前と `guard-absolute-path` で、両方の規則が当たる）。隔離の外へ通知しないことは、仕組みが無いことをレビュー（S7）で確かめる。
+- 例の無い要求の句は、次のテストで確かめる。REQ-439 の UTF-8 として読めない語は当たらない（照合の関数へのテスト）。REQ-447 の制御文字を見える表記に逃がす（引数に制御文字を含む禁止の起動）。REQ-448 の同じ環境（隔離の中で決めた変数が本物に届く）。REQ-449 の本物が kakoi 自身であるとき飛ばす（計画表示）。REQ-446 の本物の探し方（前にある同名のディレクトリ、行き先の無いリンク、実行できないファイル、隠された場所の名前を飛ばす）。REQ-453 の同じ本物を複数の名前が指すとき（2 つの名前と `guard-absolute-path` で、両方の規則が当たる）。隔離の外へ通知しないことは、仕組みが無いことをレビュー（S7）で確かめる。
 
 テストの印は kotowari の mark の場面に従い、テスト関数の直前に `// @kotowari[REQ-nnn, EX-nnn]` の形で置く。
 
@@ -137,7 +137,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 - Specification: `docs/ir/core/core-command-guard-runtime.md#REQ-446`、`docs/ir/core/core-command-guard-runtime.md#REQ-449`、`docs/ir/core/core-command-guard-runtime.md#REQ-450`、`docs/ir/core/core-environment.md#REQ-268`、`docs/ir/core/core-plan-output.md#REQ-299`
 - Prerequisites: S1
 - May change: `crates/kakoi-core/src/planning.rs`、`crates/kakoi-core/src/plan.rs`、`crates/kakoi-core/src/isolated_env.rs`、`crates/kakoi-core/src/command.rs`、`crates/kakoi-core/src/executables.rs`、`src/startup.rs`、`src/plan_text.rs`、`src/plan_json.rs`、`tests/guard.rs`、`tests/plan.rs`、`tests/cli.rs`、`tests/isolated_env.rs`、`tests/kakoi_net/supervisor.rs`、`tests/kakoi_net/application.rs`
-- Done when: EX-868、EX-869、EX-870、EX-883 が `--print-plan` と `--print-plan=json` で仕様どおりになり、EX-868 は同じ規則で `kakoi -- /bin/true` が 0 で終わり、見張り役を置くときの隔離の中の PATH の最初の項目が見張り役の場所でその後ろは元の PATH のままで、すべて飛ばしたときは PATH が変わらず、本物が通常ファイルでないときと kakoi 自身のときは理由付きで飛ばされる
+- Done when: EX-868、EX-869、EX-870、EX-883 が `--print-plan` と `--print-plan=json` で仕様どおりになり、EX-868 は同じ規則で `kakoi -- /bin/true` が 0 で終わり、見張り役を置くときの隔離の中の PATH の最初の項目が見張り役の場所でその後ろは元の PATH のままで、すべて飛ばしたときは PATH が変わらず、kakoi 自身のときは理由付きで飛ばされる
 - Shown by: test — 例ごとのテストを実行ファイルで書く。PATH は `--print-plan=json` の環境か、隔離の中で PATH を出すコマンドで確かめる
 - Left to the implementer: 計画表示の文面
 - Stop and hand back if: 本物を探す PATH の定義（A28）と既存のコマンドの解決（REQ-260）が食い違う、または隠されるかの判定に使うパスが既存のマウントの規則と両立しない
