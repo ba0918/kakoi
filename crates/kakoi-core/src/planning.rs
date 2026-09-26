@@ -15,7 +15,7 @@ use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::{file_id, first_executable, first_named};
-use crate::guard_placement::{place_guards, GuardPlan, PlacedGuard, GUARD_LOCATION};
+use crate::guard_placement::{place_guards, GuardPlan, PlacedGuard, ProgramFact, GUARD_LOCATION};
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy};
@@ -101,7 +101,12 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         Some((command, arguments)) => Some(ResolvedCommand {
             command: command.clone(),
             arguments: arguments.to_vec(),
-            path: through_guard(command, locate_command(command, search_in)?, &guards),
+            path: through_guard(
+                command,
+                locate_command(command, search_in)?,
+                path_of(search_in),
+                &guards,
+            ),
         }),
     };
     Ok(plan::plan(
@@ -158,17 +163,26 @@ fn real_candidates(program: &OsStr, path: Option<&OsStr>) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The command a run starts: a name found on `PATH` where a guard was placed is started
-/// through the guard. A path with `/` is left as it is.
-fn through_guard(command: &OsStr, path: PathBuf, guards: &GuardPlan) -> PathBuf {
+/// The command a run starts: a name whose real program, looked up on `path` as a guard
+/// looks it up, has a guard is started through the guard, as the same name started
+/// inside would be; otherwise `found`. A path with `/` is left as it is.
+fn through_guard(
+    command: &OsStr,
+    found: PathBuf,
+    path: Option<&OsStr>,
+    guards: &GuardPlan,
+) -> PathBuf {
     if command.as_bytes().contains(&b'/') {
-        return path;
+        return found;
     }
+    let ProgramFact::Found { candidate, .. } = first_named(&real_candidates(command, path)) else {
+        return found;
+    };
     guards
         .placed
         .iter()
-        .find(|guard| guard.found == path)
-        .map_or(path, PlacedGuard::guard)
+        .find(|guard| guard.found == candidate)
+        .map_or(found, PlacedGuard::guard)
 }
 
 /// Stage 8: `bwrap` on the host's `PATH` (specification section 14).
