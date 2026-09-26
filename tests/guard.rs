@@ -191,7 +191,7 @@ fn a_word_that_is_not_utf8_matches_nothing() {
     assert!(evaluate(std::slice::from_ref(&rule), &[word], &[]).is_none());
 }
 
-// @kotowari[EX-850]
+// @kotowari[REQ-440, EX-850]
 #[test]
 fn ex_850_global_options_with_a_value_are_skipped_with_the_value() {
     let rule = rule("program = \"git\"\noptions-with-value = [\"-C\"]\ndeny = [[\"push\"]]");
@@ -234,7 +234,7 @@ fn ex_872_a_double_dash_ends_the_skipping() {
     assert!(!denies(&rule, "git -- -x push"));
 }
 
-// @kotowari[EX-854]
+// @kotowari[REQ-441, EX-854]
 #[test]
 fn ex_854_flags_match_in_a_bundle_and_before_an_equals_sign() {
     let rule = rule("program = \"git\"\ndeny-flags = [\"-f\", \"--force\"]");
@@ -273,7 +273,7 @@ fn ex_873_flags_apply_only_to_a_run_that_matches_for() {
     assert!(!denies(&rule, "git checkout -f"));
 }
 
-// @kotowari[EX-857]
+// @kotowari[REQ-442, EX-857]
 #[test]
 fn ex_857_a_variable_matching_the_pattern_denies() {
     let rule = rule("program = \"git\"\ndeny-env = [\"GIT_CONFIG_*\"]");
