@@ -155,12 +155,16 @@ fn plan_guards(
     Ok(guards)
 }
 
-/// Where the real `program` is looked for: the entries of `path` other than the guard
-/// location, which a nested run inherits from the run around it (specification REQ-446).
+/// Where the real `program` is looked for: the absolute entries of `path` other than the
+/// guard location, which a nested run inherits from the run around it (specification
+/// REQ-446). A relative entry, the empty one included, names a different place for every
+/// directory the program is started from, so no one real program stands behind it.
 fn real_candidates(program: &OsStr, path: Option<&OsStr>) -> Vec<PathBuf> {
     command_candidates(program, path)
         .into_iter()
-        .filter(|candidate| candidate.parent() != Some(Path::new(GUARD_LOCATION)))
+        .filter(|candidate| {
+            candidate.is_absolute() && candidate.parent() != Some(Path::new(GUARD_LOCATION))
+        })
         .collect()
 }
 

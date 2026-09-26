@@ -836,6 +836,43 @@ fn a_directory_and_a_dangling_link_of_the_same_name_are_passed_over_and_the_real
     assert_passed(&not_denied, "real status\n");
 }
 
+// @kotowari[REQ-446]
+#[test]
+fn a_relative_entry_on_path_is_not_where_the_real_program_is_looked_up() {
+    let scene = Scene::new(&["git"]);
+    common::write_executable(
+        &scene.workspace.join("git"),
+        "#!/bin/sh\necho \"workspace $*\"\n",
+    );
+    let policy = scene.home.write(
+        "policy.toml",
+        format!(
+            "[env.set]\nPATH = \".::{}:/usr/bin:/bin\"\n{GIT_PUSH}",
+            scene.bin.display()
+        ),
+    );
+    let run = |arguments: &[&str]| {
+        scene
+            .command(&policy, arguments)
+            .current_dir(&scene.workspace)
+            .output()
+            .unwrap()
+    };
+
+    let plan = run(&["--print-plan=json"]);
+    let denied = run(&["--", "/bin/sh", "-c", "git push"]);
+    let elsewhere = run(&["--", "/bin/sh", "-c", "cd / && git status"]);
+
+    assert_loads(&plan);
+    let plan: serde_json::Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(
+        guard(&plan, "git")["found"],
+        scene.bin.join("git").to_str().unwrap()
+    );
+    assert_denied(&denied, GIT_PUSH_DENIED);
+    assert_passed(&elsewhere, "real status\n");
+}
+
 // @kotowari[REQ-449]
 #[test]
 fn a_program_that_is_kakoi_itself_gets_no_guard() {

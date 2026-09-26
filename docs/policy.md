@@ -421,7 +421,8 @@ through the entries of `PATH` in order, the first name that resolves, links foll
 executable regular file, where neither the name's place nor the file it resolves to is covered
 by a `hide` item. A directory, a link that leads nowhere, a regular file that cannot be
 executed, and a name whose place or resolved file is hidden are passed over and the search goes
-on. The guard is `kakoi`'s own executable, placed read-only in
+on. An entry of `PATH` that is not an absolute path (an empty entry, or `.`) is not searched: it
+names a different place for every directory a program is started from. The guard is `kakoi`'s own executable, placed read-only in
 a tmpfs of its own together with the rules; it is laid over every mount item. When a run is
 denied, the guard prints `kakoi: guard: <program> <the words that matched>: <reason>` on
 standard error and exits 126 without starting the program; `<program>` is the `program` of the
