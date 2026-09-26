@@ -93,11 +93,15 @@ It shows:
 - how the environment differs from the host's: the variables unset, the variables set with
   their values (a `PATH` that only grew in front shows the part added), and the names of the
   secrets. Variables that are as on the host are counted, not listed;
-- the resolved command.
+- each program with a [command guard](policy.md#command-guards), with the guard and the real
+  program it guards (and where the real program is placed again under `guard-absolute-path`),
+  and each program skipped, with the reason;
+- the resolved command, which is the guard when the command was found on `PATH` where a guard
+  is placed.
 
 `--print-plan=full` is the whole plan, for comparing two runs or for checking what reaches
 `bwrap`. In place of the summary's mount list and environment changes it prints the merged
-policy with the layer each entry came from, every mount item with its real path and its
+policy with the layer each entry came from (command guard rules included), every mount item with its real path and its
 origin, the final environment in full, and the `bwrap` argument list.
 
 `--print-plan=json` is for LLM agents and tools, not for reading: the same content as the full
@@ -119,12 +123,14 @@ meaning while `format_version` is the same; keys may be added.
 | `policy_sources` | The policy files read, each `{"kind": "file", "path": ...}` or `{"kind": "built-in-default"}`. |
 | `variables` | `workspace`, `worktree`, `git_common_dir`, `config_dir`; `null` where a variable has no value. |
 | `home` | The home directory. |
-| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`. |
+| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`, `guards` (each rule as written, with `origin`). |
 | `mounts` | The items applied, in order: `directive`, `path` (real), `kind` (`directory` or `not-directory`), `written`, `origin`. |
 | `skipped_mounts` | Written items skipped: `directive`, `written`, `origin`, `reason`. |
 | `left_visible` | Scan hits left visible: `link`, `reason`. |
 | `skipped_paths` | Skipped scan roots, `hide-mounts` `under`s, and `path-prepend` entries: `role` (`scan-root`, `hide-mounts-under`, `path-prepend`), `written`, `reason`. |
 | `not_copied` | Entries an `rw-copy` item could not take from the host: `item` (the item's real path), `path`, `reason`. |
+| `guards` | The programs with a command guard: `program`, `location` (the guards' directory, first on `PATH`), `found` (the real program on `PATH`), `relocated` (where the real program is placed again under `guard-absolute-path`, or `null`), `sources` (the `origin` of each rule applied). |
+| `skipped_guards` | The programs with a rule and no guard: `program`, `reason`. |
 | `environment` | The final environment; a secret's value is `null`. |
 | `environment_changes` | `mode`, `kept`, `unset`, `set`, `secrets`, as in the summary. |
 | `command` | `given`, `arguments`, `path`; `null` when `COMMAND` was left out. |
@@ -149,10 +155,12 @@ A failure of `kakoi` itself is one line on standard error of the form
 `kakoi: <kind>: <description>`, and the exit code is 125. Two exceptions: a command that
 cannot be found exits 127, and, in a nested run, a command that was found but cannot be executed
 (a script whose interpreter does not exist, or, in the published build, a file of a format the
-kernel cannot run) exits 126.
+kernel cannot run) exits 126, and so does a run a [command guard](policy.md#command-guards)
+denies, with the line `kakoi: guard: <program> <the words that matched>: <reason>` from inside
+the isolation.
 
-The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`, and
-`command not executable`. Warnings are one line each starting with `kakoi: warning: ` and
+The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`,
+`command not executable`, and `guard`. Warnings are one line each starting with `kakoi: warning: ` and
 do not stop the run.
 
 When the command runs, its exit code is returned as it is; a command killed by signal `s` yields

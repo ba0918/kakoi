@@ -4,8 +4,9 @@ A policy file is TOML. Every section is optional; an empty file is a valid polic
 profile, [`examples/profile/default.toml`](../examples/profile/default.toml), is the built-in
 default: it uses `mounts` (`rw`, `rw-file`, `ro`, `hide`, `scan`, `hide-mounts`),
 `network.mode`, and `env.mode` and `env.unset`, with `secrets` present only as a comment, and
-it does not use `rw-copy`, `env.pass`, `env.set`, `env.path-prepend`, or `git.instead-of`. The
-fixed keys are the ones below; any other key is a `policy` error.
+it does not use `rw-copy`, `env.pass`, `env.set`, `env.path-prepend`, or `git.instead-of`, and
+carries a command guard for `git` only as a comment. The fixed keys are the ones below and the
+keys of a [command guard](#command-guards); any other key is a `policy` error.
 
 ```toml
 [mounts]
@@ -40,6 +41,11 @@ GH_TOKEN = "${config_dir}/secrets/gh-token"
 
 [git.instead-of]
 "git@github.com:" = "https://github.com/"
+
+[[commands.guard]]
+program = "git"
+reason  = "pushing is left to the person; ask them to push"
+deny    = [["push"]]
 ```
 
 ## Paths and variables
@@ -142,7 +148,8 @@ The limits, and what a failure does:
 Up to three written layers are merged, lowest first: the profile, the `--policy-file`, and the
 command line (`--rw`, `--hide`).
 
-- Lists concatenate (`env.path-prepend` puts the upper layer first).
+- Lists concatenate (`env.path-prepend` puts the upper layer first). `commands.guard` is a list:
+  an upper layer adds rules and cannot remove a lower layer's.
 - Scalars (`network.mode`, `env.mode`) take the upper layer.
 - Tables (`env.set`, `secrets`, `git.instead-of`) merge by key, with the upper layer winning.
 
@@ -313,7 +320,9 @@ The environment inside the isolation is assembled in this order and handed to `b
 4. add the secrets;
 5. add the git rewrite;
 6. put `path-prepend` in front of `PATH`;
-7. set `KAKOI=1`.
+7. put the directory of the [command guards](#command-guards) first on `PATH`, when a guard is
+   placed and there is a `PATH`;
+8. set `KAKOI=1`.
 
 ## Secrets
 
@@ -335,6 +344,90 @@ appear in the plan, in warnings, or in diagnostics.
 `GIT_CONFIG_VALUE_n` / `GIT_CONFIG_COUNT` pairs numbered after the ones the environment already
 has, so `git config --list` inside shows `url.<replacement>.insteadof=<prefix>` next to the
 host's own entries.
+
+## Command guards
+
+A command guard stops one way of using a program the isolated process starts, such as
+`git push`, while leaving the rest of the program usable. It is a guardrail against mistakes,
+not a boundary: a process that means to get around it can (see
+[Command guards are not a boundary](security.md#command-guards-are-not-a-boundary)). To stop
+something for certain, use a token with narrower permissions or the `filtered` network's allow
+rules; to keep a program from being used at all, `hide` it, and when what you protect is a
+resource (the docker socket, say) rather than the program, `hide` the resource.
+
+```toml
+[[commands.guard]]
+program            = "git"                  # required: a name looked up on PATH, no "/", not "kakoi"
+reason             = "pushing is left to the person; ask them to push"   # required, not empty
+options-with-value = ["-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace"]
+deny               = [["push"], ["remote", ["add", "set-url"]]]
+deny-flags         = ["--force", "-f"]
+deny-option-values = { "-c" = ["/(?i)alias[.].*/"], "--config-env" = ["/(?i)alias[.].*/"] }
+deny-env           = ["GIT_DIR"]
+for                = [["push"]]              # optional: limits deny-flags, deny-option-values, deny-env
+guard-absolute-path = false                  # optional; default false
+examples.deny      = ["git push", "git -C repo push origin main"]
+examples.allow     = ["git status", "git commit -m 'push fix'"]
+```
+
+A rule needs at least one of `deny`, `deny-flags`, `deny-option-values`, and `deny-env`. A list
+or a word sequence written empty, an unknown key, and a `program` that is empty, contains `/`, or
+is `kakoi` are `policy` errors.
+
+How a run is matched, given the words after the program name:
+
+- **Words.** A word in `deny` or `for` and a value in `deny-option-values` match a whole word:
+  a text between two `/` (`"/pu.h/"`) is a regular expression in the syntax of Rust's `regex`
+  crate, applied to the whole word; anything else must equal the word. Option names are always
+  compared literally. A word that is not valid UTF-8 matches nothing.
+- **`deny`.** Leading words that start with `-` are skipped first: a name listed in
+  `options-with-value` skips the next word too, a word with `=` is skipped alone, and any other
+  such word is taken to have no value. A `--` word is skipped and ends the skipping. The run is
+  denied when the words left start with one of the `deny` sequences; each position of a
+  sequence is one word or a list of alternatives, and words after the sequence do not matter.
+  Options in the middle of the sequence are not skipped.
+- **`deny-flags`.** Matched against every word before the first `--`, the part before the first
+  `=` of a word (`--force=yes` is `--force`); a one-letter flag also matches inside a bundle
+  (`-f` matches `-fq`).
+- **`deny-option-values`.** Before the first `--`, the word after the option's name, or what
+  follows the first `=` of `name=value`, matched against the option's list.
+- **`deny-env`.** A variable whose name matches one of the patterns (`*` and `?` as in
+  `env.unset`) is set in the environment the guard is started with.
+- **`for`.** When present, `deny-flags`, `deny-option-values`, and `deny-env` apply only to a run
+  whose leading words (after the skipping) match one of its sequences; `deny` always applies.
+
+Within a rule the order is `deny-env`, `deny`, `deny-flags`, `deny-option-values`, and the first
+match denies. A run no rule denies is not denied.
+
+**Examples are checked when the policy is read.** Each example is split into words as a shell
+would split it; leading `NAME=value` words are the example's whole environment (the host's is not
+used), and the first word left must be the rule's `program`. Every `examples.deny` must be denied
+by its rule and every `examples.allow` must not; an example that does not match as expected, a
+broken regular expression, and a malformed rule stop the run with `policy`, `--print-plan`
+included, naming the program and the example.
+
+**The guard.** For each program with a rule, `kakoi` looks the program up on the `PATH` the
+isolation gets (after `path-prepend`) and places a guard of the same name in a directory of its
+own, first on `PATH`. The guard is `kakoi`'s own executable, placed read-only in a tmpfs of its
+own together with the rules; it is laid over every mount item. When a run is denied, the guard
+prints `kakoi: guard: <program> <the words that matched>: <reason>` on standard error and exits
+126 without starting the program; otherwise it executes the real program in its own place, with
+the same `argv[0]`, arguments, environment, and working directory. A command given to `kakoi`
+itself (`kakoi -- git push`) goes through the guard too. A program is skipped, with the reason
+shown in the plan, when it is not found on that `PATH`, when it is hidden by a `hide` item, when
+what is found is not a regular file or is `kakoi` itself, or when the isolation has no `PATH`;
+the rule is still checked.
+
+**`guard-absolute-path`.** By default only a start through `PATH` meets the guard, and
+`/usr/bin/git push` does not. With `guard-absolute-path = true` the guard is also laid over the
+real program's own path, and the program is placed again inside the guard's tmpfs. A program that
+finds its resources relative to its own location (Python's standard library, for one) can break
+when it is moved this way; use it for programs such as `git` that do not.
+
+**`git.instead-of` and `GIT_CONFIG_*`.** `git.instead-of` works by putting `GIT_CONFIG_*`
+variables in the environment, so a rule that denies `GIT_CONFIG_*` with `deny-env` stops every
+`git` command. The two cannot be used together; the example in the bundled profile denies the
+`-c` and `--config-env` values that define an alias instead.
 
 ## The work place, `/tmp`, and `/tmp/kakoi`
 
