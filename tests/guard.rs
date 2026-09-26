@@ -715,10 +715,13 @@ fn path_is_left_as_it_is_when_every_guard_is_skipped() {
 // @kotowari[EX-869]
 #[test]
 fn ex_869_a_hidden_program_gets_no_guard() {
-    let scene = Scene::new(&["git"]);
+    let scene = Scene::new(&[]);
+    // The name on `PATH` is visible; the program it resolves to is hidden.
+    let real = scene.home.write_executable("store/git", FAKE_PROGRAM);
+    std::os::unix::fs::symlink(&real, scene.bin.join("git")).unwrap();
     let policy = scene.policy(&format!(
         "[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}",
-        scene.bin.join("git").display()
+        real.parent().unwrap().display()
     ));
 
     let plan = scene.json_plan(&policy, &[]);
@@ -726,9 +729,9 @@ fn ex_869_a_hidden_program_gets_no_guard() {
     assert_skipped(&plan, "git");
 }
 
-// @kotowari[REQ-449]
+// @kotowari[REQ-446, REQ-449]
 #[test]
-fn a_name_found_in_a_hidden_directory_gets_no_guard_even_when_its_target_is_visible() {
+fn a_name_in_a_hidden_directory_is_passed_over_and_the_real_program_behind_it_is_guarded() {
     let scene = Scene::new(&["git"]);
     let hidden = scene.home.path().join("hidden");
     std::fs::create_dir(&hidden).unwrap();
@@ -743,11 +746,13 @@ fn a_name_found_in_a_hidden_directory_gets_no_guard_even_when_its_target_is_visi
         ),
     );
 
-    let plan = scene.json_plan(&policy, &[]);
-    let output = run_script(&scene, &policy, "git --version");
+    let given = scene.run(&policy, &["--", "git", "push"]);
+    let by_path = run_script(&scene, &policy, "git push");
+    let not_denied = run_script(&scene, &policy, "git --version");
 
-    assert_skipped(&plan, "git");
-    assert_passed(&output, "real --version\n");
+    assert_denied(&given, GIT_PUSH_DENIED);
+    assert_denied(&by_path, GIT_PUSH_DENIED);
+    assert_passed(&not_denied, "real --version\n");
 }
 
 // @kotowari[EX-883]
@@ -765,16 +770,33 @@ fn ex_883_without_path_no_guard_is_placed() {
     assert!(plan["environment"].get("PATH").is_none(), "{plan}");
 }
 
-// @kotowari[REQ-449]
+// @kotowari[REQ-446]
 #[test]
-fn a_program_that_is_not_a_regular_file_gets_no_guard() {
-    let scene = Scene::new(&[]);
-    std::fs::create_dir(scene.bin.join("git")).unwrap();
-    let policy = scene.policy(GIT_PUSH);
+fn a_directory_and_a_dangling_link_of_the_same_name_are_passed_over_and_the_real_program_behind_them_is_guarded(
+) {
+    let scene = Scene::new(&["git"]);
+    let directory = scene.home.path().join("with-directory");
+    std::fs::create_dir_all(directory.join("git")).unwrap();
+    let dangling = scene.home.path().join("with-dangling-link");
+    std::fs::create_dir(&dangling).unwrap();
+    std::os::unix::fs::symlink(scene.home.path().join("nowhere"), dangling.join("git")).unwrap();
+    let policy = scene.home.write(
+        "policy.toml",
+        format!(
+            "[env]\npath-prepend = [\"{}\", \"{}\", \"{}\"]\n{GIT_PUSH}",
+            directory.display(),
+            dangling.display(),
+            scene.bin.display()
+        ),
+    );
 
-    let plan = scene.json_plan(&policy, &[]);
+    let given = scene.run(&policy, &["--", "git", "push"]);
+    let by_path = run_script(&scene, &policy, "git push");
+    let not_denied = run_script(&scene, &policy, "git status");
 
-    assert_skipped(&plan, "git");
+    assert_denied(&given, GIT_PUSH_DENIED);
+    assert_denied(&by_path, GIT_PUSH_DENIED);
+    assert_passed(&not_denied, "real status\n");
 }
 
 // @kotowari[REQ-449]

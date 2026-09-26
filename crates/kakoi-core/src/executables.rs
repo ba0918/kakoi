@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use crate::guard_placement::{FileId, ProgramFact};
+use crate::guard_placement::{FileId, NameFact};
 
 /// The first of `candidates` that is a regular file this process may execute.
 pub fn first_executable(candidates: &[PathBuf]) -> Option<PathBuf> {
@@ -15,25 +15,21 @@ pub fn first_executable(candidates: &[PathBuf]) -> Option<PathBuf> {
         .cloned()
 }
 
-/// The first of `candidates` that names anything, looked at without following a link,
-/// with what it resolves to: the program a guard is placed in front of (specification
-/// REQ-449 skips it when it is not a regular file, rather than searching on). A regular
-/// file this process may not execute is passed over, as the shell's search passes it
-/// over, so that the guard stands in front of the program the name starts.
-pub fn first_named(candidates: &[PathBuf]) -> ProgramFact {
+/// Each of `candidates` that names anything, looked at without following a link, in
+/// order, with what it resolves to: the names the real program a guard is placed in front
+/// of is chosen from (specification REQ-446).
+pub fn named(candidates: &[PathBuf]) -> Vec<NameFact> {
     candidates
         .iter()
-        .find(|candidate| {
-            std::fs::symlink_metadata(candidate).is_ok()
-                && (is_executable_file(candidate) || !is_file(candidate))
-        })
-        .map_or(ProgramFact::NotFound, |candidate| ProgramFact::Found {
+        .filter(|candidate| std::fs::symlink_metadata(candidate).is_ok())
+        .map(|candidate| NameFact {
             candidate: candidate.clone(),
             name: resolved_name(candidate),
             real: std::fs::canonicalize(candidate).ok(),
-            regular: is_file(candidate),
+            executable: is_executable_file(candidate),
             file: file_id(candidate),
         })
+        .collect()
 }
 
 /// `path` with the links of its directory resolved and its own name kept.

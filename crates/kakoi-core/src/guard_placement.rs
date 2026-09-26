@@ -28,25 +28,36 @@ pub const GUARD_TABLE: &str = "/dev/kakoi-guard/table";
 /// Where a program relocated for `guard-absolute-path` goes, one directory per program.
 const RELOCATED: &str = "/dev/kakoi-guard/real";
 
-/// What the outer layer found for a program on the isolation's `PATH`: nothing, or the
-/// first name found, with what it resolves to and whether that is a regular file.
+/// What the outer layer found at one name of a program on the isolation's `PATH`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProgramFact {
-    NotFound,
-    Found {
-        /// The name found, under an entry of `PATH`.
-        candidate: PathBuf,
-        /// The name found with the links of its directory resolved, not its own: where
-        /// the name itself is, which a `hide` item may cover even when what it resolves
-        /// to is visible. None when the directory cannot be resolved.
-        name: Option<PathBuf>,
-        /// The real path it resolves to; none for a dangling link.
-        real: Option<PathBuf>,
-        /// Whether that is a regular file.
-        regular: bool,
-        /// Which file that is; none when it cannot be told.
-        file: Option<FileId>,
-    },
+pub struct NameFact {
+    /// The name, under an entry of `PATH`.
+    pub candidate: PathBuf,
+    /// The name with the links of its directory resolved, not its own: where the name
+    /// itself is, which a `hide` item may cover even when what it resolves to is
+    /// visible. None when the directory cannot be resolved.
+    pub name: Option<PathBuf>,
+    /// The real path it resolves to; none for a dangling link.
+    pub real: Option<PathBuf>,
+    /// Whether that is a regular file this process may execute.
+    pub executable: bool,
+    /// Which file that is; none when it cannot be told.
+    pub file: Option<FileId>,
+}
+
+/// The real program among `names` (in the order of `PATH`): the first the shell inside
+/// would start by that name, one whose name is not hidden by `mounts` and that resolves to
+/// an executable regular file (specification REQ-446). Directories, dangling links,
+/// regular files that cannot be executed, and names in a hidden place are passed over.
+pub fn real_program<'a>(names: &'a [NameFact], mounts: &[ResolvedItem]) -> Option<&'a NameFact> {
+    names.iter().find(|fact| {
+        fact.executable
+            && fact.real.is_some()
+            && !fact
+                .name
+                .as_deref()
+                .is_some_and(|name| hidden(name, mounts))
+    })
 }
 
 /// A file told apart from every other by its device and inode, whatever path names it:
@@ -135,13 +146,14 @@ impl GuardTable {
     }
 }
 
-/// Decides the guards of `guards` (the merged rules) from what was found on `PATH`
-/// (`facts`, by program; `path_present` false when the isolation has no `PATH`), the
-/// mount items as resolved, and the real path of kakoi itself and which file it is.
+/// Decides the guards of `guards` (the merged rules) from the names found on `PATH`
+/// (`facts`, by program, in the order of `PATH`; `path_present` false when the isolation
+/// has no `PATH`), the mount items as resolved, and the real path of kakoi itself and
+/// which file it is.
 pub fn place_guards(
     guards: &[GuardEntry],
     path_present: bool,
-    facts: &BTreeMap<String, ProgramFact>,
+    facts: &BTreeMap<String, Vec<NameFact>>,
     mounts: &[ResolvedItem],
     kakoi: Option<&Path>,
     kakoi_file: Option<FileId>,
@@ -153,7 +165,13 @@ pub fn place_guards(
     // The programs with their real path, in the order their first rule is written.
     let mut found: Vec<(String, PathBuf, PathBuf)> = Vec::new();
     for program in programs(guards) {
-        match check(path_present, facts.get(program), mounts, kakoi, kakoi_file) {
+        match check(
+            path_present,
+            facts.get(program).map_or(&[][..], Vec::as_slice),
+            mounts,
+            kakoi,
+            kakoi_file,
+        ) {
             Ok((candidate, real)) => found.push((program.to_string(), candidate, real)),
             Err(reason) => plan.skipped.push(SkippedGuard {
                 program: program.to_string(),
@@ -221,7 +239,7 @@ fn programs(guards: &[GuardEntry]) -> Vec<&str> {
 /// The found name and the real path of `program`, or why it gets no guard.
 fn check(
     path_present: bool,
-    fact: Option<&ProgramFact>,
+    names: &[NameFact],
     mounts: &[ResolvedItem],
     kakoi: Option<&Path>,
     kakoi_file: Option<FileId>,
@@ -229,20 +247,16 @@ fn check(
     if !path_present {
         return Err("the isolation's environment has no PATH");
     }
-    let Some(ProgramFact::Found {
+    let Some(NameFact {
         candidate,
-        name,
-        real,
-        regular,
+        real: Some(real),
         file,
-    }) = fact
+        ..
+    }) = real_program(names, mounts)
     else {
         return Err("not found on the isolation's PATH");
     };
-    let Some(real) = real.as_ref().filter(|_| *regular) else {
-        return Err("the program found on PATH is not a regular file");
-    };
-    if hidden(real, mounts) || name.as_deref().is_some_and(|name| hidden(name, mounts)) {
+    if hidden(real, mounts) {
         return Err("the program is hidden by a `hide` mount item");
     }
     if kakoi == Some(real.as_path()) || (file.is_some() && *file == kakoi_file) {

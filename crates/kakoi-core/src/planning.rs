@@ -14,11 +14,11 @@ use crate::command::{command_candidates, resolve_command};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
-use crate::executables::{file_id, first_executable, first_named};
-use crate::guard_placement::{place_guards, GuardPlan, PlacedGuard, ProgramFact, GUARD_LOCATION};
+use crate::executables::{file_id, first_executable, named};
+use crate::guard_placement::{place_guards, real_program, GuardPlan, PlacedGuard, GUARD_LOCATION};
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
-use crate::mounts::{candidates, expand_policy};
+use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand,
 };
@@ -105,6 +105,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
                 command,
                 locate_command(command, search_in)?,
                 path_of(search_in),
+                &isolation.mounts.items,
                 &guards,
             ),
         }),
@@ -128,7 +129,7 @@ fn plan_guards(
         .iter()
         .map(|entry| {
             let program = &entry.rule.program;
-            let fact = first_named(&real_candidates(OsStr::new(program), path));
+            let fact = named(&real_candidates(OsStr::new(program), path));
             (program.clone(), fact)
         })
         .collect();
@@ -170,18 +171,20 @@ fn through_guard(
     command: &OsStr,
     found: PathBuf,
     path: Option<&OsStr>,
+    mounts: &[ResolvedItem],
     guards: &GuardPlan,
 ) -> PathBuf {
     if command.as_bytes().contains(&b'/') {
         return found;
     }
-    let ProgramFact::Found { candidate, .. } = first_named(&real_candidates(command, path)) else {
+    let names = named(&real_candidates(command, path));
+    let Some(real) = real_program(&names, mounts) else {
         return found;
     };
     guards
         .placed
         .iter()
-        .find(|guard| guard.found == candidate)
+        .find(|guard| guard.found == real.candidate)
         .map_or(found, PlacedGuard::guard)
 }
 
