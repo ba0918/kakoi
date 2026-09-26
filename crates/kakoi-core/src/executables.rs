@@ -24,10 +24,17 @@ pub fn first_named(candidates: &[PathBuf]) -> ProgramFact {
         .find(|candidate| std::fs::symlink_metadata(candidate).is_ok())
         .map_or(ProgramFact::NotFound, |candidate| ProgramFact::Found {
             candidate: candidate.clone(),
+            name: resolved_name(candidate),
             real: std::fs::canonicalize(candidate).ok(),
             regular: std::fs::metadata(candidate).is_ok_and(|metadata| metadata.is_file()),
             file: file_id(candidate),
         })
+}
+
+/// `path` with the links of its directory resolved and its own name kept.
+fn resolved_name(path: &Path) -> Option<PathBuf> {
+    let directory = std::fs::canonicalize(path.parent()?).ok()?;
+    Some(directory.join(path.file_name()?))
 }
 
 /// Which file `path` names, following a link; none when it cannot be read.

@@ -36,6 +36,10 @@ pub enum ProgramFact {
     Found {
         /// The name found, under an entry of `PATH`.
         candidate: PathBuf,
+        /// The name found with the links of its directory resolved, not its own: where
+        /// the name itself is, which a `hide` item may cover even when what it resolves
+        /// to is visible. None when the directory cannot be resolved.
+        name: Option<PathBuf>,
         /// The real path it resolves to; none for a dangling link.
         real: Option<PathBuf>,
         /// Whether that is a regular file.
@@ -227,6 +231,7 @@ fn check(
     }
     let Some(ProgramFact::Found {
         candidate,
+        name,
         real,
         regular,
         file,
@@ -237,7 +242,7 @@ fn check(
     let Some(real) = real.as_ref().filter(|_| *regular) else {
         return Err("the program found on PATH is not a regular file");
     };
-    if hidden(real, mounts) {
+    if hidden(real, mounts) || name.as_deref().is_some_and(|name| hidden(name, mounts)) {
         return Err("the program is hidden by a `hide` mount item");
     }
     if kakoi == Some(real.as_path()) || (file.is_some() && *file == kakoi_file) {
@@ -246,13 +251,13 @@ fn check(
     Ok((candidate.clone(), real.clone()))
 }
 
-/// Whether the last mount item that covers `real` (the item's path or one of its
+/// Whether the last mount item that covers `path` (the item's path or one of its
 /// ancestors) hides it.
-fn hidden(real: &Path, mounts: &[ResolvedItem]) -> bool {
+fn hidden(path: &Path, mounts: &[ResolvedItem]) -> bool {
     mounts
         .iter()
         .rev()
-        .find(|item| real.starts_with(&item.real))
+        .find(|item| path.starts_with(&item.real))
         .is_some_and(|item| item.directive == Directive::Hide)
 }
 

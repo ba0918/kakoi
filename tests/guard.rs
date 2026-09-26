@@ -726,6 +726,30 @@ fn ex_869_a_hidden_program_gets_no_guard() {
     assert_skipped(&plan, "git");
 }
 
+// @kotowari[REQ-449]
+#[test]
+fn a_name_found_in_a_hidden_directory_gets_no_guard_even_when_its_target_is_visible() {
+    let scene = Scene::new(&["git"]);
+    let hidden = scene.home.path().join("hidden");
+    std::fs::create_dir(&hidden).unwrap();
+    std::os::unix::fs::symlink(scene.bin.join("git"), hidden.join("git")).unwrap();
+    let policy = scene.home.write(
+        "policy.toml",
+        format!(
+            "[env]\npath-prepend = [\"{}\", \"{}\"]\n[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}",
+            hidden.display(),
+            scene.bin.display(),
+            hidden.display()
+        ),
+    );
+
+    let plan = scene.json_plan(&policy, &[]);
+    let output = run_script(&scene, &policy, "git --version");
+
+    assert_skipped(&plan, "git");
+    assert_passed(&output, "real --version\n");
+}
+
 // @kotowari[EX-883]
 #[test]
 fn ex_883_without_path_no_guard_is_placed() {
