@@ -140,9 +140,10 @@ filtered で通信制限を維持できずに終了するときの 125 は、こ
 
 | 状況 | 標準出力 | 標準エラー | 終了コード |
 |---|---|---|---|
-| `command not found` と `command not executable` 以外の診断 | 無し | 診断 1 行 | 125 |
+| `command not found`、`command not executable`、`guard` 以外の診断 | 無し | 診断 1 行 | 125 |
 | `command not found` | 無し | 診断 1 行 | 127 |
 | `command not executable`（入れ子のみ） | 無し | 診断 1 行 | 126 |
+| `guard`（隔離の中の見張り役が禁じた） | 無し | 診断 1 行 | 126 |
 | bwrap が報告する失敗（マウントの失敗、包んだコマンドの exec の失敗） | bwrap のもの | bwrap のもの | bwrap の終了コードをそのまま |
 | コマンドが終了コード n で終わった | コマンドのもの | 警告があればそれとコマンドのもの | n |
 | コマンドがシグナル s で終わった | コマンドのもの | 警告があればそれとコマンドのもの | 128 + s |
