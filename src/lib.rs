@@ -3,6 +3,7 @@
 //! interface; everything else is `kakoi-core`.
 
 pub mod cli;
+pub mod guard;
 pub mod init;
 pub mod plan_json;
 pub mod plan_text;

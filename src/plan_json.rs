@@ -28,18 +28,20 @@ pub fn render(plan: &Plan) -> String {
 }
 
 #[derive(Serialize)]
-struct PlanDocument {
+struct PlanDocument<'a> {
     format_version: u32,
     nested: bool,
     policy_sources: Vec<Source>,
     variables: Variables,
     home: String,
-    policy: MergedPolicy,
+    policy: MergedPolicy<'a>,
     mounts: Vec<MountItem>,
     skipped_mounts: Vec<SkippedMount>,
     left_visible: Vec<LeftVisible>,
     skipped_paths: Vec<SkippedPath>,
     not_copied: Vec<NotCopied>,
+    guards: Vec<Guard>,
+    skipped_guards: Vec<SkippedGuard>,
     environment: BTreeMap<String, Option<String>>,
     environment_changes: EnvironmentChanges,
     command: Option<Command>,
@@ -63,7 +65,7 @@ struct Variables {
 }
 
 #[derive(Serialize)]
-struct MergedPolicy {
+struct MergedPolicy<'a> {
     mounts: Vec<PolicyMount>,
     scan: Vec<Scan>,
     hide_mounts: Vec<HideMounts>,
@@ -80,6 +82,33 @@ struct MergedPolicy {
     path_prepend: Vec<String>,
     secrets: BTreeMap<String, String>,
     instead_of: BTreeMap<String, String>,
+    guards: Vec<PolicyGuard<'a>>,
+}
+
+/// One rule of `commands.guard` as written, with its layer.
+#[derive(Serialize)]
+struct PolicyGuard<'a> {
+    #[serde(flatten)]
+    rule: &'a kakoi_core::guard::GuardRule,
+    origin: Origin,
+}
+
+/// A program with a command guard: the directory of the guard (first on `PATH`), the real
+/// program as found on `PATH`, where it is relocated for `guard-absolute-path` (or
+/// `null`), and where each rule applied came from.
+#[derive(Serialize)]
+struct Guard {
+    program: String,
+    location: String,
+    found: String,
+    relocated: Option<String>,
+    sources: Vec<Origin>,
+}
+
+#[derive(Serialize)]
+struct SkippedGuard {
+    program: String,
+    reason: String,
 }
 
 #[derive(Serialize)]
@@ -187,8 +216,8 @@ enum BwrapArgument {
     },
 }
 
-impl From<&Plan> for PlanDocument {
-    fn from(plan: &Plan) -> Self {
+impl<'a> From<&'a Plan> for PlanDocument<'a> {
+    fn from(plan: &'a Plan) -> Self {
         let changes = &plan.environment_changes;
         PlanDocument {
             format_version: FORMAT_VERSION,
@@ -259,6 +288,27 @@ impl From<&Plan> for PlanDocument {
                     reason: entry.reason.clone(),
                 })
                 .collect(),
+            guards: plan
+                .guards
+                .placed
+                .iter()
+                .map(|guard| Guard {
+                    program: guard.program.clone(),
+                    location: text(&guard.location),
+                    found: text(&guard.found),
+                    relocated: guard.relocated.as_deref().map(text),
+                    sources: guard.sources.iter().map(layer).collect(),
+                })
+                .collect(),
+            skipped_guards: plan
+                .guards
+                .skipped
+                .iter()
+                .map(|skipped| SkippedGuard {
+                    program: skipped.program.clone(),
+                    reason: skipped.reason.clone(),
+                })
+                .collect(),
             environment: plan
                 .environment
                 .shown()
@@ -302,7 +352,7 @@ impl From<&Plan> for PlanDocument {
     }
 }
 
-fn merged_policy(policy: &Policy) -> MergedPolicy {
+fn merged_policy(policy: &Policy) -> MergedPolicy<'_> {
     MergedPolicy {
         mounts: policy
             .mounts
@@ -352,6 +402,14 @@ fn merged_policy(policy: &Policy) -> MergedPolicy {
             .map(|(name, path)| (name.clone(), path.to_string()))
             .collect(),
         instead_of: policy.instead_of.clone(),
+        guards: policy
+            .guards
+            .iter()
+            .map(|entry| PolicyGuard {
+                rule: &entry.rule,
+                origin: layer(&entry.origin),
+            })
+            .collect(),
     }
 }
 

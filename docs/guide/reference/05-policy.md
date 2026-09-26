@@ -6,7 +6,7 @@
 その条件は [ポリシーを保護する配置](06-policy-placement.md) が定める。
 
 ## キーの一覧
-<!-- @kotowari[REQ-151:21ed6c60] -->
+<!-- @kotowari[REQ-151:5e504e1b] -->
 
 ポリシーファイルに書けるキーは次の表のとおりである。
 表にない固定キーを書くと、ポリシーの読み込みに失敗する（種類 `policy` の診断、終了コード 125）。
@@ -50,14 +50,16 @@
 | `network` | `dns-zero-ttl-grace-milliseconds` | 整数（100〜10000） | 1000 | TTL が 0 の応答で得た IP へ新しく接続できる猶予 | [DNS](network/04-dns.md) |
 | `network` | `udp-idle-timeout-seconds` | 整数（1〜86400） | 120 | UDP の無通信期限 | [DNS](network/04-dns.md) |
 | `process` | `shutdown-grace-seconds` | 整数（1〜300） | 5 | filtered で終了を待つ猶予 | [プロセス監督](network/07-lifecycle.md) |
+| `commands` | `guard` | テーブルの配列 | 空 | 隔離の中で起動されるプログラムの使い方を止める規則 | [コマンドのガードレール](13-command-guard.md) |
 
 `network.allow`、`network.publish`、`network.dns-upstream` の各項目の中のキーと、`network` と `process` のキーを書いたときに `network.mode` の明示が要る条件は、それぞれの詳細の章が定める。
+`commands.guard` の各規則のキーは[コマンドのガードレール](13-command-guard.md#規則の形)が定める。
 
 `env.mode` と `network.mode` の「表の下を参照」は、どの段も書かなかったときの値が合成の後に決まることを表す（[モードを省略したときの値](#モードを省略したときの値)）。
 同梱プロファイルは両方を明示している（`env.mode = "inherit"`、`network.mode = "host"`）。
 
 ## ファイルの形式
-<!-- @kotowari[REQ-151:21ed6c60, EX-350:b2bc402d, EX-351:620df7f9] -->
+<!-- @kotowari[REQ-151:5e504e1b, EX-350:b2bc402d, EX-351:620df7f9] -->
 
 ポリシーファイルは TOML で書く。
 次の例は形を示すためのもので、値は例である。
@@ -259,13 +261,13 @@ kakoi: policy: ...                     # 終了コード 125
 その `--policy-file` に `${config_dir}` で始まる `ro` の項目があれば、値を持たない変数を含む項目として飛ばされ、理由付きで計画に出る。
 
 ## 段の合成規則
-<!-- @kotowari[TBL-152:121b5da2, REQ-154:a401a486, REQ-155:c0592024] -->
+<!-- @kotowari[TBL-152:593c05c6, REQ-154:a401a486, REQ-155:c0592024] -->
 
 段を重ねる規則は、値の種類で決まる。
 
 | 種類 | 対象 | 規則 |
 |---|---|---|
-| リスト | `mounts.rw` `rw-file` `rw-copy` `ro` `hide` `scan` `hide-mounts`、`env.pass` `unset` `path-prepend` | 連結する。上の段が下の段に足す |
+| リスト | `mounts.rw` `rw-file` `rw-copy` `ro` `hide` `scan` `hide-mounts`、`env.pass` `unset` `path-prepend`、`commands.guard` | 連結する。上の段が下の段に足す |
 | スカラー | `network.mode`、`env.mode` | 上の段が上書きする |
 | テーブル | `env.set`、`secrets`、`git.instead-of` | キー単位でまとめる。同じキーは上の段が勝つ |
 

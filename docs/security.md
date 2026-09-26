@@ -57,6 +57,8 @@ When the launch is not refused:
 - That an `rw` area stays harmless afterwards. What the process writes there (`.git/hooks`,
   `.git/config`, build scripts) is read by whatever you later run on the host.
 - Complete protection of `ro` and `hide` items placed inside an `rw` area; see known gap 15.
+- That a command guard stops what it names: a guard is a guardrail, not part of the boundary
+  (see below).
 
 ## The `filtered` network
 
@@ -90,6 +92,39 @@ Limits of `filtered`, as it stands:
   coming up, say) counts as any other, and a `dns` rule whose name resolves to it opens it.
 - IPv6 link-local destinations (`host-interface`) are refused, and publications are fixed:
   nothing is published because something inside started listening.
+
+## Command guards are not a boundary
+
+A [command guard](policy.md#command-guards) stops a way of using a program that an agent would
+reach for by mistake, with a reason; it does not stop a process that means to get around it. It
+does not watch:
+
+- a start from a place where no guard is placed: an absolute path without
+  `guard-absolute-path`, another name or a hard link that reaches the same program, and the real
+  program found again where `guard-absolute-path` placed it;
+- a library that does the same work without starting the program (a git implementation in
+  Python, say);
+- an alias defined in a configuration file (the `[alias]` of a `.git/config` writable from
+  inside) or through environment variables (`GIT_CONFIG_*`);
+- a shell's built-in commands;
+- an abbreviated long option (`git push --forc`);
+- an option in the middle of the word sequence (`git remote -v add` is not matched by
+  `["remote", "add"]`);
+- the guard's own content when `kakoi`'s executable lies under an item writable from inside:
+  the guards, the rules, and a relocated program cannot be written through the guards'
+  directory, but the guard is `kakoi`'s own executable, and writing it through that item
+  changes every guard (and the `kakoi` on the host);
+- a file swapped in the gap between the plan and the start under `guard-absolute-path`: the
+  real program is relocated by the path resolved when the plan was made, and `bwrap` resolves
+  that path again when it starts, so another isolation that can write where the real program
+  lies can put a hidden file there in between, and it shows at the relocated place. This is the
+  same kind of gap as item 15 of the known gaps below.
+
+A denial is reported only by the guard's own line on standard error and exit code 126; nothing
+is sent outside the isolation. To stop an operation for certain, give the process a token with
+narrower permissions or limit its traffic with the `filtered` network's allow rules. To keep a
+program from being used at all, `hide` it; when what needs protecting is a resource (the docker
+socket, say), `hide` the resource, since the program is not the only way to reach it.
 
 ## Known gaps
 
@@ -168,6 +203,8 @@ Limits of `filtered`, as it stands:
 - double isolation when nested, and nesting detection other than the environment variable
 - aarch64, 32-bit, and x32 binaries
 - protection of `.git/hooks` and `.git/config`
+- stopping programs written or downloaded into a writable place from running (command guards
+  watch how a program on `PATH` is used; `hide` keeps a given program from being used)
 - tool-section values for any command other than codex (fill in your own in a copy of
   [`examples/shim/codex`](../examples/shim/codex))
 - `init --force` (remove the file first)

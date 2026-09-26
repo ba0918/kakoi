@@ -563,6 +563,8 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
         "skipped_mounts",
         "left_visible",
         "skipped_paths",
+        "guards",
+        "skipped_guards",
         "environment",
         "environment_changes",
         "command",

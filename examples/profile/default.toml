@@ -121,3 +121,32 @@ unset = [
 # been placed, does not warn about a missing one on every run.
 [secrets]
 # GH_TOKEN = "${config_dir}/secrets/gh-token"
+
+# Command guards: a rule that stops one way of using a program started inside the
+# isolation, with a reason, and exit code 126. It is a guardrail against mistakes, not a
+# boundary: a program started by an absolute path, through a library, or through an
+# alias made in a configuration file is not watched (see docs/security.md). No rule is
+# active here, because a rule in this profile could not be removed by an upper layer.
+# The example below stops `git push`; uncomment it (or copy it into a --policy-file) to
+# use it. It declares git's global options that take a value, so that `git -C dir push`
+# is still matched from `push`, and stops the `-c` and `--config-env` values that would
+# define an alias. It does not deny the GIT_CONFIG_* variables: `git.instead-of` puts
+# them in the environment itself, so denying them would stop every git command.
+#
+# [[commands.guard]]
+# program = "git"
+# reason = "pushing is left to the person; ask them to push"
+# options-with-value = ["-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace"]
+# deny = [["push"]]
+# deny-option-values = { "-c" = ["/(?i)alias[.].*/"], "--config-env" = ["/(?i)alias[.].*/"] }
+# examples.deny = [
+#     "git push",
+#     "git -C repo push origin main",
+#     "git -c alias.p=push p",
+#     "git --config-env=alias.p=ENV p",
+# ]
+# examples.allow = [
+#     "git status",
+#     "git commit -m 'push fix'",
+#     "git -c color.ui=false log",
+# ]

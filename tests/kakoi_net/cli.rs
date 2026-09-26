@@ -997,3 +997,29 @@ fn a_pasta_that_closes_its_startup_pipe_and_keeps_running_is_not_asked_for_help(
     assert_diagnostic(&filtered_start(&filtered), 125, "bwrap");
     assert_no_help(&calls);
 }
+
+// @kotowari[REQ-446]
+#[test]
+fn the_command_guard_denies_in_filtered_mode_too() {
+    let filtered = Filtered::new(
+        "\n[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n",
+    );
+    filtered
+        .bin
+        .write_executable("git", "#!/bin/sh\necho \"real $*\"\n");
+
+    let output = filtered
+        .with_pasta(&["/bin/sh", "-c", "git push; echo \"exit $?\"; git status"])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stderr}");
+    assert_eq!(output.stdout, b"exit 126\nreal status\n", "{stderr}");
+    assert!(
+        stderr
+            .lines()
+            .any(|line| line == "kakoi: guard: git push: push は人が行う"),
+        "{stderr}"
+    );
+}

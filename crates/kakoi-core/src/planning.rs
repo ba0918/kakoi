@@ -7,16 +7,18 @@
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
-use std::path::PathBuf;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
 use crate::command::{command_candidates, resolve_command};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
-use crate::executables::first_executable;
-use crate::layers::{load_layers, merge, LayerSelection};
+use crate::executables::{file_id, first_executable, named};
+use crate::guard_placement::{place_guards, real_program, GuardPlan, PlacedGuard, GUARD_LOCATION};
+use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
-use crate::mounts::{candidates, expand_policy};
+use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand,
 };
@@ -35,6 +37,9 @@ pub struct Request {
     pub command: Vec<OsString>,
     pub current_dir: PathBuf,
     pub host: BTreeMap<OsString, OsString>,
+    /// The path of kakoi's own executable, which each guard is; none when it cannot be
+    /// told.
+    pub executable: Option<PathBuf>,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -78,7 +83,8 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         current_dir: &request.current_dir,
         host: &request.host,
     };
-    let isolation = resolve_isolation(&inputs, &facts)?;
+    let mut isolation = resolve_isolation(&inputs, &facts)?;
+    let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;
     // The last of stage 7: what each `rw-copy` item that applies starts the isolation
     // with, read only for the items that survived the resolution and the checks.
     let copies = read_copy_sources(&isolation.mounts.items)?;
@@ -95,10 +101,91 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         Some((command, arguments)) => Some(ResolvedCommand {
             command: command.clone(),
             arguments: arguments.to_vec(),
-            path: locate_command(command, search_in)?,
+            path: through_guard(
+                command,
+                locate_command(command, search_in)?,
+                path_of(search_in),
+                &isolation.mounts.items,
+                &guards,
+            ),
         }),
     };
-    Ok(plan::plan(&inputs, isolation, copies, bwrap, command))
+    Ok(plan::plan(
+        &inputs, isolation, copies, bwrap, command, guards,
+    ))
+}
+
+/// The guards of the merged rules, found on the isolation's `PATH` after the mounts are
+/// resolved; the guard location goes first on that `PATH` when a guard is placed
+/// (specification REQ-446 and REQ-449).
+fn plan_guards(
+    policy: &Policy,
+    isolation: &mut plan::Isolation,
+    executable: Option<&Path>,
+) -> Result<GuardPlan, Diagnostic> {
+    let path = path_of(isolation.environment.values());
+    let facts = policy
+        .guards
+        .iter()
+        .map(|entry| {
+            let program = &entry.rule.program;
+            let fact = named(&real_candidates(OsStr::new(program), path));
+            (program.clone(), fact)
+        })
+        .collect();
+    let kakoi = executable.and_then(|path| std::fs::canonicalize(path).ok());
+    let guards = place_guards(
+        &policy.guards,
+        path.is_some(),
+        &facts,
+        &isolation.mounts.items,
+        kakoi.as_deref(),
+        kakoi.as_deref().and_then(file_id),
+    );
+    if !guards.placed.is_empty() {
+        if kakoi.is_none() {
+            return Err(Diagnostic::bwrap(
+                "the executable of kakoi itself, which each command guard is, cannot be located",
+            ));
+        }
+        isolation
+            .environment
+            .put_first_on_path(Path::new(GUARD_LOCATION));
+    }
+    Ok(guards)
+}
+
+/// Where the real `program` is looked for: the entries of `path` other than the guard
+/// location, which a nested run inherits from the run around it (specification REQ-446).
+fn real_candidates(program: &OsStr, path: Option<&OsStr>) -> Vec<PathBuf> {
+    command_candidates(program, path)
+        .into_iter()
+        .filter(|candidate| candidate.parent() != Some(Path::new(GUARD_LOCATION)))
+        .collect()
+}
+
+/// The command a run starts: a name whose real program, looked up on `path` as a guard
+/// looks it up, has a guard is started through the guard, as the same name started
+/// inside would be; otherwise `found`. A path with `/` is left as it is.
+fn through_guard(
+    command: &OsStr,
+    found: PathBuf,
+    path: Option<&OsStr>,
+    mounts: &[ResolvedItem],
+    guards: &GuardPlan,
+) -> PathBuf {
+    if command.as_bytes().contains(&b'/') {
+        return found;
+    }
+    let names = named(&real_candidates(command, path));
+    let Some(real) = real_program(&names, mounts) else {
+        return found;
+    };
+    guards
+        .placed
+        .iter()
+        .find(|guard| guard.found == real.candidate)
+        .map_or(found, PlacedGuard::guard)
 }
 
 /// Stage 8: `bwrap` on the host's `PATH` (specification section 14).

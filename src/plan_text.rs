@@ -89,6 +89,7 @@ fn render_summary(text: &mut String, plan: &Plan) {
         );
     }
     render_left_visible_and_skipped_paths(text, plan);
+    render_guards(text, plan);
     let changes = &plan.environment_changes;
     let kept = match (changes.inherited, changes.kept) {
         (true, 1) => "1 variable as on the host".to_string(),
@@ -144,6 +145,7 @@ fn render_full(text: &mut String, plan: &Plan) {
         );
     }
     render_left_visible_and_skipped_paths(text, plan);
+    render_guards(text, plan);
     text.push_str("environment:\n");
     for (name, value) in plan.environment.shown() {
         match value {
@@ -197,6 +199,37 @@ fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
         );
     }
     render_copy_note(text, plan);
+}
+
+/// The command guards placed, with the guard and, for `guard-absolute-path`, where the
+/// real program is placed again; then the programs skipped, with the reason. The same in
+/// both forms.
+fn render_guards(text: &mut String, plan: &Plan) {
+    if plan.guards.placed.is_empty() && plan.guards.skipped.is_empty() {
+        return;
+    }
+    text.push_str("command guards:\n");
+    for guard in &plan.guards.placed {
+        let _ = write!(
+            text,
+            "  {} guarded by {} (real {})",
+            escape_control(&guard.program),
+            shown(guard.guard()),
+            shown(&guard.found)
+        );
+        if let Some(relocated) = &guard.relocated {
+            let _ = write!(text, ", relocated to {}", shown(relocated));
+        }
+        text.push('\n');
+    }
+    for skipped in &plan.guards.skipped {
+        let _ = writeln!(
+            text,
+            "  skipped `{}`: {}",
+            escape_control(&skipped.program),
+            escape_control(&skipped.reason)
+        );
+    }
 }
 
 /// The one line that says what `rw-copy` means, printed only when an item uses it: the
@@ -361,6 +394,15 @@ fn render_policy(text: &mut String, policy: &Policy) {
             "  secrets {} = `{}`",
             escape_control(name),
             escape_control(&path.to_string())
+        );
+    }
+    for entry in &policy.guards {
+        let rule = serde_json::to_string(&entry.rule).expect("a rule serializes");
+        let _ = writeln!(
+            text,
+            "  commands.guard {} (from {})",
+            escape_control(&rule),
+            layer(&entry.origin)
         );
     }
     for (original, replacement) in &policy.instead_of {
