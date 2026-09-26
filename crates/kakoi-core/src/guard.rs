@@ -351,7 +351,8 @@ fn prefix(sequence: &Sequence, rest: &[Option<&str>]) -> Option<String> {
 }
 
 /// Whether `word` matches `flag`: the part before the first `=` is the flag, and a
-/// one-letter flag also matches that letter among the letters of a bundle.
+/// one-letter flag also matches that letter among the letters of a bundle, before that `=`
+/// too.
 fn flag_matches(flag: &str, word: &str) -> bool {
     let head = word.split_once('=').map_or(word, |(head, _)| head);
     if head == flag {
@@ -360,7 +361,7 @@ fn flag_matches(flag: &str, word: &str) -> bool {
     let mut letters = flag.chars();
     match (letters.next(), letters.next(), letters.next()) {
         (Some('-'), Some(letter), None) if letter != '-' => {
-            word.starts_with('-') && !word.starts_with("--") && word[1..].contains(letter)
+            head.starts_with('-') && !head.starts_with("--") && head[1..].contains(letter)
         }
         _ => false,
     }

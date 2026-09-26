@@ -243,6 +243,15 @@ fn ex_854_flags_match_in_a_bundle_and_before_an_equals_sign() {
     assert!(denies(&rule, "git push --force=yes"));
 }
 
+// @kotowari[REQ-441]
+#[test]
+fn a_one_letter_flag_is_not_looked_for_after_an_equals_sign() {
+    let rule = rule("program = \"git\"\ndeny-flags = [\"-f\"]");
+
+    assert!(!denies(&rule, "git log -o=fast"));
+    assert!(denies(&rule, "git log -fo=x"));
+}
+
 // @kotowari[EX-855]
 #[test]
 fn ex_855_flags_after_a_double_dash_do_not_match() {
