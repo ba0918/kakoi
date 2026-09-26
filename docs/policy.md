@@ -361,13 +361,20 @@ program            = "git"                  # required: a name looked up on PATH
 reason             = "pushing is left to the person; ask them to push"   # required, not empty
 options-with-value = ["-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace"]
 deny               = [["push"], ["remote", ["add", "set-url"]]]
-deny-flags         = ["--force", "-f"]
 deny-option-values = { "-c" = ["/(?i)alias[.].*/"], "--config-env" = ["/(?i)alias[.].*/"] }
-deny-env           = ["GIT_DIR"]
-for                = [["push"]]              # optional: limits deny-flags, deny-option-values, deny-env
 guard-absolute-path = false                  # optional; default false
-examples.deny      = ["git push", "git -C repo push origin main"]
-examples.allow     = ["git status", "git commit -m 'push fix'"]
+examples.deny      = ["git push", "git -C repo push origin main", "git -c alias.p=push p"]
+examples.allow     = ["git status", "git commit -m 'push fix'", "git -c color.ui=false log"]
+
+[[commands.guard]]
+program            = "git"
+reason             = "commits run the hooks; fix what they report instead"
+options-with-value = ["-C", "-c", "--config-env", "--git-dir", "--work-tree", "--namespace"]
+for                = [["commit"]]            # optional: limits deny-flags, deny-option-values, deny-env
+deny-flags         = ["--no-verify", "-n"]
+deny-env           = ["HUSKY"]
+examples.deny      = ["git commit --no-verify -m x", "git commit -nm x", "HUSKY=0 git commit -m x"]
+examples.allow     = ["git commit -m x", "git log -n 3", "HUSKY=0 git status"]
 ```
 
 A rule needs at least one of `deny`, `deny-flags`, `deny-option-values`, and `deny-env`. A list
