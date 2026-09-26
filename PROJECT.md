@@ -59,7 +59,11 @@ nested run `/usr/bin/env` and `/bin/sh`. Copies of `/bin/echo` and `/bin/cat` pl
 temporary directory are started by the relative name `-x/tool`, and a copy of `/bin/sh` there by
 the name `sh` through the host's `PATH`; no copy is started by an absolute path (`python3` makes
 the raw system calls that observe the seccomp filter and the socket connections that observe
-the network mode). Tests point `HOME` and
+the network mode). The command guard tests write small `/bin/sh` scripts into a temporary
+directory and start them by name through `PATH` (`git`, `git2`) and by their absolute
+path (with and without `guard-absolute-path`); they also start `sh` through `PATH`, a copy of the
+built `kakoi` placed in a temporary directory under the name `git` by its absolute path, and
+`/usr/bin/python3` to try writing into the guards' directory. Tests point `HOME` and
 `XDG_CONFIG_HOME` at a temporary directory, hand the binary only `PATH` from the developer's
 environment, and never read the developer's real configuration directory.
 
