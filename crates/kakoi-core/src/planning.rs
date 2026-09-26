@@ -123,7 +123,7 @@ fn plan_guards(
         .iter()
         .map(|entry| {
             let program = &entry.rule.program;
-            let fact = first_named(&command_candidates(OsStr::new(program), path));
+            let fact = first_named(&real_candidates(OsStr::new(program), path));
             (program.clone(), fact)
         })
         .collect();
@@ -146,6 +146,15 @@ fn plan_guards(
             .put_first_on_path(Path::new(GUARD_LOCATION));
     }
     Ok(guards)
+}
+
+/// Where the real `program` is looked for: the entries of `path` other than the guard
+/// location, which a nested run inherits from the run around it (specification REQ-446).
+fn real_candidates(program: &OsStr, path: Option<&OsStr>) -> Vec<PathBuf> {
+    command_candidates(program, path)
+        .into_iter()
+        .filter(|candidate| candidate.parent() != Some(Path::new(GUARD_LOCATION)))
+        .collect()
 }
 
 /// The command a run starts: a name found on `PATH` where a guard was placed is started

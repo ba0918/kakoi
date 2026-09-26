@@ -647,6 +647,34 @@ fn guard_absolute_path_relocates_the_real_program_and_the_plan_shows_where() {
     );
 }
 
+// @kotowari[REQ-446]
+#[test]
+fn the_real_program_is_looked_up_without_the_guard_location() {
+    let scene = Scene::new(&["git"]);
+    let outer = scene.policy(GIT_PUSH);
+    let inner = scene.home.write("inner.toml", GIT_PUSH);
+
+    // Inside, the inherited PATH starts with the outer run's guard location.
+    let output = run_script(
+        &scene,
+        &outer,
+        &format!(
+            "{} --workspace {} --policy-file {} --print-plan=json",
+            env!("CARGO_BIN_EXE_kakoi"),
+            scene.workspace.display(),
+            inner.display()
+        ),
+    );
+
+    assert_loads(&output);
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        guard(&plan, "git")["found"],
+        scene.bin.join("git").to_str().unwrap(),
+        "{plan}"
+    );
+}
+
 // @kotowari[EX-868]
 #[test]
 fn ex_868_a_program_not_on_path_is_skipped_with_a_reason_and_the_run_goes_on() {
