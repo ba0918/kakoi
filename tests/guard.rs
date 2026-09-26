@@ -983,6 +983,21 @@ fn ex_881_a_denied_flag_is_shown_as_that_flag() {
 
 // @kotowari[REQ-447]
 #[test]
+fn a_flag_found_in_a_bundle_or_before_an_equals_sign_is_shown_as_that_flag() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(
+        "[[commands.guard]]\nprogram = \"git\"\ndeny-flags = [\"-f\", \"--force\"]\nreason = \"r\"\n",
+    );
+
+    let bundle = run_script(&scene, &policy, "git push -fq");
+    let with_value = run_script(&scene, &policy, "git push --force=yes");
+
+    assert_denied(&bundle, "kakoi: guard: git -f: r");
+    assert_denied(&with_value, "kakoi: guard: git --force: r");
+}
+
+// @kotowari[REQ-447]
+#[test]
 fn control_characters_in_the_matched_words_are_escaped() {
     let scene = Scene::new(&["git"]);
     let policy = scene

@@ -285,15 +285,12 @@ impl GuardRule {
                 .and_then(|sequences| sequences.iter().find_map(|sequence| prefix(sequence, rest)))
         };
         let flags = || {
-            self.deny_flags
-                .as_ref()
-                .and_then(|flags| {
-                    before_separator
-                        .iter()
-                        .flatten()
-                        .find(|word| flags.iter().any(|flag| flag_matches(flag, word)))
-                })
-                .map(|word| word.to_string())
+            self.deny_flags.as_ref().and_then(|flags| {
+                before_separator
+                    .iter()
+                    .flatten()
+                    .find_map(|word| flags.iter().find(|flag| flag_matches(flag, word)).cloned())
+            })
         };
         let option_values = || {
             self.deny_option_values
