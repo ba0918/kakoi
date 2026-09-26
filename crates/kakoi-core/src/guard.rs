@@ -1,8 +1,14 @@
 //! The command guard's rules (`[[commands.guard]]`): their shape and how they are
 //! checked when a policy file is read.
 
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
+
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+
+use crate::wildcard;
 
 /// The name a rule may not guard: the guard is kakoi itself.
 const KAKOI: &str = "kakoi";
@@ -138,4 +144,192 @@ impl GuardRule {
         }
         Ok(())
     }
+}
+
+/// What a rule denied: the rule's program, the words of the run that matched (the
+/// argument side), and the rule's reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Denial {
+    pub program: String,
+    pub matched: String,
+    pub reason: String,
+}
+
+/// Whether `rules` deny a run of their program with `arguments` (the words after the
+/// program name) while the variables named `environment` are set. Each rule is tried in
+/// order, and within a rule `deny-env`, `deny`, `deny-flags`, then `deny-option-values`;
+/// the first match is the denial.
+pub fn evaluate<'a>(
+    rules: impl IntoIterator<Item = &'a GuardRule>,
+    arguments: &[OsString],
+    environment: &[OsString],
+) -> Option<Denial> {
+    let words: Vec<Option<&str>> = arguments.iter().map(|word| word.to_str()).collect();
+    rules.into_iter().find_map(|rule| {
+        rule.denial(arguments, &words, environment)
+            .map(|matched| Denial {
+                program: rule.program.clone(),
+                matched,
+                reason: rule.reason.clone(),
+            })
+    })
+}
+
+impl GuardRule {
+    fn denial(
+        &self,
+        arguments: &[OsString],
+        words: &[Option<&str>],
+        environment: &[OsString],
+    ) -> Option<String> {
+        let rest = &words[self.skipped(arguments)..];
+        let applies = self.for_.as_ref().is_none_or(|sequences| {
+            sequences
+                .iter()
+                .any(|sequence| prefix(sequence, rest).is_some())
+        });
+        let before_separator = &words[..arguments
+            .iter()
+            .position(|word| word == "--")
+            .unwrap_or(arguments.len())];
+        let env = || {
+            self.deny_env.as_ref().and_then(|patterns| {
+                environment.iter().find_map(|name| {
+                    patterns
+                        .iter()
+                        .any(|pattern| wildcard::matches(pattern, name.as_bytes()))
+                        .then(|| name.to_string_lossy().into_owned())
+                })
+            })
+        };
+        let deny = || {
+            self.deny
+                .as_ref()
+                .and_then(|sequences| sequences.iter().find_map(|sequence| prefix(sequence, rest)))
+        };
+        let flags = || {
+            self.deny_flags
+                .as_ref()
+                .and_then(|flags| {
+                    before_separator
+                        .iter()
+                        .flatten()
+                        .find(|word| flags.iter().any(|flag| flag_matches(flag, word)))
+                })
+                .map(|word| word.to_string())
+        };
+        let option_values = || {
+            self.deny_option_values
+                .as_ref()
+                .and_then(|values| option_value(values, before_separator))
+        };
+        if applies {
+            env().or_else(deny).or_else(flags).or_else(option_values)
+        } else {
+            deny()
+        }
+    }
+
+    /// How many leading words are global options (and their values) to skip before the
+    /// prefix is matched.
+    fn skipped(&self, arguments: &[OsString]) -> usize {
+        let takes_value = |word: &OsStr| {
+            self.options_with_value
+                .iter()
+                .flatten()
+                .any(|name| word == OsStr::new(name))
+        };
+        let mut index = 0;
+        while let Some(word) = arguments.get(index) {
+            if word == "--" {
+                return index + 1;
+            }
+            if !word.as_bytes().starts_with(b"-") {
+                break;
+            }
+            index += if takes_value(word) { 2 } else { 1 };
+        }
+        index.min(arguments.len())
+    }
+}
+
+/// The words of `rest` that `sequence` matches from its front, joined by spaces.
+fn prefix(sequence: &Sequence, rest: &[Option<&str>]) -> Option<String> {
+    if rest.len() < sequence.len() {
+        return None;
+    }
+    let mut matched = Vec::with_capacity(sequence.len());
+    for (position, word) in sequence.iter().zip(rest) {
+        let word = (*word)?;
+        if !position
+            .words()
+            .iter()
+            .any(|pattern| word_matches(pattern, word))
+        {
+            return None;
+        }
+        matched.push(word);
+    }
+    Some(matched.join(" "))
+}
+
+/// Whether `word` matches `flag`: the part before the first `=` is the flag, and a
+/// one-letter flag also matches that letter among the letters of a bundle.
+fn flag_matches(flag: &str, word: &str) -> bool {
+    let head = word.split_once('=').map_or(word, |(head, _)| head);
+    if head == flag {
+        return true;
+    }
+    let mut letters = flag.chars();
+    match (letters.next(), letters.next(), letters.next()) {
+        (Some('-'), Some(letter), None) if letter != '-' => {
+            word.starts_with('-') && !word.starts_with("--") && word[1..].contains(letter)
+        }
+        _ => false,
+    }
+}
+
+/// The first option and value among `words` (the words before the first `--`) whose
+/// value `values` denies for that option, as the run wrote them.
+fn option_value(values: &BTreeMap<String, Vec<String>>, words: &[Option<&str>]) -> Option<String> {
+    let denied = |name: &str, value: &str| {
+        values
+            .get(name)
+            .is_some_and(|patterns| patterns.iter().any(|pattern| word_matches(pattern, value)))
+    };
+    for (index, word) in words.iter().enumerate() {
+        let Some(word) = *word else { continue };
+        if let Some((name, value)) = word.split_once('=') {
+            if denied(name, value) {
+                return Some(word.to_string());
+            }
+        }
+        if let Some(Some(value)) = words.get(index + 1) {
+            if denied(word, value) {
+                return Some(format!("{word} {value}"));
+            }
+        }
+    }
+    None
+}
+
+/// Whether `word` matches `pattern`: a text between two `/` is a regular expression
+/// over the whole word, anything else the word itself.
+pub fn word_matches(pattern: &str, word: &str) -> bool {
+    match regular_expression(pattern) {
+        Some(Ok(regex)) => regex.is_match(word),
+        Some(Err(_)) => false,
+        None => pattern == word,
+    }
+}
+
+/// The regular expression `pattern` stands for, anchored to the whole word; `None` when
+/// the pattern is a plain word. The inner text is compiled alone first so that an
+/// unbalanced `)` cannot escape the anchors.
+pub fn regular_expression(pattern: &str) -> Option<Result<Regex, regex::Error>> {
+    let inner = pattern
+        .strip_prefix('/')
+        .and_then(|rest| rest.strip_suffix('/'))
+        .filter(|_| pattern.len() >= 2)?;
+    Some(Regex::new(inner).and_then(|_| Regex::new(&format!(r"\A(?:{inner})\z"))))
 }
