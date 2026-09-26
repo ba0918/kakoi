@@ -110,6 +110,15 @@ does not watch:
 - an abbreviated long option (`git push --forc`);
 - an option in the middle of the word sequence (`git remote -v add` is not matched by
   `["remote", "add"]`).
+- the guard's own content when `kakoi`'s executable lies under an item writable from inside:
+  the guards, the rules, and a relocated program cannot be written through the guards'
+  directory, but the guard is `kakoi`'s own executable, and writing it through that item
+  changes every guard (and the `kakoi` on the host);
+- a file swapped in the gap between the plan and the start under `guard-absolute-path`: the
+  real program is relocated by the path resolved when the plan was made, and `bwrap` resolves
+  that path again when it starts, so another isolation that can write where the real program
+  lies can put a hidden file there in between, and it shows at the relocated place. This is the
+  same kind of gap as item 15 of the known gaps below.
 
 A denial is reported only by the guard's own line on standard error and exit code 126; nothing
 is sent outside the isolation. To stop an operation for certain, give the process a token with

@@ -157,7 +157,9 @@ cannot be found exits 127, and, in a nested run, a command that was found but ca
 (a script whose interpreter does not exist, or, in the published build, a file of a format the
 kernel cannot run) exits 126, and so does a run a [command guard](policy.md#command-guards)
 denies, with the line `kakoi: guard: <program> <the words that matched>: <reason>` from inside
-the isolation.
+the isolation, where `<program>` is the `program` of the rule that matched. A run the guard lets
+through whose real program cannot be executed exits 126 with `command not executable` too, from
+the guard.
 
 The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`,
 `command not executable`, and `guard`. Warnings are one line each starting with `kakoi: warning: ` and
@@ -166,8 +168,9 @@ do not stop the run.
 When the command runs, its exit code is returned as it is; a command killed by signal `s` yields
 128 + `s`. `kakoi` executes `bwrap` in place rather than waiting for it as a child, so a
 failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
-own output and exit code. Only in a nested run, where `kakoi` executes the command itself,
-does a failed `exec` become the `command not executable` diagnostic above. The failure a
+own output and exit code. Only where `kakoi` executes the command itself, in a nested run or as
+a command guard executing the real program, does a failed `exec` become the
+`command not executable` diagnostic above. The failure a
 fresh machine meets first is a user namespace the kernel will not let `bwrap` create; see
 [Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
 

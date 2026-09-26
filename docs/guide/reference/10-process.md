@@ -113,7 +113,7 @@ LF と CR もこの範囲に入る。
 - 見える表記の形と、JSON 以外の出力で UTF-8 として不正なバイト列をどう表すかは実装に委ねる（[未決事項、実装裁量](../appendix/open-issues.md)）。JSON の計画の扱いは[計画の表示](04-plan.md)が定める。
 
 ## 診断の種類一覧
-<!-- @kotowari[REQ-290:6d029963, EX-526:c80acd80] -->
+<!-- @kotowari[REQ-290:feecd47b, EX-526:c80acd80] -->
 
 診断で終わるとき、標準出力には何も出さない。
 終了コードは種類で決まる。
@@ -127,7 +127,7 @@ LF と CR もこの範囲に入る。
 | `env` | 125 | `HOME` が無い、空、絶対パスでない、実体を得られない、実体がディレクトリでない。`git.instead-of` があり `GIT_CONFIG_COUNT` が不正か足すと上限を超える | [用語](02-terms.md)、[環境変数、秘密、Git の URL 書き換え](08-environment.md) |
 | `bwrap` | 125 | bwrap がホストの `PATH` に無い、bwrap に渡すファイル記述子を用意できない、host と none で bwrap 自身の exec に失敗した | [実行時の境界](../maintainer/runtime.md)、[bwrap を exec できないとき](#bwrap-を-exec-できないとき) |
 | `command not found` | 127 | コマンドが見つからない。説明はコマンド名 | [コマンドライン](03-cli.md) |
-| `command not executable` | 126 | 入れ子で、見つかったコマンドの exec に失敗した。説明はそのパスとエラー | [入れ子で起動したとき](#入れ子で起動したとき) |
+| `command not executable` | 126 | 入れ子で見つかったコマンドの exec に失敗した、または見張り役が禁止にしなかった起動で本物の exec に失敗した。説明はそのパスとエラー | [入れ子で起動したとき](#入れ子で起動したとき)、[コマンドのガードレール](13-command-guard.md#禁止と通過) |
 | `guard` | 126 | 隔離の中で、見張り役がガードレールの規則で起動を禁じた。説明はプログラム名、当たった語、理由 | [コマンドのガードレール](13-command-guard.md#禁止と通過) |
 
 各条件の細部は、表の右の章の検査規則に従う。
@@ -142,7 +142,7 @@ filtered で通信制限を維持できずに終了するときの 125 は、こ
 |---|---|---|---|
 | `command not found`、`command not executable`、`guard` 以外の診断 | 無し | 診断 1 行 | 125 |
 | `command not found` | 無し | 診断 1 行 | 127 |
-| `command not executable`（入れ子のみ） | 無し | 診断 1 行 | 126 |
+| `command not executable`（入れ子と、隔離の中の見張り役） | 無し | 診断 1 行 | 126 |
 | `guard`（隔離の中の見張り役が禁じた） | 無し | 診断 1 行 | 126 |
 | bwrap が報告する失敗（マウントの失敗、包んだコマンドの exec の失敗） | bwrap のもの | bwrap のもの | bwrap の終了コードをそのまま |
 | コマンドが終了コード n で終わった | コマンドのもの | 警告があればそれとコマンドのもの | n |
@@ -158,6 +158,7 @@ filtered で通信制限を維持できずに終了するときの 125 は、こ
 host と none では、kakoi は bwrap を子プロセスとして待たず、bwrap へ exec する。
 bwrap の失敗の出力と終了コードがそのまま呼び出し元に見えるのはこのためである。
 通常の起動でコマンドの exec に失敗すると bwrap の失敗として返り、入れ子では `command not executable` になる。
+見張り役を通る起動では、bwrap が起動するのは見張り役なので、本物の exec の失敗は見張り役の `command not executable` になる。
 
 filtered では kakoi が監督のために残り、SIGTERM や Ctrl-C の扱いと安全上の故障による 125 の優先は [filtered のプロセス監督と終了](network/07-lifecycle.md)が定める。
 その規則はこの表より優先する。
@@ -217,7 +218,7 @@ filtered では kakoi が監督のために残り、SIGTERM や Ctrl-C の扱い
 たとえば `HOME` が相対パスなら、次の段階 4 の `env` の診断で止まる。
 
 ## bwrap を exec できないとき
-<!-- @kotowari[REQ-401:94108879, EX-755:952cef4b, EX-756:3eddd21f] -->
+<!-- @kotowari[REQ-401:b5aeb77d, EX-755:952cef4b, EX-756:3eddd21f] -->
 
 host と none の段階 10 で bwrap 自身の exec に失敗したときは、種類 `bwrap` の診断を出し、終了コード 125 で終わる。
 段階 8 で所在を確かめた後に bwrap が消された場合や、実行できない場合（例: 存在しないインタプリタを指すスクリプト）がこれに当たる。
@@ -226,6 +227,7 @@ exec に失敗した時点ではまだ kakoi が動いているので、kakoi �
 包んだコマンドの exec の失敗は、これと扱いが違う。
 こちらは bwrap が報告するので、kakoi は診断を出さず、bwrap の失敗の出力と終了コードをそのまま返す（[終了結果](#終了結果)）。
 入れ子では kakoi がコマンドを直接 exec するので、同じ失敗が `command not executable`（終了コード 126）になる。
+見張り役が本物を exec するときも同じで、見張り役は bwrap がコマンドを起動した後で動くので、bwrap はその失敗を報告できず、見張り役が `command not executable`（終了コード 126）を出す（[コマンドのガードレール](13-command-guard.md#禁止と通過)）。
 起動の形によって同じ失敗の見え方が違うこの非対称は、受け入れている。
 
 ## 段階 7 の内訳

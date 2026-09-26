@@ -149,7 +149,7 @@ kakoi: usage: --help and --version cannot be combined with any other argument
 ```
 
 ## 実行するコマンドの探し方
-<!-- @kotowari[REQ-260:5288d70d, REQ-261:bd6588a2, EX-500:d93cef11, EX-501:fb8d778f, REQ-446:1b330209] -->
+<!-- @kotowari[REQ-260:5288d70d, REQ-261:bd6588a2, EX-500:d93cef11, EX-501:fb8d778f, REQ-446:da003487] -->
 
 `kakoi` は起動の前に `COMMAND` をファイルのパスへ解決する。
 
@@ -161,7 +161,7 @@ kakoi: usage: --help and --version cannot be combined with any other argument
 どちらの場合も見つからなければ、種類 `command not found` の診断を出して終了コード 127 で終わる。
 診断の説明は `COMMAND` に与えた名前である。
 探すのに使う `PATH` は、ポリシーで組み立てた隔離の中の値である（[環境変数](08-environment.md)）。
-`/` を含まない名前で探した結果が、見張り役を置いたプログラムの本物なら、そのコマンドも見張り役を通して起動する（[コマンドのガードレール](13-command-guard.md#見張り役の置き方)）。
+`/` を含まない名前を見張り役と同じ探し方で探した結果が、見張り役を置いたプログラムの本物なら、そのコマンドも見張り役を通して起動し、計画のコマンドの欄のパスは見張り役のパスになる（[コマンドのガードレール](13-command-guard.md#見張り役の置き方)）。
 
 ```console
 $ kakoi -- /opt/tool             # /opt/tool が存在しない

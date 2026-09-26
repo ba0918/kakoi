@@ -413,24 +413,40 @@ by its rule and every `examples.allow` must not; an example that does not match 
 broken regular expression, and a malformed rule stop the run with `policy`, `--print-plan`
 included, naming the program and the example.
 
-**The guard.** For each program with a rule, `kakoi` looks the program up on the `PATH` the
-isolation gets (after `path-prepend`, leaving out the guards' own directory, which a nested
+**The guard.** For each program with a rule, `kakoi` looks for the real program on the `PATH`
+the isolation gets (after `path-prepend`, leaving out the guards' own directory, which a nested
 `kakoi` inherits) and places a guard of the same name in a directory of its
-own, first on `PATH`. The guard is `kakoi`'s own executable, placed read-only in a tmpfs of its
-own together with the rules; it is laid over every mount item. When a run is denied, the guard
-prints `kakoi: guard: <program> <the words that matched>: <reason>` on standard error and exits
-126 without starting the program; otherwise it executes the real program in its own place, with
-the same `argv[0]`, arguments, environment, and working directory. A command given to `kakoi`
-itself (`kakoi -- git push`) goes through the guard too. A program is skipped, with the reason
-shown in the plan, when it is not found on that `PATH`, when it is hidden by a `hide` item, when
-what is found is not a regular file or is `kakoi` itself, or when the isolation has no `PATH`;
-the rule is still checked.
+own, first on `PATH`. The real program is the one a shell inside would start by that name: going
+through the entries of `PATH` in order, the first name that is not in a place a `hide` item
+covers and that resolves, links followed, to an executable regular file. A directory, a link
+that leads nowhere, a regular file that cannot be executed, and a name in a hidden place are
+passed over and the search goes on. The guard is `kakoi`'s own executable, placed read-only in
+a tmpfs of its own together with the rules; it is laid over every mount item. When a run is
+denied, the guard prints `kakoi: guard: <program> <the words that matched>: <reason>` on
+standard error and exits 126 without starting the program; `<program>` is the `program` of the
+rule that matched, which tells which rule it was when two names reach the same real program.
+Otherwise it executes the real program in its own place, with the same `argv[0]`, arguments,
+environment, and working directory; when that `exec` fails, it exits 126 with the
+`command not executable` diagnostic. A command given to `kakoi` itself (`kakoi -- git push`)
+goes through the guard too, decided by the same search, and the plan shows the guard as the
+command's path. A program is skipped, with the reason shown in the plan, when no real program is
+found on that `PATH`, when the real program, links resolved, is hidden by a `hide` item, when
+it is `kakoi` itself, or when the isolation has no `PATH`; the rule is still checked.
+
+That nothing inside can change the guards, the rules, or a relocated program holds for writes
+through the guards' own directory. The guard is `kakoi`'s own executable, so when that executable
+lies under an item writable from inside, writing it there changes the guard (see
+[Command guards are not a boundary](security.md#command-guards-are-not-a-boundary)).
 
 **`guard-absolute-path`.** By default only a start through `PATH` meets the guard, and
 `/usr/bin/git push` does not. With `guard-absolute-path = true` the guard is also laid over the
 real program's own path, and the program is placed again inside the guard's tmpfs. A program that
 finds its resources relative to its own location (Python's standard library, for one) can break
-when it is moved this way; use it for programs such as `git` that do not.
+when it is moved this way; use it for programs such as `git` that do not. The program is
+relocated by the path resolved when the plan was made, and `bwrap` resolves that path again when
+it starts: another isolation that can write where the real program lies can swap in a hidden file
+between the two, and it shows at the relocated place (the same kind of gap as item 15 of
+[Known gaps](security.md#known-gaps)).
 
 **`git.instead-of` and `GIT_CONFIG_*`.** `git.instead-of` works by putting `GIT_CONFIG_*`
 variables in the environment, so a rule that denies `GIT_CONFIG_*` with `deny-env` stops every
