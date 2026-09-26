@@ -109,7 +109,7 @@ does not watch:
 - a shell's built-in commands;
 - an abbreviated long option (`git push --forc`);
 - an option in the middle of the word sequence (`git remote -v add` is not matched by
-  `["remote", "add"]`).
+  `["remote", "add"]`);
 - the guard's own content when `kakoi`'s executable lies under an item writable from inside:
   the guards, the rules, and a relocated program cannot be written through the guards'
   directory, but the guard is `kakoi`'s own executable, and writing it through that item
