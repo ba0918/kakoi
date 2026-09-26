@@ -40,7 +40,17 @@ pub enum ProgramFact {
         real: Option<PathBuf>,
         /// Whether that is a regular file.
         regular: bool,
+        /// Which file that is; none when it cannot be told.
+        file: Option<FileId>,
     },
+}
+
+/// A file told apart from every other by its device and inode, whatever path names it:
+/// two hard links to one file are the same.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileId {
+    pub device: u64,
+    pub inode: u64,
 }
 
 /// A program with a guard in front of it.
@@ -123,13 +133,14 @@ impl GuardTable {
 
 /// Decides the guards of `guards` (the merged rules) from what was found on `PATH`
 /// (`facts`, by program; `path_present` false when the isolation has no `PATH`), the
-/// mount items as resolved, and the real path of kakoi itself.
+/// mount items as resolved, and the real path of kakoi itself and which file it is.
 pub fn place_guards(
     guards: &[GuardEntry],
     path_present: bool,
     facts: &BTreeMap<String, ProgramFact>,
     mounts: &[ResolvedItem],
     kakoi: Option<&Path>,
+    kakoi_file: Option<FileId>,
 ) -> GuardPlan {
     let mut plan = GuardPlan {
         executable: kakoi.map(Path::to_path_buf),
@@ -138,7 +149,7 @@ pub fn place_guards(
     // The programs with their real path, in the order their first rule is written.
     let mut found: Vec<(String, PathBuf, PathBuf)> = Vec::new();
     for program in programs(guards) {
-        match check(path_present, facts.get(program), mounts, kakoi) {
+        match check(path_present, facts.get(program), mounts, kakoi, kakoi_file) {
             Ok((candidate, real)) => found.push((program.to_string(), candidate, real)),
             Err(reason) => plan.skipped.push(SkippedGuard {
                 program: program.to_string(),
@@ -209,6 +220,7 @@ fn check(
     fact: Option<&ProgramFact>,
     mounts: &[ResolvedItem],
     kakoi: Option<&Path>,
+    kakoi_file: Option<FileId>,
 ) -> Result<(PathBuf, PathBuf), &'static str> {
     if !path_present {
         return Err("the isolation's environment has no PATH");
@@ -217,6 +229,7 @@ fn check(
         candidate,
         real,
         regular,
+        file,
     }) = fact
     else {
         return Err("not found on the isolation's PATH");
@@ -227,7 +240,7 @@ fn check(
     if hidden(real, mounts) {
         return Err("the program is hidden by a `hide` mount item");
     }
-    if kakoi == Some(real.as_path()) {
+    if kakoi == Some(real.as_path()) || (file.is_some() && *file == kakoi_file) {
         return Err("the program found on PATH is kakoi itself");
     }
     Ok((candidate.clone(), real.clone()))

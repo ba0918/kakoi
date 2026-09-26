@@ -14,7 +14,7 @@ use crate::command::{command_candidates, resolve_command};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
-use crate::executables::{first_executable, first_named};
+use crate::executables::{file_id, first_executable, first_named};
 use crate::guard_placement::{place_guards, GuardPlan, PlacedGuard, GUARD_LOCATION};
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
@@ -134,6 +134,7 @@ fn plan_guards(
         &facts,
         &isolation.mounts.items,
         kakoi.as_deref(),
+        kakoi.as_deref().and_then(file_id),
     );
     if !guards.placed.is_empty() {
         if kakoi.is_none() {

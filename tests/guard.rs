@@ -765,6 +765,33 @@ fn a_program_that_is_kakoi_itself_gets_no_guard() {
     assert_skipped(&plan, "git");
 }
 
+// @kotowari[REQ-449]
+#[test]
+fn a_program_that_is_a_hard_link_to_kakoi_itself_gets_no_guard() {
+    let scene = Scene::new(&[]);
+    // A copy of kakoi beside `bin`, so that the hard link stays on one file system.
+    let kakoi = scene.home.path().join("kakoi");
+    common::copy_executable(Path::new(env!("CARGO_BIN_EXE_kakoi")), &kakoi);
+    std::fs::hard_link(&kakoi, scene.bin.join("git")).unwrap();
+    let policy = scene.policy(GIT_PUSH);
+
+    let command = scene.command(&policy, &["--print-plan=json"]);
+    let output = std::process::Command::new(&kakoi)
+        .args(command.get_args())
+        .env_clear()
+        .envs(
+            command
+                .get_envs()
+                .filter_map(|(name, value)| value.map(|value| (name, value))),
+        )
+        .output()
+        .unwrap();
+
+    assert_loads(&output);
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_skipped(&plan, "git");
+}
+
 // @kotowari[REQ-450]
 #[test]
 fn the_summary_and_the_full_plan_show_guards_and_skipped_guards_and_the_full_plan_the_rules() {

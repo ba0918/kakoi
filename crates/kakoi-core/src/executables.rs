@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use crate::guard_placement::ProgramFact;
+use crate::guard_placement::{FileId, ProgramFact};
 
 /// The first of `candidates` that is a regular file this process may execute.
 pub fn first_executable(candidates: &[PathBuf]) -> Option<PathBuf> {
@@ -26,7 +26,17 @@ pub fn first_named(candidates: &[PathBuf]) -> ProgramFact {
             candidate: candidate.clone(),
             real: std::fs::canonicalize(candidate).ok(),
             regular: std::fs::metadata(candidate).is_ok_and(|metadata| metadata.is_file()),
+            file: file_id(candidate),
         })
+}
+
+/// Which file `path` names, following a link; none when it cannot be read.
+pub fn file_id(path: &Path) -> Option<FileId> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|metadata| FileId {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    })
 }
 
 fn is_executable_file(path: &Path) -> bool {
