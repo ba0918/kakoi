@@ -719,13 +719,23 @@ fn ex_869_a_hidden_program_gets_no_guard() {
     // The name on `PATH` is visible; the program it resolves to is hidden.
     let real = scene.home.write_executable("store/git", FAKE_PROGRAM);
     std::os::unix::fs::symlink(&real, scene.bin.join("git")).unwrap();
-    let policy = scene.policy(&format!(
-        "[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}",
-        real.parent().unwrap().display()
-    ));
+    // `PATH` is only `bin`, so no other git is on it.
+    let policy = scene.home.write(
+        "policy.toml",
+        format!(
+            "[env.set]\nPATH = \"{}\"\n[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}",
+            scene.bin.display(),
+            real.parent().unwrap().display()
+        ),
+    );
 
     let plan = scene.json_plan(&policy, &[]);
 
+    assert_eq!(
+        plan["environment"]["PATH"],
+        scene.bin.to_str().unwrap(),
+        "{plan}"
+    );
     assert_skipped(&plan, "git");
 }
 
@@ -753,6 +763,33 @@ fn a_name_in_a_hidden_directory_is_passed_over_and_the_real_program_behind_it_is
     assert_denied(&given, GIT_PUSH_DENIED);
     assert_denied(&by_path, GIT_PUSH_DENIED);
     assert_passed(&not_denied, "real --version\n");
+}
+
+// @kotowari[REQ-446, REQ-449]
+#[test]
+fn a_name_whose_real_program_is_hidden_is_passed_over_and_the_real_program_behind_it_is_guarded() {
+    let scene = Scene::new(&["git"]);
+    let store = scene.home.write_executable("store/git", FAKE_PROGRAM);
+    let front = scene.home.path().join("front");
+    std::fs::create_dir(&front).unwrap();
+    std::os::unix::fs::symlink(&store, front.join("git")).unwrap();
+    let policy = scene.home.write(
+        "policy.toml",
+        format!(
+            "[env]\npath-prepend = [\"{}\", \"{}\"]\n[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}",
+            front.display(),
+            scene.bin.display(),
+            store.parent().unwrap().display()
+        ),
+    );
+
+    let given = scene.run(&policy, &["--", "git", "push"]);
+    let by_path = run_script(&scene, &policy, "git push");
+    let not_denied = run_script(&scene, &policy, "git status");
+
+    assert_denied(&given, GIT_PUSH_DENIED);
+    assert_denied(&by_path, GIT_PUSH_DENIED);
+    assert_passed(&not_denied, "real status\n");
 }
 
 // @kotowari[EX-883]

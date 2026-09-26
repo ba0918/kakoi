@@ -46,13 +46,17 @@ pub struct NameFact {
 }
 
 /// The real program among `names` (in the order of `PATH`): the first the shell inside
-/// would start by that name, one whose name is not hidden by `mounts` and that resolves to
-/// an executable regular file (specification REQ-446). Directories, dangling links,
-/// regular files that cannot be executed, and names in a hidden place are passed over.
+/// would start by that name, one whose name and what it resolves to are not hidden by
+/// `mounts` and that resolves to an executable regular file (specification REQ-446).
+/// Directories, dangling links, regular files that cannot be executed, and names whose
+/// place or real file is hidden are passed over.
 pub fn real_program<'a>(names: &'a [NameFact], mounts: &[ResolvedItem]) -> Option<&'a NameFact> {
     names.iter().find(|fact| {
         fact.executable
-            && fact.real.is_some()
+            && fact
+                .real
+                .as_deref()
+                .is_some_and(|real| !hidden(real, mounts))
             && !fact
                 .name
                 .as_deref()
@@ -256,9 +260,6 @@ fn check(
     else {
         return Err("not found on the isolation's PATH");
     };
-    if hidden(real, mounts) {
-        return Err("the program is hidden by a `hide` mount item");
-    }
     if kakoi == Some(real.as_path()) || (file.is_some() && *file == kakoi_file) {
         return Err("the program found on PATH is kakoi itself");
     }
