@@ -414,7 +414,8 @@ broken regular expression, and a malformed rule stop the run with `policy`, `--p
 included, naming the program and the example.
 
 **The guard.** For each program with a rule, `kakoi` looks the program up on the `PATH` the
-isolation gets (after `path-prepend`) and places a guard of the same name in a directory of its
+isolation gets (after `path-prepend`, leaving out the guards' own directory, which a nested
+`kakoi` inherits) and places a guard of the same name in a directory of its
 own, first on `PATH`. The guard is `kakoi`'s own executable, placed read-only in a tmpfs of its
 own together with the rules; it is laid over every mount item. When a run is denied, the guard
 prints `kakoi: guard: <program> <the words that matched>: <reason>` on standard error and exits
