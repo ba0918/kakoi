@@ -160,9 +160,9 @@ Scenario: PATHに無いプログラムの規則は飛ばす
   When 起動する
   Then 起動は続き、計画表示はそのプログラムを理由付きで飛ばしたと示す
 
-@id=EX-869 @about=REQ-449 @source=docs/decision/brainstorm/2026-09-25-command-policy.md#A19,docs/decision/brainstorm/2026-09-25-command-policy.md#A15,docs/decision/brainstorm/2026-09-25-command-policy.md#A35
+@id=EX-869 @about=REQ-449 @source=docs/decision/brainstorm/2026-09-25-command-policy.md#A19,docs/decision/brainstorm/2026-09-25-command-policy.md#A15,docs/decision/brainstorm/2026-09-25-command-policy.md#A35,docs/decision/brainstorm/2026-09-25-command-policy.md#A44
 Scenario: 隠したプログラムには見張り役を置かない
-  Given "git" の規則があり、"git" の本物を "hide" で隠している
+  Given "git" の規則があり、"git" の本物を "hide" で隠していて、隔離へ渡すPATHにほかの "git" は無い
   When "--print-plan=json" を実行する
   Then "skipped_guards" に "git" が理由付きであり、"guards" に "git" は無い
 
