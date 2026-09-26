@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.0] - 2026-09-26
+
+### Added
+
+- Command guards: a rule under `[[commands.guard]]` stops one way of using a program the
+  isolated process starts — `git push`, say — while the rest of the program stays usable. For
+  each program a rule names, `kakoi` puts a guard (its own executable, read-only) first on
+  `PATH`, in front of the program a shell inside would start by that name. A run the rules deny
+  prints `kakoi: guard: <program> <the words that matched>: <reason>` on standard error, nothing
+  on standard output, and exits 126; any other run is handed to the real program with the same
+  arguments, environment, and working directory. A command given to `kakoi` directly goes
+  through the guard too. See [Command guards](docs/policy.md#command-guards).
+  - A rule denies leading words (`deny`, after skipping the global options it declares in
+    `options-with-value`), flags anywhere before `--` (`deny-flags`, bundles and `--flag=value`
+    included), option values (`deny-option-values`), and set environment variables
+    (`deny-env`); `for` limits the last three to some leading words. A word written between two
+    `/` is a regular expression.
+  - `examples.deny` and `examples.allow` are checked when the policy is read, and a rule whose
+    examples do not hold stops the launch with `policy`, as does a rule of the wrong shape. Rules
+    from every layer apply together.
+  - `guard-absolute-path = true` also lays a guard over the real program's own path, so that
+    `/usr/bin/git push` is caught; a program that finds its resources from its own location can
+    break under it.
+  - A guard is a guardrail against mistakes, not a boundary: a process that means to get around
+    it can. [Security model](docs/security.md#command-guards-are-not-a-boundary) lists what it
+    cannot see. To stop something for certain, use a token with narrower permissions or
+    `filtered` rules; to keep a program from being used at all, `hide` it.
+  - The bundled profile carries a commented rule for `git` that denies `push` and the `-c` and
+    `--config-env` aliases that would reach it.
+- `--print-plan` shows the programs given a guard and those skipped, with the reason;
+  `--print-plan=full` also shows the merged rules and where each came from. `--print-plan=json`
+  gains `guards`, `skipped_guards`, and `policy.guards`; `format_version` stays `1`, as these
+  are additions.
+- The `command not executable` diagnostic (126) now also reports a guard that cannot start the
+  real program, outside a nested run too.
+
 ## [0.4.0] - 2026-09-25
 
 ### Added
@@ -145,7 +181,8 @@ layered policy, and returns the command's exit code unchanged.
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
 
-[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ba0918/kakoi/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ba0918/kakoi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ba0918/kakoi/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ba0918/kakoi/compare/v0.1.1...v0.2.0
