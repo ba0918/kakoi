@@ -125,7 +125,7 @@ LF と CR もこの範囲に入る。
 | `path` | 125 | カレントディレクトリを取得できない、ワークスペースが無いかディレクトリでない、設定ディレクトリの実体を得られない、Git の導出の失敗、マウントの種類の誤り、広すぎる範囲、保護対象の配置、`rw-copy` の複製元の失敗や上限超過、`init` の書き出し先が既にある、書き込みの失敗 | [マウントの解決](07-mounts.md)、[ポリシーを保護する配置](06-policy-placement.md)、[コマンドライン](03-cli.md) |
 | `secret` | 125 | 秘密ファイルを読めない、通常ファイルでない、改行を除いた値が空、NUL を含む、64 KiB を超える | [環境変数、秘密、Git の URL 書き換え](08-environment.md) |
 | `env` | 125 | `HOME` が無い、空、絶対パスでない、実体を得られない、実体がディレクトリでない。`git.instead-of` があり `GIT_CONFIG_COUNT` が不正か足すと上限を超える | [用語](02-terms.md)、[環境変数、秘密、Git の URL 書き換え](08-environment.md) |
-| `bwrap` | 125 | bwrap がホストの `PATH` に無い、bwrap に渡すファイル記述子を用意できない、host と none で bwrap 自身の exec に失敗した | [実行時の境界](../maintainer/runtime.md)、[bwrap を exec できないとき](#bwrap-を-exec-できないとき) |
+| `bwrap` | 125 | bwrap がホストの `PATH` に無い、bwrap に渡すファイル記述子を用意できない、host と none で bwrap 自身の exec に失敗した、見張り役を置くのに kakoi 自身の実行ファイルの場所が分からない | [実行時の境界](../maintainer/runtime.md)、[bwrap を exec できないとき](#bwrap-を-exec-できないとき) |
 | `command not found` | 127 | コマンドが見つからない。説明はコマンド名 | [コマンドライン](03-cli.md) |
 | `command not executable` | 126 | 入れ子で見つかったコマンドの exec に失敗した、または見張り役が禁止にしなかった起動で本物の exec に失敗した。説明はそのパスとエラー | [入れ子で起動したとき](#入れ子で起動したとき)、[コマンドのガードレール](13-command-guard.md#禁止と通過) |
 | `guard` | 126 | 隔離の中で、見張り役がガードレールの規則で起動を禁じた。説明はプログラム名、当たった語、理由 | [コマンドのガードレール](13-command-guard.md#禁止と通過) |
