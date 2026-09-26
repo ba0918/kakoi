@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
-use crate::guard_placement::GuardPlan;
+use crate::guard_placement::{GuardPlan, GUARD_LOCATION, GUARD_ROOT, GUARD_TABLE};
 use crate::isolated_env::{
     assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
 };
@@ -169,6 +169,7 @@ pub fn plan(
         inputs.current_dir,
         &isolation.mounts.items,
         &copies,
+        &guards,
         command.as_ref(),
     );
     let environment_changes =
@@ -246,6 +247,7 @@ pub fn bwrap_arguments(
     current_dir: &Path,
     items: &[ResolvedItem],
     copies: &CopySources,
+    guards: &GuardPlan,
     command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
     let mut arguments = vec![
@@ -308,6 +310,7 @@ pub fn bwrap_arguments(
             Argument::text("/etc/resolv.conf"),
         ]);
     }
+    arguments.extend(guard_arguments(guards));
     if let Some(command) = command {
         arguments.push(Argument::text("--"));
         arguments.push(Argument::text(command.path.as_os_str()));
@@ -376,6 +379,68 @@ fn copy_arguments(item: &ResolvedItem, source: Option<&CopySource>) -> Vec<Argum
             real(),
         ],
     }
+}
+
+/// The arguments that place the command guards, after the user's mounts so that none of
+/// them covers a guard: a tmpfs of kakoi's own under bwrap's `/dev`, a bind of kakoi's
+/// executable for each guard (each its own, so that the guard tells where it was started
+/// from), each program of `guard-absolute-path` bound again inside the tmpfs and a guard
+/// bound over its own path, the table, and the tmpfs made read-only. Nothing when no
+/// guard is placed. No argument is a bare `--`.
+fn guard_arguments(guards: &GuardPlan) -> Vec<Argument> {
+    let Some(kakoi) = guards
+        .executable
+        .as_deref()
+        .filter(|_| !guards.placed.is_empty())
+    else {
+        return Vec::new();
+    };
+    let bind = |from: &Path, to: &Path| {
+        [
+            Argument::text("--ro-bind"),
+            Argument::text(from.as_os_str()),
+            Argument::text(to.as_os_str()),
+        ]
+    };
+    let directory = |path: &Path| {
+        [
+            Argument::text("--perms"),
+            Argument::text("0755"),
+            Argument::text("--dir"),
+            Argument::text(path.as_os_str()),
+        ]
+    };
+    let mut arguments = vec![
+        Argument::text("--perms"),
+        Argument::text("0755"),
+        Argument::text("--tmpfs"),
+        Argument::text(GUARD_ROOT),
+    ];
+    arguments.extend(directory(Path::new(GUARD_LOCATION)));
+    for guard in &guards.placed {
+        arguments.extend(bind(kakoi, &guard.guard()));
+    }
+    for (real, relocated) in &guards.overlaid {
+        // bwrap would make the missing directories itself, readable by their owner only.
+        let parent = relocated
+            .parent()
+            .expect("a relocated program is in a directory");
+        for directory_path in [parent.parent(), Some(parent)].into_iter().flatten() {
+            arguments.extend(directory(directory_path));
+        }
+        arguments.extend(bind(real, relocated));
+        arguments.extend(bind(kakoi, real));
+    }
+    arguments.extend([
+        Argument::text("--perms"),
+        Argument::text("0444"),
+        Argument::text("--ro-bind-data"),
+        Argument::CopiedFile(FileContent::new(guards.table.to_bytes())),
+        Argument::text(GUARD_TABLE),
+        Argument::text("--remount-ro"),
+        Argument::text(GUARD_ROOT),
+    ]);
+    arguments
 }
 
 /// A mode as bwrap's `--perms` takes it.

@@ -454,7 +454,7 @@ fn ex_861_an_upper_layer_rule_does_not_remove_a_lower_layer_rule() {
 }
 
 /// A program that stands in for the real one: prints its name and arguments.
-const FAKE_PROGRAM: &str = "#!/bin/sh\necho \"real $0 $*\"\n";
+const FAKE_PROGRAM: &str = "#!/bin/sh\necho \"real $*\"\n";
 
 /// A home with the `RW_WORKSPACE` profile, a workspace, and a directory `bin` of fake
 /// programs that the policy puts in front of `PATH`.
@@ -752,4 +752,344 @@ fn the_summary_and_the_full_plan_show_guards_and_skipped_guards_and_the_full_pla
     assert!(full.contains("push は人が行う"), "{full}");
     assert!(full.contains("never"), "{full}");
     assert!(full.contains(policy.to_str().unwrap()), "{full}");
+}
+
+/// Runs `script` with `/bin/sh -c` inside the isolation of `policy`.
+fn run_script(scene: &Scene, policy: &Path, script: &str) -> Output {
+    scene.run(policy, &["--", "/bin/sh", "-c", script])
+}
+
+/// Exit 126, nothing on standard output, and one line on standard error that is `line`.
+fn assert_denied(output: &Output, line: &str) {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!("{line}\n"),
+        "{report}"
+    );
+}
+
+/// `program` found on `PATH` inside the isolation is its guard.
+fn assert_guarded(scene: &Scene, policy: &Path, program: &str) {
+    let plan = scene.json_plan(policy, &[]);
+    let location = guard(&plan, program)["location"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let output = run_script(scene, policy, &format!("command -v {program}"));
+    assert_passed(&output, &format!("{location}/{program}\n"));
+}
+
+/// Exit 0, `stdout` on standard output, and nothing on standard error.
+fn assert_passed(output: &Output, stdout: &str) {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), stdout, "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+}
+
+const GIT_PUSH_DENIED: &str = "kakoi: guard: git push: push は人が行う";
+
+// @kotowari[EX-862]
+#[test]
+fn ex_862_a_program_started_through_path_passes_the_guard() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = run_script(&scene, &policy, "git push");
+
+    assert_denied(&output, GIT_PUSH_DENIED);
+}
+
+// @kotowari[EX-863]
+#[test]
+fn ex_863_guard_absolute_path_guards_a_start_by_absolute_path() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!("{GIT_PUSH}guard-absolute-path = true\n"));
+
+    let output = run_script(
+        &scene,
+        &policy,
+        &format!("{}/git push", scene.bin.display()),
+    );
+
+    assert_denied(&output, GIT_PUSH_DENIED);
+}
+
+// @kotowari[EX-877]
+#[test]
+fn ex_877_by_default_the_real_program_is_not_overlaid() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = run_script(
+        &scene,
+        &policy,
+        &format!("{}/git push", scene.bin.display()),
+    );
+
+    assert_passed(&output, "real push\n");
+}
+
+// @kotowari[EX-878]
+#[test]
+fn ex_878_a_program_in_path_prepend_is_guarded() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = scene.run(&policy, &["--", "git", "push"]);
+
+    assert_denied(&output, GIT_PUSH_DENIED);
+}
+
+// @kotowari[EX-864]
+#[test]
+fn ex_864_a_command_given_to_kakoi_is_guarded_and_the_real_program_not_started() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.home.write("policy.toml", GIT_PUSH);
+
+    let output = scene
+        .command(&policy, &["--", "git", "push"])
+        .env("PATH", format!("{}:{}", scene.bin.display(), host_path()))
+        .output()
+        .unwrap();
+
+    assert_denied(&output, GIT_PUSH_DENIED);
+}
+
+/// Inside the isolation: the tmpfs holding `location` (the mount whose point is the
+/// longest prefix of it), every file in it opened for writing and a file created in every
+/// directory of it; prints each attempt that succeeded.
+const TRY_WRITES: &str = r#"
+import os, sys
+location = sys.argv[1]
+points = []
+with open("/proc/self/mountinfo") as mounts:
+    for line in mounts:
+        fields = line.split()
+        point, kind = fields[4], fields[fields.index("-") + 1]
+        if kind == "tmpfs" and (location == point or location.startswith(point.rstrip("/") + "/")):
+            points.append(point)
+root = max(points, key=len)
+print("root", root)
+for directory, _, files in os.walk(root):
+    try:
+        open(os.path.join(directory, "kakoi-test-new"), "w").close()
+        print("created in", directory)
+    except OSError:
+        pass
+    for name in files:
+        try:
+            open(os.path.join(directory, name), "r+b").close()
+            print("opened", os.path.join(directory, name))
+        except OSError:
+            pass
+"#;
+
+// @kotowari[EX-865]
+#[test]
+fn ex_865_the_guard_and_its_rules_cannot_be_written_from_inside() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!("{GIT_PUSH}guard-absolute-path = true\n"));
+    let plan = scene.json_plan(&policy, &[]);
+    let location = guard(&plan, "git")["location"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let output = scene.run(
+        &policy,
+        &["--", "/usr/bin/python3", "-c", TRY_WRITES, &location],
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let mut lines = stdout.lines();
+    assert!(
+        lines.next().is_some_and(|line| line.starts_with("root /")),
+        "{report}"
+    );
+    assert_eq!(lines.next(), None, "{report}");
+}
+
+// @kotowari[EX-879]
+#[test]
+fn ex_879_the_guard_does_not_behave_as_a_nested_kakoi() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = run_script(&scene, &policy, "git --version");
+
+    assert_passed(&output, "real --version\n");
+    assert_guarded(&scene, &policy, "git");
+}
+
+// @kotowari[EX-880]
+#[test]
+fn ex_880_a_copy_of_kakoi_not_in_the_table_is_not_a_guard() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+    let copy = scene.home.path().join("other");
+    std::fs::create_dir(&copy).unwrap();
+    common::copy_executable(Path::new(env!("CARGO_BIN_EXE_kakoi")), &copy.join("git"));
+    let version = run(scene.home.path(), ["--version"]);
+
+    let output = run_script(
+        &scene,
+        &policy,
+        &format!("{}/git --version", copy.display()),
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, version.stdout, "{report}");
+}
+
+// @kotowari[EX-866, REQ-290]
+#[test]
+fn ex_866_a_denied_run_prints_the_reason_and_ends_with_126() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = run_script(&scene, &policy, "git push origin main");
+
+    assert_denied(&output, GIT_PUSH_DENIED);
+}
+
+// @kotowari[EX-881]
+#[test]
+fn ex_881_a_denied_flag_is_shown_as_that_flag() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(
+        "[[commands.guard]]\nprogram = \"git\"\ndeny-flags = [\"--force\"]\nreason = \"強制は人が行う\"\n",
+    );
+
+    let output = run_script(&scene, &policy, "git push --force");
+
+    assert_denied(&output, "kakoi: guard: git --force: 強制は人が行う");
+}
+
+// @kotowari[REQ-447]
+#[test]
+fn control_characters_in_the_matched_words_are_escaped() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene
+        .policy("[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"/push.*/\"]]\nreason = \"r\"\n");
+
+    let output = scene.run(&policy, &["--", "git", "push\u{1}x"]);
+
+    assert_denied(&output, "kakoi: guard: git push\\x01x: r");
+}
+
+// @kotowari[EX-867]
+#[test]
+fn ex_867_a_run_not_denied_returns_the_real_result() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = scene.run(&policy, &["--", "git", "--version"]);
+
+    assert_passed(&output, "real --version\n");
+    let plan = scene.json_plan(&policy, &["git", "--version"]);
+    let location = guard(&plan, "git")["location"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(plan["command"]["path"], format!("{location}/git"), "{plan}");
+}
+
+// @kotowari[EX-882]
+#[test]
+fn ex_882_argv0_and_the_working_directory_reach_the_real_program() {
+    let scene = Scene::new(&[]);
+    let policy = scene.policy(
+        "[[commands.guard]]\nprogram = \"sh\"\ndeny = [[\"never-used\"]]\nreason = \"r\"\n",
+    );
+    let sub = scene.workspace.join("sub");
+    std::fs::create_dir(&sub).unwrap();
+    let run_in_sub = |arguments: &[&str]| {
+        scene
+            .command(&policy, arguments)
+            .current_dir(&sub)
+            .output()
+            .unwrap()
+    };
+
+    let output = run_in_sub(&["--", "sh", "-c", "echo $0; pwd"]);
+    let through_guard = run_in_sub(&["--", "sh", "never-used"]);
+
+    assert_passed(&output, &format!("sh\n{}\n", sub.display()));
+    assert_denied(&through_guard, "kakoi: guard: sh never-used: r");
+}
+
+// @kotowari[REQ-448]
+#[test]
+fn the_real_program_gets_the_environment_set_inside() {
+    let scene = Scene::new(&[]);
+    common::write_executable(&scene.bin.join("git"), "#!/bin/sh\necho \"$GUARD_TEST\"\n");
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = run_script(&scene, &policy, "GUARD_TEST=inside git status");
+
+    assert_passed(&output, "inside\n");
+    assert_guarded(&scene, &policy, "git");
+}
+
+// @kotowari[REQ-453]
+#[test]
+fn two_names_for_the_same_real_program_get_the_rules_of_both() {
+    let scene = Scene::new(&["git"]);
+    std::os::unix::fs::symlink(scene.bin.join("git"), scene.bin.join("git2")).unwrap();
+    let policy = scene.policy(&format!(
+        "{GIT_PUSH}[[commands.guard]]\nprogram = \"git2\"\ndeny = [[\"fetch\"]]\n\
+         reason = \"fetch も人が行う\"\nguard-absolute-path = true\n"
+    ));
+
+    let by_path = run_script(&scene, &policy, "git fetch");
+    let other_name = run_script(&scene, &policy, "git2 push");
+    let absolute = run_script(
+        &scene,
+        &policy,
+        &format!("{}/git fetch", scene.bin.display()),
+    );
+
+    assert_denied(&by_path, "kakoi: guard: git2 fetch: fetch も人が行う");
+    assert_denied(&other_name, GIT_PUSH_DENIED);
+    assert_denied(&absolute, "kakoi: guard: git2 fetch: fetch も人が行う");
+}
+
+// @kotowari[EX-861]
+#[test]
+fn ex_861_rules_of_two_layers_both_deny_inside() {
+    let scene = Scene::new(&["git"]);
+    scene.home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "{}[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n",
+            common::RW_WORKSPACE
+        ),
+    );
+    let policy = scene.policy(
+        "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"fetch\"]]\nreason = \"fetch も人が行う\"\n",
+    );
+
+    let push = run_script(&scene, &policy, "git push");
+    let fetch = run_script(&scene, &policy, "git fetch");
+
+    assert_denied(&push, GIT_PUSH_DENIED);
+    assert_denied(&fetch, "kakoi: guard: git fetch: fetch も人が行う");
+}
+
+// @kotowari[REQ-446]
+#[test]
+fn the_guard_denies_with_network_mode_none() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!("[network]\nmode = \"none\"\n{GIT_PUSH}"));
+
+    let output = run_script(&scene, &policy, "git push");
+
+    assert_denied(&output, GIT_PUSH_DENIED);
 }

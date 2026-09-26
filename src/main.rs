@@ -18,6 +18,11 @@ use std::os::fd::AsFd;
 use std::process::Stdio;
 
 fn main() -> ExitCode {
+    // A command guard is this executable too, and is told apart before anything else:
+    // inside the isolation `KAKOI=1` would otherwise make it a nested run.
+    if let Some(code) = kakoi::guard::run_if_guard() {
+        return code;
+    }
     // The isolation's process 1 of a filtered run is this executable (kakoi-net).
     kakoi_net::init::run_if_requested();
     match startup::prepare(std::env::args_os().skip(1)) {

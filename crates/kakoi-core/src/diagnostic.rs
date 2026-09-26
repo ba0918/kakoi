@@ -14,6 +14,8 @@ pub enum Kind {
     Bwrap,
     CommandNotFound,
     CommandNotExecutable,
+    /// A command guard denied a run (specification REQ-447).
+    Guard,
 }
 
 impl Kind {
@@ -27,6 +29,7 @@ impl Kind {
             Kind::Bwrap => "bwrap",
             Kind::CommandNotFound => "command not found",
             Kind::CommandNotExecutable => "command not executable",
+            Kind::Guard => "guard",
         }
     }
 }
@@ -103,12 +106,12 @@ impl Diagnostic {
         &self.description
     }
 
-    /// 127 for `command not found`, 126 for `command not executable`, 125 for every other
-    /// kind.
+    /// 127 for `command not found`, 126 for `command not executable` and `guard`, 125 for
+    /// every other kind.
     pub fn exit_code(&self) -> i32 {
         match self.kind {
             Kind::CommandNotFound => 127,
-            Kind::CommandNotExecutable => 126,
+            Kind::CommandNotExecutable | Kind::Guard => 126,
             _ => 125,
         }
     }

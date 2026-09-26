@@ -13,6 +13,7 @@ use kakoi_core::command::{command_candidates, resolve_command};
 use kakoi_core::copies::CopySources;
 use kakoi_core::diagnostic::{Diagnostic, Kind};
 use kakoi_core::executables::first_executable;
+use kakoi_core::guard_placement::GuardPlan;
 use kakoi_core::isolated_env::SecretFile;
 use kakoi_core::layers::{Directive, LayerOrigin};
 use kakoi_core::mounts::{
@@ -139,6 +140,7 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
         Path::new("/home/u/proj"),
         &items,
         &CopySources::default(),
+        &GuardPlan::default(),
         Some(&sh_dash_c_echo()),
     );
 
@@ -195,6 +197,7 @@ fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
         Path::new("/home/u/proj"),
         &items,
         &CopySources::default(),
+        &GuardPlan::default(),
         None,
     );
 
@@ -215,6 +218,7 @@ fn share_net_is_present_only_for_host_mode() {
         Path::new("/home/u/proj"),
         &[],
         &CopySources::default(),
+        &GuardPlan::default(),
         None,
     );
     let none = bwrap_arguments(
@@ -222,6 +226,7 @@ fn share_net_is_present_only_for_host_mode() {
         Path::new("/home/u/proj"),
         &[],
         &CopySources::default(),
+        &GuardPlan::default(),
         None,
     );
 
@@ -240,6 +245,7 @@ fn the_argument_list_carries_no_environment_flags() {
         Path::new("/home/u/proj"),
         &items,
         &CopySources::default(),
+        &GuardPlan::default(),
         Some(&sh_dash_c_echo()),
     );
 

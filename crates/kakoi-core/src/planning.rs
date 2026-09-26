@@ -84,7 +84,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         host: &request.host,
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
-    let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref());
+    let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;
     // The last of stage 7: what each `rw-copy` item that applies starts the isolation
     // with, read only for the items that survived the resolution and the checks.
     let copies = read_copy_sources(&isolation.mounts.items)?;
@@ -116,7 +116,7 @@ fn plan_guards(
     policy: &Policy,
     isolation: &mut plan::Isolation,
     executable: Option<&Path>,
-) -> GuardPlan {
+) -> Result<GuardPlan, Diagnostic> {
     let path = path_of(isolation.environment.values());
     let facts = policy
         .guards
@@ -136,11 +136,16 @@ fn plan_guards(
         kakoi.as_deref(),
     );
     if !guards.placed.is_empty() {
+        if kakoi.is_none() {
+            return Err(Diagnostic::bwrap(
+                "the executable of kakoi itself, which each command guard is, cannot be located",
+            ));
+        }
         isolation
             .environment
             .put_first_on_path(Path::new(GUARD_LOCATION));
     }
-    guards
+    Ok(guards)
 }
 
 /// The command a run starts: a name found on `PATH` where a guard was placed is started
