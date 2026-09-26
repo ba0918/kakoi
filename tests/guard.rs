@@ -949,7 +949,7 @@ fn ex_864_a_command_given_to_kakoi_is_guarded_and_the_real_program_not_started()
 
 // @kotowari[REQ-446]
 #[test]
-fn a_command_given_to_kakoi_goes_through_the_guard_placed_in_front_of_a_file_without_execute_permission(
+fn a_command_given_to_kakoi_is_guarded_as_one_started_by_name_past_a_file_without_execute_permission(
 ) {
     let scene = Scene::new(&["git"]);
     let first = scene.home.write("first/git", FAKE_PROGRAM);
@@ -967,6 +967,27 @@ fn a_command_given_to_kakoi_goes_through_the_guard_placed_in_front_of_a_file_wit
 
     assert_denied(&given, GIT_PUSH_DENIED);
     assert_denied(&by_path, GIT_PUSH_DENIED);
+}
+
+// @kotowari[REQ-446, REQ-448]
+#[test]
+fn a_run_not_denied_reaches_the_executable_real_program_past_a_file_without_execute_permission() {
+    let scene = Scene::new(&["git"]);
+    let first = scene.home.write("first/git", FAKE_PROGRAM);
+    let policy = scene.home.write(
+        "policy.toml",
+        format!(
+            "[env]\npath-prepend = [\"{}\", \"{}\"]\n{GIT_PUSH}",
+            first.parent().unwrap().display(),
+            scene.bin.display()
+        ),
+    );
+
+    let given = scene.run(&policy, &["--", "git", "status"]);
+    let by_path = run_script(&scene, &policy, "git status");
+
+    assert_passed(&given, "real status\n");
+    assert_passed(&by_path, "real status\n");
 }
 
 /// Inside the isolation: the tmpfs holding `location` (the mount whose point is the

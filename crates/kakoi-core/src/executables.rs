@@ -17,16 +17,21 @@ pub fn first_executable(candidates: &[PathBuf]) -> Option<PathBuf> {
 
 /// The first of `candidates` that names anything, looked at without following a link,
 /// with what it resolves to: the program a guard is placed in front of (specification
-/// REQ-449 skips it when it is not a regular file, rather than searching on).
+/// REQ-449 skips it when it is not a regular file, rather than searching on). A regular
+/// file this process may not execute is passed over, as the shell's search passes it
+/// over, so that the guard stands in front of the program the name starts.
 pub fn first_named(candidates: &[PathBuf]) -> ProgramFact {
     candidates
         .iter()
-        .find(|candidate| std::fs::symlink_metadata(candidate).is_ok())
+        .find(|candidate| {
+            std::fs::symlink_metadata(candidate).is_ok()
+                && (is_executable_file(candidate) || !is_file(candidate))
+        })
         .map_or(ProgramFact::NotFound, |candidate| ProgramFact::Found {
             candidate: candidate.clone(),
             name: resolved_name(candidate),
             real: std::fs::canonicalize(candidate).ok(),
-            regular: std::fs::metadata(candidate).is_ok_and(|metadata| metadata.is_file()),
+            regular: is_file(candidate),
             file: file_id(candidate),
         })
 }
@@ -46,11 +51,15 @@ pub fn file_id(path: &Path) -> Option<FileId> {
     })
 }
 
+/// Whether `path`, following a link, is a regular file.
+fn is_file(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file())
+}
+
 fn is_executable_file(path: &Path) -> bool {
-    let is_file = std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file());
     let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {
         return false;
     };
     // SAFETY: `access` reads the NUL-terminated path and touches nothing else.
-    is_file && unsafe { libc::access(c_path.as_ptr(), libc::X_OK) } == 0
+    is_file(path) && unsafe { libc::access(c_path.as_ptr(), libc::X_OK) } == 0
 }
