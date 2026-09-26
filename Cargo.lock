@@ -489,6 +489,7 @@ dependencies = [
  "libc",
  "regex",
  "serde",
+ "shlex",
  "toml",
 ]
 

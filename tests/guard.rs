@@ -10,6 +10,7 @@ use std::process::Output;
 
 use common::{assert_diagnostic, home_with_workspace, output_report, run, TempDir};
 use kakoi_core::guard::{evaluate, GuardRule};
+use kakoi_core::layers::{merge, Layer, LayerOrigin};
 use kakoi_core::policy::parse_policy;
 
 /// Writes `policy` as a `--policy-file` beside the `RW_WORKSPACE` profile and runs
@@ -331,4 +332,123 @@ fn deny_env_then_deny_then_flags_then_option_values_and_the_first_match_is_repor
     );
     assert_eq!(matched("git -c x fetch", &[]).as_deref(), Some("-c x"));
     assert_eq!(matched("git fetch", &[]), None);
+}
+
+// @kotowari[EX-859]
+#[test]
+fn ex_859_an_example_that_does_not_match_as_expected_stops_the_run() {
+    let output = print_plan(
+        r#"
+[[commands.guard]]
+program = "git"
+deny = [["push"]]
+reason = "push は人が行う"
+examples.deny = ["git -C dir push"]
+"#,
+    );
+
+    let diagnostic = assert_diagnostic(&output, 125, "policy");
+    assert!(diagnostic.contains("git -C dir push"), "{diagnostic}");
+}
+
+// @kotowari[EX-860]
+#[test]
+fn ex_860_a_rule_that_matches_its_examples_loads() {
+    let output = print_plan(
+        r#"
+[[commands.guard]]
+program = "git"
+deny = [["push"]]
+reason = "push は人が行う"
+examples.deny = ["git push"]
+examples.allow = ["git commit -m 'push fix'"]
+"#,
+    );
+
+    assert_loads(&output);
+}
+
+// @kotowari[EX-875]
+#[test]
+fn ex_875_an_example_is_checked_in_its_own_leading_environment_only() {
+    let (home, workspace) = home_with_workspace();
+    let policy_file = home.write(
+        "policy.toml",
+        r#"
+[[commands.guard]]
+program = "git"
+deny-env = ["GIT_CONFIG_*"]
+reason = "別名は作らない"
+examples.deny = ["GIT_CONFIG_COUNT=1 git status"]
+examples.allow = ["git status"]
+"#,
+    );
+
+    let output = common::binary(home.path())
+        .env("GIT_CONFIG_COUNT", "1")
+        .arg("--workspace")
+        .arg(&workspace)
+        .arg("--policy-file")
+        .arg(&policy_file)
+        .arg("--print-plan")
+        .output()
+        .unwrap();
+
+    assert_loads(&output);
+}
+
+// @kotowari[EX-876]
+#[test]
+fn ex_876_a_broken_regular_expression_stops_the_run() {
+    let output = print_plan(
+        r#"
+[[commands.guard]]
+program = "git"
+deny = [["/pu(sh/"]]
+reason = "push は人が行う"
+"#,
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[REQ-444]
+#[test]
+fn an_example_for_another_program_an_allowed_example_denied_or_unbalanced_quotes_stop_the_run() {
+    for examples in [
+        "examples.deny = [\"hg push\"]",
+        "examples.allow = [\"git push origin\"]",
+        "examples.allow = [\"git commit -m 'push\"]",
+        "examples.deny = [\"GIT_DIR=x\"]",
+    ] {
+        let output = print_plan(&format!(
+            "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"r\"\n{examples}\n"
+        ));
+
+        let diagnostic = assert_diagnostic(&output, 125, "policy");
+        assert!(diagnostic.contains("git"), "{diagnostic}");
+    }
+}
+
+// @kotowari[REQ-443, EX-861]
+#[test]
+fn ex_861_an_upper_layer_rule_does_not_remove_a_lower_layer_rule() {
+    let layer = |origin: LayerOrigin, text: &str| Layer {
+        policy: parse_policy(text, Path::new("/policy.toml")).unwrap(),
+        origin,
+    };
+    let lower = layer(
+        LayerOrigin::BuiltInDefault,
+        "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"r\"\n",
+    );
+    let upper = layer(
+        LayerOrigin::CommandLine,
+        "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"fetch\"]]\nreason = \"r\"\n",
+    );
+
+    let policy = merge(&[lower, upper]).unwrap();
+
+    let rules: Vec<GuardRule> = policy.guards.into_iter().map(|entry| entry.rule).collect();
+    assert!(denies_with(&rules, "git push", &[]));
+    assert!(denies_with(&rules, "git fetch", &[]));
 }

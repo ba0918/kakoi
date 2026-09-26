@@ -142,8 +142,85 @@ impl GuardRule {
                 return empty("deny-option-values");
             }
         }
+        self.check_patterns()?;
+        self.check_examples()
+    }
+
+    /// Every regular expression in `for`, `deny`, and `deny-option-values` compiles.
+    fn check_patterns(&self) -> Result<(), String> {
+        let sequences = self.for_.iter().chain(&self.deny).flatten().flatten();
+        let words = sequences.flat_map(Position::words);
+        let values = self
+            .deny_option_values
+            .iter()
+            .flat_map(|values| values.values().flatten());
+        for pattern in words.chain(values) {
+            if let Some(Err(error)) = regular_expression(pattern) {
+                return Err(format!(
+                    "`commands.guard` for `{}` has a broken regular expression {pattern:?}: {error}",
+                    self.program
+                ));
+            }
+        }
         Ok(())
     }
+
+    /// Each example is denied (`examples.deny`) or not (`examples.allow`) by this rule
+    /// alone, in the environment of its own leading `NAME=value` words.
+    fn check_examples(&self) -> Result<(), String> {
+        let lists = [(true, &self.examples.deny), (false, &self.examples.allow)];
+        for (expected, example) in lists.into_iter().flat_map(|(expected, list)| {
+            list.iter()
+                .flatten()
+                .map(move |example| (expected, example))
+        }) {
+            let unexpected = |why: &str| {
+                Err(format!(
+                    "`commands.guard` for `{}`: the example {example:?} {why}",
+                    self.program
+                ))
+            };
+            let Some(words) = shlex::split(example) else {
+                return unexpected("cannot be split into words");
+            };
+            let command_start = words
+                .iter()
+                .position(|word| !is_assignment(word))
+                .unwrap_or(words.len());
+            let (assignments, command) = words.split_at(command_start);
+            if command.first() != Some(&self.program) {
+                return unexpected("does not start with the rule's program");
+            }
+            let environment: Vec<OsString> = assignments
+                .iter()
+                .filter_map(|word| word.split_once('='))
+                .map(|(name, _)| OsString::from(name))
+                .collect();
+            let arguments: Vec<OsString> = command[1..].iter().map(OsString::from).collect();
+            let denied = evaluate([self], &arguments, &environment).is_some();
+            if denied != expected {
+                return unexpected(if expected {
+                    "is not denied by the rule"
+                } else {
+                    "is denied by the rule"
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Whether `word` is a shell assignment `NAME=value`, `NAME` a letter or `_` followed
+/// by letters, digits, and `_`.
+fn is_assignment(word: &str) -> bool {
+    let Some((name, _)) = word.split_once('=') else {
+        return false;
+    };
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
 /// What a rule denied: the rule's program, the words of the run that matched (the
