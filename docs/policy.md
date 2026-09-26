@@ -417,10 +417,11 @@ included, naming the program and the example.
 the isolation gets (after `path-prepend`, leaving out the guards' own directory, which a nested
 `kakoi` inherits) and places a guard of the same name in a directory of its
 own, first on `PATH`. The real program is the one a shell inside would start by that name: going
-through the entries of `PATH` in order, the first name that is not in a place a `hide` item
-covers and that resolves, links followed, to an executable regular file. A directory, a link
-that leads nowhere, a regular file that cannot be executed, and a name in a hidden place are
-passed over and the search goes on. The guard is `kakoi`'s own executable, placed read-only in
+through the entries of `PATH` in order, the first name that resolves, links followed, to an
+executable regular file, where neither the name's place nor the file it resolves to is covered
+by a `hide` item. A directory, a link that leads nowhere, a regular file that cannot be
+executed, and a name whose place or resolved file is hidden are passed over and the search goes
+on. The guard is `kakoi`'s own executable, placed read-only in
 a tmpfs of its own together with the rules; it is laid over every mount item. When a run is
 denied, the guard prints `kakoi: guard: <program> <the words that matched>: <reason>` on
 standard error and exits 126 without starting the program; `<program>` is the `program` of the
@@ -430,8 +431,8 @@ environment, and working directory; when that `exec` fails, it exits 126 with th
 `command not executable` diagnostic. A command given to `kakoi` itself (`kakoi -- git push`)
 goes through the guard too, decided by the same search, and the plan shows the guard as the
 command's path. A program is skipped, with the reason shown in the plan, when no real program is
-found on that `PATH`, when the real program, links resolved, is hidden by a `hide` item, when
-it is `kakoi` itself, or when the isolation has no `PATH`; the rule is still checked.
+found on that `PATH` (as when every name of it is hidden), when it is `kakoi` itself, or when
+the isolation has no `PATH`; the rule is still checked.
 
 That nothing inside can change the guards, the rules, or a relocated program holds for writes
 through the guards' own directory. The guard is `kakoi`'s own executable, so when that executable

@@ -149,7 +149,7 @@ kakoi: usage: --help and --version cannot be combined with any other argument
 ```
 
 ## 実行するコマンドの探し方
-<!-- @kotowari[REQ-260:5288d70d, REQ-261:bd6588a2, EX-500:d93cef11, EX-501:fb8d778f, REQ-446:da003487] -->
+<!-- @kotowari[REQ-260:5288d70d, REQ-261:bd6588a2, EX-500:d93cef11, EX-501:fb8d778f, REQ-446:d9d65b91] -->
 
 `kakoi` は起動の前に `COMMAND` をファイルのパスへ解決する。
 
