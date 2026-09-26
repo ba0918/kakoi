@@ -62,7 +62,8 @@ the raw system calls that observe the seccomp filter and the socket connections 
 the network mode). The command guard tests write small `/bin/sh` scripts into a temporary
 directory and start them by name through `PATH` (`git`, `git2`) and by their absolute
 path (with and without `guard-absolute-path`); they also start `sh` through `PATH`, a copy of the
-built `kakoi` placed in a temporary directory under the name `git` by its absolute path, and
+built `kakoi` placed in a temporary directory under the name `git` by its absolute path, the
+built `kakoi` itself by its absolute path for a nested `--print-plan=json`, and
 `/usr/bin/python3` to try writing into the guards' directory. Tests point `HOME` and
 `XDG_CONFIG_HOME` at a temporary directory, hand the binary only `PATH` from the developer's
 environment, and never read the developer's real configuration directory.
