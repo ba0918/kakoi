@@ -16,6 +16,7 @@ pub mod copy_facts;
 pub mod diagnostic;
 pub mod environment;
 pub mod executables;
+pub mod guard;
 pub mod isolated_env;
 pub mod launch;
 pub mod layers;

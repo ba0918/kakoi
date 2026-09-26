@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
 use crate::environment::PathState;
+use crate::guard::GuardRule;
 use crate::policy::{parse_policy, EnvMode, HideMounts, NetworkMode, PolicyFile, PolicyPath, Scan};
 use crate::regular_file::{read_regular_file, Links};
 use crate::workspace_facts::probe_path;
@@ -138,6 +139,15 @@ pub struct Policy {
     pub path_prepend: Vec<PolicyPath>,
     pub secrets: BTreeMap<String, PolicyPath>,
     pub instead_of: BTreeMap<String, String>,
+    /// The rules of `commands.guard`, lower layer first, each with its layer.
+    pub guards: Vec<GuardEntry>,
+}
+
+/// One rule of `commands.guard` with the layer it came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuardEntry {
+    pub rule: GuardRule,
+    pub origin: LayerOrigin,
 }
 
 /// Merges the written layers, lowest first: lists concatenate (the upper layer appended,
@@ -180,6 +190,7 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         path_prepend: Vec::new(),
         secrets: BTreeMap::new(),
         instead_of: BTreeMap::new(),
+        guards: Vec::new(),
     };
     for layer in layers {
         let file = &layer.policy;
@@ -232,6 +243,12 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
             .splice(0..0, file.env.path_prepend.iter().cloned());
         policy.secrets.extend(file.secrets.clone());
         policy.instead_of.extend(file.git.instead_of.clone());
+        policy
+            .guards
+            .extend(file.commands.guard.iter().map(|rule| GuardEntry {
+                rule: rule.clone(),
+                origin: layer.origin.clone(),
+            }));
     }
     if policy.env_mode == EnvMode::Inherit && !policy.env_pass.is_empty() {
         return Err(Diagnostic::policy(

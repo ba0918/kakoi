@@ -129,6 +129,7 @@ pub struct PolicyFile {
     pub env: Env,
     pub secrets: BTreeMap<String, PolicyPath>,
     pub git: Git,
+    pub commands: crate::guard::Commands,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -257,6 +258,10 @@ pub fn parse_policy(text: &str, origin: &Path) -> Result<PolicyFile, Diagnostic>
                 origin.display()
             )));
         }
+    }
+    for rule in &policy.commands.guard {
+        rule.validate()
+            .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
     }
     policy.network.publish = crate::network::merge_publications(policy.network.publish)
         .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;

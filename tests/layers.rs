@@ -451,3 +451,31 @@ fn a_policy_file_behind_a_symlink_is_read() {
 
     assert_eq!(layers[1].policy.mounts.ro, [absolute("/p")]);
 }
+
+// @kotowari[REQ-443]
+#[test]
+fn guard_rules_concatenate_across_layers_lower_first_with_their_layer() {
+    let lower = "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"lower\"\n";
+    let upper = "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"fetch\"]]\nreason = \"upper\"\n";
+
+    let policy = merge(&[profile(lower), policy_file(upper)]).unwrap();
+
+    let merged: Vec<_> = policy
+        .guards
+        .iter()
+        .map(|entry| (entry.rule.reason.as_str(), entry.origin.clone()))
+        .collect();
+    assert_eq!(
+        merged,
+        [
+            (
+                "lower",
+                LayerOrigin::Profile(PathBuf::from("/config/profile/default.toml"))
+            ),
+            (
+                "upper",
+                LayerOrigin::PolicyFile(PathBuf::from("/project/policy.toml"))
+            ),
+        ]
+    );
+}
