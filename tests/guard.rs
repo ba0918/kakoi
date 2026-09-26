@@ -1216,7 +1216,23 @@ fn the_real_program_gets_the_environment_set_inside() {
     assert_guarded(&scene, &policy, "git");
 }
 
-// @kotowari[REQ-453]
+// @kotowari[REQ-448, REQ-290]
+#[test]
+fn a_real_program_the_guard_cannot_exec_is_a_command_not_executable_diagnostic() {
+    let scene = Scene::new(&[]);
+    common::write_executable(
+        &scene.bin.join("git"),
+        "#!/nonexistent/interpreter\necho \"real $*\"\n",
+    );
+    let policy = scene.policy(GIT_PUSH);
+
+    let output = scene.run(&policy, &["--", "git", "status"]);
+
+    assert_diagnostic(&output, 126, "command not executable");
+    assert_guarded(&scene, &policy, "git");
+}
+
+// @kotowari[REQ-453, REQ-447]
 #[test]
 fn two_names_for_the_same_real_program_get_the_rules_of_both() {
     let scene = Scene::new(&["git"]);
