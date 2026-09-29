@@ -622,3 +622,188 @@ fn req_314_the_host_environment_chooses_the_profile_and_the_work_place_but_not_t
         tool.canonicalize().unwrap().to_str().unwrap()
     );
 }
+
+// A nested run with `--nested=isolate`: an isolation of its own inside the outer one.
+
+// @kotowari[EX-886]
+#[test]
+fn ex_886_an_isolation_asked_for_inside_is_no_wider_than_the_outer_one() {
+    let (home, workspace) = home_with_workspace();
+    let data = home.path().join("data");
+    std::fs::create_dir(&data).unwrap();
+
+    // The nested run asks for `~/data` as `rw`; the outer isolation has it read-only.
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        &format!(
+            "exec {KAKOI} --nested=isolate --workspace {} --rw {} -- /bin/sh -c \
+             'test -f {MARK} && echo isolated; (echo x > {}) 2>/dev/null || echo not-writable'",
+            workspace.display(),
+            data.display(),
+            data.join("file").display(),
+        ),
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"isolated\nnot-writable\n", "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+    assert!(!data.join("file").exists(), "{report}");
+}
+
+// @kotowari[REQ-456]
+#[test]
+fn req_456_a_nested_isolation_finds_the_command_on_the_isolated_path() {
+    let (home, workspace) = home_with_workspace();
+    home.write_executable("host-bin/tool", "#!/bin/sh\necho host\n");
+    home.write_executable("isolated-bin/tool", "#!/bin/sh\necho isolated\n");
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}[env]\npath-prepend = [\"{}\"]\n",
+            home.path().join("isolated-bin").display()
+        ),
+    );
+
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        &format!(
+            "exec /usr/bin/env PATH={}:\"$PATH\" {KAKOI} --nested=isolate --workspace {} -- tool",
+            home.path().join("host-bin").display(),
+            workspace.display()
+        ),
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"isolated\n", "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+}
+
+// @kotowari[REQ-456]
+#[test]
+fn req_456_a_nested_isolation_checks_the_home_directory() {
+    let (home, workspace) = home_with_workspace();
+    let home_file = home.write("ws/home-file", "");
+
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        &format!(
+            "exec /usr/bin/env HOME={} {KAKOI} --nested=isolate -- /bin/echo ran",
+            home_file.display()
+        ),
+    );
+
+    assert_diagnostic(&output, 125, "env");
+}
+
+// @kotowari[REQ-456]
+#[test]
+fn req_456_a_nested_isolation_stops_on_the_secret_the_outer_run_emptied() {
+    let (home, workspace) = home_with_workspace();
+    home.write("token", "FAKE-TOKEN\n");
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/token\"\n"),
+    );
+
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        &format!(
+            "exec {KAKOI} --nested=isolate --workspace {} -- /bin/echo ran",
+            workspace.display()
+        ),
+    );
+
+    assert_diagnostic(&output, 125, "secret");
+}
+
+/// The JSON plan a kakoi started inside with `arguments` prints, after checking it
+/// exited 0.
+fn nested_json_plan(
+    home: &TempDir,
+    workspace: &std::path::Path,
+    arguments: &str,
+) -> serde_json::Value {
+    let output = run_inside(
+        home.path(),
+        workspace,
+        &format!(
+            "exec {KAKOI} {arguments} --workspace {} --print-plan=json",
+            workspace.display()
+        ),
+    );
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
+}
+
+// @kotowari[EX-888]
+#[test]
+fn ex_888_nested_and_applied_in_the_json_plan() {
+    let (home, workspace) = home_with_workspace();
+
+    let isolate = nested_json_plan(&home, &workspace, "--nested=isolate");
+    let exec = nested_json_plan(&home, &workspace, "--nested=exec");
+    let host = binary(home.path())
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ])
+        .output()
+        .unwrap();
+    let report = output_report(&host);
+    assert_eq!(host.status.code(), Some(0), "{report}");
+    let host: serde_json::Value = serde_json::from_slice(&host.stdout).unwrap();
+
+    assert_eq!(
+        [&isolate["nested"], &exec["nested"], &host["nested"]],
+        [true, true, false]
+    );
+    assert_eq!(
+        [&isolate["applied"], &exec["applied"], &host["applied"]],
+        [true, false, true]
+    );
+    for plan in [&isolate, &exec, &host] {
+        assert_eq!(plan["format_version"], 1);
+    }
+}
+
+// @kotowari[REQ-457, REQ-297]
+#[test]
+fn req_457_a_nested_isolation_plan_is_marked_apart_from_a_nested_exec_plan() {
+    let (home, workspace) = home_with_workspace();
+    let first_line = |arguments: &str, form: &str| {
+        let output = run_inside(
+            home.path(),
+            &workspace,
+            &format!(
+                "exec {KAKOI} {arguments} --workspace {} {form}",
+                workspace.display()
+            ),
+        );
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{report}");
+        let text = String::from_utf8(output.stdout).unwrap();
+        text.lines().next().unwrap().to_string()
+    };
+    let plain = binary(home.path())
+        .args(["--workspace", workspace.to_str().unwrap(), "--print-plan"])
+        .output()
+        .unwrap();
+    let plain = String::from_utf8(plain.stdout).unwrap();
+
+    let isolate_summary = first_line("--nested=isolate", "--print-plan");
+    let isolate_full = first_line("--nested=isolate", "--print-plan=full");
+    let exec_summary = first_line("--nested=exec", "--print-plan");
+
+    assert_eq!(isolate_summary, isolate_full);
+    assert_ne!(isolate_summary, exec_summary);
+    assert!(!plain.contains(&isolate_summary), "{plain}");
+    assert!(!plain.contains(&exec_summary), "{plain}");
+}

@@ -32,10 +32,15 @@ pub fn render(plan: &Plan, form: PlanForm) -> String {
 /// files, the variables), then `body`.
 fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
     let mut text = String::new();
-    if plan.nested {
-        text.push_str(
+    match (plan.nested, plan.applied) {
+        (false, _) => {}
+        (true, false) => text.push_str(
             "nested: yes (inside an isolation; the plan is shown but would not be applied)\n",
-        );
+        ),
+        (true, true) => text.push_str(
+            "nested: yes (--nested=isolate: the plan is applied inside the outer isolation, \
+             whose limits still hold and may narrow it)\n",
+        ),
     }
     text.push_str("policy files:\n");
     for source in &plan.policy_sources {

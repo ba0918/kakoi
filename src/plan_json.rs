@@ -31,6 +31,7 @@ pub fn render(plan: &Plan) -> String {
 struct PlanDocument<'a> {
     format_version: u32,
     nested: bool,
+    applied: bool,
     policy_sources: Vec<Source>,
     variables: Variables,
     home: String,
@@ -222,6 +223,7 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
         PlanDocument {
             format_version: FORMAT_VERSION,
             nested: plan.nested,
+            applied: plan.applied,
             policy_sources: plan.policy_sources.iter().map(source).collect(),
             variables: Variables {
                 workspace: text(&plan.variables.workspace),

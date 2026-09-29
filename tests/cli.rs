@@ -627,6 +627,7 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     for key in [
         "format_version",
         "nested",
+        "applied",
         "policy_sources",
         "variables",
         "home",
@@ -647,6 +648,7 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     }
     assert_eq!(plan["format_version"], 1, "{report}");
     assert_eq!(plan["nested"], false, "{report}");
+    assert_eq!(plan["applied"], true, "{report}");
     assert_eq!(plan["policy_sources"][0]["kind"], "file", "{report}");
     assert_eq!(plan["variables"]["workspace"], workspace, "{report}");
     assert_eq!(

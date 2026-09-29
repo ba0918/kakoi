@@ -44,6 +44,9 @@ pub struct Inputs<'a> {
     /// Whether the run is nested: the nesting mark was there when it started
     /// (specification REQ-455).
     pub nested: bool,
+    /// Whether the plan is used: outside an isolation, or inside one with
+    /// `--nested=isolate` (specification REQ-457).
+    pub applied: bool,
 }
 
 /// The facts stage 7 needs.
@@ -132,6 +135,9 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
 pub struct Plan {
     /// Whether the run is nested (specification REQ-455).
     pub nested: bool,
+    /// Whether the plan is used; a nested run without `--nested=isolate` only shows it
+    /// (specification REQ-457).
+    pub applied: bool,
     pub policy: Policy,
     /// Where the policies read came from: files at their real paths, or the built-in
     /// default.
@@ -185,6 +191,7 @@ pub fn plan(
     }
     Plan {
         nested: inputs.nested,
+        applied: inputs.applied,
         policy: inputs.policy.clone(),
         policy_sources: isolation.policy_sources,
         variables: inputs.variables.clone(),

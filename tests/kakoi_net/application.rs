@@ -85,6 +85,7 @@ print('isolated')
         host,
         executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
         nested: false,
+        applied: true,
     })
     .unwrap();
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
@@ -221,6 +222,7 @@ print('managed-dns')
         host,
         executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
         nested: false,
+        applied: true,
     })
     .unwrap();
     let mut launch = application::prepare(&plan, &ns).unwrap();

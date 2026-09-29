@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::cli::{self, Invocation, Parsed};
+use crate::cli::{self, Invocation, Nesting, Parsed};
 use kakoi_core::diagnostic::{Diagnostic, Warning};
 use kakoi_core::environment::{HostEnvironment, RealEntry};
 use kakoi_core::plan::{Plan, NESTING_MARK};
@@ -78,11 +78,13 @@ where
         }
         Parsed::Invocation(invocation) => invocation,
     };
-    // Stage 2, nested without `--print-plan`: stages 3 to 8 are skipped, nothing is read
-    // and nothing changed, and the command is resolved on the host's `PATH`
-    // (specification sections 12.1 and 13).
+    // Stage 2, nested with `--nested=exec` and without `--print-plan`: stages 3 to 8 are
+    // skipped, nothing is read and nothing changed, and the command is resolved on the
+    // host's `PATH` (specification REQ-284). With `--nested=isolate` a nested run goes
+    // through every stage as any other run does (REQ-456).
     let nested = inside_an_isolation();
-    if nested && invocation.print_plan.is_none() {
+    let applied = !nested || invocation.nested == Nesting::Isolate;
+    if !applied && invocation.print_plan.is_none() {
         return Ok(Outcome::Nested(Nested {
             warning: nested_warning(),
             command: locate_command(&invocation.command[0], &host),
@@ -105,6 +107,7 @@ where
         host,
         executable: std::env::current_exe().ok(),
         nested,
+        applied,
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,

@@ -41,6 +41,9 @@ pub struct Request {
     /// Whether the run is nested: the nesting mark was there when it started
     /// (specification REQ-455).
     pub nested: bool,
+    /// Whether the plan is used: outside an isolation, or inside one with
+    /// `--nested=isolate` (specification REQ-457).
+    pub applied: bool,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -84,6 +87,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         current_dir: &request.current_dir,
         host: &request.host,
         nested: request.nested,
+        applied: request.applied,
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;
@@ -91,12 +95,12 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     // with, read only for the items that survived the resolution and the checks.
     let copies = read_copy_sources(&isolation.mounts.items)?;
     let bwrap = locate_bwrap(&request.host)?;
-    // A nested run resolves on the host's `PATH` rather than the isolation's
-    // (specification section 4.2).
-    let search_in = if request.nested {
-        &request.host
-    } else {
+    // A plan that is only shown, that of a nested run without `--nested=isolate`,
+    // resolves on the host's `PATH` as that run would (specification REQ-261).
+    let search_in = if request.applied {
         isolation.environment.values()
+    } else {
+        &request.host
     };
     let command = match request.command.split_first() {
         None => None,
