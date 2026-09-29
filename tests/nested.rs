@@ -1063,7 +1063,7 @@ fn ex_900_a_guard_over_the_real_program_still_starts_it_inside_a_nested_isolatio
     assert!(output.stderr.is_empty(), "{report}");
 }
 
-// @kotowari[EX-901]
+// @kotowari[EX-901, REQ-466]
 #[test]
 fn ex_901_guards_outside_and_inside_stop_the_nested_isolation() {
     let (home, workspace) = home_with_workspace();
