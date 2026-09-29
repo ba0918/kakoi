@@ -50,6 +50,7 @@ kakoi: usage: COMMAND is required unless --print-plan is given
 | `--rw PATH` | パス | 無し | コマンドラインの段へ `rw` の項目を足す。繰り返せる |
 | `--hide PATH` | パス | 無し | コマンドラインの段へ `hide` の項目を足す。繰り返せる |
 | `--print-plan[=FORM]` | `summary`、`full`、`json` | `summary` | 実行せずに計画を表示する（[計画の表示の指定](#計画の表示の指定)） |
+| `--nested=MODE` | `exec`、`isolate` | `exec` | 入れ子で起動したときの扱いを選ぶ（[入れ子の扱いの指定](#入れ子の扱いの指定)） |
 | `--version` | 無し | 無し | 版を標準出力へ出して 0 で終わる |
 | `--help` | 無し | 無し | 使い方を標準出力へ出して 0 で終わる |
 
@@ -70,9 +71,10 @@ kakoi: usage: the profile name `../x` is not a single path component
 ```
 
 ## オプションの書き方
-<!-- @kotowari[REQ-252:2e7b9c8b, EX-492:99679867] -->
+<!-- @kotowari[REQ-252:93758fe7, EX-492:99679867] -->
 
 値を取るオプションは `--opt VALUE`（分離形）と `--opt=VALUE`（`=` 形）のどちらでも書け、意味は同じである。
+ただし `--print-plan` と `--nested` は `=` 形でだけ値を書ける。
 次の規則に反すると、種類 `usage` の診断で終了コード 125 になる。
 
 | 規則 | 違反の例 |
@@ -132,6 +134,35 @@ $ kakoi --hide '~/x' -- sh       # /cwd/~/x を隠す（ホームディレクト
 | `--print-plan=` や `--print-plan=yaml` | `usage`、125 |
 | `--print-plan --` | `usage`、125（`--` の後に `COMMAND` が無い） |
 
+## 入れ子の扱いの指定
+<!-- @kotowari[REQ-464:dbbad305, EX-896:006f72da, EX-897:f503682e] -->
+
+`--nested` は、隔離の中で起動した（入れ子の）ときの扱いを選ぶ。
+値は `=` 形でだけ指定でき、次の 2 つに限られる。
+書かなければ `exec` になる。
+
+| MODE | 入れ子での扱い |
+|---|---|
+| `exec`（省略時） | 隔離を作らず、外側の隔離の中でコマンドを実行する |
+| `isolate` | 入れ子でない起動と同じ手順で、外側の隔離の中に隔離を作ってから実行する |
+
+入れ子でない起動では、どちらでも隔離を作る。
+各扱いの中身は[入れ子、並列、出力、診断と終了コード](10-process.md#入れ子で起動したとき)が定める。
+
+受け付けるのは実行の形と計画表示の形だけである。
+次の書き方は種類 `usage` の診断で終了コード 125 になる。
+
+| 書き方 | 理由 |
+|---|---|
+| `--nested isolate` | 分離形は受け付けない |
+| `--nested=other`、値の無い `--nested` | 値が `exec` と `isolate` のどちらでもない |
+| `--nested=exec --nested=isolate` | 繰り返せない |
+| `kakoi init --nested=isolate` | `init` には付けられない |
+| `kakoi --version --nested=isolate` | `--version` と `--help` は単独でだけ使える |
+
+ポリシーには同じ指定をするキーを置かない。
+入れ子の中で隔離を作るかは、呼ぶ側がその起動ごとに決めるためである。
+
 ## --help と --version
 <!-- @kotowari[REQ-255:b4b437d2, EX-495:ff90588d] -->
 
@@ -149,7 +180,7 @@ kakoi: usage: --help and --version cannot be combined with any other argument
 ```
 
 ## 実行するコマンドの探し方
-<!-- @kotowari[REQ-260:5288d70d, REQ-261:bd6588a2, EX-500:d93cef11, EX-501:fb8d778f, REQ-446:a7751adc] -->
+<!-- @kotowari[REQ-260:5288d70d, REQ-261:d6c16c98, EX-500:d93cef11, EX-501:ea36c6c4, REQ-446:a7751adc] -->
 
 `kakoi` は起動の前に `COMMAND` をファイルのパスへ解決する。
 
@@ -171,27 +202,27 @@ kakoi: command not found: /opt/tool
 次の 2 つの場合は探し方が変わる。
 
 - `--print-plan` で `COMMAND` を省略したときは解決を行わず、計画のコマンドの欄は無しになる。
-- 入れ子（環境変数 `KAKOI=1` の状態で `kakoi` が起動されること）では、`--print-plan` の有無にかかわらず、`kakoi` が受け取ったホストの `PATH` で探す。ホストの `PATH` が無ければ探さない。入れ子で計画を表示すると、計画に載る `PATH` は隔離の中の値のまま、コマンドの欄はホストの `PATH` で解決した結果になる。
+- `--nested=exec` の入れ子（隔離の中で `kakoi` が起動されること。[用語](02-terms.md)）では、`--print-plan` の有無にかかわらず、`kakoi` が受け取ったホストの `PATH` で探す。ホストの `PATH` が無ければ探さない。この入れ子で計画を表示すると、計画に載る `PATH` は隔離の中の値のまま、コマンドの欄はホストの `PATH` で解決した結果になる。`--nested=isolate` の入れ子は、入れ子でない起動と同じく隔離の中の `PATH` で探す。
 
 入れ子の扱い全体は[入れ子、並列、出力、診断と終了コード](10-process.md)を参照する。
 
 ## 見つかった後に実行できない場合
-<!-- @kotowari[REQ-262:837c8d32, EX-502:6820cb31] -->
+<!-- @kotowari[REQ-262:dc267f0d, EX-502:7dd14ed1] -->
 
-見つかったコマンドの exec が失敗したとき（たとえばインタプリタが無いスクリプト）の見え方は、通常の起動と入れ子で異なる。
+見つかったコマンドの exec が失敗したとき（たとえばインタプリタが無いスクリプト）の見え方は、通常の起動と `--nested=exec` の入れ子で異なる。
 
 | 起動 | 見え方 |
 |---|---|
-| 通常の起動 | bwrap の失敗として、bwrap の出力と終了コードがそのまま返る |
-| 入れ子 | 種類 `command not executable` の診断で終了コード 126。説明はパスとエラー |
+| 通常の起動（`--nested=isolate` の入れ子を含む） | bwrap の失敗として、bwrap の出力と終了コードがそのまま返る |
+| `--nested=exec` の入れ子 | 種類 `command not executable` の診断で終了コード 126。説明はパスとエラー |
 
-通常の起動では exec するのは bwrap であり、入れ子では `kakoi` 自身がコマンドを exec するためである。
+通常の起動では exec するのは bwrap であり、`--nested=exec` の入れ子では `kakoi` 自身がコマンドを exec するためである。
 2 つの経路で失敗の見え方が違うことは許容している。
 
 ## argv[0] に渡す名前
-<!-- @kotowari[REQ-263:50ac75c0, EX-503:593ea85f] -->
+<!-- @kotowari[REQ-263:69e8893d, EX-503:593ea85f] -->
 
-起動したプロセスの argv[0] は、通常の起動でも入れ子でも、`COMMAND` に与えた文字列そのものである。
+起動したプロセスの argv[0] は、通常の起動でも `--nested=exec` の入れ子でも、`COMMAND` に与えた文字列そのものである。
 解決したパスは exec するファイルを指定するためだけに使い、bwrap には `--argv0` で与えた名前を渡す。
 シェルが `PATH` で見つけたコマンドに打った名前を argv[0] として渡すのと同じ動きで、argv[0] で振る舞いを変えるコマンド（多重呼び出しのバイナリ）が打ったとおりに動く。
 
@@ -277,7 +308,7 @@ kakoi: path: /home/alice/.config/kakoi/profile/default.toml already exists
 既に書き出す先があるときに「何も書かず」が `secrets/` のモード変更まで含むかは決まっていない（[未決事項](../appendix/open-issues.md)）。
 
 ## init が行う検査と行わない検査
-<!-- @kotowari[REQ-259:12198cab, EX-499:6fd29e1c] -->
+<!-- @kotowari[REQ-259:12198cab, EX-499:83b50cdf] -->
 
 `init` は次の順で検査し、最初に当たった診断で終わる。
 
@@ -287,7 +318,7 @@ kakoi: path: /home/alice/.config/kakoi/profile/default.toml already exists
 
 `init` は、ポリシーの読み込み、ワークスペースの導出、マウントの解決、`bwrap` の所在の確認、入れ子の検出を行わない。
 `bwrap` の無い機械でも、隔離の中でも、書ける場所であれば設定を置ける。
-たとえば `KAKOI=1` で `bwrap` の無い環境でも、書き込みの条件を満たせば入れ子の警告を出さずに成功する。
+たとえば入れ子の印がある隔離の中で `bwrap` の無い環境でも、書き込みの条件を満たせば入れ子の警告を出さずに成功する。
 
 ```console
 $ kakoi init -- sh
