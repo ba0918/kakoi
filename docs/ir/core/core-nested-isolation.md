@@ -60,6 +60,20 @@ filtered の隔離の中の resolver は "127.0.0.53" と "127.0.0.54" の両方
 
 共有ファイルの置き場を使う起動では、置き場のディレクトリを REQ-158 の保護対象のパスに加え、その3つの条件をそのまま当てる。合成後の "rw" または "rw-file" の項目が置き場の中にあるときも、同じ種類 "path" の診断で終わる。どちらの場合も、置き場を使えない起動として続けることはしない。保護対象の診断の順（REQ-295）では、置き場を最後に置く。この検査は計画表示でも行う。
 
+### REQ-465: 入れ子の中の隔離と外の見張り役
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53
+- verification: unit
+
+"--nested=isolate" の起動は、起動したときに "/dev/kakoi-guard" が存在すれば、それを隔離の中の同じ場所に読み取り専用でそのまま見せる。存在しなければ何もしない。外の見張り役の規則と、本物の場所に重ねた見張り役は、中の隔離でも外と同じに働く。
+
+### REQ-466: 入れ子の中の隔離で重ねられない見張り役
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52, docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53
+- verification: unit
+
+"--nested=isolate" の起動が "/dev/kakoi-guard" を引き継ぐときに、中の合成後のポリシーに見張り役の規則が1つでもあれば、コマンドを実行せず種類 policy の診断で 125 とする。
+
 ### REQ-463: 入れ子の中の隔離の公開文書
 - kind: ubiquitous
 - source: docs/decision/brainstorm/2026-09-29-nested-isolation.md#A12, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A13, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A24, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A28, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A47, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A10, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30
@@ -143,9 +157,27 @@ Scenario: 共有ファイルの置き場を書き込める項目で覆うと止�
   When コマンドを起動する
   Then コマンドを実行せず種類 path の診断で 125 になる
 
-@id=EX-898 @about=REQ-460 @source=docs/decision/brainstorm/2026-09-29-nested-isolation.md#A35
+@id=EX-898 @about=REQ-460 @source=docs/decision/brainstorm/2026-09-29-nested-isolation.md#A35,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19
 Scenario: 共有ファイルの置き場で隠したファイルには書けない
   Given 入れ子でない起動で共有ファイルの置き場を使えていて、ポリシーがファイルを "hide" にしている
   When 隔離の中からそのファイルに書く
   Then 書けず、置き場のファイルは空のままである
+
+@id=EX-899 @about=REQ-465 @source=docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51,docs/decision/brainstorm/2026-09-25-command-policy.md#A12
+Scenario: 外の見張り役の規則は入れ子の中の隔離でも効く
+  Given 外のポリシーが "git push" を禁じる見張り役を置いている
+  When 入れ子の中で見張り役の無いポリシーと "--nested=isolate" でシェルを起動し、その中で "git push" を実行する
+  Then 見張り役が禁止を伝えて 126 で終わる
+
+@id=EX-900 @about=REQ-465 @source=docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51,docs/decision/brainstorm/2026-09-25-command-policy.md#A26
+Scenario: 本物の場所に重ねた見張り役は入れ子の中の隔離でも本物を起動する
+  Given 外のポリシーが git の見張り役を "guard-absolute-path = true" で置いている
+  When 入れ子の中で見張り役の無いポリシーと "--nested=isolate" でシェルを起動し、その中で "/usr/bin/git --version" を実行する
+  Then 本物の git の版が出る
+
+@id=EX-901 @about=REQ-466 @source=docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52,docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+Scenario: 外と中の両方に見張り役があると入れ子の中の隔離を作らない
+  Given 外のポリシーが見張り役を置いている
+  When 入れ子の中で見張り役のあるポリシーと "--nested=isolate" でコマンドを起動する
+  Then コマンドを実行せず種類 policy の診断で 125 になる
 ```

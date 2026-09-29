@@ -28,10 +28,10 @@
 
 ### REQ-287: 並列起動
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49
 - verification: unit
 
-コマンドを包む並列起動は内部状態を共有せず、一方の終了で他方を停止しない。同じNAMEのinitの競合結果は保証しない。filteredの公開ポート競合は既存の公開割当・復帰仕様に従う。
+コマンドを包む並列起動は内部状態を共有せず（共有ファイルの置き場は中身が決まったファイルだけを置くので、起動の結果を互いに左右しない）、一方の終了で他方を停止しない。同じNAMEのinitの競合結果は保証しない。filteredの公開ポート競合は既存の公開割当・復帰仕様に従う。
 
 ### REQ-288: 診断と警告の形
 - kind: ubiquitous

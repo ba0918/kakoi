@@ -6,17 +6,17 @@
 
 ### REQ-305: ホストへの書込み境界
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A21, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A43
 - verification: unit
 
-コマンドを包む起動は計画表示を含め永続状態を持たず、自身でホストのファイルを書かない。initだけが設定ディレクトリまでの欠けた成分とprofile/、secrets/、出力ファイルを作る。/tmp/kakoiを作らない。
+コマンドを包む起動は計画表示を含め永続状態を持たず、自身でホストのファイルを書かない。initだけが設定ディレクトリまでの欠けた成分とprofile/、secrets/、出力ファイルを作る。例外は、入れ子でない実行（計画表示を除く）が共有ファイルの置き場のディレクトリと、中身が決まった2つのファイル（空のファイルと"nameserver 127.0.0.53"の1行）を作り直すことだけである（REQ-461）。/tmp/kakoiを作らない。
 
 ### REQ-306: 収集する事実
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A31, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A21, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A38
 - verification: unit
 
-本体はポリシー・秘密、.gitとGit関係ファイル、共通ディレクトリHEADの存在種類、マウント一覧、走査ディレクトリ、候補パスの存在種類実体、配置検査の通過ディレクトリとリンク先、サブモジュールconfig、適用rw-copyの名前種類モード内容リンク先を読む。HEAD内容は読まない。filtered追加観測は既存のネットワーク仕様に従う。
+本体はポリシー・秘密、.gitとGit関係ファイル、共通ディレクトリHEADの存在種類、マウント一覧、走査ディレクトリ、候補パスの存在種類実体、配置検査の通過ディレクトリとリンク先、サブモジュールconfig、適用rw-copyの名前種類モード内容リンク先を読む。HEAD内容は読まない。入れ子の印と外の見張り役の置き場の有無、共有ファイルの置き場のディレクトリとファイルの持ち主・種類・権限・中身、network.allow-nested-filteredがtrueのときのホストの/dev/net/tunの有無も読む。filtered追加観測は既存のネットワーク仕様に従う。
 
 ### REQ-307: 外部コマンド
 - kind: ubiquitous
@@ -76,10 +76,10 @@ HOME、XDG_CONFIG_HOME、XDG_RUNTIME_DIR、PATH、cwdを信頼し、ホストで
 
 ### REQ-315: 固定引数の順序
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A37, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A37, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30
 - verification: unit
 
-host/noneの固定引数は--ro-bind / /、--dev /dev、入れ子の印の読み取り専用のファイル（/dev/kakoi-isolated）、network.allow-nested-filteredがtrueのときだけホストの/dev/net/tunを見せる引数、--proc /proc、--unshare-all、hostだけ--share-net、--die-with-parent、--chdir cwd、--seccomp記述子、--argv0 COMMANDの順。続けて適用順のマウント、1個の--、解決済みコマンドパス、ARGSを置く。ポリシーで固定部分を変えない。例外はnetwork.allow-nested-filteredによるtunだけである。
+host/noneの固定引数は--ro-bind / /、--dev /dev、入れ子の印の読み取り専用のファイル（/dev/kakoi-isolated）、network.allow-nested-filteredがtrueのときだけホストの/dev/net/tunを見せる引数、外の見張り役の置き場を引き継ぐときだけその読み取り専用の引数（REQ-465）、--proc /proc、--unshare-all、hostだけ--share-net、--die-with-parent、--chdir cwd、--seccomp記述子、--argv0 COMMANDの順。続けて適用順のマウント、1個の--、解決済みコマンドパス、ARGSを置く。ポリシーで固定部分を変えない。例外はnetwork.allow-nested-filteredによるtunだけである。
 
 ### REQ-316: COMMANDなしの固定引数
 - kind: ubiquitous

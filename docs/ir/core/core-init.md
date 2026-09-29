@@ -66,10 +66,10 @@ Scenario: initの出力と上書き拒否
   When default.tomlにリンク切れがある状態でinitする
   Then リンク先を作らずpathで125となる
 
-@id=EX-499 @about=REQ-259 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+@id=EX-499 @about=REQ-259 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A50
 Scenario: initの独立した検査
-  Given 本体の既存仕様を適用する
-  When KAKOI=1かつbwrapがない環境でinitする
+  Given 入れ子の印がある隔離の中にいる
+  When bwrapがPATHにない状態でinitする
   Then 書き込み条件を満たせば入れ子警告なしで成功する
 
 ```
