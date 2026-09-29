@@ -2157,26 +2157,6 @@ fn kakoi_1_on_the_host_runs_the_command_itself_with_the_environment_as_received(
     assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }
 
-// @kotowari[EX-521]
-#[test]
-fn a_nested_plan_of_a_missing_named_profile_is_a_policy_diagnostic() {
-    let (home, workspace) = home_with_workspace();
-
-    let output = binary(home.path())
-        .env("KAKOI", "1")
-        .args([
-            "--workspace",
-            workspace.to_str().unwrap(),
-            "--profile",
-            "missing",
-            "--print-plan",
-        ])
-        .output()
-        .unwrap();
-
-    assert_diagnostic(&output, 125, "policy");
-}
-
 // @kotowari[REQ-286]
 #[test]
 fn a_kakoi_started_inside_without_kakoi_1_isolates_again_within_the_outer_boundary() {

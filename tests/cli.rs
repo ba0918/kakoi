@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, run,
-    run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir, RW_WORKSPACE,
+    assert_diagnostic, binary, home_with_workspace, output_report, run, run_from_deleted_dir,
+    TempDir, RW_WORKSPACE,
 };
 use kakoi::cli::{interpret, Invocation, Parsed, PlanForm};
 use kakoi_core::diagnostic::Kind;
@@ -641,18 +641,6 @@ fn print_plan_json_is_one_document_with_the_keys_of_the_contract() {
     assert_eq!(without_a_command.status.code(), Some(0), "{report}");
     let plan: serde_json::Value = serde_json::from_slice(&without_a_command.stdout).unwrap();
     assert_eq!(plan["command"], serde_json::Value::Null, "{report}");
-
-    // A nested run is marked by the `nested` key, not by a line in front.
-    let nested = binary(home.path())
-        .env("KAKOI", "1")
-        .args(["--workspace", workspace, "--print-plan=json"])
-        .output()
-        .unwrap();
-
-    let report = output_report(&nested);
-    assert_eq!(nested.status.code(), Some(0), "{report}");
-    let plan: serde_json::Value = serde_json::from_slice(&nested.stdout).unwrap();
-    assert_eq!(plan["nested"], true, "{report}");
 }
 
 // @kotowari[REQ-296]
@@ -755,230 +743,6 @@ fn a_control_character_in_a_warning_is_escaped() {
     assert!(stderr.starts_with("kakoi: warning: "), "{report}");
     assert!(!output.stderr.contains(&0x1b), "{report}");
     assert!(!output.stdout.contains(&0x1b), "{report}");
-}
-
-/// The built binary started as a nested run: `KAKOI=1` in its environment. No
-/// profile exists under `home` and `PATH` is `path`, so anything but the nested branch
-/// ends in a diagnostic.
-fn nested(home: &TempDir, path: &Path) -> std::process::Command {
-    let mut command = binary(home.path());
-    command.env("KAKOI", "1").env("PATH", path);
-    command
-}
-
-// @kotowari[REQ-284]
-#[test]
-fn a_nested_launch_warns_and_runs_the_command_without_bwrap() {
-    let home = TempDir::new();
-    let empty_path = TempDir::new();
-
-    let output = nested(&home, empty_path.path())
-        .args(["--", "/bin/sh", "-c", "echo out; echo err >&2; exit 3"])
-        .output()
-        .unwrap();
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(3), "{report}");
-    assert_eq!(output.stdout, b"out\n", "{report}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    let mut lines = stderr.lines();
-    assert!(
-        lines.next().unwrap().starts_with("kakoi: warning: "),
-        "{report}"
-    );
-    assert_eq!(lines.collect::<Vec<_>>(), ["err"], "{report}");
-}
-
-// @kotowari[REQ-284]
-#[test]
-fn a_nested_launch_leaves_the_environment_unchanged() {
-    let home = TempDir::new();
-    let mut command = nested(&home, Path::new("/nonexistent"));
-    command
-        .env_clear()
-        .env("HOME", home.path())
-        .env("XDG_CONFIG_HOME", home.path().join(".config"))
-        .env("KAKOI", "1")
-        .env("PATH", "/nonexistent")
-        .env("MARKER", "kept as is");
-    let expected: std::collections::BTreeSet<String> = command
-        .get_envs()
-        .map(|(name, value)| {
-            format!(
-                "{}={}",
-                name.to_str().unwrap(),
-                value.unwrap().to_str().unwrap()
-            )
-        })
-        .collect();
-
-    let output = command.args(["--", "/usr/bin/env"]).output().unwrap();
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    let inside: std::collections::BTreeSet<String> = String::from_utf8(output.stdout)
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect();
-    assert_eq!(inside, expected, "{report}");
-}
-
-// @kotowari[REQ-261, REQ-290]
-#[test]
-fn a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_missing() {
-    let home = TempDir::new();
-    let bin = TempDir::new();
-    bin.write_executable("tool", "#!/bin/sh\nexit 7\n");
-    let empty_path = TempDir::new();
-
-    let found = nested(&home, bin.path())
-        .args(["--", "tool"])
-        .output()
-        .unwrap();
-    let report = output_report(&found);
-    assert_eq!(found.status.code(), Some(7), "{report}");
-
-    let missing = nested(&home, empty_path.path())
-        .args(["--", "tool"])
-        .output()
-        .unwrap();
-    let report = output_report(&missing);
-    assert_eq!(missing.status.code(), Some(127), "{report}");
-    assert!(missing.stdout.is_empty(), "{report}");
-    let stderr = String::from_utf8(missing.stderr).unwrap();
-    let lines: Vec<&str> = stderr.lines().collect();
-    assert_eq!(lines.len(), 2, "{report}");
-    assert!(lines[0].starts_with("kakoi: warning: "), "{report}");
-    assert!(
-        lines[1].starts_with("kakoi: command not found: "),
-        "{report}"
-    );
-}
-
-// @kotowari[REQ-263]
-#[test]
-fn a_nested_launch_passes_the_given_name_as_argv0() {
-    // Specification sections 1 and 12.1: the nested run execs the command found on the
-    // host's `PATH` with `COMMAND` as argv[0]. `sh` is a copy in a temporary directory, so
-    // argv[0] `sh` and the resolved path are told apart.
-    let home = TempDir::new();
-    let bin = TempDir::new();
-    common::copy_executable(Path::new("/bin/sh"), &bin.path().join("sh"));
-
-    let output = nested(&home, bin.path())
-        .args(["--", "sh", "-c", "echo \"$0\""])
-        .output()
-        .unwrap();
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    assert_eq!(output.stdout, b"sh\n", "{report}");
-}
-
-// @kotowari[REQ-262, REQ-290, EX-502]
-#[test]
-fn a_nested_launch_of_a_script_with_a_missing_interpreter_exits_126() {
-    // The command is found, but its exec fails (specification sections 4.2 and 12.1): one
-    // warning line, then `command not executable`, exit code 126.
-    let home = TempDir::new();
-    let script = home.write_executable("tool", "#!/nonexistent/interpreter\n");
-
-    let output = nested(&home, Path::new("/nonexistent"))
-        .arg("--")
-        .arg(&script)
-        .output()
-        .unwrap();
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(126), "{report}");
-    assert!(output.stdout.is_empty(), "{report}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    let lines: Vec<&str> = stderr.lines().collect();
-    assert_eq!(lines.len(), 2, "{report}");
-    assert!(lines[0].starts_with("kakoi: warning: "), "{report}");
-    assert!(
-        lines[1].starts_with("kakoi: command not executable: "),
-        "{report}"
-    );
-}
-
-// @kotowari[REQ-309]
-#[test]
-fn a_nested_launch_leaves_the_soft_limit_unchanged() {
-    // A nested run makes no descriptors, so it does not raise the limit (specification
-    // section 14): the command sees the 1024 the shell set.
-    let home = TempDir::new();
-
-    let output = run_command_with_soft_fd_limit(
-        nested(&home, Path::new("/nonexistent")),
-        1024,
-        ["--", "/bin/sh", "-c", "ulimit -Sn"],
-    );
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    assert_eq!(output.stdout, b"1024\n", "{report}");
-}
-
-// @kotowari[REQ-285]
-#[test]
-fn a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
-    let home = TempDir::new();
-    let workspace = home.path().join("ws");
-    std::fs::create_dir(&workspace).unwrap();
-    let arguments = ["--workspace", workspace.to_str().unwrap()];
-
-    // A nested run reads the policy too: a named profile that is not there is a
-    // diagnostic, not a plan.
-    let without_a_profile = binary(home.path())
-        .env("KAKOI", "1")
-        .args(["--profile", "strict", "--print-plan"])
-        .args(arguments)
-        .output()
-        .unwrap();
-    assert_diagnostic(&without_a_profile, 125, "policy");
-
-    home.write(".config/kakoi/profile/default.toml", RW_WORKSPACE);
-    // The full form: the nested plan is the plain plan with one line in front that marks
-    // it as nested. (The summary shows the environment as its difference from the host's,
-    // and the nested host already carries `KAKOI=1`, so only the full form, which
-    // shows the final environment itself, is the same line for line.)
-    let full = ["--print-plan=full"];
-    let plain = binary(home.path())
-        .args(arguments)
-        .args(full)
-        .output()
-        .unwrap();
-    let nested = binary(home.path())
-        .env("KAKOI", "1")
-        .args(arguments)
-        .args(full)
-        .output()
-        .unwrap();
-
-    let report = format!("{}\n{}", output_report(&plain), output_report(&nested));
-    assert_eq!(plain.status.code(), Some(0), "{report}");
-    assert_eq!(nested.status.code(), Some(0), "{report}");
-    let plain = String::from_utf8(plain.stdout).unwrap();
-    let nested = String::from_utf8(nested.stdout).unwrap();
-    let (first_line, rest) = nested.split_once('\n').unwrap();
-    assert_eq!(rest, plain, "{report}");
-    assert!(!plain.contains(first_line), "{report}");
-
-    // The summary carries the same first line.
-    let summary = binary(home.path())
-        .env("KAKOI", "1")
-        .args(arguments)
-        .arg("--print-plan")
-        .output()
-        .unwrap();
-
-    let report = output_report(&summary);
-    assert_eq!(summary.status.code(), Some(0), "{report}");
-    let summary = String::from_utf8(summary.stdout).unwrap();
-    assert!(summary.starts_with(&format!("{first_line}\n")), "{report}");
-    assert!(summary.contains("\n  rw      ~/ws\n"), "{report}");
 }
 
 // @kotowari[REQ-274]
@@ -1550,19 +1314,10 @@ fn init_creates_missing_ancestors_of_the_configuration_directory() {
 
 // @kotowari[REQ-259]
 #[test]
-fn init_ignores_nesting_the_current_directory_and_bwrap() {
-    // Inside an isolation, from a directory that is gone, and on a machine without `bwrap`,
-    // the configuration can still be put in place (specification sections 4.1 and 12.1).
-    let nested_home = TempDir::new();
-    let nested = binary(nested_home.path())
-        .env("KAKOI", "1")
-        .args(["init"])
-        .output()
-        .unwrap();
-    let report = output_report(&nested);
-    assert_eq!(nested.status.code(), Some(0), "{report}");
-    assert!(nested.stderr.is_empty(), "{report}");
-
+fn init_ignores_the_current_directory_and_bwrap() {
+    // From a directory that is gone and on a machine without `bwrap`, the configuration
+    // can still be put in place (specification section 4.1). Inside an isolation is the
+    // nesting tests' part.
     let deleted_home = TempDir::new();
     let deleted = run_from_deleted_dir(deleted_home.path(), ["init"]);
     assert_eq!(
@@ -1748,33 +1503,6 @@ fn init_leaves_the_target_of_a_broken_link_at_the_profile_uncreated() {
     );
 }
 
-// @kotowari[EX-499]
-#[test]
-fn init_under_kakoi_1_without_bwrap_succeeds_without_the_nesting_warning() {
-    let home = TempDir::new();
-    let empty_path = TempDir::new();
-
-    let output = binary(home.path())
-        .env("KAKOI", "1")
-        .env("PATH", empty_path.path())
-        .args(["init"])
-        .output()
-        .unwrap();
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    assert!(
-        !String::from_utf8_lossy(&output.stderr).contains("kakoi: warning:"),
-        "{report}"
-    );
-    assert!(
-        home.path()
-            .join(".config/kakoi/profile/default.toml")
-            .is_file(),
-        "{report}"
-    );
-}
-
 // @kotowari[EX-500, EX-526]
 #[test]
 fn a_command_that_is_nowhere_is_command_not_found_with_127() {
@@ -1789,54 +1517,6 @@ fn a_command_that_is_nowhere_is_command_not_found_with_127() {
 
         assert_diagnostic(&output, 127, "command not found");
     }
-}
-
-// @kotowari[EX-501]
-#[test]
-fn a_nested_plan_shows_the_command_found_on_the_host_path() {
-    let (home, workspace) = home_with_workspace();
-    let host_bin = TempDir::new();
-    let host_tool = host_bin.write_executable("tool", "#!/bin/sh\n");
-    let isolated_bin = TempDir::new();
-    isolated_bin.write_executable("tool", "#!/bin/sh\n");
-    home.write(
-        ".config/kakoi/profile/default.toml",
-        format!(
-            "{RW_WORKSPACE}[env]\npath-prepend = [\"{}\"]\n",
-            isolated_bin.path().display()
-        ),
-    );
-    let mut host_path = vec![host_bin.path().to_path_buf()];
-    host_path.extend(std::env::split_paths(
-        &std::env::var_os("PATH").unwrap_or_default(),
-    ));
-    let host_path = std::env::join_paths(host_path).unwrap();
-
-    let output = binary(home.path())
-        .env("KAKOI", "1")
-        .env("PATH", &host_path)
-        .args([
-            "--workspace",
-            workspace.to_str().unwrap(),
-            "--print-plan=json",
-            "--",
-            "tool",
-        ])
-        .output()
-        .unwrap();
-
-    let plan = json_plan(&output);
-    let report = output_report(&output);
-    assert_ne!(
-        plan["environment"]["PATH"].as_str(),
-        host_path.to_str(),
-        "the isolated PATH should differ from the host's: {report}"
-    );
-    assert_eq!(
-        plan["command"]["path"],
-        host_tool.canonicalize().unwrap().to_str().unwrap(),
-        "{report}"
-    );
 }
 
 // @kotowari[EX-530]
