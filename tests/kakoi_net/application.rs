@@ -84,6 +84,7 @@ print('isolated')
         current_dir: workspace.clone(),
         host,
         executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
+        nested: false,
     })
     .unwrap();
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
@@ -219,6 +220,7 @@ print('managed-dns')
         current_dir: workspace,
         host,
         executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
+        nested: false,
     })
     .unwrap();
     let mut launch = application::prepare(&plan, &ns).unwrap();

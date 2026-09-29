@@ -289,6 +289,7 @@ fn isolation_with(
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
+        nested: false,
     };
     let facts = IsolationFacts {
         mounts: facts.mount_facts(),
@@ -1140,6 +1141,7 @@ fn a_missing_configuration_directory_leaves_config_dir_valueless() {
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
+        nested: false,
     };
     let facts = IsolationFacts {
         mounts: Facts::new()

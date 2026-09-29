@@ -19,9 +19,7 @@ use crate::guard_placement::{place_guards, real_program, GuardPlan, PlacedGuard,
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
-use crate::plan::{
-    self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand,
-};
+use crate::plan::{self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand};
 use crate::secret_facts::read_secret_files;
 use crate::variables::derive_variables;
 use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
@@ -40,6 +38,9 @@ pub struct Request {
     /// The path of kakoi's own executable, which each guard is; none when it cannot be
     /// told.
     pub executable: Option<PathBuf>,
+    /// Whether the run is nested: the nesting mark was there when it started
+    /// (specification REQ-455).
+    pub nested: bool,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -82,6 +83,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         workspace: request.workspace.as_deref(),
         current_dir: &request.current_dir,
         host: &request.host,
+        nested: request.nested,
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;
@@ -91,7 +93,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let bwrap = locate_bwrap(&request.host)?;
     // A nested run resolves on the host's `PATH` rather than the isolation's
     // (specification section 4.2).
-    let search_in = if is_nested(&request.host) {
+    let search_in = if request.nested {
         &request.host
     } else {
         isolation.environment.values()

@@ -470,3 +470,155 @@ fn ex_499_init_inside_an_isolation_without_bwrap_succeeds_without_the_nesting_wa
         "{report}"
     );
 }
+
+// Telling a nested run: the mark, not the environment.
+
+// @kotowari[EX-884, REQ-284]
+#[test]
+fn ex_884_a_kakoi_started_inside_without_kakoi_is_still_nested() {
+    let (home, workspace) = home_with_workspace();
+    home.write("box/file", "hidden outside\n");
+    std::fs::create_dir(home.path().join("data")).unwrap();
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}hide = [\"{}\"]\n",
+            home.path().join("box").display()
+        ),
+    );
+
+    // The nested run asks for `~/data` as `rw`; the outer isolation has it read-only.
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        &format!(
+            "exec /usr/bin/env -u KAKOI {KAKOI} --rw {} -- /bin/sh -c \
+             'test ! -e {} && echo still-hidden; (echo x > {}) 2>/dev/null || echo not-writable'",
+            home.path().join("data").display(),
+            home.path().join("box/file").display(),
+            home.path().join("data/file").display(),
+        ),
+    );
+
+    assert_nested_warning_only(&output);
+    assert_eq!(
+        output.stdout,
+        b"still-hidden\nnot-writable\n",
+        "{}",
+        output_report(&output)
+    );
+    assert!(!home.path().join("data/file").exists());
+}
+
+// @kotowari[EX-884, REQ-284]
+#[test]
+fn ex_884_a_nested_run_without_kakoi_does_not_read_the_secret_the_outer_run_emptied() {
+    // A nested run reads no policy, so the secret file the outer isolation shows empty
+    // does not stop it.
+    let (home, workspace) = home_with_workspace();
+    home.write("token", "FAKE-TOKEN\n");
+    profile(
+        &home,
+        &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/token\"\n"),
+    );
+
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        &format!("exec /usr/bin/env -u KAKOI {KAKOI} -- /bin/echo ran"),
+    );
+
+    assert_nested_warning_only(&output);
+    assert_eq!(output.stdout, b"ran\n", "{}", output_report(&output));
+}
+
+// @kotowari[EX-885]
+#[test]
+fn ex_885_kakoi_1_on_the_host_is_not_nested() {
+    let (home, workspace) = home_with_workspace();
+    home.write("box/file", "hidden\n");
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}hide = [\"{}\"]\n",
+            home.path().join("box").display()
+        ),
+    );
+
+    let output = binary(home.path())
+        .env("KAKOI", "1")
+        .current_dir(&workspace)
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--",
+            "/bin/sh",
+            "-c",
+            &format!(
+                "test -f {MARK} && test ! -e {} && echo isolated",
+                home.path().join("box/file").display()
+            ),
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"isolated\n", "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+}
+
+// @kotowari[REQ-314, EX-547]
+#[test]
+fn req_314_the_host_environment_chooses_the_profile_and_the_work_place_but_not_the_nesting() {
+    let home = TempDir::new();
+    let first = home.write("first/kakoi/profile/default.toml", RW_WORKSPACE);
+    let second = home.write("second/kakoi/profile/default.toml", RW_WORKSPACE);
+    let place = home.path().join("place");
+    std::fs::create_dir(&place).unwrap();
+    let tool = home.write_executable("bin/tool", "#!/bin/sh\n");
+    let mut path = vec![home.path().join("bin")];
+    path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let plan = |config_home: &str| {
+        let output = binary(home.path())
+            .env("KAKOI", "1")
+            .env("XDG_CONFIG_HOME", home.path().join(config_home))
+            .env("PATH", std::env::join_paths(&path).unwrap())
+            .current_dir(&place)
+            .args(["--print-plan=json", "--", "tool"])
+            .output()
+            .unwrap();
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{report}");
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+    };
+
+    let from_first = plan("first");
+    let from_second = plan("second");
+
+    assert_eq!(
+        from_first["policy_sources"][0]["path"],
+        first.to_str().unwrap()
+    );
+    assert_eq!(
+        from_second["policy_sources"][0]["path"],
+        second.to_str().unwrap()
+    );
+    assert_eq!(from_first["nested"], false);
+    assert_eq!(from_second["nested"], false);
+    let place = place.canonicalize().unwrap();
+    assert_eq!(
+        from_first["variables"]["workspace"],
+        place.to_str().unwrap()
+    );
+    assert_eq!(
+        from_first["home"],
+        home.path().canonicalize().unwrap().to_str().unwrap()
+    );
+    assert_eq!(
+        from_first["command"]["path"],
+        tool.canonicalize().unwrap().to_str().unwrap()
+    );
+}

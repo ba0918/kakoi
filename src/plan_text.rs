@@ -33,7 +33,9 @@ pub fn render(plan: &Plan, form: PlanForm) -> String {
 fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
     let mut text = String::new();
     if plan.nested {
-        text.push_str("nested: yes (KAKOI=1; the plan is shown but would not be applied)\n");
+        text.push_str(
+            "nested: yes (inside an isolation; the plan is shown but would not be applied)\n",
+        );
     }
     text.push_str("policy files:\n");
     for source in &plan.policy_sources {

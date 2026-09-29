@@ -3,7 +3,7 @@
 //! (section 14). Pure.
 
 use std::collections::BTreeMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
@@ -41,6 +41,9 @@ pub struct Inputs<'a> {
     pub workspace: Option<&'a Path>,
     pub current_dir: &'a Path,
     pub host: &'a BTreeMap<OsString, OsString>,
+    /// Whether the run is nested: the nesting mark was there when it started
+    /// (specification REQ-455).
+    pub nested: bool,
 }
 
 /// The facts stage 7 needs.
@@ -127,8 +130,7 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
 /// sections 2 and 13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Plan {
-    /// Whether the run is nested (specification section 12.1): the plan is shown, not
-    /// applied.
+    /// Whether the run is nested (specification REQ-455).
     pub nested: bool,
     pub policy: Policy,
     /// Where the policies read came from: files at their real paths, or the built-in
@@ -182,7 +184,7 @@ pub fn plan(
         ));
     }
     Plan {
-        nested: is_nested(inputs.host),
+        nested: inputs.nested,
         policy: inputs.policy.clone(),
         policy_sources: isolation.policy_sources,
         variables: inputs.variables.clone(),
@@ -198,12 +200,6 @@ pub fn plan(
         guards,
         arguments,
     }
-}
-
-/// Whether `host` marks a nested run: `KAKOI` is `1` (specification section 12.1).
-pub fn is_nested(host: &BTreeMap<OsString, OsString>) -> bool {
-    host.get(OsStr::new("KAKOI"))
-        .is_some_and(|value| value == "1")
 }
 
 /// The nesting mark: an empty file every isolation carries, read-only, under bwrap's own
