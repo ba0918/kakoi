@@ -206,6 +206,10 @@ pub fn is_nested(host: &BTreeMap<OsString, OsString>) -> bool {
         .is_some_and(|value| value == "1")
 }
 
+/// The nesting mark: an empty file every isolation carries, read-only, under bwrap's own
+/// `/dev`. A kakoi started where it exists is nested (specification REQ-455).
+pub const NESTING_MARK: &str = "/dev/kakoi-isolated";
+
 /// The command as given on the command line (`COMMAND` and `ARGS`) and where `COMMAND`
 /// resolved to (specification section 4.2). The process sees `command` as its argv[0]
 /// and `path` is only what is executed.
@@ -256,6 +260,9 @@ pub fn bwrap_arguments(
         Argument::text("/"),
         Argument::text("--dev"),
         Argument::text("/dev"),
+        Argument::text("--ro-bind-data"),
+        Argument::EmptyFile,
+        Argument::text(NESTING_MARK),
         Argument::text("--proc"),
         Argument::text("/proc"),
         Argument::text("--unshare-all"),
