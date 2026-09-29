@@ -49,13 +49,23 @@ gate tests do not require TUN. The tests that carry real traffic through pasta n
 `/dev/net/tun` and a pasta executable, taken from `KAKOI_TEST_PASTA` or else from `PATH`;
 they fail rather than skip without one. They run kakoi inside a private
 user, network, and PID namespace that stands in for the host, created with `unshare` from
-util-linux, so that their addresses and ports never meet the real host's. The verified build is Debian trixie-backports
+util-linux, so that their addresses and ports never meet the real host's. That namespace's root
+cannot map root to itself without capabilities, which a kakoi nested inside a `filtered`
+isolation has to do, so the tests that nest `filtered` in `filtered` start the outer kakoi as
+user 1000 in a user namespace of its own (`unshare --map-user`), as on a real host. The verified build is Debian trixie-backports
 `passt 0.0~git20260728.f8df3f1-1~bpo13+1`, which CI fetches and checks by digest.
 
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on
 the machine; they fail rather than skip when any of them is missing. Inside the isolation they
-start `/usr/bin/python3`, `/usr/bin/git`, `/bin/sh`, and `/bin/true` by absolute path, and in a
-nested run `/usr/bin/env` and `/bin/sh`. Copies of `/bin/echo` and `/bin/cat` placed in a
+start `/usr/bin/python3`, `/usr/bin/git`, `/bin/sh`, and `/bin/true` by absolute path, and
+`stat`, `cat`, `test`, `rm`, `mv`, and `mkdir` through the shell. A nested run is tested for real:
+a shell inside an isolation of the built `kakoi` starts the built `kakoi` again by its absolute
+path, through `/usr/bin/env` when it gives the nested run another `PATH`, `HOME`, or
+`XDG_CONFIG_HOME`, and the nested run starts `/usr/bin/env`, `/usr/bin/tr`, `/bin/sh`,
+`/bin/echo`, `/bin/cat`, and `/usr/bin/git`. The host without `/dev/net/tun` that a nested run
+meets is made the same way, inside an outer isolation that does not show the device; the tests
+that show it need the host's `/dev/net/tun`. Tests that use the shared file place point
+`XDG_RUNTIME_DIR` at a temporary directory; the others leave it unset. Copies of `/bin/echo` and `/bin/cat` placed in a
 temporary directory are started by the relative name `-x/tool`, and a copy of `/bin/sh` there by
 the name `sh` through the host's `PATH`; no copy is started by an absolute path (`python3` makes
 the raw system calls that observe the seccomp filter and the socket connections that observe
@@ -104,8 +114,11 @@ when, is in the routing table of `AGENTS.md`.
   dependencies and supported environment are governed by the proof gate in
   `docs/guide/maintainer/library.md`, including the product integration checks required
   before the initial filtered release. A launch that wraps a command (including
-  `--print-plan`) writes no files; `init` is the only form that writes files, and only within
-  the paths the runtime boundary allows.
+  `--print-plan`) writes no files, with one exception: a launch that is not nested, and not
+  `--print-plan`, makes the shared file place `$XDG_RUNTIME_DIR/kakoi/` and its two files of
+  fixed content (the empty file and `nameserver 127.0.0.53`) again when they are missing or
+  wrong (`docs/ir/core/core-runtime.md` REQ-305, `core-nested-isolation.md` REQ-461). `init` is
+  the only form that writes other files, and only within the paths the runtime boundary allows.
 - `docs/ir/core/core-product.md` (old section 18) is authoritative for features the current version
   excludes.
 - The version lives in `Cargo.toml` only (`docs/ir/core/core-release.md`, old section 17).
