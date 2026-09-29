@@ -807,3 +807,183 @@ fn req_457_a_nested_isolation_plan_is_marked_apart_from_a_nested_exec_plan() {
     assert!(!plain.contains(&isolate_summary), "{plain}");
     assert!(!plain.contains(&exec_summary), "{plain}");
 }
+
+// `network.allow-nested-filtered`: the host's `/dev/net/tun` inside.
+
+/// Writes `policy` as a policy file under `home` and returns its path.
+fn policy_file(home: &TempDir, name: &str, policy: &str) -> std::path::PathBuf {
+    home.write(name, policy)
+}
+
+/// Runs `script` inside the isolation of `home`'s profile and `policy`.
+fn run_with_policy(
+    home: &TempDir,
+    workspace: &std::path::Path,
+    policy: &std::path::Path,
+    script: &str,
+) -> Output {
+    binary(home.path())
+        .current_dir(workspace)
+        .args([
+            "--workspace".as_ref(),
+            workspace.as_os_str(),
+            "--policy-file".as_ref(),
+            policy.as_os_str(),
+            "--".as_ref(),
+            "/bin/sh".as_ref(),
+            "-c".as_ref(),
+            std::ffi::OsStr::new(script),
+        ])
+        .output()
+        .unwrap()
+}
+
+const LOOK_FOR_TUN: &str = "test -c /dev/net/tun && echo tun || echo no-tun";
+
+// @kotowari[EX-890]
+#[test]
+fn ex_890_the_tun_device_is_not_shown_by_default() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = run_inside(home.path(), &workspace, LOOK_FOR_TUN);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"no-tun\n", "{report}");
+}
+
+// @kotowari[REQ-458]
+#[test]
+fn req_458_the_key_shows_the_tun_device_without_a_warning_in_host_mode() {
+    let (home, workspace) = home_with_workspace();
+    let policy = policy_file(
+        &home,
+        "tun.toml",
+        "[network]\nallow-nested-filtered = true\n",
+    );
+
+    let output = run_with_policy(&home, &workspace, &policy, LOOK_FOR_TUN);
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"tun\n", "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+}
+
+// @kotowari[REQ-458]
+#[test]
+fn req_458_the_upper_layer_decides() {
+    let (home, workspace) = home_with_workspace();
+    let with = |profile: bool, file: bool| {
+        profile_text(&home, profile);
+        let policy = policy_file(
+            &home,
+            "tun.toml",
+            &format!("[network]\nallow-nested-filtered = {file}\n"),
+        );
+        let output = run_with_policy(&home, &workspace, &policy, LOOK_FOR_TUN);
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{report}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    assert_eq!(with(true, false), "no-tun\n");
+    assert_eq!(with(false, true), "tun\n");
+}
+
+/// Writes the profile of `home`: the workspace `rw` and `network.allow-nested-filtered`.
+fn profile_text(home: &TempDir, allow: bool) {
+    profile(
+        home,
+        &format!("{RW_WORKSPACE}[network]\nallow-nested-filtered = {allow}\n"),
+    );
+}
+
+// @kotowari[REQ-458]
+#[test]
+fn req_458_the_summary_says_the_tun_device_is_shown() {
+    let (home, workspace) = home_with_workspace();
+    let summary = |allow: bool| {
+        profile_text(&home, allow);
+        let output = binary(home.path())
+            .args(["--workspace", workspace.to_str().unwrap(), "--print-plan"])
+            .output()
+            .unwrap();
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{report}");
+        assert!(output.stderr.is_empty(), "{report}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    let shown = summary(true);
+    let not_shown = summary(false);
+
+    let extra: Vec<&str> = shown
+        .lines()
+        .filter(|line| !not_shown.lines().any(|other| other == *line))
+        .collect();
+    assert_eq!(extra.len(), 1, "{shown}\n{not_shown}");
+    assert_eq!(not_shown.lines().count() + 1, shown.lines().count());
+}
+
+// @kotowari[REQ-458]
+#[test]
+fn req_458_without_a_tun_device_on_the_host_the_run_and_the_plan_stop() {
+    // The outer isolation shows no `/dev/net/tun`, so for the nested run the host has
+    // none.
+    let (home, workspace) = home_with_workspace();
+    let inner = policy_file(
+        &home,
+        "inner.toml",
+        "[network]\nallow-nested-filtered = true\n",
+    );
+    let nested = |arguments: &str| {
+        run_inside(
+            home.path(),
+            &workspace,
+            &format!(
+                "exec {KAKOI} --nested=isolate --workspace {} --policy-file {} {arguments}",
+                workspace.display(),
+                inner.display()
+            ),
+        )
+    };
+
+    assert_diagnostic(&nested("-- /bin/echo ran"), 125, "bwrap");
+    assert_diagnostic(&nested("--print-plan"), 125, "bwrap");
+}
+
+// @kotowari[REQ-315]
+#[test]
+fn req_315_the_tun_device_follows_the_mark() {
+    let (home, workspace) = home_with_workspace();
+    profile_text(&home, true);
+
+    let output = binary(home.path())
+        .args([
+            "--workspace",
+            workspace.to_str().unwrap(),
+            "--print-plan=json",
+        ])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let arguments = plan["bwrap_arguments"].as_array().unwrap();
+    let mark = arguments
+        .iter()
+        .position(|argument| argument["value"] == MARK)
+        .unwrap_or_else(|| panic!("no mark: {report}"));
+    let values: Vec<&serde_json::Value> = arguments[mark + 1..mark + 4]
+        .iter()
+        .map(|argument| &argument["value"])
+        .collect();
+    assert_eq!(
+        values,
+        ["--dev-bind", "/dev/net/tun", "/dev/net/tun"],
+        "{report}"
+    );
+    assert_eq!(arguments[mark + 4]["value"], "--proc", "{report}");
+}

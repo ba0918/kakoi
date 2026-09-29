@@ -132,6 +132,8 @@ pub struct Policy {
     pub network_limits: crate::network::NetworkLimits,
     pub dns_upstream: Vec<crate::network::DnsUpstream>,
     pub shutdown_grace_seconds: u32,
+    /// Whether the host's `/dev/net/tun` is shown inside (specification REQ-458).
+    pub allow_nested_filtered: bool,
     pub env_mode: EnvMode,
     pub env_pass: Vec<String>,
     pub env_set: BTreeMap<String, String>,
@@ -183,6 +185,7 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         network_limits: crate::network::NetworkLimits::default(),
         dns_upstream: Vec::new(),
         shutdown_grace_seconds: 5,
+        allow_nested_filtered: false,
         env_mode: EnvMode::Inherit,
         env_pass: Vec::new(),
         env_set: BTreeMap::new(),
@@ -217,6 +220,9 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
             .extend(file.mounts.hide_mounts.iter().cloned());
         if let Some(mode) = file.network.mode {
             policy.network_mode = mode;
+        }
+        if let Some(allow) = file.network.allow_nested_filtered {
+            policy.allow_nested_filtered = allow;
         }
         policy.network_publish.extend(&file.network.publish);
         policy

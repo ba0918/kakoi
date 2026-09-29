@@ -1623,6 +1623,7 @@ fn req_460_files_of_the_place_are_bound_read_only_and_fall_back_to_data() {
     let place = PathBuf::from("/run/user/1000/kakoi");
     let with_place = Provisions {
         shared_files: Some(place.clone()),
+        ..Provisions::default()
     };
     let arguments = |provisions: &Provisions| {
         bwrap_arguments(

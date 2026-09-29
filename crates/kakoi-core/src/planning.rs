@@ -19,7 +19,9 @@ use crate::guard_placement::{place_guards, real_program, GuardPlan, PlacedGuard,
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
-use crate::plan::{self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand};
+use crate::plan::{
+    self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
+};
 use crate::secret_facts::read_secret_files;
 use crate::shared_files;
 use crate::variables::derive_variables;
@@ -99,6 +101,12 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     // with, read only for the items that survived the resolution and the checks.
     let copies = read_copy_sources(&isolation.mounts.items)?;
     let bwrap = locate_bwrap(&request.host)?;
+    // With `bwrap`, since the device is shown by it (specification REQ-458).
+    if policy.allow_nested_filtered && Path::new(TUN_DEVICE).symlink_metadata().is_err() {
+        return Err(Diagnostic::bwrap(format!(
+            "network.allow-nested-filtered shows {TUN_DEVICE} inside, but the host has none"
+        )));
+    }
     // A plan that is only shown, that of a nested run without `--nested=isolate`,
     // resolves on the host's `PATH` as that run would (specification REQ-261).
     let search_in = if request.applied {

@@ -182,6 +182,7 @@ pub fn plan(
 ) -> Plan {
     let provisions = Provisions {
         shared_files: inputs.shared_files.map(Path::to_path_buf),
+        tun: inputs.policy.allow_nested_filtered,
     };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
@@ -225,6 +226,9 @@ pub fn plan(
 /// `/dev`. A kakoi started where it exists is nested (specification REQ-455).
 pub const NESTING_MARK: &str = "/dev/kakoi-isolated";
 
+/// The tun device a kakoi nested inside needs for filtered (specification REQ-458).
+pub const TUN_DEVICE: &str = "/dev/net/tun";
+
 /// The command as given on the command line (`COMMAND` and `ARGS`) and where `COMMAND`
 /// resolved to (specification section 4.2). The process sees `command` as its argv[0]
 /// and `path` is only what is executed.
@@ -255,12 +259,14 @@ pub enum Argument {
     },
 }
 
-/// What the host provides the isolation with besides the policy.
+/// What the host provides the isolation with besides the mount items.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Provisions {
     /// The shared file place the files that are always the same are bound from; none
     /// when they are made from data (specification REQ-460).
     pub shared_files: Option<PathBuf>,
+    /// Whether the host's tun device is shown inside (specification REQ-458).
+    pub tun: bool,
 }
 
 impl Provisions {
@@ -316,10 +322,19 @@ pub fn bwrap_arguments(
         Argument::text("--ro-bind-data"),
         Argument::EmptyFile,
         Argument::text(NESTING_MARK),
+    ];
+    if provisions.tun {
+        arguments.extend([
+            Argument::text("--dev-bind"),
+            Argument::text(TUN_DEVICE),
+            Argument::text(TUN_DEVICE),
+        ]);
+    }
+    arguments.extend([
         Argument::text("--proc"),
         Argument::text("/proc"),
         Argument::text("--unshare-all"),
-    ];
+    ]);
     if matches!(network_mode, NetworkMode::Host | NetworkMode::Filtered) {
         arguments.push(Argument::text("--share-net"));
     }
