@@ -21,6 +21,7 @@ use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand};
 use crate::secret_facts::read_secret_files;
+use crate::shared_files;
 use crate::variables::derive_variables;
 use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 
@@ -65,13 +66,15 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let protected_config_dir = config_dir.as_path();
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
     let expanded = expand_policy(&policy, &variables, &home);
+    let shared_files = shared_files::place(&request.host, request.nested);
     let wanted = candidates(
         &expanded,
         &layers,
         &variables,
         protected_config_dir,
         request.workspace.as_deref(),
-    );
+    )
+    .with_protected(shared_files.as_deref());
     let facts = IsolationFacts {
         mounts: collect_mount_facts(&wanted),
         secrets: read_secret_files(&expanded.secrets),
@@ -88,6 +91,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         host: &request.host,
         nested: request.nested,
         applied: request.applied,
+        shared_files: shared_files.as_deref(),
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;

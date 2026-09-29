@@ -175,6 +175,22 @@ pub struct Candidates {
     pub hide_mounts_under: Vec<PathBuf>,
 }
 
+impl Candidates {
+    /// These candidates and those of one more protected path: its prefixes, and its
+    /// resolution.
+    pub fn with_protected(mut self, path: Option<&Path>) -> Self {
+        if let Some(path) = path {
+            self.paths.extend(path.ancestors().map(Path::to_path_buf));
+            self.traversals.push(path.to_path_buf());
+            self.paths.sort();
+            self.paths.dedup();
+            self.traversals.sort();
+            self.traversals.dedup();
+        }
+        self
+    }
+}
+
 /// The candidate paths of `expanded`: every expanded path, plus every prefix (each
 /// ancestor and the path itself) of the paths specification section 5.6 protects — the
 /// policy files read, the configuration directory, the secret files, and the

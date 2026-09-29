@@ -14,7 +14,8 @@ use crate::variables::Variables;
 
 /// The paths specification section 5.6 protects, in the order section 13 reports them:
 /// the policy files read (profile first), the configuration directory, the secret files
-/// by name, and the `path-prepend` entries in merged order.
+/// by name, the `path-prepend` entries in merged order, and the shared file place of a
+/// run that uses it (specification REQ-462).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ProtectedPaths {
     pub policy_files: Vec<PathBuf>,
@@ -23,6 +24,9 @@ pub struct ProtectedPaths {
     pub config_dir: PathBuf,
     pub secrets: Vec<(String, PathBuf)>,
     pub path_prepend: Vec<PathBuf>,
+    /// Protected whether or not it exists, like the configuration directory; nor may a
+    /// writable item lie inside it.
+    pub shared_files: Option<PathBuf>,
 }
 
 pub fn protected_paths(
@@ -49,6 +53,7 @@ pub fn protected_paths(
             .iter()
             .filter_map(|entry| Some(entry.path.path()?.to_path_buf()))
             .collect(),
+        shared_files: None,
     }
 }
 
@@ -312,7 +317,35 @@ fn check_protected_paths(
     for path in &protected.path_prepend {
         check_prefixes(path, "the `path-prepend` entry", writable, facts)?;
     }
+    if let Some(place) = &protected.shared_files {
+        check_prefixes(place, "the shared file place", writable, facts)?;
+        check_nothing_writable_inside(place, writable, facts)?;
+    }
     Ok(())
+}
+
+/// A writable item inside the shared file place could write the files every run binds
+/// read-only (specification REQ-462).
+fn check_nothing_writable_inside(
+    place: &Path,
+    writable: &[&ResolvedItem],
+    facts: &MountFacts,
+) -> Result<(), Diagnostic> {
+    let entry = facts.entry(place);
+    let real = entry.path().unwrap_or(place);
+    match writable
+        .iter()
+        .find(|item| item.real.starts_with(real) || item.real.starts_with(place))
+    {
+        Some(item) => Err(Diagnostic::path(format!(
+            "the `{}` item {} is inside the shared file place {}, whose files every run \
+             binds read-only, and could change them from inside the isolation",
+            item.directive.name(),
+            item.real.display(),
+            place.display()
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// The root-item check of specification section 5.6: a written `rw`, `rw-file`, or `hide`

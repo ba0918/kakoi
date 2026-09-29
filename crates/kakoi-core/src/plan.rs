@@ -20,9 +20,10 @@ use crate::mounts::{
 };
 use crate::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
+    ProtectedPaths,
 };
 use crate::policy::NetworkMode;
-use crate::shared_files::{self, SharedFile};
+use crate::shared_files::SharedFile;
 use crate::variables::Variables;
 
 /// Everything stage 7 decides from besides the facts: the layers and their merge, the
@@ -48,6 +49,9 @@ pub struct Inputs<'a> {
     /// Whether the plan is used: outside an isolation, or inside one with
     /// `--nested=isolate` (specification REQ-457).
     pub applied: bool,
+    /// The shared file place the run plans with; none when it makes those files from data
+    /// (specification REQ-460).
+    pub shared_files: Option<&'a Path>,
 }
 
 /// The facts stage 7 needs.
@@ -99,7 +103,10 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         &facts.mounts,
         &swappable_ro,
     )?;
-    let protected = protected_paths(inputs.expanded, inputs.layers, inputs.config_dir);
+    let protected = ProtectedPaths {
+        shared_files: inputs.shared_files.map(Path::to_path_buf),
+        ..protected_paths(inputs.expanded, inputs.layers, inputs.config_dir)
+    };
     let mut warnings = check_placement(
         &mounts,
         &protected,
@@ -174,7 +181,7 @@ pub fn plan(
     guards: GuardPlan,
 ) -> Plan {
     let provisions = Provisions {
-        shared_files: shared_files::place(inputs.host, inputs.nested),
+        shared_files: inputs.shared_files.map(Path::to_path_buf),
     };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,

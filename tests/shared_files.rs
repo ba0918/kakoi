@@ -439,3 +439,83 @@ fn req_287_concurrent_runs_share_the_place_without_affecting_each_other() {
         assert_eq!(child.wait().unwrap().code(), Some(10 + index));
     }
 }
+
+// Keeping the place from writable items.
+
+impl Scene {
+    /// Replaces the profile with the workspace and `rw` as `rw`, the hidden file, and
+    /// `more` in the mounts table.
+    fn profile(&self, rw: Option<&Path>, more: &str) {
+        let rw = rw.map_or(String::new(), |path| format!(", \"{}\"", path.display()));
+        self.home.write(
+            ".config/kakoi/profile/default.toml",
+            format!(
+                "[mounts]\nrw = [\"${{workspace}}\"{rw}]\nhide = [\"{}\"]\n{more}",
+                self.hidden.display()
+            ),
+        );
+    }
+}
+
+// @kotowari[EX-895]
+#[test]
+fn ex_895_the_place_under_an_rw_item_is_a_path_diagnostic() {
+    let scene = Scene::new();
+    scene.profile(Some(&scene.runtime), "");
+
+    let output = scene.run_with_place("echo ran");
+
+    assert_diagnostic(&output, 125, "path");
+    assert!(!scene.place().exists());
+}
+
+// @kotowari[REQ-462]
+#[test]
+fn req_462_an_rw_file_item_inside_the_place_is_a_path_diagnostic_in_a_run_and_a_plan() {
+    let scene = Scene::new();
+    let file = made_file(&scene);
+    scene.profile(None, &format!("rw-file = [\"{}\"]\n", file.display()));
+
+    let run = scene.run_with_place("echo ran");
+    let plan = scene
+        .kakoi(Some(scene.runtime.as_os_str()))
+        .arg("--print-plan")
+        .output()
+        .unwrap();
+
+    assert_diagnostic(&run, 125, "path");
+    assert_diagnostic(&plan, 125, "path");
+}
+
+// @kotowari[REQ-462]
+#[test]
+fn req_462_the_place_is_checked_only_when_it_would_be_used() {
+    let scene = Scene::new();
+    scene.profile(Some(&scene.runtime), "");
+
+    let plan = scene
+        .kakoi(Some(scene.runtime.as_os_str()))
+        .arg("--print-plan")
+        .output()
+        .unwrap();
+    let without = scene.run(None, "echo ran");
+
+    assert_diagnostic(&plan, 125, "path");
+    assert_eq!(assert_quiet(&without), "ran\n");
+}
+
+// @kotowari[REQ-295, REQ-462]
+#[test]
+fn req_295_the_place_is_named_after_the_other_protected_paths() {
+    let scene = Scene::new();
+    let token = scene.home.write("run/token", "FAKE-TOKEN\n");
+    scene.profile(
+        Some(&scene.runtime),
+        &format!("[secrets]\nTOKEN = \"{}\"\n", token.display()),
+    );
+
+    let output = scene.run_with_place("echo ran");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains("TOKEN"), "{diagnostic}");
+}
