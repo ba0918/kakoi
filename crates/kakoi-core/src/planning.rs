@@ -47,6 +47,9 @@ pub struct Request {
     /// Whether the plan is used: outside an isolation, or inside one with
     /// `--nested=isolate` (specification REQ-457).
     pub applied: bool,
+    /// Whether the command guards of the run around this nested one are handed on: they
+    /// were there when it started (specification REQ-465).
+    pub outer_guard: bool,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -56,6 +59,13 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let config_dir = env.config_dir(&home);
     let layers = load_layers(&request.layers, &config_dir)?;
     let policy = merge(&layers)?;
+    // The guards of both runs cannot be laid one over the other (specification REQ-466).
+    if request.outer_guard && !policy.guards.is_empty() {
+        return Err(Diagnostic::policy(
+            "the command guards of the isolation around this one are handed on, so the \
+             policy of a nested isolation cannot place guards of its own",
+        ));
+    }
     let workspace = request
         .workspace
         .clone()
@@ -94,6 +104,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         nested: request.nested,
         applied: request.applied,
         shared_files: shared_files.as_deref(),
+        outer_guard: request.outer_guard,
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;

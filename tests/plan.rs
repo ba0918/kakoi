@@ -297,6 +297,7 @@ fn isolation_with(
         host: &BTreeMap::new(),
         nested: false,
         applied: true,
+        outer_guard: false,
         shared_files: None,
     };
     let facts = IsolationFacts {
@@ -1151,6 +1152,7 @@ fn a_missing_configuration_directory_leaves_config_dir_valueless() {
         host: &BTreeMap::new(),
         nested: false,
         applied: true,
+        outer_guard: false,
         shared_files: None,
     };
     let facts = IsolationFacts {

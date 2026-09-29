@@ -987,3 +987,151 @@ fn req_315_the_tun_device_follows_the_mark() {
     );
     assert_eq!(arguments[mark + 4]["value"], "--proc", "{report}");
 }
+
+// The outer run's command guards inside a nested isolation.
+
+const GIT_PUSH: &str =
+    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
+
+/// Runs `script` inside the isolation of `home`'s profile with `outer` added, where it
+/// starts a nested isolation of the profile with `inner` added, and in that the shell
+/// command `inner_script`.
+fn nested_under_policies(
+    home: &TempDir,
+    workspace: &std::path::Path,
+    outer: &str,
+    inner: &str,
+    arguments: &str,
+) -> Output {
+    let outer = policy_file(home, "outer.toml", outer);
+    let inner = policy_file(home, "inner.toml", inner);
+    run_with_policy(
+        home,
+        workspace,
+        &outer,
+        &format!(
+            "exec {KAKOI} --nested=isolate --workspace {} --policy-file {} {arguments}",
+            workspace.display(),
+            inner.display()
+        ),
+    )
+}
+
+// @kotowari[EX-899]
+#[test]
+fn ex_899_the_outer_guard_still_denies_inside_a_nested_isolation() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_under_policies(
+        &home,
+        &workspace,
+        GIT_PUSH,
+        "",
+        "-- /bin/sh -c 'git push origin main'",
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "kakoi: guard: git push: push は人が行う\n",
+        "{report}"
+    );
+}
+
+// @kotowari[EX-900]
+#[test]
+fn ex_900_a_guard_over_the_real_program_still_starts_it_inside_a_nested_isolation() {
+    let (home, workspace) = home_with_workspace();
+    let version = std::process::Command::new("/usr/bin/git")
+        .arg("--version")
+        .output()
+        .unwrap();
+
+    let output = nested_under_policies(
+        &home,
+        &workspace,
+        &format!("{GIT_PUSH}guard-absolute-path = true\n"),
+        "",
+        "-- /bin/sh -c '/usr/bin/git --version'",
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, version.stdout, "{report}");
+    assert!(output.stderr.is_empty(), "{report}");
+}
+
+// @kotowari[EX-901]
+#[test]
+fn ex_901_guards_outside_and_inside_stop_the_nested_isolation() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_under_policies(&home, &workspace, GIT_PUSH, GIT_PUSH, "-- /bin/echo ran");
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+/// The `value`s of the literal arguments of the JSON plan in `output`.
+fn literal_arguments(output: &Output) -> Vec<String> {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    plan["bwrap_arguments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|argument| argument["value"].as_str().unwrap_or("").to_string())
+        .collect()
+}
+
+// @kotowari[REQ-465]
+#[test]
+fn req_465_nothing_is_handed_on_without_an_outer_guard() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_under_policies(&home, &workspace, "", "", "--print-plan=json");
+
+    let arguments = literal_arguments(&output);
+    assert!(
+        !arguments
+            .iter()
+            .any(|value| value.starts_with("/dev/kakoi-guard")),
+        "{arguments:?}"
+    );
+}
+
+// @kotowari[REQ-315, REQ-465]
+#[test]
+fn req_315_the_outer_guard_follows_the_mark_and_the_tun_device() {
+    let (home, workspace) = home_with_workspace();
+    let tun = "[network]\nallow-nested-filtered = true\n";
+
+    let output = nested_under_policies(
+        &home,
+        &workspace,
+        &format!("{GIT_PUSH}{tun}"),
+        tun,
+        "--print-plan=json",
+    );
+
+    let arguments = literal_arguments(&output);
+    let mark = arguments
+        .iter()
+        .position(|value| value == MARK)
+        .unwrap_or_else(|| panic!("{arguments:?}"));
+    assert_eq!(
+        arguments[mark + 1..mark + 8],
+        [
+            "--dev-bind",
+            "/dev/net/tun",
+            "/dev/net/tun",
+            "--ro-bind",
+            "/dev/kakoi-guard",
+            "/dev/kakoi-guard",
+            "--proc",
+        ],
+        "{arguments:?}"
+    );
+}

@@ -52,6 +52,9 @@ pub struct Inputs<'a> {
     /// The shared file place the run plans with; none when it makes those files from data
     /// (specification REQ-460).
     pub shared_files: Option<&'a Path>,
+    /// Whether the run hands the command guards of the run around it on (specification
+    /// REQ-465).
+    pub outer_guard: bool,
 }
 
 /// The facts stage 7 needs.
@@ -183,6 +186,7 @@ pub fn plan(
     let provisions = Provisions {
         shared_files: inputs.shared_files.map(Path::to_path_buf),
         tun: inputs.policy.allow_nested_filtered,
+        outer_guard: inputs.outer_guard,
     };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
@@ -267,6 +271,9 @@ pub struct Provisions {
     pub shared_files: Option<PathBuf>,
     /// Whether the host's tun device is shown inside (specification REQ-458).
     pub tun: bool,
+    /// Whether the command guards of the run around a nested one are shown inside as
+    /// they are (specification REQ-465).
+    pub outer_guard: bool,
 }
 
 impl Provisions {
@@ -328,6 +335,13 @@ pub fn bwrap_arguments(
             Argument::text("--dev-bind"),
             Argument::text(TUN_DEVICE),
             Argument::text(TUN_DEVICE),
+        ]);
+    }
+    if provisions.outer_guard {
+        arguments.extend([
+            Argument::text("--ro-bind"),
+            Argument::text(GUARD_ROOT),
+            Argument::text(GUARD_ROOT),
         ]);
     }
     arguments.extend([

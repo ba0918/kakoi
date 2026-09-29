@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::cli::{self, Invocation, Nesting, Parsed};
 use kakoi_core::diagnostic::{Diagnostic, Warning};
 use kakoi_core::environment::{HostEnvironment, RealEntry};
+use kakoi_core::guard_placement::GUARD_ROOT;
 use kakoi_core::plan::{Plan, NESTING_MARK};
 use kakoi_core::planning::{locate_command, plan_for, Request};
 use kakoi_core::workspace_facts::real_entry;
@@ -108,6 +109,9 @@ where
         executable: std::env::current_exe().ok(),
         nested,
         applied,
+        // Only kakoi makes `/dev`, so what is there was placed by the run around this one
+        // (specification REQ-465).
+        outer_guard: nested && applied && Path::new(GUARD_ROOT).symlink_metadata().is_ok(),
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,
