@@ -13,10 +13,10 @@
 
 ### REQ-295: 同段階の診断順序
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A36
 - verification: unit
 
-同検査のマウントは適用順、環境と秘密は名前のバイト順で最初を診断する。保護対象はprofile、policy-file、設定ディレクトリ、秘密名順、合成後path-prepend順。scan rootがunderより先、生成前の検査が書かれた項目より先。根と露出組は項目順の後workspaceを見て、2検査の交互配置は委譲する。
+同検査のマウントは適用順、環境と秘密は名前のバイト順で最初を診断する。保護対象はprofile、policy-file、設定ディレクトリ、秘密名順、合成後path-prepend順、共有ファイルの置き場。scan rootがunderより先、生成前の検査が書かれた項目より先。根と露出組は項目順の後workspaceを見て、2検査の交互配置は委譲する。
 
 ### REQ-296: 要約の内容
 - kind: ubiquitous
@@ -27,10 +27,10 @@
 
 ### REQ-297: 全量と共通表示
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-last-four.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-last-four.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A8
 - verification: unit
 
-全量は合成後ポリシー、マウント実体パスと出所、秘密を伏せた全環境、解決コマンド、bwrap引数を示す。要約と全量は飛ばした項目と理由、複製できなかったエントリと理由、入れ子の印を共通して持つ。
+全量は合成後ポリシー、マウント実体パスと出所、秘密を伏せた全環境、解決コマンド、bwrap引数を示す。要約と全量は飛ばした項目と理由、複製できなかったエントリと理由、入れ子の表示を共通して持つ。
 
 ### REQ-298: JSONの外形と版
 - kind: ubiquitous
@@ -41,10 +41,10 @@ JSON計画は全量に環境差分を加えた1行1文書を末尾LF1個付き�
 
 ### REQ-299: JSONの主要キー
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A9
 - verification: unit
 
-JSONはformat_version、nested、policy_sources、variables、home、policy、mounts、skipped_mounts、left_visible、skipped_paths、not_copied、guards、skipped_guards、environment、environment_changes、command、bwrap、bwrap_argumentsを持つ。variablesは4変数、不在値はnull。COMMAND省略時commandはnull。mountsは実体パス・種類・記述値・出所を持つ。
+JSONはformat_version、nested、applied、policy_sources、variables、home、policy、mounts、skipped_mounts、left_visible、skipped_paths、not_copied、guards、skipped_guards、environment、environment_changes、command、bwrap、bwrap_argumentsを持つ。variablesは4変数、不在値はnull。COMMAND省略時commandはnull。mountsは実体パス・種類・記述値・出所を持つ。
 
 ### REQ-300: JSONの秘密と記述子
 - kind: ubiquitous

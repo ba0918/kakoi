@@ -6,24 +6,25 @@
 
 ### REQ-284: 入れ子の実行
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A10
 - verification: unit
 
-入れ子ではinitと計画表示を除き、ポリシー読込・bwrap起動・環境変更・cwdとHOMEの検査を行わず、内側プロファイルを適用しないwarningを1行出してコマンドを直接execする。
+入れ子（REQ-455の判定）で"--nested=exec"の実行（"--nested"を省略した実行を含む）は、ポリシー読込・bwrap起動・環境変更・cwdとHOMEの検査を行わず、内側プロファイルを適用しないwarningを1行出してコマンドを直接execする。initと計画表示はこの規則の対象外。"--nested=isolate"の実行はREQ-456に従う。
 
 ### REQ-285: 入れ子の計画
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A8
 - verification: unit
 
-入れ子の計画表示はポリシーを読み計画に入れ子の印を付ける。計画のPATHは隔離環境の値、解決先はホストPATHによる値として区別する。
+"--nested=exec"の入れ子の計画表示はポリシーを読み、計画に入れ子の表示と、その計画は使われないことを付ける。計画のPATHは隔離環境の値、解決先はホストPATHによる値として区別する。
 
-### REQ-286: 入れ子検出の限界
+### REQ-286: 入れ子の判定の限界
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-- verification: unit
+- source: docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A13, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16
+- verification: review
+- how_to_verify: READMEから直接リンクする "docs/security.md" の既知の隙間に、本文の限界が書かれていることを確かめる。
 
-入れ子検出は環境変数だけに頼る。隔離内で環境を消すと二重隔離を試み、外側より広がらず、空にされた秘密はsecret診断になる。ホストKAKOI=1では隔離せず警告して実行する。両方をREADMEに記す。
+隔離の中のプロセスが自分で名前空間を作って "/dev" を覆うと、その中で起動したkakoiからは入れ子の印が見えず、入れ子でないと判定される。入れ子の印を置かない古い版のkakoiの隔離の中では、新しい版のkakoiは入れ子と判定しない。"--nested=isolate"の入れ子（2段目）の中でさらに"--nested=isolate"で隔離（3段目）を作るとき、3段目が、2段目がデータから作って置いたファイル（"hide"のファイル、filteredの"/etc/resolv.conf"）と同じパスにマウントしようとすると、コマンドを実行せずに止まる。外の起動が共有ファイルの置き場を使えなかったときの2段目も同じである。この4つをREADMEに記す。
 
 ### REQ-287: 並列起動
 - kind: ubiquitous
@@ -42,23 +43,23 @@
 ## Examples
 
 ```gherkin
-@id=EX-520 @about=REQ-284 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+@id=EX-520 @about=REQ-284 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A10,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23
 Scenario: 入れ子の実行
-  Given 本体の既存仕様を適用する
-  When KAKOI=1の環境でコマンドを実行する
+  Given 入れ子の印がある隔離の中にいる
+  When "--nested"を付けずにコマンドを実行する
   Then 受け取った環境のまま直接execしてwarningを出す
 
-@id=EX-521 @about=REQ-285 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+@id=EX-521 @about=REQ-285 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23
 Scenario: 入れ子の計画
-  Given 本体の既存仕様を適用する
-  When KAKOI=1で存在しない名前付きプロファイルの計画を見る
+  Given 入れ子の印がある隔離の中にいる
+  When 存在しない名前付きプロファイルの計画を見る
   Then 計画を出さずpolicy診断となる
 
-@id=EX-522 @about=REQ-286 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-Scenario: 入れ子検出の限界
-  Given 本体の既存仕様を適用する
-  When ホストでKAKOI=1を設定して実行する
-  Then 隔離を作らず必ず入れ子警告を出す
+@id=EX-522 @about=REQ-286 @source=docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19
+Scenario: 3段目の入れ子の隔離は止まる
+  Given "--nested=isolate"で作った入れ子の隔離の中にいて、その隔離がファイルを"hide"にしている
+  When 同じファイルを"hide"にするポリシーと"--nested=isolate"でコマンドを起動する
+  Then コマンドを実行せずに止まる
 
 @id=EX-523 @about=REQ-287 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 Scenario: 並列起動

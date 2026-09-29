@@ -63,7 +63,7 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 ## Decision tables
 
 ### TBL-160: 既知の隙間
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30
 
 | 番号 | 既知の隙間 |
 |---|---|
@@ -74,7 +74,7 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 | 5 | マウントするパスと秘密ファイルのパスは bwrap の引数に載り、秘密の値は "/proc" を通してホストから読める（core-environment.md） |
 | 6 | 名前が規則に合わないホストの認証情報の環境変数は、"inherit" で隔離に入る（core-environment.md） |
 | 7 | "TIOCLINUX"、端末の応答を使った注入、ディスプレイサーバを経由した入力の合成は、seccomp で塞がない（core-terminal.md）。同梱のプロファイルは、これらの経路を "hide" と "unset" で消す |
-| 8 | 環境を空にした入れ子と、ホスト側で "KAKOI=1" を立てた起動（core-process.md） |
+| 8 | 入れ子の判定と入れ子の中の隔離の限界。隔離の中で自分で名前空間を作って "/dev" を覆うと、その中で起動した kakoi は入れ子と判定しない。古い版の kakoi の隔離の中では入れ子と判定しない。"--nested=isolate" の入れ子の中でさらに "--nested=isolate" で隔離を作るとき、内側が外側のデータから作って置いたファイル（"hide" のファイル、filtered の "/etc/resolv.conf"）と同じパスにマウントしようとすると止まる。外の起動が共有ファイルの置き場を使えなかったときも同じである（core-process.md）。入れ子と判定しなかった内側の kakoi は、外の隔離の中の書ける場所に共有ファイルの置き場を作ることがあり、そのとき外のエージェントは内側の起動の隠したファイルに中身を入れられる。外と中のポリシーで同じファイルを "rw-copy" にすると、中の隔離を作れずに止まる（core-nested-isolation.md） |
 | 9 | kakoi は起動された環境を信頼する（core-runtime.md）。カレントディレクトリも含む。"rw" の中を通るパスで "cd" し直してから起動すると、隔離の中で差し替えたリンクの先が作業場所になる |
 | 10 | "rw" で渡した領域は、利用者がホスト側で後から実行するものの置き場になりうる。".git/hooks" と ".git/config" は、利用者の "git" の操作で自動的に読まれる。隔離の設計では防げず、利用者が差分を見るしかない |
 | 11 | 32 ビットと x32 のバイナリは動かない（core-terminal.md） |
@@ -83,6 +83,7 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 | 14 | core-policy-placement.md の根の項目の検査は、今回の起動で書き込める項目を基準にする。ワークツリーの下位を字面で書いた項目（例: "rw" に "${worktree}" と "~/work/a/b" を並べたポリシー）は、ワークツリーが "~/work" である起動の隔離の中で "~/work/a" をリンクに差し替えられる。次にワークツリーが別の場所になる起動ではその差し替えが見えず、リンクの先に "rw" が付く。項目のパス自身がリンクに差し替えられる形（"~/work/a/b" を差し替え、次の起動で "--workspace ~/work/a/b/inner" を別の場所から与える）も同じである。同じワークツリーから起動すれば止まる。閉じるには前回の起動で書き込めた項目を覚える必要があり、永続する状態を持たないという core-runtime.md の境界に反するので、この隙間は受け入れる。ワークツリーの下位は変数で書く |
 | 15 | "rw" の中にある "ro" と "hide" の項目の守りは完全ではない。リンクで書いた "ro" が守るのは、リンク先の実体だけである。隔離の中でリンクを消して同じ名前の通常ファイルを置けば、同じ起動の中で、読む側のパスの内容を変えられる（一時ファイルと rename で保存するエディタも、リンクを置き換える）。リンク先が書き込める項目の外なら、そこは元から読み取り専用であり、"ro" の項目は何も足していない。次の起動では、リンクの差し替えで別の場所が読み取り専用になるか、削除で読み取り専用が外れる。新しく見えるものは、ポリシーを保護する配置の露出する組の検査が止める。リンクで書いた "hide" は、根の項目の検査が 1 回目の起動から止める。リンクでなくても、祖先ディレクトリの改名と、同じパスへの別のファイルの配置で、次の起動が読む内容を変えられる（core-policy-placement.md）。"ro" で守れるのは、エージェントが読む実体の内容が意図せず書き換わらないことまでで、エージェントが別の内容を読むように仕向ける迂回は止められない |
 | 16 | シムの雛形は、包む対象のどのオプションが値を取るかを知らないので、写す対象のオプションと同じ名前の語を、別のオプションの値でも位置引数でも、どこにあってもそのオプションとして読む。そのため "--workspace" や "--rw" が、その語に続く語まで広がりうる。例: "codex -m --cd /etc exec" は kakoi に "--workspace /etc" を渡す（core-shim.md）。この誤読は受け入れる |
+| 17 | "network.allow-nested-filtered" を true にした host の隔離の中からは、ホストのネットワーク名前空間にある、所有者を設定していないか利用者と同じ uid を所有者とする永続の tun と tap の装置を読み書きできる（core-nested-isolation.md） |
 
 ## Examples
 

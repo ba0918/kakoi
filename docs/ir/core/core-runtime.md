@@ -27,17 +27,17 @@ host/noneはbwrap以外の外部コマンドを実行せず、bwrapをホストP
 
 ### REQ-308: メモリ上の記述子
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20
 - verification: unit
 
-hideの空ファイル、rw-copy各通常ファイル、seccompをメモリ上のファイル記述子でbwrapへ渡しホストのファイルシステムに残さない。記述子を用意できない場合はbwrapで125。番号は起動直前に割り当て計画では記号を示す。
+hideの空ファイル（共有ファイルの置き場を使わない起動だけ。REQ-460）、filteredのresolv.conf（同じ）、rw-copy各通常ファイル、seccompをメモリ上のファイル記述子でbwrapへ渡しホストのファイルシステムに残さない。記述子を用意できない場合はbwrapで125。番号は起動直前に割り当て計画では記号を示す。
 
 ### REQ-309: ファイル数上限
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
 - verification: unit
 
-記述子を作る前に開けるファイル数のsoft上限を毎回hard上限まで上げ、コマンドに継承する。入れ子では記述子を作らず上限を上げない。rw-copyは通常ファイル1個につき記述子1個を使う。
+記述子を作る前に開けるファイル数のsoft上限を毎回hard上限まで上げ、コマンドに継承する。"--nested=exec"の入れ子では記述子を作らず上限を上げない。rw-copyは通常ファイル1個につき記述子1個を使う。
 
 ### REQ-310: 通常ファイルだけを読む
 - kind: ubiquitous
@@ -69,17 +69,17 @@ hideの空ファイル、rw-copy各通常ファイル、seccompをメモリ上�
 
 ### REQ-314: 信頼する起動環境
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A41
 - verification: unit
 
-HOME、XDG_CONFIG_HOME、PATH、KAKOI、cwdを信頼し、ホストでの操作がプロファイル・入れ子判定・作業場所を変えることをREADMEに記す。cgroup資源制限は対象外。
+HOME、XDG_CONFIG_HOME、XDG_RUNTIME_DIR、PATH、cwdを信頼し、ホストでの操作がプロファイル・共有ファイルの置き場・作業場所を変えることをREADMEに記す。入れ子の判定は環境変数ではなく入れ子の印による（REQ-455）。cgroup資源制限は対象外。
 
 ### REQ-315: 固定引数の順序
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A37, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14
 - verification: unit
 
-host/noneの固定引数は--ro-bind / /、--dev /dev、--proc /proc、--unshare-all、hostだけ--share-net、--die-with-parent、--chdir cwd、--seccomp記述子、--argv0 COMMANDの順。続けて適用順のマウント、1個の--、解決済みコマンドパス、ARGSを置く。ポリシーで固定部分を変えない。
+host/noneの固定引数は--ro-bind / /、--dev /dev、入れ子の印の読み取り専用のファイル（/dev/kakoi-isolated）、network.allow-nested-filteredがtrueのときだけホストの/dev/net/tunを見せる引数、--proc /proc、--unshare-all、hostだけ--share-net、--die-with-parent、--chdir cwd、--seccomp記述子、--argv0 COMMANDの順。続けて適用順のマウント、1個の--、解決済みコマンドパス、ARGSを置く。ポリシーで固定部分を変えない。例外はnetwork.allow-nested-filteredによるtunだけである。
 
 ### REQ-316: COMMANDなしの固定引数
 - kind: ubiquitous
@@ -155,11 +155,11 @@ Scenario: パス解決のリンク数
   When 書かれたマウント項目がリンク上限を超える
   Then 実体を持たない項目として飛ばす
 
-@id=EX-547 @about=REQ-314 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+@id=EX-547 @about=REQ-314 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A41
 Scenario: 信頼する起動環境
   Given 本体の既存仕様を適用する
-  When ホストでKAKOI=1を与える
-  Then 入れ子として扱う
+  When ホストで XDG_CONFIG_HOME を別のディレクトリに向けて起動する
+  Then そのディレクトリのプロファイルを読む
 
 ```
 

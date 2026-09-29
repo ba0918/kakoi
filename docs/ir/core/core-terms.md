@@ -82,11 +82,11 @@
 
 ### REQ-183: ホームディレクトリ
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
 - verification: review
 - how_to_verify: IR（docs/ir）、ガイド（docs/guide）、用語集（"CONTEXT.md"）で「ホームディレクトリ」が使われている箇所を検索し、ホストの環境変数 "HOME" の実体のパスの意味で使われていることを確かめる。IR の診断の段階を定める要求を読み、"HOME" が無い、空、絶対パスでない、実体のパスを得られない、実体がディレクトリでないときに、ポリシーが "~" を使うかにかかわらず段階 4 で種類 "env" の診断で終わること、"--help"、"--version"、"--print-plan" の無い入れ子が例外であることが書かれていることを確かめる。
 
-ホストの環境変数 "HOME" の実体のパス。"HOME" が無い、空、絶対パスでない、実体のパスを得られない（存在しない、途中が辿れない）、または実体がディレクトリでないときは、ポリシーが "~" を使うかにかかわらず、第 13 節の段階 4 で種類"env" の診断で終わる（"--help"、"--version"、"--print-plan" の無い入れ子は例外で、この段階に至らない）。
+ホストの環境変数 "HOME" の実体のパス。"HOME" が無い、空、絶対パスでない、実体のパスを得られない（存在しない、途中が辿れない）、または実体がディレクトリでないときは、ポリシーが "~" を使うかにかかわらず、第 13 節の段階 4 で種類"env" の診断で終わる（"--help"、"--version"、"--print-plan" の無い "--nested=exec" の入れ子は例外で、この段階に至らない）。
 
 ### REQ-184: 設定ディレクトリ
 - kind: ubiquitous
@@ -188,11 +188,11 @@
 
 ### REQ-196: 入れ子
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A41
 - verification: review
-- how_to_verify: IR（docs/ir）、ガイド（docs/guide）、用語集（"CONTEXT.md"）で「入れ子」が使われている箇所を検索し、環境変数 "KAKOI" が "1" の状態で "kakoi" が起動されることの意味で使われていることを確かめる。
+- how_to_verify: IR（docs/ir）、ガイド（docs/guide）、用語集（"CONTEXT.md"）で「入れ子」が単独で使われている箇所を検索し、"kakoi" が起動時に入れ子の印を見つけたことの意味で使われていることを確かめる。「入れ子の項目」のようにマウントの項目どうしの包含を指す使い方は、この用語に当たらない。
 
-環境変数 "KAKOI" が "1" の状態で "kakoi" が起動されること。既に隔離の中で動いているプロセスが "kakoi" を起動した場合がこれに当たる。
+"kakoi" が起動時に入れ子の印（"/dev/kakoi-isolated"）を見つけたこと。既に隔離の中で動いているプロセスが "kakoi" を起動した場合がこれに当たる。環境変数 "KAKOI" の有無では決めない（REQ-455）。
 
 ### REQ-197: 解決が参照するもの
 - kind: ubiquitous
