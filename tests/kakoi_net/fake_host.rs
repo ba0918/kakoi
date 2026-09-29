@@ -210,11 +210,15 @@ def resolv(text):
         with open(RESOLV, 'r+b', buffering=0) as current:
             current.write(padded)
 
-def kakoi(app, stdin=subprocess.DEVNULL, options=(), environment=None):
+def kakoi(app, stdin=subprocess.DEVNULL, options=(), environment=None, unprivileged=False):
     """Starts kakoi with `options` and `app` as the sandbox's Python program,
-    adding `environment` to kakoi's own."""
+    adding `environment` to kakoi's own. `unprivileged` starts it as user
+    1000 in a user namespace of its own, as on a real host: this host's root
+    cannot map root to itself without capabilities, which a kakoi nested in a
+    filtered isolation needs to do."""
+    user = ['/usr/bin/unshare', '--user', '--map-user=1000', '--map-group=1000'] if unprivileged else []
     return subprocess.Popen(
-        [os.environ['KAKOI'], *options, '--', '/usr/bin/python3', '-c', CLIENT + app],
+        [*user, os.environ['KAKOI'], *options, '--', '/usr/bin/python3', '-c', CLIENT + app],
         cwd=os.environ['WORKSPACE'], stdin=stdin, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, bufsize=0,
         env={'PATH': os.environ['BIN'] + ':/usr/sbin:/usr/bin:/bin',
