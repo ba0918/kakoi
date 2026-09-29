@@ -253,6 +253,6 @@ for dir in ${rw_dirs[@]+"${rw_dirs[@]}"}; do
 	kakoi_args+=(--rw "${dir}")
 done
 
-# Nesting is not this shim's business: kakoi detects KAKOI=1
-# itself and warns.
+# Nesting is not this shim's business: kakoi tells a nested run by
+# the mark inside the isolation itself and warns.
 exec kakoi "${kakoi_args[@]}" -- "${real_command}" ${command_args[@]+"${command_args[@]}"}
