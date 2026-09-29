@@ -123,8 +123,8 @@ then selects.
 
 ## Read what the default gives you
 
-The default is written for WSL2. It hides the Windows drives under `/mnt`, `/run/WSL`, `/tmp`,
-`/run/user`, and the usual credential directories; opens the workspace and the worktree for
+The default is written for WSL2. It hides the Windows drives under `/mnt`, `/run/WSL`, `/mnt/wslg`,
+`/tmp`, `/run/user`, and the usual credential directories; opens the workspace and the worktree for
 writing; and drops the credential-shaped environment variables. Read the file `init` wrote, or
 run
 
