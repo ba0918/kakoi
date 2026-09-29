@@ -19,7 +19,18 @@ pub struct Invocation {
     pub hide: Vec<PathBuf>,
     /// The form of the plan to print; none when the command is to be run.
     pub print_plan: Option<PlanForm>,
+    /// What a nested run does.
+    pub nested: Nesting,
     pub command: Vec<OsString>,
+}
+
+/// What a nested run does (specification REQ-464): run the command under the outer
+/// isolation as it is, or make an isolation of its own inside it. Outside an isolation
+/// both make one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Nesting {
+    Exec,
+    Isolate,
 }
 
 /// Which form `--print-plan` shows (specification section 13): the summary; the full
@@ -90,6 +101,17 @@ struct Arguments {
         value_enum
     )]
     print_plan: Option<PlanForm>,
+
+    /// What to do inside an isolation: `exec` runs the command under it as it is,
+    /// `isolate` makes an isolation of this policy inside it.
+    #[arg(
+        long,
+        value_name = "MODE",
+        require_equals = true,
+        default_value = "exec",
+        value_enum
+    )]
+    nested: Nesting,
 
     /// The command and its arguments, after `--`.
     #[arg(last = true, allow_hyphen_values = true, value_name = "COMMAND")]
@@ -187,6 +209,7 @@ where
         rw: parsed.rw,
         hide: parsed.hide,
         print_plan: parsed.print_plan,
+        nested: parsed.nested,
         command: parsed.command,
     }))
 }

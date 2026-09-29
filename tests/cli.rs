@@ -8,7 +8,7 @@ use common::{
     assert_diagnostic, binary, home_with_workspace, output_report, run, run_from_deleted_dir,
     TempDir, RW_WORKSPACE,
 };
-use kakoi::cli::{interpret, Invocation, Parsed, PlanForm};
+use kakoi::cli::{interpret, Invocation, Nesting, Parsed, PlanForm};
 use kakoi_core::diagnostic::Kind;
 
 /// A name for the failure message and the arrangement it makes under a temporary home.
@@ -316,6 +316,78 @@ fn the_equals_form_means_the_same_as_the_separated_form() {
     };
     assert_eq!(invocation.profile, "p");
     assert_eq!(invocation.workspace, Some(PathBuf::from("w")));
+}
+
+/// How a nested run is to be handled, as the command line gives it.
+fn nesting_of(arguments: &[&str]) -> Nesting {
+    let Parsed::Invocation(invocation) = interpret_ok(arguments) else {
+        panic!("not an invocation");
+    };
+    invocation.nested
+}
+
+// @kotowari[EX-896]
+#[test]
+fn ex_896_only_the_equals_form_of_a_known_nesting_value_is_accepted() {
+    let home = TempDir::new();
+
+    assert_eq!(
+        nesting_of(&["--nested=isolate", "--", "true"]),
+        Nesting::Isolate
+    );
+    for arguments in [
+        &["--nested", "isolate", "--", "true"][..],
+        &["--nested=other", "--", "true"][..],
+        &["--nested", "--", "true"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+}
+
+// @kotowari[REQ-464]
+#[test]
+fn req_464_nesting_is_exec_unless_given_and_is_accepted_with_a_plan() {
+    assert_eq!(nesting_of(&["--", "true"]), Nesting::Exec);
+    assert_eq!(nesting_of(&["--nested=exec", "--", "true"]), Nesting::Exec);
+    assert_eq!(
+        nesting_of(&["--nested=isolate", "--print-plan=json"]),
+        Nesting::Isolate
+    );
+}
+
+// @kotowari[EX-897]
+#[test]
+fn ex_897_init_takes_no_nesting() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["init", "--nested=isolate"][..],
+        &["--nested=isolate", "init"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
+    assert!(!home.path().join(".config").exists());
+}
+
+// @kotowari[REQ-464, REQ-252]
+#[test]
+fn req_464_nesting_given_twice_or_beside_help_or_version_is_a_usage_diagnostic() {
+    let home = TempDir::new();
+
+    for arguments in [
+        &["--nested=exec", "--nested=isolate", "--", "true"][..],
+        &["--nested=isolate", "--nested=isolate", "--", "true"][..],
+        &["--version", "--nested=isolate"][..],
+        &["--help", "--nested=exec"][..],
+    ] {
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+    }
 }
 
 // @kotowari[REQ-255, EX-495]
