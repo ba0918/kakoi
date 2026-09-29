@@ -3,6 +3,13 @@
 /// The managed resolver inside each filtered application network namespace.
 pub const DNS_RESOLVER_ADDRESS: std::net::Ipv4Addr = std::net::Ipv4Addr::new(127, 0, 0, 53);
 
+/// The same resolver at a second address. A kakoi nested inside reads the
+/// `nameserver 127.0.0.53` of the isolation's resolver configuration as the
+/// stub of systemd-resolved and asks 127.0.0.54 instead, so the resolver
+/// answers there too (specification REQ-459). The resolver configuration keeps
+/// naming the first address only.
+pub const DNS_RESOLVER_SECOND_ADDRESS: std::net::Ipv4Addr = std::net::Ipv4Addr::new(127, 0, 0, 54);
+
 use std::{collections::HashMap, num::NonZeroU16};
 
 use serde::{Deserialize, Serialize};

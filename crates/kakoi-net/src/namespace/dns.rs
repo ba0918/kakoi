@@ -10,13 +10,20 @@ use std::{
     time::Duration,
 };
 
-/// Private resolver endpoint. Both A and AAAA questions can use this IPv4
-/// loopback endpoint; upstream connections remain in the host controller.
+/// Private resolver endpoints. Both A and AAAA questions can use these IPv4
+/// loopback endpoints; upstream connections remain in the host controller.
 pub struct DnsSockets {
+    /// At the address the resolver configuration names.
     pub udp: UdpSocket,
     pub tcp: TcpListener,
+    /// At the second address the same resolver answers on.
+    pub second_udp: UdpSocket,
+    pub second_tcp: TcpListener,
     _namespace: Arc<NetworkNamespace>,
 }
+
+/// UDP and TCP at each of the two addresses.
+const SOCKETS: usize = 4;
 
 struct Helper {
     pid: libc::pid_t,
@@ -50,16 +57,18 @@ impl DnsSockets {
         drop(endpoint);
         let pidfd = child_pidfd(pid)?;
         let _helper = Helper { pid, pidfd };
-        let [udp, tcp] = receive(&parent)?;
+        let [udp, tcp, second_udp, second_tcp] = receive(&parent)?;
         Ok(Self {
             udp: UdpSocket::from(udp),
             tcp: TcpListener::from(tcp),
+            second_udp: UdpSocket::from(second_udp),
+            second_tcp: TcpListener::from(second_tcp),
             _namespace: namespace,
         })
     }
 }
 
-fn receive(socket: &UnixDatagram) -> io::Result<[OwnedFd; 2]> {
+fn receive(socket: &UnixDatagram) -> io::Result<[OwnedFd; SOCKETS]> {
     let mut status = 0_i32;
     let mut control = [0_usize; 8];
     let mut vector = libc::iovec {
@@ -106,7 +115,7 @@ fn receive(socket: &UnixDatagram) -> io::Result<[OwnedFd; 2]> {
     }
     descriptors
         .try_into()
-        .map_err(|_: Vec<OwnedFd>| io::Error::other("expected two DNS sockets"))
+        .map_err(|_: Vec<OwnedFd>| io::Error::other("expected four DNS sockets"))
 }
 
 /// # Safety
@@ -123,24 +132,35 @@ unsafe fn bind_child(control: RawFd, user: RawFd, net: RawFd) -> ! {
     {
         libc::_exit(125);
     }
-    let address = libc::sockaddr_in {
+    let endpoint = |address: std::net::Ipv4Addr| libc::sockaddr_in {
         sin_family: libc::AF_INET as _,
         sin_port: 53_u16.to_be(),
         sin_addr: libc::in_addr {
-            s_addr: u32::from_ne_bytes(kakoi_core::network::DNS_RESOLVER_ADDRESS.octets()),
+            s_addr: u32::from_ne_bytes(address.octets()),
         },
         sin_zero: [0; 8],
     };
-    let mut sockets = [-1; 2];
+    let first = endpoint(kakoi_core::network::DNS_RESOLVER_ADDRESS);
+    let second = endpoint(kakoi_core::network::DNS_RESOLVER_SECOND_ADDRESS);
+    let mut sockets = [-1; SOCKETS];
     if error == 0 {
-        for (index, kind) in [libc::SOCK_DGRAM, libc::SOCK_STREAM].iter().enumerate() {
+        for (index, (address, kind)) in [
+            (&first, libc::SOCK_DGRAM),
+            (&first, libc::SOCK_STREAM),
+            (&second, libc::SOCK_DGRAM),
+            (&second, libc::SOCK_STREAM),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let stream = *kind == libc::SOCK_STREAM;
             let fd = libc::socket(libc::AF_INET, *kind | libc::SOCK_CLOEXEC, 0);
             if fd < 0 {
                 error = *libc::__errno_location();
                 break;
             }
             sockets[index] = fd;
-            if index == 1 {
+            if stream {
                 let enabled: libc::c_int = 1;
                 if libc::setsockopt(
                     fd,
@@ -156,10 +176,10 @@ unsafe fn bind_child(control: RawFd, user: RawFd, net: RawFd) -> ! {
             }
             if libc::bind(
                 fd,
-                (&address as *const libc::sockaddr_in).cast(),
-                std::mem::size_of_val(&address) as _,
+                (*address as *const libc::sockaddr_in).cast(),
+                std::mem::size_of::<libc::sockaddr_in>() as _,
             ) != 0
-                || (index == 1 && libc::listen(fd, 128) != 0)
+                || (stream && libc::listen(fd, 128) != 0)
             {
                 error = *libc::__errno_location();
                 break;
@@ -181,7 +201,11 @@ unsafe fn bind_child(control: RawFd, user: RawFd, net: RawFd) -> ! {
         (*header).cmsg_level = libc::SOL_SOCKET;
         (*header).cmsg_type = libc::SCM_RIGHTS;
         (*header).cmsg_len = libc::CMSG_LEN(std::mem::size_of_val(&sockets) as _) as _;
-        std::ptr::copy_nonoverlapping(sockets.as_ptr(), libc::CMSG_DATA(header).cast::<RawFd>(), 2);
+        std::ptr::copy_nonoverlapping(
+            sockets.as_ptr(),
+            libc::CMSG_DATA(header).cast::<RawFd>(),
+            SOCKETS,
+        );
     }
     let sent = libc::sendmsg(3, &message, libc::MSG_NOSIGNAL);
     libc::_exit(if sent == 4 && error == 0 { 0 } else { 125 });
