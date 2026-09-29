@@ -33,6 +33,7 @@ pub mod regular_file;
 pub mod scan;
 pub mod seccomp;
 pub mod secret_facts;
+pub mod shared_files;
 pub mod variables;
 pub mod wildcard;
 pub mod workspace_facts;

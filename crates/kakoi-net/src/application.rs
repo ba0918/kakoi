@@ -5,6 +5,7 @@ use kakoi_core::{
     diagnostic::Diagnostic,
     launch::{self, BwrapCommand},
     plan::{Argument, Plan},
+    shared_files::SharedFile,
 };
 use std::{os::fd::RawFd, time::Duration};
 
@@ -26,9 +27,15 @@ pub fn prepare(plan: &Plan, namespace: &NetworkNamespace) -> Result<BwrapCommand
             .arguments
             .windows(3)
             .rposition(|args| {
-                matches!(&args[0], Argument::Literal(value) if value == "--ro-bind-data")
-                    && matches!(&args[1], Argument::CopiedFile(_))
-                    && matches!(&args[2], Argument::Literal(value) if value == "/etc/resolv.conf")
+                matches!(&args[0], Argument::Literal(value) if value == "--ro-bind-data" || value == "--ro-bind")
+                    && matches!(
+                    &args[1],
+                    Argument::CopiedFile(_)
+                        | Argument::SharedFile {
+                            file: SharedFile::Resolver,
+                            ..
+                        }
+                ) && matches!(&args[2], Argument::Literal(value) if value == "/etc/resolv.conf")
             })
             .ok_or_else(|| {
                 Diagnostic::bwrap("filtered plan lacks managed resolver configuration")

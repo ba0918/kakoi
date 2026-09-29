@@ -22,6 +22,7 @@ use crate::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
 };
 use crate::policy::NetworkMode;
+use crate::shared_files::{self, SharedFile};
 use crate::variables::Variables;
 
 /// Everything stage 7 decides from besides the facts: the layers and their merge, the
@@ -172,12 +173,16 @@ pub fn plan(
     command: Option<ResolvedCommand>,
     guards: GuardPlan,
 ) -> Plan {
+    let provisions = Provisions {
+        shared_files: shared_files::place(inputs.host, inputs.nested),
+    };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
         inputs.current_dir,
         &isolation.mounts.items,
         &copies,
         &guards,
+        &provisions,
         command.as_ref(),
     );
     let environment_changes =
@@ -234,6 +239,42 @@ pub enum Argument {
     Seccomp,
     /// The descriptor one file of an `rw-copy` item is filled from.
     CopiedFile(FileContent),
+    /// A file of the shared file place at `path`, bound read-only. Right before the start
+    /// it becomes `path`, or the same file put from data when the place does not hold
+    /// (specification REQ-460).
+    SharedFile {
+        file: SharedFile,
+        path: PathBuf,
+    },
+}
+
+/// What the host provides the isolation with besides the policy.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Provisions {
+    /// The shared file place the files that are always the same are bound from; none
+    /// when they are made from data (specification REQ-460).
+    pub shared_files: Option<PathBuf>,
+}
+
+impl Provisions {
+    /// The arguments that put `file` at `destination`, read-only.
+    fn put(&self, file: SharedFile, destination: impl Into<OsString>) -> [Argument; 3] {
+        match &self.shared_files {
+            Some(place) => [
+                Argument::text("--ro-bind"),
+                Argument::SharedFile {
+                    file,
+                    path: place.join(file.name()),
+                },
+                Argument::text(destination),
+            ],
+            None => [
+                Argument::text("--ro-bind-data"),
+                file.from_data(),
+                Argument::text(destination),
+            ],
+        }
+    }
 }
 
 impl Argument {
@@ -242,7 +283,8 @@ impl Argument {
     }
 }
 
-/// The bwrap arguments: the fixed part in the order of specification section 14, ending
+/// The bwrap arguments: the fixed part in the order of specification section 14 (the
+/// nesting mark right after `/dev`), ending
 /// with `--argv0 <COMMAND as given>` so that the process sees the name it was called by;
 /// then the mount items in the order they were resolved; then `--`, the resolved path, and
 /// `ARGS`. The `--` keeps the path from being read as an option of bwrap (specification
@@ -255,6 +297,7 @@ pub fn bwrap_arguments(
     items: &[ResolvedItem],
     copies: &CopySources,
     guards: &GuardPlan,
+    provisions: &Provisions,
     command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
     let mut arguments = vec![
@@ -305,20 +348,14 @@ pub fn bwrap_arguments(
                 arguments.extend([Argument::text("--tmpfs"), real]);
             }
             (Directive::Hide, EntryKind::NotDirectory) => {
-                arguments.extend([Argument::text("--ro-bind-data"), Argument::EmptyFile, real]);
+                arguments.extend(provisions.put(SharedFile::Empty, item.real.as_os_str()));
             }
         }
     }
     if network_mode == NetworkMode::Filtered {
         // Apply after user mounts so a copied/hidden host resolver file cannot
         // silently redirect the application's ordinary DNS lookups.
-        arguments.extend([
-            Argument::text("--ro-bind-data"),
-            Argument::CopiedFile(FileContent::new(
-                format!("nameserver {}\n", crate::network::DNS_RESOLVER_ADDRESS,).into_bytes(),
-            )),
-            Argument::text("/etc/resolv.conf"),
-        ]);
+        arguments.extend(provisions.put(SharedFile::Resolver, "/etc/resolv.conf"));
     }
     arguments.extend(guard_arguments(guards));
     if let Some(command) = command {

@@ -348,6 +348,9 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                     Argument::CopiedFile(content) => BwrapArgument::CopiedFile {
                         bytes: content.bytes().len(),
                     },
+                    Argument::SharedFile { path, .. } => {
+                        BwrapArgument::Literal { value: text(path) }
+                    }
                 })
                 .collect(),
         }

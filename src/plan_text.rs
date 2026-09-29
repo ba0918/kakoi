@@ -482,6 +482,7 @@ fn argument_text(argument: &Argument) -> String {
         Argument::CopiedFile(content) => {
             format!("<fd: copied file, {} bytes>", content.bytes().len())
         }
+        Argument::SharedFile { path, .. } => shown(path),
     }
 }
 
