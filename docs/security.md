@@ -8,7 +8,7 @@ leak.
 ## The trust boundary
 
 The host is the trusted side; the isolated process is not. `kakoi` trusts the environment
-it starts in (`HOME`, `XDG_CONFIG_HOME`, `PATH`, `KAKOI`, and the current directory),
+it starts in (`HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`, `PATH`, and the current directory),
 the policy files it reads, and the `bwrap` it finds on `PATH` (and, in `filtered` mode, the
 `pasta` and `nft`). Everything the host does, your
 shell, your `git`, the files you open afterwards, is outside the boundary.
@@ -145,13 +145,20 @@ socket, say), `hide` the resource, since the program is not the only way to reac
 7. Only `TIOCSTI` is blocked by the seccomp filter. `TIOCLINUX`, injection through terminal
    responses, and input synthesis through a display server's socket are not; the bundled profile
    cuts the socket paths with `hide` and the variables with `unset`.
-8. Nesting is detected only through `KAKOI=1`. Clearing the environment inside the
-   isolation and starting `kakoi` again attempts a second isolation (no wider than the
-   first; a policy with secrets fails there because the outer isolation emptied the files).
-   Setting `KAKOI=1` on the host runs the command without isolation, with the nesting
-   warning on standard error.
-9. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `PATH`,
-   `KAKOI`, and the current directory. That includes the current directory: `cd` into a
+8. Nesting and isolations made inside one have limits. A process inside that makes a namespace
+   of its own and covers `/dev` hides the nesting mark from a `kakoi` it starts there, which
+   then does not take itself to be nested; nor does a `kakoi` started inside an isolation of an
+   older version, which put no mark. A third isolation, made with `--nested=isolate` inside one
+   made the same way, stops without running its command when it mounts at a path where the
+   second one put a file made from data (a hidden file, or `/etc/resolv.conf` in `filtered`);
+   so does the second one when the outer launch could not use the shared file place. When both
+   the outer and the inner policy place command guards, the inner isolation is not made either.
+   A `kakoi` inside that did not take itself to be nested can make a shared file place in a
+   writable place of the outer isolation, and the outer agent can then put content into the
+   files that launch hides. And when the outer and the inner policy make the same file
+   `rw-copy`, the inner isolation cannot be made.
+9. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`,
+   `PATH`, and the current directory. That includes the current directory: `cd` into a
    path that passes through an `rw` area, after a link there was swapped from inside, and the
    link's new target becomes the work place.
 10. An `rw` area is a place for anything the user later runs on the host. `.git/hooks` and
@@ -190,6 +197,9 @@ socket, say), `hide` the resource, since the program is not the only way to reac
     widens to the word that follows it: `codex -m --cd /etc exec` sends `kakoi`
     `--workspace /etc`. This misreading is accepted; the other misreadings of the template
     only leave a directory out.
+17. From inside a `host` isolation whose policy sets `network.allow-nested-filtered = true`,
+    persistent tun and tap devices in the host's network namespace that have no owner set, or
+    are owned by your user, can be read and written.
 
 ## Not supported yet
 
@@ -200,7 +210,6 @@ socket, say), `hide` the resource, since the program is not the only way to reac
 - an automatic merge of `default.toml` under another profile
 - policy files found from the current directory
 - `bwrap --new-session`
-- double isolation when nested, and nesting detection other than the environment variable
 - aarch64, 32-bit, and x32 binaries
 - protection of `.git/hooks` and `.git/config`
 - stopping programs written or downloaded into a writable place from running (command guards
