@@ -189,12 +189,16 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             arguments: arguments.to_vec(),
             path: through_guard(
                 command,
-                locate_shown_command(
-                    command,
-                    search_in,
-                    &isolation.mounts.items,
-                    isolation.listed.as_ref(),
-                )?,
+                if request.applied {
+                    locate_shown_command(
+                        command,
+                        search_in,
+                        &isolation.mounts.items,
+                        isolation.listed.as_ref(),
+                    )?
+                } else {
+                    locate_command(command, search_in)?
+                },
                 path_of(search_in),
                 &isolation.mounts.items,
                 isolation.listed.as_ref(),
@@ -391,17 +395,15 @@ fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFac
         .collect()
 }
 
-/// Stage 9 as the isolation sees it: a name on `PATH` a "listed" isolation does not show,
-/// or whose place or real file `mounts` hides, is passed over (specification REQ-484).
+/// Stage 9 as the isolation sees it: a name on `PATH` whose place or real file `mounts`
+/// hides, or that a "listed" isolation does not show, is passed over, and a path with `/`
+/// naming such a file is not found (specification REQ-260 and REQ-484).
 fn locate_shown_command(
     command: &OsStr,
     environment: &BTreeMap<OsString, OsString>,
     mounts: &[ResolvedItem],
     listed: Option<&ListedRoot>,
 ) -> Result<PathBuf, Diagnostic> {
-    if listed.is_none() || command.as_bytes().contains(&b'/') {
-        return locate_command(command, environment);
-    }
     let candidates: Vec<PathBuf> = shown_names(
         named(&command_candidates(command, path_of(environment))),
         listed,

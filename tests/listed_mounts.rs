@@ -764,6 +764,23 @@ fn ex_951_a_program_only_in_an_unshown_place_is_not_found() {
     common::assert_diagnostic(&output, 127, "command not found");
 }
 
+// @kotowari[REQ-260]
+#[test]
+fn a_command_given_by_a_path_in_an_unshown_place_is_not_found() {
+    let scene = Scene::new(&[], "");
+    let tool = scene
+        .shim("kakoi-only-in-the-shim")
+        .join("kakoi-only-in-the-shim");
+
+    let output = scene.kakoi(
+        &scene.workspace,
+        None,
+        &[OsStr::new("--"), tool.as_os_str()],
+    );
+
+    common::assert_diagnostic(&output, 127, "command not found");
+}
+
 // @kotowari[REQ-468]
 #[test]
 fn a_scan_root_or_a_hide_mounts_under_outside_what_is_shown_is_skipped_with_a_reason() {
