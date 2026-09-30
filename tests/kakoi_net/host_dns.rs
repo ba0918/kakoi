@@ -401,6 +401,74 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         assert!(rules.contains("1.1.1.1"), "new grant was not installed");
     }
 
+    #[test]
+    fn new_settings_cannot_start_while_an_old_permission_is_still_activating() {
+        let temp = TempDir::new();
+        let (old, old_port) = upstream();
+        let (new, new_port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+        let marker = temp.path().join("activation-started");
+        let release = temp.path().join("release-activation");
+        let wrapper = temp.path().join("nft");
+        crate::common::write_executable(
+            &wrapper,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" != -f ]; then exec /usr/sbin/nft \"$@\"; fi\nscript=$(cat)\ncase \"$script\" in\n  'flush chain'*) touch '{}'; while [ ! -e '{}' ]; do sleep 0.01; done ;;\nesac\nprintf '%s' \"$script\" | /usr/sbin/nft -f -\n",
+                marker.display(),
+                release.display(),
+            ),
+        );
+        let (ns, mut runtime) = start(
+            &file,
+            NetworkLimits {
+                dns_resolution_timeout_seconds: 30,
+                dns_server_timeout_seconds: 30,
+                ..NetworkLimits::default()
+            },
+            None,
+            &wrapper,
+        );
+        let mut first = client(&ns);
+        let (query, peer) = received(&old, &mut runtime);
+        old.send_to(&answer(&query, [2, 2, 2, 2]), peer).unwrap();
+        let until = Instant::now() + HANG;
+        while !marker.exists() {
+            runtime.poll(Instant::now()).unwrap();
+            assert!(
+                Instant::now() < until,
+                "old permission activation did not start"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::thread::sleep(Duration::from_millis(1050));
+        std::fs::write(&file, format!("upstream {new_port}\n")).unwrap();
+        let mut second = client(&ns);
+        runtime.poll(Instant::now()).unwrap();
+        let mut premature = false;
+        let until = Instant::now() + Duration::from_millis(150);
+        while Instant::now() < until {
+            runtime.poll(Instant::now()).unwrap();
+            if new.recv_from(&mut [0; 512]).is_ok() {
+                premature = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::fs::write(&release, "").unwrap();
+        if premature {
+            first.kill().unwrap();
+            second.kill().unwrap();
+            first.wait().unwrap();
+            second.wait().unwrap();
+            panic!("new settings were used before old permission activation finished");
+        }
+        let (new_query, new_peer) = received(&new, &mut runtime);
+        new.send_to(&answer(&new_query, [1, 1, 1, 1]), new_peer)
+            .unwrap();
+        assert_eq!(finish(first, &mut runtime), "0 1.1.1.1\n");
+        assert_eq!(finish(second, &mut runtime), "0 1.1.1.1\n");
+    }
+
     // The upstreams in force came from the content read at start-up; a change
     // made before the runtime started is a change to follow like any other.
     // @kotowari[REQ-107]

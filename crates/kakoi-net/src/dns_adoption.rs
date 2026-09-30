@@ -12,7 +12,7 @@ use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
-        Arc,
+        Arc, Mutex, MutexGuard, TryLockError,
     },
     thread::{self, JoinHandle},
 };
@@ -29,6 +29,7 @@ pub struct DnsAdoption {
     receiver: Receiver<AdoptionCompletion>,
     handle: Option<JoinHandle<()>>,
     cancellation: Cancellation,
+    activation: Arc<Mutex<()>>,
     faulted: Arc<AtomicBool>,
     outstanding: usize,
     limit: usize,
@@ -53,6 +54,8 @@ impl DnsAdoption {
         let (results, receiver) = mpsc::sync_channel(limit);
         let cancellation = Cancellation::new();
         let cancel = cancellation.clone();
+        let activation = Arc::new(Mutex::new(()));
+        let activation_for_worker = Arc::clone(&activation);
         let faulted = Arc::new(AtomicBool::new(false));
         let fault = Arc::clone(&faulted);
         let handle = thread::Builder::new()
@@ -65,7 +68,11 @@ impl DnsAdoption {
                             "DNS permission executor faulted",
                         )))
                     } else {
-                        candidate.adopt_controlled(&mut permissions, Some(&cancel))
+                        candidate.adopt_controlled(
+                            &mut permissions,
+                            Some(&cancel),
+                            Some(&activation_for_worker),
+                        )
                     };
                     if matches!(answer, Err(EnforcedDnsError::Enforcement(_))) {
                         fault.store(true, Ordering::Release);
@@ -82,6 +89,7 @@ impl DnsAdoption {
             receiver,
             handle: Some(handle),
             cancellation,
+            activation,
             faulted,
             outstanding: 0,
             limit,
@@ -160,6 +168,16 @@ impl DnsAdoption {
 
     pub fn is_faulted(&self) -> bool {
         self.faulted.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn try_activation_guard(&self) -> io::Result<Option<MutexGuard<'_, ()>>> {
+        match self.activation.try_lock() {
+            Ok(guard) => Ok(Some(guard)),
+            Err(TryLockError::WouldBlock) => Ok(None),
+            Err(TryLockError::Poisoned(_)) => {
+                Err(io::Error::other("DNS activation synchronization failed"))
+            }
+        }
     }
     pub fn is_finished(&self) -> bool {
         self.handle.is_none() && self.outstanding == 0

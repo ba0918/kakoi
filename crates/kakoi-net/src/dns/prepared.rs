@@ -1,7 +1,11 @@
 use super::{DnsError, EnforcedDnsError};
 use crate::{dns_workers::Cancellation, dynamic::DynamicPermissions, leases::ActiveGrant};
 use kakoi_core::network::Allow;
-use std::{io, sync::Arc, time::Instant};
+use std::{
+    io,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 /// Screened answer whose wire bytes become available only after permission
 /// adoption. Dropping a candidate has no effect on the kernel. It cannot be
@@ -53,13 +57,14 @@ impl PreparedAnswer {
         self,
         permissions: &mut DynamicPermissions<'_>,
     ) -> Result<Vec<u8>, EnforcedDnsError> {
-        self.adopt_controlled(permissions, None)
+        self.adopt_controlled(permissions, None, None)
     }
 
     pub(crate) fn adopt_controlled(
         self,
         permissions: &mut DynamicPermissions<'_>,
         cancellation: Option<&Cancellation>,
+        activation: Option<&Mutex<()>>,
     ) -> Result<Vec<u8>, EnforcedDnsError> {
         if permissions.requires_reconciliation() || !permissions.matches_policy(&self.policy) {
             return Err(EnforcedDnsError::Enforcement(io::Error::other(
@@ -72,6 +77,15 @@ impl PreparedAnswer {
                 let staged = permissions
                     .stage(&self.grants)
                     .map_err(EnforcedDnsError::Enforcement)?;
+                let _guard = activation
+                    .map(|lock| {
+                        lock.lock().map_err(|_| {
+                            EnforcedDnsError::Enforcement(io::Error::other(
+                                "DNS activation synchronization failed",
+                            ))
+                        })
+                    })
+                    .transpose()?;
                 self.ensure_live(cancellation)?;
                 staged.activate().map_err(EnforcedDnsError::Enforcement)?;
             }
