@@ -237,9 +237,12 @@ diagnostic. The limits of all this are [known gap 8](security.md#known-gaps).
 
 ## Open files
 
-Before making the file descriptors it hands to `bwrap` (one per hidden file, one per file an
-`rw-copy` item starts the isolation with, plus the seccomp
-filter), `kakoi` raises its soft limit on open files to the hard limit, always, so that a
-scan hiding thousands of files starts under the usual limit of 1024 and the same input gives the
-same result. The command inherits the raised limit. A nested run with `--nested=exec` makes no
+Before making the file descriptors it hands to `bwrap` (one per file an `rw-copy` item starts
+the isolation with, plus the seccomp filter; and, only in a launch that puts them from memory
+rather than from the [shared file place](policy.md#hidden-files-and-the-shared-file-place), one
+per hidden file and one for `/etc/resolv.conf` in `filtered` mode), `kakoi` raises its soft limit
+on open files to the hard limit, always, so that a scan hiding thousands of files starts under
+the usual limit of 1024 and the same input gives the same result. A launch that uses the shared
+file place binds hidden files and the resolver configuration from real files there and makes no
+descriptor for them. The command inherits the raised limit. A nested run with `--nested=exec` makes no
 descriptors and leaves the limit alone.
