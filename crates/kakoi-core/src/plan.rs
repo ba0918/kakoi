@@ -15,7 +15,7 @@ use crate::isolated_env::{
     assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
 };
 use crate::layers::{Directive, Layer, Policy, PolicySource};
-use crate::listed::{listed_root, set_aside_unshown, unshown_generators, ListedRoot};
+use crate::listed::{listed_root, set_aside_unshown, shown_generators, ListedRoot};
 use crate::mounts::{
     generate, policy_sources, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
     MountFacts, ResolvedItem, ResolvedMounts, SkippedPath,
@@ -102,9 +102,10 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     );
+    let (generating, skipped_generators) = generating_policy(inputs, &facts.mounts)?;
     let mut mounts = generate(
         before_generation,
-        inputs.expanded,
+        &generating,
         inputs.layers,
         inputs.variables,
         &facts.mounts,
@@ -120,7 +121,7 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
             &facts.mounts,
         );
         skipped.extend(skipped_base);
-        skipped.extend(unshown_generators(inputs.expanded, &facts.mounts, &root));
+        skipped.extend(skipped_generators);
         set_aside_unshown(&mut mounts, &root);
         root
     });
@@ -163,6 +164,29 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         policy_sources: policy_sources(inputs.layers, &facts.mounts),
         listed,
     })
+}
+
+/// The policy whose scans and `hide-mounts` generate `hide` items: under the "listed"
+/// mount mode, those rooted where nothing is shown are set aside, with the reason, by the
+/// places the written items show, before anything is walked or the mount list is read
+/// for them (specification REQ-468); otherwise the policy as it is. The outer layer
+/// collects the facts of the scans and the `hide-mounts` of this policy only.
+pub fn generating_policy(
+    inputs: &Inputs,
+    facts: &MountFacts,
+) -> Result<(ExpandedPolicy, Vec<SkippedPath>), Diagnostic> {
+    if inputs.policy.mounts_mode != ListMode::Listed {
+        return Ok((inputs.expanded.clone(), Vec::new()));
+    }
+    let written = resolve_written(inputs.expanded, facts)?;
+    let (root, _) = listed_root(
+        inputs.policy.mounts_system,
+        inputs.policy.network_mode,
+        &written.items,
+        inputs.expanded,
+        facts,
+    );
+    Ok(shown_generators(inputs.expanded, facts, &root))
 }
 
 /// The current directory of a "listed" isolation is one of the places it shows

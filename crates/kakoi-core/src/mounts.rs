@@ -176,6 +176,34 @@ pub struct Candidates {
 }
 
 impl Candidates {
+    /// These candidates with the scans to walk and the `hide-mounts` `under`s of
+    /// `expanded` in place of their own.
+    pub fn for_generators(self, expanded: &ExpandedPolicy) -> Self {
+        let scans = expanded
+            .scans
+            .iter()
+            .filter_map(|scan| match &scan.root {
+                Expansion::Path(root) => Some(ScanRequest {
+                    root: root.clone(),
+                    names: scan.names.clone(),
+                    exclude: scan.exclude.clone(),
+                    prune: scan.prune.clone(),
+                }),
+                Expansion::Valueless(_) => None,
+            })
+            .collect();
+        let hide_mounts_under = expanded
+            .hide_mounts
+            .iter()
+            .filter_map(|hide| hide.under.path().map(Path::to_path_buf))
+            .collect();
+        Self {
+            scans,
+            hide_mounts_under,
+            ..self
+        }
+    }
+
     /// These candidates and those of one more protected path: its prefixes, and its
     /// resolution.
     pub fn with_protected(mut self, path: Option<&Path>) -> Self {
@@ -274,25 +302,9 @@ pub fn candidates(
     Candidates {
         paths,
         traversals,
-        scans: expanded
-            .scans
-            .iter()
-            .filter_map(|scan| match &scan.root {
-                Expansion::Path(root) => Some(ScanRequest {
-                    root: root.clone(),
-                    names: scan.names.clone(),
-                    exclude: scan.exclude.clone(),
-                    prune: scan.prune.clone(),
-                }),
-                Expansion::Valueless(_) => None,
-            })
-            .collect(),
-        hide_mounts_under: expanded
-            .hide_mounts
-            .iter()
-            .filter_map(|hide| hide.under.path().map(Path::to_path_buf))
-            .collect(),
+        ..Candidates::default()
     }
+    .for_generators(expanded)
 }
 
 /// One entry the scan found by name: where it was found, what is behind it, and whether

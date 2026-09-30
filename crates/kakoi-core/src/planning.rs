@@ -21,7 +21,7 @@ use crate::guard_placement::{
 };
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::listed::ListedRoot;
-use crate::mount_facts::collect_mount_facts;
+use crate::mount_facts::{collect_generator_facts, collect_path_facts};
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
@@ -96,10 +96,6 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     .with_protected(shared_files.as_deref())
     .with_walked(&listed_lookups(&policy))
     .with_walked(&command_limits::lookups(&policy, &variables, &home));
-    let facts = IsolationFacts {
-        mounts: collect_mount_facts(&wanted),
-        secrets: read_secret_files(&expanded.secrets),
-    };
     let inputs = Inputs {
         layers: &layers,
         policy: &policy,
@@ -114,6 +110,15 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         applied: request.applied,
         shared_files: shared_files.as_deref(),
         outer_guard: request.outer_guard,
+    };
+    // What the scans find and the mount list are gathered only for the scans and the
+    // `hide-mounts` that apply (specification REQ-468).
+    let mut mounts = collect_path_facts(&wanted);
+    let (generating, _) = plan::generating_policy(&inputs, &mounts)?;
+    collect_generator_facts(&wanted.for_generators(&generating), &mut mounts);
+    let facts = IsolationFacts {
+        mounts,
+        secrets: read_secret_files(&expanded.secrets),
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(

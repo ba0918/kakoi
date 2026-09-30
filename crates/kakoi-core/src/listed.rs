@@ -9,8 +9,8 @@ use crate::environment::RealEntry;
 use crate::guard_placement::GUARD_ROOT;
 use crate::layers::Directive;
 use crate::mounts::{
-    byte_order, ExpandedPolicy, MountFacts, NotShown, ResolvedItem, ResolvedMounts, SkippedPath,
-    SkippedRole,
+    byte_order, ExpandedPolicy, Expansion, MountFacts, NotShown, ResolvedItem, ResolvedMounts,
+    SkippedPath, SkippedRole,
 };
 use crate::plan::{NESTING_MARK, TUN_DEVICE};
 use crate::policy::NetworkMode;
@@ -293,32 +293,53 @@ pub fn set_aside_unshown(mounts: &mut ResolvedMounts, root: &ListedRoot) {
         .collect();
 }
 
-/// The scan roots and the `hide-mounts` `under`s of `expanded` under which nothing is
-/// shown, skipped with the reason.
-pub fn unshown_generators(
+/// `expanded` without the scans and the `hide-mounts` whose root or `under` has nothing
+/// shown at or under it, and those set aside, each with the reason.
+pub fn shown_generators(
     expanded: &ExpandedPolicy,
     facts: &MountFacts,
     root: &ListedRoot,
-) -> Vec<SkippedPath> {
-    let scans = expanded
+) -> (ExpandedPolicy, Vec<SkippedPath>) {
+    let unshown = |expansion: &Expansion| {
+        expansion.path().is_some_and(|path| {
+            facts
+                .entry(path)
+                .path()
+                .is_some_and(|real| !root.reaches(real))
+        })
+    };
+    let skip = |role, written: &crate::policy::PolicyPath| SkippedPath {
+        role,
+        written: written.to_string(),
+        reason: "nothing under it is shown in the \"listed\" mount mode".to_string(),
+    };
+    let (scans, unshown_scans): (Vec<_>, Vec<_>) = expanded
         .scans
         .iter()
-        .map(|scan| (SkippedRole::ScanRoot, &scan.written, &scan.root));
-    let hide_mounts = expanded
+        .cloned()
+        .partition(|scan| !unshown(&scan.root));
+    let (hide_mounts, unshown_hide_mounts): (Vec<_>, Vec<_>) = expanded
         .hide_mounts
         .iter()
-        .map(|hide| (SkippedRole::HideMountsUnder, &hide.written, &hide.under));
-    scans
-        .chain(hide_mounts)
-        .filter_map(|(role, written, expansion)| {
-            let real = facts.entry(expansion.path()?).path()?.to_path_buf();
-            (!root.reaches(&real)).then(|| SkippedPath {
-                role,
-                written: written.to_string(),
-                reason: "nothing under it is shown in the \"listed\" mount mode".to_string(),
-            })
-        })
-        .collect()
+        .cloned()
+        .partition(|hide| !unshown(&hide.under));
+    let skipped = unshown_scans
+        .iter()
+        .map(|scan| skip(SkippedRole::ScanRoot, &scan.written))
+        .chain(
+            unshown_hide_mounts
+                .iter()
+                .map(|hide| skip(SkippedRole::HideMountsUnder, &hide.written)),
+        )
+        .collect();
+    (
+        ExpandedPolicy {
+            scans,
+            hide_mounts,
+            ..expanded.clone()
+        },
+        skipped,
+    )
 }
 
 /// Whether `path` is one of `places` or inside one.

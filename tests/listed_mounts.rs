@@ -694,6 +694,26 @@ fn a_scan_root_or_a_hide_mounts_under_outside_what_is_shown_is_skipped_with_a_re
     );
 }
 
+// @kotowari[REQ-468]
+#[test]
+fn a_hide_mounts_under_outside_what_is_shown_needs_no_mount_list() {
+    let profile = "[mounts]\nmode = \"listed\"\nrw = [\"${workspace}\"]\n\
+                   [[mounts.hide-mounts]]\nunder = \"/mnt\"\nfstype = [\"9p\"]\n";
+    let facts = base_facts().dir("/mnt").mount_list_unreadable();
+
+    let isolation = isolation(profile, "host", facts).unwrap();
+
+    let skipped: Vec<_> = isolation
+        .skipped_paths
+        .iter()
+        .map(|skipped| (skipped.role, skipped.written.as_str()))
+        .collect();
+    assert!(
+        skipped.contains(&(SkippedRole::HideMountsUnder, "/mnt")),
+        "{skipped:?}"
+    );
+}
+
 /// A name for an abstract UNIX socket no other test uses.
 fn abstract_name() -> String {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
