@@ -206,7 +206,7 @@ fn ex_926_a_skipped_allowed_program_widens_nothing() {
     assert_eq!(stdout(&output), "failed\n");
 }
 
-// @kotowari[EX-927]
+// @kotowari[EX-927, REQ-477]
 #[test]
 fn ex_927_a_host_without_landlock_does_not_start_a_listed_command_mode() {
     let scene = Scene::allowing(&["/bin/sh"], "");

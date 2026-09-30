@@ -247,7 +247,7 @@ fn ex_911_a_written_rw_place_can_be_written_and_the_host_keeps_it() {
     );
 }
 
-// @kotowari[EX-912]
+// @kotowari[EX-912, REQ-470]
 #[test]
 fn ex_912_the_isolation_has_an_empty_tmp_of_its_own() {
     let scene = Scene::new(&[], "");
@@ -574,7 +574,7 @@ fn ex_943_a_guard_wraps_the_real_program_that_is_shown() {
     );
 }
 
-// @kotowari[EX-944]
+// @kotowari[EX-944, REQ-483]
 #[test]
 fn ex_944_a_current_directory_that_is_not_shown_is_a_path_diagnostic() {
     let scene = Scene::new(&[], "");
@@ -607,7 +607,7 @@ fn ex_945_a_shown_workspace_as_the_current_directory_runs_the_command() {
     assert_eq!(stdout(&output), "ran\n");
 }
 
-// @kotowari[EX-950]
+// @kotowari[EX-950, REQ-484]
 #[test]
 fn ex_950_an_unshown_program_first_on_path_is_passed_over_for_a_shown_one() {
     let scene = Scene::new(&[], "");

@@ -114,7 +114,7 @@ fn listed_example() -> String {
     .unwrap()
 }
 
-// @kotowari[REQ-151, REQ-482]
+// @kotowari[REQ-151]
 #[test]
 fn the_bundled_listed_example_loads_and_passes_the_placement_checks() {
     let home = TempDir::new();

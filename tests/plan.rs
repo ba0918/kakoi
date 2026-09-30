@@ -1704,7 +1704,7 @@ fn line_naming<'a>(summary: &'a str, what: &str) -> &'a str {
     lines[0]
 }
 
-// @kotowari[EX-918]
+// @kotowari[EX-918, REQ-473]
 #[test]
 fn ex_918_the_mount_mode_and_the_system_show_in_the_summary_and_the_json() {
     let (summary, json) = summary_and_json("mode = \"listed\"\nsystem = false\n");
@@ -1727,7 +1727,7 @@ fn ex_919_an_unwritten_mount_mode_shows_as_host() {
     assert_eq!(json["policy"]["mounts_system"], true, "{json}");
 }
 
-// @kotowari[EX-929, REQ-476]
+// @kotowari[EX-929, REQ-476, REQ-478]
 #[test]
 fn ex_929_the_command_mode_and_the_allowed_programs_show_in_the_summary_and_the_json() {
     let (summary, json) = summary_and_json(
@@ -1746,7 +1746,7 @@ fn ex_929_the_command_mode_and_the_allowed_programs_show_in_the_summary_and_the_
     assert_eq!(json["format_version"], 1);
 }
 
-// @kotowari[EX-930]
+// @kotowari[EX-930, REQ-478]
 #[test]
 fn ex_930_an_unwritten_command_mode_shows_as_host_without_a_count() {
     let (summary, json) = summary_and_json("");
