@@ -247,7 +247,7 @@ pub fn swappable_ro_items(
 fn writable_items(items: &[ResolvedItem]) -> Vec<&ResolvedItem> {
     items
         .iter()
-        .filter(|item| matches!(item.directive, Directive::Rw | Directive::RwFile))
+        .filter(|item| item.directive.writes_to_host())
         .collect()
 }
 
@@ -614,7 +614,7 @@ fn writable_forms_of<'a>(
     facts: &'a MountFacts,
 ) -> impl Iterator<Item = &'a WrittenItem> {
     written.items.iter().filter(move |form| {
-        matches!(form.directive, Directive::Rw | Directive::RwFile)
+        form.directive.writes_to_host()
             && facts.entry(&form.path).path() == Some(item.real.as_path())
     })
 }

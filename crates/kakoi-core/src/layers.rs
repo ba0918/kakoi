@@ -115,6 +115,15 @@ impl Directive {
             Directive::Hide => "hide",
         }
     }
+
+    /// Whether what is written inside through an item of this directive reaches the host
+    /// (specification section 5.6 guards the places such items could change).
+    pub fn writes_to_host(self) -> bool {
+        match self {
+            Directive::Rw | Directive::RwFile => true,
+            Directive::RwCopy | Directive::Ro | Directive::Hide => false,
+        }
+    }
 }
 
 /// One written mount item, with the layer it came from.
