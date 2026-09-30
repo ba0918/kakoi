@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::command_limits::FIRST_ROOT;
 use crate::environment::RealEntry;
 use crate::guard_placement::GUARD_ROOT;
 use crate::layers::Directive;
@@ -28,10 +29,11 @@ pub const RESOLVER: &str = "/etc/resolv.conf";
 const PROVIDED: [&str; 3] = ["/dev", "/proc", "/tmp"];
 
 /// What kakoi and bwrap put in the provided places: kakoi's own tmpfs of the command
-/// guards (handed on to a nested run too), the nesting mark, the tunnel device, and the
+/// guards (handed on to a nested run too) and of the first process, the nesting mark, the tunnel device, and the
 /// nodes and links bwrap's `/dev` holds.
-const PUT_INSIDE: [&str; 17] = [
+const PUT_INSIDE: [&str; 18] = [
     GUARD_ROOT,
+    FIRST_ROOT,
     NESTING_MARK,
     TUN_DEVICE,
     "/dev/null",

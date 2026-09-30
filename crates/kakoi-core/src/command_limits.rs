@@ -14,12 +14,17 @@ use crate::listed::ListedRoot;
 use crate::mounts::{expand, Expansion, MountFacts, ResolvedItem};
 use crate::variables::Variables;
 
-/// Where kakoi's own executable is placed as the isolation's first process, in the
-/// kakoi-only tmpfs of the command guards.
-pub const FIRST_PROCESS: &str = "/dev/kakoi-guard/first";
+/// The kakoi-only tmpfs the isolation's first process and its list are placed in, under
+/// the tmpfs bwrap makes for `/dev`. Not the command guards' tmpfs: a nested run shows
+/// the guards of the run around it there as they are, and a tmpfs of its own there would
+/// cover them.
+pub const FIRST_ROOT: &str = "/dev/kakoi-first";
+
+/// Where kakoi's own executable is placed as the isolation's first process.
+pub const FIRST_PROCESS: &str = "/dev/kakoi-first/kakoi";
 
 /// The list of the programs the first process allows, in the same tmpfs.
-pub const ALLOWED_LIST: &str = "/dev/kakoi-guard/allowed";
+pub const ALLOWED_LIST: &str = "/dev/kakoi-first/allowed";
 
 /// The dynamic linker kakoi allows by itself: without it no dynamically linked program
 /// starts.
