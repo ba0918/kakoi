@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+
+- The bundled profile (`examples/profile/default.toml`, what `kakoi init` writes) now hides
+  `/mnt/wslg`. On WSL2 with WSLg, `/mnt/wslg/distro` mounts the distro's root a second time and
+  `/mnt/wslg/run/user` mounts the session's `/run/user` a second time; since `hide` acts only on
+  the path it names, the credential directories and the session bus the profile hides were
+  readable through them from inside the isolation. A profile written by an earlier `kakoi init`
+  keeps the hole: add `"/mnt/wslg"` to its `hide` list.
+
 ## [0.5.0] - 2026-09-26
 
 ### Added

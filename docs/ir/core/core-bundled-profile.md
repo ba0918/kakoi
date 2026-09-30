@@ -6,11 +6,11 @@
 
 ### REQ-364: 同梱プロファイルの配置と内容
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-30-hide-wslg.md#A1
 - verification: review
-- how_to_verify: examples/profile/default.tomlを読み、既存codex jailのマウント表にあるWSL2向けの項目が転記され、パスがリンクの実体へ書き換えられず元の記法のままであることを突き合わせて確かめる。rwにworkspace、worktree、git_common_dir、/tmp/kakoiが、hideに/tmpと/run/userがあり、.envの走査と/mnt以下の9p・drvfsのhide-mountsがあることを確かめる。READMEからこのファイルを参照していることを確かめる。
+- how_to_verify: examples/profile/default.tomlを読み、既存codex jailのマウント表にあるWSL2向けの項目が転記され、パスがリンクの実体へ書き換えられず元の記法のままであることを突き合わせて確かめる。rwにworkspace、worktree、git_common_dir、/tmp/kakoiが、hideに/tmpと/run/userと/mnt/wslgがあり、.envの走査と/mnt以下の9p・drvfsのhide-mountsがあることを確かめる。READMEからこのファイルを参照していることを確かめる。
 
-examples/profile/default.tomlはWSL2向けに既存codex jailのマウント表を転記し、パスはリンクを実体へ書き直さず元の記法を保つ。rwにworkspace/worktree/git_common_dirと/tmp/kakoi、hideに/tmpと/run/user、.env走査と/mnt以下の9p・drvfsのhide-mountsを含める。READMEから参照する。
+examples/profile/default.tomlはWSL2向けに既存codex jailのマウント表を転記し、パスはリンクを実体へ書き直さず元の記法を保つ。rwにworkspace/worktree/git_common_dirと/tmp/kakoi、hideに/tmpと/run/userと/mnt/wslg、.env走査と/mnt以下の9p・drvfsのhide-mountsを含める。READMEから参照する。
 
 ### REQ-365: 同梱の認証情報と表示経路の除去
 - kind: ubiquitous

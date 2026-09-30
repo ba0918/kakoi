@@ -79,6 +79,12 @@ hide = [
     # whole distro readable via \\wsl$. Hiding the drives below only removes the obvious
     # binaries; an .exe copied or downloaded into the isolation would still escape.
     "/run/WSL",
+    # WSLg mounts the distro's own root again at /mnt/wslg/distro and the session's
+    # /run/user again at /mnt/wslg/run/user, and hide acts only on the path it names:
+    # everything hidden above (~/.ssh, the session bus, ...) would be readable there. It
+    # also holds the X11, Wayland, and PulseAudio sockets. /mnt/wsl, without the g, stays
+    # visible: /etc/resolv.conf points into it.
+    "/mnt/wslg",
 ]
 
 # Environment files anywhere in the worktree read as empty inside the isolation.
