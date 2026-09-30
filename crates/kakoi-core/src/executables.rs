@@ -25,7 +25,7 @@ pub fn named(candidates: &[PathBuf]) -> Vec<NameFact> {
         .map(|candidate| NameFact {
             candidate: candidate.clone(),
             name: resolved_name(candidate),
-            real: std::fs::canonicalize(candidate).ok(),
+            real: crate::mount_facts::real_path(candidate),
             executable: is_executable_file(candidate),
             file: file_id(candidate),
         })
@@ -34,7 +34,7 @@ pub fn named(candidates: &[PathBuf]) -> Vec<NameFact> {
 
 /// `path` with the links of its directory resolved and its own name kept.
 fn resolved_name(path: &Path) -> Option<PathBuf> {
-    let directory = std::fs::canonicalize(path.parent()?).ok()?;
+    let directory = crate::mount_facts::real_path(path.parent()?)?;
     Some(directory.join(path.file_name()?))
 }
 

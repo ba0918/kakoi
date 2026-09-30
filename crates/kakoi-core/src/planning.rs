@@ -224,7 +224,7 @@ fn command_limits(
     let executable = request
         .executable
         .as_deref()
-        .and_then(|path| std::fs::canonicalize(path).ok())
+        .and_then(crate::mount_facts::real_path)
         .ok_or_else(|| {
             Diagnostic::bwrap(
                 "the executable of kakoi itself, which the isolation's first process is, \
@@ -305,7 +305,7 @@ fn plan_guards(
             (program.clone(), names)
         })
         .collect();
-    let kakoi = executable.and_then(|path| std::fs::canonicalize(path).ok());
+    let kakoi = executable.and_then(crate::mount_facts::real_path);
     let guards = place_guards(
         &policy.guards,
         path.is_some(),

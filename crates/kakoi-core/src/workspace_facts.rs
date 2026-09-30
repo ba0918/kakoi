@@ -15,17 +15,7 @@ use crate::variables::{
 
 /// What exists behind `path`, following symbolic links.
 pub fn real_entry(path: &Path) -> RealEntry {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        match std::env::current_dir() {
-            Ok(cwd) => cwd.join(path),
-            Err(_) => return RealEntry::Missing,
-        }
-    };
-    // Not `fs::canonicalize`: the C library's `realpath` has its own link limit (musl stops
-    // one link sooner than glibc), and specification section 5.6 fixes the limit at 40.
-    let Some(real) = crate::mount_facts::resolve(&absolute) else {
+    let Some(real) = crate::mount_facts::real_path(path) else {
         return RealEntry::Missing;
     };
     match fs::metadata(&real) {
@@ -124,7 +114,7 @@ fn read_links(worktree: &Path) -> GitFileLinks {
                 .find_map(|line| line.strip_prefix("gitdir:"))
                 .map(|rest| rest.trim().to_string())
         })
-        .and_then(|target| fs::canonicalize(worktree.join(target)).ok());
+        .and_then(|target| crate::mount_facts::real_path(&worktree.join(target)));
     let Some(gitdir) = gitdir else {
         return GitFileLinks {
             gitdir: None,
@@ -201,5 +191,5 @@ fn read_git_file(path: &Path) -> GitFile {
 
 /// The real path of `target` taken relative to `base`; `None` when nothing exists there.
 fn resolve_from(base: &Path, target: &str) -> Option<PathBuf> {
-    fs::canonicalize(base.join(target)).ok()
+    crate::mount_facts::real_path(&base.join(target))
 }

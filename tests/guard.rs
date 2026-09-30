@@ -836,6 +836,35 @@ fn a_directory_and_a_dangling_link_of_the_same_name_are_passed_over_and_the_real
     assert_passed(&not_denied, "real status\n");
 }
 
+// The kernel follows 40 links to start a program, whatever C library kakoi is built with.
+// @kotowari[REQ-446]
+#[test]
+fn a_real_program_forty_links_away_is_guarded() {
+    const PROGRAM: &str = "kakoi-test-forty";
+    let scene = Scene::new(&[]);
+    let store = scene
+        .home
+        .write_executable(format!("store/{PROGRAM}"), FAKE_PROGRAM);
+    let links = scene.home.path().join("links");
+    std::fs::create_dir(&links).unwrap();
+    for index in 0..39 {
+        let next = if index == 38 {
+            store.clone()
+        } else {
+            links.join(format!("l{}", index + 1))
+        };
+        std::os::unix::fs::symlink(next, links.join(format!("l{index}"))).unwrap();
+    }
+    std::os::unix::fs::symlink(links.join("l0"), scene.bin.join(PROGRAM)).unwrap();
+    let policy = scene.policy(&format!(
+        "[[commands.guard]]\nprogram = \"{PROGRAM}\"\ndeny = [[\"push\"]]\nreason = \"r\"\n"
+    ));
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    guard(&plan, PROGRAM);
+}
+
 // @kotowari[REQ-446]
 #[test]
 fn a_relative_entry_on_path_is_not_where_the_real_program_is_looked_up() {
