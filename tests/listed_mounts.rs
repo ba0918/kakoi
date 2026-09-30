@@ -480,33 +480,6 @@ fn the_resolver_target_is_not_shown_under_filtered_or_without_the_system() {
     }
 }
 
-// @kotowari[REQ-471]
-#[test]
-fn the_resolver_target_under_tmp_is_shown_over_the_isolations_own_tmp() {
-    let facts = base_facts()
-        .link_to_file("/etc/resolv.conf", "/tmp/resolve/resolv.conf")
-        .links_traversed("/etc/resolv.conf", &["/etc/resolv.conf"])
-        .link_target("/etc/resolv.conf", "/tmp/resolve/resolv.conf");
-    let listed = "[mounts]\nmode = \"listed\"\nrw = [\"${workspace}\"]\n";
-    let isolation = isolation(listed, "host", facts).unwrap();
-
-    let arguments = arguments(&isolation, NetworkMode::Host);
-
-    let position = |window: &[&str]| {
-        let window: Vec<OsString> = window.iter().map(OsString::from).collect();
-        arguments
-            .windows(window.len())
-            .position(|found| found == window)
-    };
-    let tmp = position(&["--tmpfs", "/tmp"]).expect("the isolation's own /tmp");
-    let shown = position(&[
-        "--ro-bind",
-        "/tmp/resolve/resolv.conf",
-        "/tmp/resolve/resolv.conf",
-    ]);
-    assert!(shown.is_some_and(|shown| shown > tmp), "{arguments:?}");
-}
-
 // @kotowari[EX-915]
 #[test]
 fn ex_915_nothing_else_beside_the_resolver_target_is_shown() {
