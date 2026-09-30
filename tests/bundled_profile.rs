@@ -105,3 +105,69 @@ fn the_bundled_profile_cuts_the_display_server_sockets_and_variables() {
         "{report}"
     );
 }
+
+fn listed_example() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/profile/listed.toml"
+    ))
+    .unwrap()
+}
+
+// @kotowari[REQ-151, REQ-482]
+#[test]
+fn the_bundled_listed_example_loads_and_passes_the_placement_checks() {
+    let home = TempDir::new();
+    home.write(".config/kakoi/profile/default.toml", listed_example());
+    let workspace = home.path().join("ws");
+    std::fs::create_dir(&workspace).unwrap();
+
+    let output = binary(home.path())
+        .current_dir(&workspace)
+        .args(["--print-plan=json", "--", "/bin/true"])
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    let stderr = String::from_utf8(output.stderr.clone()).unwrap();
+    assert!(
+        stderr
+            .lines()
+            .all(|line| line.starts_with("kakoi: warning: ")),
+        "{report}"
+    );
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(plan["policy"]["mounts_mode"], "listed", "{report}");
+    assert_eq!(plan["policy"]["commands_mode"], "host", "{report}");
+}
+
+// @kotowari[REQ-480]
+#[test]
+fn the_ld_so_rule_of_the_listed_example_stops_every_run_of_ld_so() {
+    let policy =
+        kakoi_core::policy::parse_policy(&listed_example(), std::path::Path::new("/listed.toml"))
+            .unwrap();
+    let rules: Vec<_> = policy
+        .commands
+        .guard
+        .iter()
+        .filter(|rule| rule.program == "ld.so")
+        .collect();
+    assert!(!rules.is_empty());
+
+    for arguments in [
+        &[][..],
+        &["/usr/bin/git"],
+        &["--list", "/usr/bin/git"],
+        &["--", "/usr/bin/id"],
+        &["status"],
+    ] {
+        let arguments: Vec<std::ffi::OsString> =
+            arguments.iter().map(std::ffi::OsString::from).collect();
+        assert!(
+            kakoi_core::guard::evaluate(rules.iter().copied(), &arguments, &[]).is_some(),
+            "{arguments:?}"
+        );
+    }
+}
