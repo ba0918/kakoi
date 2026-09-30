@@ -270,6 +270,9 @@ fn render_guards(text: &mut String, plan: &Plan) {
         if let Some(relocated) = &guard.relocated {
             let _ = write!(text, ", relocated to {}", shown(relocated));
         }
+        if let Some(reason) = &guard.not_relocated {
+            let _ = write!(text, ", not relocated: {}", escape_control(reason));
+        }
         text.push('\n');
     }
     for skipped in &plan.guards.skipped {

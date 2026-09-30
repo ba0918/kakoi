@@ -4,6 +4,7 @@
 //! is a fact from `executables`.
 
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
@@ -89,6 +90,9 @@ pub struct PlacedGuard {
     /// Where the real program is placed again when a rule asks for `guard-absolute-path`:
     /// its own path then holds a guard.
     pub relocated: Option<PathBuf>,
+    /// Why the real program was not relocated although a rule asks for
+    /// `guard-absolute-path`; none otherwise.
+    pub not_relocated: Option<String>,
     /// Where each rule applied to this program came from.
     pub sources: Vec<LayerOrigin>,
 }
@@ -203,15 +207,27 @@ pub fn place_guards(
     let mut relocations: Vec<(PathBuf, PathBuf)> = Vec::new();
     for (program, candidate, real) in &found {
         let entries = rules_of(real);
-        let relocated = entries
-            .iter()
-            .any(|entry| entry.rule.guard_absolute_path)
-            .then(|| relocation(&mut relocations, real));
+        let absolute = entries.iter().any(|entry| entry.rule.guard_absolute_path);
+        // A file named as none of the programs pointing at it is one program started
+        // under many names (mise, busybox): a guard over it would put these rules on all
+        // of them.
+        let same_name = found.iter().any(|(other_program, _, other)| {
+            other == real && real.file_name() == Some(OsStr::new(other_program))
+        });
+        let relocated = (absolute && same_name).then(|| relocation(&mut relocations, real));
+        let not_relocated = (absolute && !same_name).then(|| {
+            format!(
+                "its real program {} has another name, and a guard over it would apply \
+                 these rules to every program started through it",
+                real.display()
+            )
+        });
         let placed = PlacedGuard {
             program: program.clone(),
             location: PathBuf::from(GUARD_LOCATION),
             found: candidate.clone(),
             relocated: relocated.clone(),
+            not_relocated,
             sources: entries.iter().map(|entry| entry.origin.clone()).collect(),
         };
         plan.table.entries.push(TableEntry {

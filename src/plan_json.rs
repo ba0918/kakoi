@@ -103,13 +103,15 @@ struct PolicyGuard<'a> {
 
 /// A program with a command guard: the directory of the guard (first on `PATH`), the real
 /// program as found on `PATH`, where it is relocated for `guard-absolute-path` (or
-/// `null`), and where each rule applied came from.
+/// `null`), why it was not relocated although a rule asks for it (or `null`), and where
+/// each rule applied came from.
 #[derive(Serialize)]
 struct Guard {
     program: String,
     location: String,
     found: String,
     relocated: Option<String>,
+    not_relocated: Option<String>,
     sources: Vec<Origin>,
 }
 
@@ -350,6 +352,7 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                     location: text(&guard.location),
                     found: text(&guard.found),
                     relocated: guard.relocated.as_deref().map(text),
+                    not_relocated: guard.not_relocated.clone(),
                     sources: guard.sources.iter().map(layer).collect(),
                 })
                 .collect(),
