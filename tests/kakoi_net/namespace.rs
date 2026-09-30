@@ -46,10 +46,14 @@ import ctypes, os, sys
 libc = ctypes.CDLL(None, use_errno=True)
 before = {kind: os.readlink('/proc/self/ns/' + kind) for kind in ('user', 'net')}
 for kind, flag in [('user', 0x10000000), ('net', 0x40000000)]:
-    target = os.readlink('/proc/' + sys.argv[1] + '/ns/' + kind)
+    path = '/proc/' + sys.argv[1] + '/ns/' + kind
+    try:
+        target = os.readlink(path)
+    except PermissionError:
+        continue
     assert target != before[kind], kind
     try:
-        fd = os.open('/proc/' + sys.argv[1] + '/ns/' + kind, os.O_RDONLY)
+        fd = os.open(path, os.O_RDONLY)
     except PermissionError:
         continue
     try:
