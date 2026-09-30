@@ -1924,7 +1924,7 @@ fn listed_example() -> Vec<u8> {
     .unwrap()
 }
 
-// @kotowari[EX-937, REQ-256]
+// @kotowari[EX-937, REQ-482, REQ-256]
 #[test]
 fn ex_937_init_writes_the_example_chosen() {
     for (arguments, expected) in [
@@ -1955,7 +1955,7 @@ fn ex_937_init_writes_the_example_chosen() {
     );
 }
 
-// @kotowari[EX-938, REQ-259]
+// @kotowari[EX-938, REQ-482, REQ-259]
 #[test]
 fn ex_938_an_unknown_missing_or_repeated_example_is_a_usage_diagnostic_writing_nothing() {
     for arguments in [
@@ -1979,7 +1979,7 @@ fn ex_938_an_unknown_missing_or_repeated_example_is_a_usage_diagnostic_writing_n
     }
 }
 
-// @kotowari[EX-939]
+// @kotowari[EX-939, REQ-482]
 #[test]
 fn ex_939_example_outside_init_is_a_usage_diagnostic() {
     for arguments in [
