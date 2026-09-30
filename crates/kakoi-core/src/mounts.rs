@@ -619,10 +619,11 @@ struct Scanned {
 /// The `hide` items of the scan (specification section 6.3): each hit that is not a
 /// directory nor a link to one, nor a policy file that was read. A hit that is a link
 /// pointing at or into a written `ro` item is not hidden: hiding it would empty the user's
-/// own read-only file. When that `ro` item could be swapped from inside the isolation
-/// (`swappable_ro`), the scan could be made to empty something else next time, so the run
-/// stops, naming the first such link in byte order whatever order the walk found them in;
-/// otherwise the link is left visible with the reason.
+/// own read-only file. When any `ro` item around the target could be swapped from inside
+/// the isolation (`swappable_ro`), the scan could be made to empty something else next
+/// time, so the run stops, naming the first such link in byte order whatever order the
+/// walk found them in, and the first such `ro` item; otherwise the link is left visible
+/// with the reason.
 fn scan_items(
     written: &[ResolvedItem],
     layers: &[Layer],

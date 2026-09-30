@@ -351,7 +351,8 @@ pub enum Argument {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Provisions {
     /// The shared file place the files that are always the same are bound from; none
-    /// when they are made from data (specification REQ-460).
+    /// when they are made from data, and when the run puts nothing from the place
+    /// (specification REQ-460).
     pub shared_files: Option<PathBuf>,
     /// Whether the host's tun device is shown inside (specification REQ-458).
     pub tun: bool,
