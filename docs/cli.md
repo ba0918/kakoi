@@ -231,7 +231,10 @@ variable in from the outer isolation with `env.pass`. And a `filtered` policy ne
 [`network.allow-nested-filtered`](policy.md#nested-filtered).
 
 The [command guards](policy.md#command-guards) of the outer run go on working inside an
-isolation made with `--nested=isolate`: their directory is shown there read-only as it is. A
+isolation made with `--nested=isolate`: their directory is shown there read-only as it is, and
+it is put first on the inner `PATH` when there is one. An inner environment without `PATH` (an
+`env.mode = "clear"` policy that passes none) gets no guard directory on it, as outside, so the
+guards found through `PATH` do not watch there. A
 policy for the inner isolation cannot place guards of its own while it does; that is a `policy`
 diagnostic. The limits of all this are [known gap 8](security.md#known-gaps).
 

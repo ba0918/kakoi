@@ -102,6 +102,9 @@ does not watch:
 - a start from a place where no guard is placed: an absolute path without
   `guard-absolute-path`, another name or a hard link that reaches the same program, and the real
   program found again where `guard-absolute-path` placed it;
+- a start in an environment without `PATH` (a policy with `env.mode = "clear"` that passes
+  none, including an inner isolation made with `--nested=isolate`): the guards' directory is put
+  on `PATH` only when there is one;
 - a library that does the same work without starting the program (a git implementation in
   Python, say);
 - an alias defined in a configuration file (the `[alias]` of a `.git/config` writable from
