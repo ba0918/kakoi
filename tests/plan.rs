@@ -395,6 +395,30 @@ fn a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic() {
     }
 }
 
+// An `ro` item that cannot be swapped around the swappable one does not make the link
+// safe to leave: the swappable item inside it is what the next start could re-point.
+// @kotowari[REQ-403]
+#[test]
+fn a_scan_link_into_a_swappable_ro_item_inside_an_unswappable_one_is_a_path_diagnostic() {
+    let diagnostic = isolation(
+        &format!(
+            "[mounts]\nrw = [\"${{worktree}}\", \"~/.claude\"]\n\
+             ro = [\"/home/u\", \"~/.claude/settings.json\"]\n{SCAN_ENV}"
+        ),
+        env_links_into_claude_settings(&["/home/u/proj/.env"]),
+        &[],
+    )
+    .unwrap_err();
+
+    assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+    assert!(
+        diagnostic
+            .description()
+            .contains("/home/u/.claude/settings.json"),
+        "{diagnostic}"
+    );
+}
+
 // @kotowari[REQ-295]
 #[test]
 fn the_first_offending_scan_link_in_byte_order_is_named() {

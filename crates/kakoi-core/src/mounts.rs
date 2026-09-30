@@ -646,10 +646,17 @@ fn scan_items(
         if policy_files.contains(&real.as_path()) {
             continue;
         }
-        let into_ro = written
+        let containing_ro: Vec<&ResolvedItem> = written
             .iter()
             .filter(|item| item.directive == Directive::Ro)
-            .find(|item| hit.is_link && real.starts_with(&item.real));
+            .filter(|item| hit.is_link && real.starts_with(&item.real))
+            .collect();
+        // Any swappable `ro` around the target stops the run, even inside one that cannot be
+        // swapped: the swappable one is what the next start could be made to re-point.
+        let into_ro = containing_ro
+            .iter()
+            .find(|ro| swappable_ro.contains(&ro.real))
+            .or(containing_ro.first());
         match into_ro {
             Some(ro) if swappable_ro.contains(&ro.real) => {
                 return Err(Diagnostic::path(format!(
