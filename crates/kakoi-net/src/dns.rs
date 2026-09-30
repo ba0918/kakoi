@@ -67,6 +67,10 @@ fn decode(wire: &[u8]) -> Result<Message, DnsError> {
 }
 
 impl Question {
+    pub(crate) fn is_message_signed(&self) -> bool {
+        self.message.signature.is_some()
+    }
+
     pub fn address_chain(&self, max_hops: u32) -> Result<AddressChain, DnsError> {
         AddressChain::new(&self.message.queries[0], max_hops)
     }

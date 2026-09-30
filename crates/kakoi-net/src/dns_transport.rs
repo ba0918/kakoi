@@ -201,19 +201,36 @@ fn plain(
 ) -> io::Result<ReceivedResponse> {
     let original = Question::parse(wire).map_err(invalid_dns)?;
     deadline.remaining()?;
-    let mut request = wire.to_vec();
-    random_id(&mut request[..2], deadline)?;
+    let request = upstream_request(wire, &original, deadline)?;
     let question = Question::parse(&request).map_err(invalid_dns)?;
     let (mut answer, received_at) = match transport {
         PlainTransport::Udp => udp(&request, &question, peer, deadline)?,
         PlainTransport::Tcp => tcp(&request, &question, peer, deadline)?,
     };
     deadline.remaining()?;
-    answer[..2].copy_from_slice(&wire[..2]);
+    restore_client_id(&mut answer, wire, &original);
     Ok(ReceivedResponse {
         response: original.validate_response(&answer).map_err(invalid_dns)?,
         received_at,
     })
+}
+
+fn upstream_request(
+    wire: &[u8],
+    original: &Question,
+    deadline: ExchangeDeadline<'_>,
+) -> io::Result<Vec<u8>> {
+    let mut request = wire.to_vec();
+    if !original.is_message_signed() {
+        random_id(&mut request[..2], deadline)?;
+    }
+    Ok(request)
+}
+
+fn restore_client_id(answer: &mut [u8], wire: &[u8], original: &Question) {
+    if !original.is_message_signed() {
+        answer[..2].copy_from_slice(&wire[..2]);
+    }
 }
 
 fn invalid_dns(error: crate::dns::DnsError) -> io::Error {
