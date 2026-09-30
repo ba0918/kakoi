@@ -14,11 +14,11 @@
 
 ### REQ-359: 既知の隙間の公開
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54
 - verification: review
-- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、16件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
+- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、17件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
 
-表 TBL-160 の既知の隙間16件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。16件のどれも省かない。
+表 TBL-160 の既知の隙間17件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。17件のどれも省かない。
 
 ### REQ-360: 配置保護の説明
 - kind: ubiquitous
@@ -98,11 +98,11 @@ Scenario: 公開文書の導線・反例
   Given READMEだけから初回起動を進める
   When 契約への適合を確認する
   Then 起動前に必ずプロファイル設置が必要だと読めることは契約違反である
-@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2
+@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54
 Scenario: 既知の隙間の公開・成功
   Given READMEから保証範囲を調べる
   When 契約への適合を確認する
-  Then 一回のリンクで16件の具体的な限界を読める
+  Then 一回のリンクで17件の具体的な限界を読める
 @id=EX-659 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1
 Scenario: 既知の隙間の公開・反例
   Given READMEから保証範囲を調べる

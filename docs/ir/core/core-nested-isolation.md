@@ -62,10 +62,10 @@ filtered の隔離の中の resolver は "127.0.0.53" と "127.0.0.54" の両方
 
 ### REQ-465: 入れ子の中の隔離と外の見張り役
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53
+- source: docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A55
 - verification: unit
 
-"--nested=isolate" の起動は、起動したときに "/dev/kakoi-guard" が存在すれば、それを隔離の中の同じ場所に読み取り専用でそのまま見せる。存在しなければ何もしない。外の見張り役の規則と、本物の場所に重ねた見張り役は、中の隔離でも外と同じに働く。
+"--nested=isolate" の起動は、起動したときに "/dev/kakoi-guard" が存在すれば、それを隔離の中の同じ場所に読み取り専用でそのまま見せる。存在しなければ何もしない。外の見張り役の規則と、本物の場所に重ねた見張り役は、中の隔離でも外と同じに働く。中の環境に PATH が無いときは、REQ-268 のとおり見張り役の場所を PATH に足さないので、PATH で探す見張り役は働かない。
 
 ### REQ-466: 入れ子の中の隔離で重ねられない見張り役
 - kind: ubiquitous

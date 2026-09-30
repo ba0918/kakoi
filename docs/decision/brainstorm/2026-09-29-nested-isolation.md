@@ -14,7 +14,7 @@ botti のセッションから、入れ子でも中で隔離を作り直し、�
 実測（同上）: 外の中のプロセスは 3 モードとも CapEff=0 で、tun の新規作成、外の netns の "ip link"・"nft" の操作はすべて EPERM だった。外が filtered のとき pasta の tap（app0）への TUNSETIFF は EBUSY だった。owner 未設定か uid が一致する永続の tun/tap には、CAP_NET_ADMIN の無い子 userns からでも接続できた（使い捨ての netns で実測）。外が host のときだけ、ホストの netns にそういう装置があれば読み書きできることになる（今のホストには無い。ホストの "/dev/net/tun" は 666 で、隔離の外の同じ利用者には元からできる）。tun の fd は開いた時点の netns に固定されるので外から渡す案は使えず、外の nft に規則を足す案も EPERM だった。
 実測（2026-09-29、この環境、素の bwrap 0.9.0 の二重起動）: 外が "--ro-bind-data" で置いたファイルの上には、中の bwrap は "--ro-bind-data" でも "--ro-bind" でもマウントできず、"Unable to mount source on destination: No such file or directory" で止まる。外が "--ro-bind" でホストの実在のファイルを置いた場合は、中から上にマウントできる。kakoi は "--ro-bind-data" を、filtered の resolv.conf のほか、ファイルの "hide"（空のファイル）と "rw-copy" で写すファイルにも使っている。ガードレールの規則の表も "--ro-bind-data" だが、中の kakoi は "/dev" を作り直すので重ならない。
 実測（2026-09-30、この環境、kakoi 0.5.0、外の kakoi の中で `env -u KAKOI kakoi` で中の隔離を作った）: 外の policy が git の見張り役を `guard-absolute-path = true` で置いていると、中の隔離では `/usr/bin/git` に重ねた kakoi 自身が見張り役として振る舞えず（見張り役の表が中の `/dev` に無い）、`git --version` が `kakoi 0.5.0` を返し、`git push` は `kakoi: usage` になった。`guard-absolute-path = false` だと中で git は本物として動くが、外の規則（`git push` の禁止）は効かなかった。
-Position: 承認後の改訂（A49〜A53）を IR に反映し、照合を 3 回終えた（3 回目で指摘 0 件）。改訂の承認待ち。
+Position: 実装のレビューで見つかった仕様の直し（A54、A55）を反映し、照合を終えた（指摘 0 件）。
 
 ## Agreements
 
@@ -195,6 +195,13 @@ Position: 承認後の改訂（A49〜A53）を IR に反映し、照合を 3 回
   - decided_by: 利用者（推奨を採用）
 - A53 外の見張り役を引き継ぐかは、中の kakoi が起動したときに `/dev/kakoi-guard` が存在するかで見分ける。
   - why: `/dev` は kakoi が作るので、そこにあれば外の kakoi が置いたものである。エージェントが自分で名前空間を作って `/dev` を覆えば騙せるが、騙せるのは自分で起動した kakoi だけで、A25 と同じ状況である。
+  - decided_by: 利用者（推奨を採用）
+
+- A54 既知の隙間を公開する要求（REQ-359）とその場面（EX-658）の件数を、TBL-160 の行数に合わせて 17 件にする。
+  - why: A15 で TBL-160 に 17 行目（tun）を足したが、件数を書いた要求と場面を直し忘れていた（実装のレビューで判明）。README とガイドは 17 件と書いている。
+  - decided_by: 利用者（推奨を採用）
+- A55 `--nested=isolate` の中の環境に PATH が無いとき（中の policy が `env.mode = "clear"` で PATH を渡さないとき）は、見張り役の場所を PATH に足さない既存の規則（REQ-268）のとおり外の見張り役の場所も PATH に入らず、PATH で探す見張り役は働かない。このことを REQ-465 と `docs/cli.md`、`docs/security.md` のガードレールの限界に明記する。
+  - why: 外の隔離でも PATH の無い環境には見張り役を足さず、ガードレールは境界ではないので、外と同じ限界を持つのが REQ-465 の「外と同じに働く」の素直な読み方である。実装はこのとおりだが、仕様と文書に書かれておらず、読み手が「中でも必ず効く」と誤解しうる（実装のレビューで判明）。
   - decided_by: 利用者（推奨を採用）
 
 ## Undecided

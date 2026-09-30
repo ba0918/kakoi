@@ -67,7 +67,7 @@ podman-static から取り出す手順と、ディストリごとの例や版の
 Ubuntu 24.04 の標準の pasta しか無い利用者が、確かめ方に従って足りないことを知り、手順を実行すれば、`~/.local/bin` の pasta の `--help` に名前がすべて載る。
 
 ## 既知の隙間
-<!-- @kotowari[REQ-359:f8570fbc, TBL-160:70bd72f7, EX-658:e16908e6, EX-659:87f89b7b, EX-736:bd8c616a, EX-737:388f8b31] -->
+<!-- @kotowari[REQ-359:2f94d6b6, TBL-160:70bd72f7, EX-658:cf375ffc, EX-659:87f89b7b, EX-736:bd8c616a, EX-737:388f8b31] -->
 
 既知の隙間は `docs/security.md` に載せ、README からその節へ直接リンクする。
 README から 1 回のリンクで、次の 17 件の具体的な限界を読めること。
