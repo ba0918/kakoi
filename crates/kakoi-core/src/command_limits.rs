@@ -8,9 +8,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::environment::{HomeDirectory, RealEntry};
+use crate::guard_placement::hidden;
 use crate::layers::Policy;
 use crate::listed::ListedRoot;
-use crate::mounts::{expand, Expansion, MountFacts};
+use crate::mounts::{expand, Expansion, MountFacts, ResolvedItem};
 use crate::variables::Variables;
 
 /// Where kakoi's own executable is placed as the isolation's first process, in the
@@ -102,13 +103,15 @@ pub fn lookups(policy: &Policy, variables: &Variables, home: &HomeDirectory) -> 
 }
 
 /// The items of `commands.allow` that are allowed, and those skipped with the reason: a
-/// variable without a value, nothing at the path, or, under the "listed" mount mode, a
-/// real path the isolation does not show (specification REQ-476).
+/// variable without a value, nothing at the path, or a path the isolation does not have
+/// as written: the path, a link on the way, or what it resolves to hidden by `mounts`,
+/// or, under the "listed" mount mode, not shown (specification REQ-476).
 pub fn allowed_programs(
     policy: &Policy,
     variables: &Variables,
     home: &HomeDirectory,
     facts: &MountFacts,
+    mounts: &[ResolvedItem],
     listed: Option<&ListedRoot>,
 ) -> (Vec<PathBuf>, Vec<SkippedAllow>) {
     let mut allowed = Vec::new();
@@ -120,8 +123,12 @@ pub fn allowed_programs(
                 RealEntry::Missing => "does not exist".to_string(),
                 entry => {
                     let real = entry.path().expect("an entry that exists");
-                    if listed.is_some_and(|root| !root.shows(real)) {
+                    let links = facts.traversed_links(&path);
+                    if listed.is_some_and(|root| !root.shows_through(links, real)) {
                         "is not among the places the \"listed\" mount mode shows".to_string()
+                    } else if hidden(real, mounts) || links.iter().any(|link| hidden(link, mounts))
+                    {
+                        "is hidden inside the isolation".to_string()
                     } else {
                         allowed.push(path);
                         continue;

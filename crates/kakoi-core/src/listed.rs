@@ -78,6 +78,15 @@ impl ListedRoot {
             || covered(path, PUT_INSIDE.iter().map(Path::new))
     }
 
+    /// Whether a path is there as written when resolving it passes through `links` to
+    /// `real`: each link is inside a place shown or is made again, and `real` is shown.
+    pub fn shows_through(&self, links: &[PathBuf], real: &Path) -> bool {
+        self.shows(real)
+            && links.iter().all(|link| {
+                self.shows(link) || self.links.iter().any(|rebuilt| &rebuilt.place == link)
+            })
+    }
+
     /// Whether anything of the host's at or under `path` is shown.
     pub fn reaches(&self, path: &Path) -> bool {
         covered(path, self.places.iter().map(PathBuf::as_path))

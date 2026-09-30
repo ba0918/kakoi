@@ -267,7 +267,7 @@ fn check(
 
 /// Whether the last mount item that covers `path` (the item's path or one of its
 /// ancestors) hides it.
-fn hidden(path: &Path, mounts: &[ResolvedItem]) -> bool {
+pub(crate) fn hidden(path: &Path, mounts: &[ResolvedItem]) -> bool {
     mounts
         .iter()
         .rev()

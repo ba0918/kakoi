@@ -310,3 +310,55 @@ fn an_allowed_program_a_guard_overlays_starts_through_the_guard() {
         assert!(push.stdout.is_empty(), "{}", output_report(&push));
     }
 }
+
+/// The items `plan` allows, and the items it skips, each with a reason.
+fn allowed_and_skipped(plan: &serde_json::Value) -> (Vec<String>, Vec<String>) {
+    let texts = |key: &str, field: Option<&str>| -> Vec<String> {
+        plan[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("no {key}: {plan}"))
+            .iter()
+            .map(|entry| {
+                if let Some(reason) = entry.get("reason") {
+                    assert!(!reason.as_str().unwrap().is_empty(), "{entry}");
+                }
+                let value = field.map_or(entry, |field| &entry[field]);
+                value.as_str().unwrap().to_string()
+            })
+            .collect()
+    };
+    (
+        texts("commands_allowed", None),
+        texts("skipped_command_allow", Some("written")),
+    )
+}
+
+// @kotowari[REQ-476, REQ-478]
+#[test]
+fn an_allowed_link_the_listed_mount_mode_does_not_show_is_skipped_though_its_target_is_shown() {
+    let home = TempDir::new();
+    let link = home.path().join("links/true");
+    std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink("/usr/bin/true", &link).unwrap();
+    let link = link.to_str().unwrap();
+    let scene = Scene::allowing(&["/bin/sh", link], "mode = \"listed\"\n");
+
+    let (allowed, skipped) = allowed_and_skipped(&json_plan(&scene));
+
+    assert_eq!(allowed, ["/bin/sh"]);
+    assert_eq!(skipped, [link]);
+}
+
+// @kotowari[REQ-476, REQ-478]
+#[test]
+fn an_allowed_program_a_hide_covers_is_skipped_under_the_host_mount_mode() {
+    let scene = Scene::allowing(&["/bin/sh", "~/tools/prog"], "hide = [\"~/tools\"]\n");
+    let prog = scene.home.path().join("tools/prog");
+    std::fs::create_dir_all(prog.parent().unwrap()).unwrap();
+    common::write_executable(&prog, "#!/bin/sh\n");
+
+    let (allowed, skipped) = allowed_and_skipped(&json_plan(&scene));
+
+    assert_eq!(allowed, ["/bin/sh"]);
+    assert_eq!(skipped, ["~/tools/prog"]);
+}

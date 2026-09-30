@@ -159,7 +159,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
                 &variables,
                 &home,
                 &facts.mounts,
-                isolation.listed.as_ref(),
+                &isolation,
                 &guards,
                 request,
             )
@@ -199,7 +199,7 @@ fn command_limits(
     variables: &crate::variables::Variables,
     home: &crate::environment::HomeDirectory,
     facts: &crate::mounts::MountFacts,
-    listed: Option<&ListedRoot>,
+    isolation: &plan::Isolation,
     guards: &GuardPlan,
     request: &Request,
 ) -> Result<CommandLimits, Diagnostic> {
@@ -221,7 +221,14 @@ fn command_limits(
                  cannot be located",
             )
         })?;
-    let (allowed, skipped) = allowed_programs(policy, variables, home, facts, listed);
+    let (allowed, skipped) = allowed_programs(
+        policy,
+        variables,
+        home,
+        facts,
+        &isolation.mounts.items,
+        isolation.listed.as_ref(),
+    );
     let reals: Vec<PathBuf> = allowed
         .iter()
         .filter_map(|path| facts.entry(path).path().map(Path::to_path_buf))
