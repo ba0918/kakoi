@@ -64,35 +64,55 @@ impl Scene {
         path
     }
 
-    /// Runs `script` with `/bin/sh -c` inside the isolation, from the workspace.
-    fn run(&self, script: &str) -> Output {
-        binary(&self.home)
-            .current_dir(&self.workspace)
-            .args([
-                OsStr::new("--workspace"),
-                self.workspace.as_os_str(),
-                OsStr::new("--"),
-                OsStr::new("/bin/sh"),
-                OsStr::new("-c"),
-                OsStr::new(script),
-            ])
+    /// Runs the built kakoi with `--workspace` and `arguments` from `current_dir`, with
+    /// the test's `PATH` or `path`.
+    fn kakoi(&self, current_dir: &Path, path: Option<&str>, arguments: &[&OsStr]) -> Output {
+        let mut command = binary(&self.home);
+        if let Some(path) = path {
+            command.env("PATH", path);
+        }
+        command
+            .current_dir(current_dir)
+            .arg("--workspace")
+            .arg(&self.workspace)
+            .args(arguments)
             .output()
             .unwrap()
     }
 
-    /// The JSON plan of the scene, without a command.
-    fn json_plan(&self) -> serde_json::Value {
-        let output = binary(&self.home)
-            .current_dir(&self.workspace)
-            .args([
-                OsStr::new("--workspace"),
-                self.workspace.as_os_str(),
-                OsStr::new("--print-plan=json"),
-            ])
-            .output()
-            .unwrap();
+    /// Runs `script` with `/bin/sh -c` inside the isolation, from the workspace.
+    fn run(&self, script: &str) -> Output {
+        self.kakoi(
+            &self.workspace,
+            None,
+            &[
+                OsStr::new("--"),
+                OsStr::new("/bin/sh"),
+                OsStr::new("-c"),
+                OsStr::new(script),
+            ],
+        )
+    }
+
+    /// The JSON plan of the scene, without a command, with the test's `PATH` or `path`.
+    fn json_plan_on(&self, path: Option<&str>) -> serde_json::Value {
+        let output = self.kakoi(&self.workspace, path, &[OsStr::new("--print-plan=json")]);
         assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
         serde_json::from_slice(&output.stdout).unwrap()
+    }
+
+    /// The JSON plan of the scene, without a command.
+    fn json_plan(&self) -> serde_json::Value {
+        self.json_plan_on(None)
+    }
+
+    /// A directory beside the home and the workspace holding an executable script `name`
+    /// that prints `name` and where it is; not shown unless the policy writes it.
+    fn shim(&self, name: &str) -> PathBuf {
+        let shim = self.home.parent().unwrap().join("shim");
+        fs::create_dir_all(&shim).unwrap();
+        common::write_executable(&shim.join(name), format!("#!/bin/sh\necho shim {name}\n"));
+        shim
     }
 }
 
@@ -461,4 +481,194 @@ fn ex_915_nothing_else_beside_the_resolver_target_is_shown() {
         assert!(!sources.contains(&OsStr::new(hidden)), "{arguments:?}");
     }
     assert!(!arguments.contains(&OsString::from("/mnt/wsl/other")));
+}
+
+/// The kinds of the items the plan says were not shown, as `origin` names them.
+fn not_shown(plan: &serde_json::Value) -> Vec<(String, String)> {
+    plan["not_shown"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no not_shown: {plan}"))
+        .iter()
+        .map(|entry| {
+            assert!(!entry["reason"].as_str().unwrap().is_empty(), "{entry}");
+            (
+                entry["origin"]["kind"].as_str().unwrap().to_string(),
+                entry["path"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect()
+}
+
+// @kotowari[EX-942]
+#[test]
+fn ex_942_the_secret_place_of_an_unshown_configuration_directory_is_not_there() {
+    let scene = Scene::new(&[], "");
+    let secrets = scene.write(".config/kakoi/secrets/token", "secret\n");
+    let config_dir = secrets.parent().unwrap().parent().unwrap();
+
+    let output = scene.run(&format!(
+        "! test -e '{}' && echo absent",
+        config_dir.display()
+    ));
+    let plan = scene.json_plan();
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), "absent\n");
+    assert!(
+        not_shown(&plan).contains(&(
+            "config-secrets".to_string(),
+            secrets.parent().unwrap().display().to_string()
+        )),
+        "{plan}"
+    );
+}
+
+// @kotowari[REQ-468]
+#[test]
+fn a_written_hide_outside_what_is_shown_is_skipped_with_a_reason() {
+    let scene = Scene::new(&[], "hide = [\"~/.ssh\"]\n");
+    let ssh = scene.write(".ssh/id", "key\n");
+
+    let output = scene.run(&format!(
+        "! test -e '{}' && echo absent",
+        ssh.parent().unwrap().display()
+    ));
+    let plan = scene.json_plan();
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), "absent\n");
+    assert!(
+        not_shown(&plan).contains(&(
+            "profile".to_string(),
+            ssh.parent().unwrap().display().to_string()
+        )),
+        "{plan}"
+    );
+}
+
+// @kotowari[EX-943]
+#[test]
+fn ex_943_a_guard_wraps_the_real_program_that_is_shown() {
+    let scene = Scene::new(
+        &[],
+        "[[commands.guard]]\nprogram = \"git\"\nreason = \"no push\"\ndeny = [[\"push\"]]\n",
+    );
+    let shim = scene.shim("git");
+    let path = format!("{}:/usr/bin:/bin", shim.display());
+
+    let plan = scene.json_plan_on(Some(&path));
+    let output = scene.kakoi(
+        &scene.workspace,
+        Some(&path),
+        &[OsStr::new("--"), OsStr::new("git"), OsStr::new("--version")],
+    );
+
+    let guards = plan["guards"].as_array().unwrap();
+    assert_eq!(guards.len(), 1, "{plan}");
+    assert_eq!(guards[0]["found"], "/usr/bin/git", "{plan}");
+    assert_success(&output);
+    assert!(
+        stdout(&output).starts_with("git version"),
+        "{}",
+        output_report(&output)
+    );
+}
+
+// @kotowari[EX-944]
+#[test]
+fn ex_944_a_current_directory_that_is_not_shown_is_a_path_diagnostic() {
+    let scene = Scene::new(&[], "");
+    let marker = scene.home.join("ran");
+
+    let run = scene.kakoi(
+        &scene.home,
+        None,
+        &[
+            OsStr::new("--"),
+            OsStr::new("/usr/bin/touch"),
+            marker.as_os_str(),
+        ],
+    );
+    let print = scene.kakoi(&scene.home, None, &[OsStr::new("--print-plan")]);
+
+    common::assert_diagnostic(&run, 125, "path");
+    common::assert_diagnostic(&print, 125, "path");
+    assert!(!marker.exists());
+}
+
+// @kotowari[EX-945]
+#[test]
+fn ex_945_a_shown_workspace_as_the_current_directory_runs_the_command() {
+    let scene = Scene::new(&[], "");
+
+    let output = scene.run("echo ran");
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), "ran\n");
+}
+
+// @kotowari[EX-950]
+#[test]
+fn ex_950_an_unshown_program_first_on_path_is_passed_over_for_a_shown_one() {
+    let scene = Scene::new(&[], "");
+    let shim = scene.shim("id");
+    let path = format!("{}:/usr/bin:/bin", shim.display());
+
+    let output = scene.kakoi(
+        &scene.workspace,
+        Some(&path),
+        &[OsStr::new("--"), OsStr::new("id"), OsStr::new("-u")],
+    );
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), format!("{}\n", unsafe { libc::getuid() }));
+}
+
+// @kotowari[EX-951]
+#[test]
+fn ex_951_a_program_only_in_an_unshown_place_is_not_found() {
+    let scene = Scene::new(&[], "");
+    let shim = scene.shim("kakoi-only-in-the-shim");
+    let path = format!("{}:/usr/bin:/bin", shim.display());
+
+    let output = scene.kakoi(
+        &scene.workspace,
+        Some(&path),
+        &[OsStr::new("--"), OsStr::new("kakoi-only-in-the-shim")],
+    );
+
+    common::assert_diagnostic(&output, 127, "command not found");
+}
+
+// @kotowari[REQ-468]
+#[test]
+fn a_scan_root_or_a_hide_mounts_under_outside_what_is_shown_is_skipped_with_a_reason() {
+    let profile = "[mounts]\nmode = \"listed\"\nrw = [\"${workspace}\"]\n\
+                   [[mounts.scan]]\nroot = \"/home/u/elsewhere\"\nnames = [\".env\"]\n\
+                   [[mounts.hide-mounts]]\nunder = \"/mnt\"\nfstype = [\"9p\"]\n";
+    let facts = base_facts()
+        .dir("/home/u/elsewhere")
+        .dir("/mnt")
+        .mount("/mnt/c", "9p");
+
+    let isolation = isolation(profile, "host", facts).unwrap();
+
+    let skipped: Vec<_> = isolation
+        .skipped_paths
+        .iter()
+        .map(|skipped| (skipped.role, skipped.written.as_str()))
+        .collect();
+    assert!(
+        skipped.contains(&(SkippedRole::ScanRoot, "/home/u/elsewhere")),
+        "{skipped:?}"
+    );
+    assert!(
+        skipped.contains(&(SkippedRole::HideMountsUnder, "/mnt")),
+        "{skipped:?}"
+    );
+    let arguments = arguments(&isolation, NetworkMode::Host);
+    assert!(
+        !arguments.contains(&OsString::from("/mnt/c")),
+        "{arguments:?}"
+    );
 }

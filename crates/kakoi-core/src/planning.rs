@@ -15,8 +15,11 @@ use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::{file_id, first_executable, named};
-use crate::guard_placement::{place_guards, real_program, GuardPlan, PlacedGuard, GUARD_LOCATION};
+use crate::guard_placement::{
+    place_guards, real_program, GuardPlan, NameFact, PlacedGuard, GUARD_LOCATION,
+};
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
+use crate::listed::ListedRoot;
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
@@ -139,9 +142,10 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             arguments: arguments.to_vec(),
             path: through_guard(
                 command,
-                locate_command(command, search_in)?,
+                locate_shown_command(command, search_in, isolation.listed.as_ref())?,
                 path_of(search_in),
                 &isolation.mounts.items,
+                isolation.listed.as_ref(),
                 &guards,
             ),
         }),
@@ -156,7 +160,7 @@ fn listed_lookups(policy: &Policy) -> Vec<PathBuf> {
     if policy.mounts_mode != ListMode::Listed {
         return Vec::new();
     }
-    crate::listed::lookups(policy.mounts_system, policy.network_mode)
+    crate::listed::lookups(policy.mounts_system)
 }
 
 /// The guards of the merged rules, found on the isolation's `PATH` after the mounts are
@@ -176,7 +180,10 @@ fn plan_guards(
         .iter()
         .map(|entry| {
             let program = &entry.rule.program;
-            let names = named(&real_candidates(OsStr::new(program), path));
+            let names = shown_names(
+                named(&real_candidates(OsStr::new(program), path)),
+                isolation.listed.as_ref(),
+            );
             (program.clone(), names)
         })
         .collect();
@@ -230,12 +237,13 @@ fn through_guard(
     found: PathBuf,
     path: Option<&OsStr>,
     mounts: &[ResolvedItem],
+    listed: Option<&ListedRoot>,
     guards: &GuardPlan,
 ) -> PathBuf {
     if command.as_bytes().contains(&b'/') {
         return found;
     }
-    let names = named(&real_candidates(command, path));
+    let names = shown_names(named(&real_candidates(command, path)), listed);
     let Some(real) = real_program(&names, mounts) else {
         return found;
     };
@@ -244,6 +252,41 @@ fn through_guard(
         .iter()
         .find(|guard| guard.found == real.candidate)
         .map_or(found, PlacedGuard::guard)
+}
+
+/// The names of `names` a "listed" isolation shows, both where each is and what it
+/// resolves to (specification REQ-468 and REQ-484); all of them under "host".
+fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFact> {
+    let Some(root) = listed else {
+        return names;
+    };
+    names
+        .into_iter()
+        .filter(|fact| {
+            fact.name.as_deref().is_some_and(|name| root.shows(name))
+                && fact.real.as_deref().is_some_and(|real| root.shows(real))
+        })
+        .collect()
+}
+
+/// Stage 9 as the isolation sees it: a name on `PATH` a "listed" isolation does not show
+/// is passed over (specification REQ-484).
+fn locate_shown_command(
+    command: &OsStr,
+    environment: &BTreeMap<OsString, OsString>,
+    listed: Option<&ListedRoot>,
+) -> Result<PathBuf, Diagnostic> {
+    if listed.is_none() || command.as_bytes().contains(&b'/') {
+        return locate_command(command, environment);
+    }
+    let candidates: Vec<PathBuf> = shown_names(
+        named(&command_candidates(command, path_of(environment))),
+        listed,
+    )
+    .into_iter()
+    .map(|fact| fact.candidate)
+    .collect();
+    resolve_command(command, first_executable(&candidates))
 }
 
 /// Stage 8: `bwrap` on the host's `PATH` (specification section 14).

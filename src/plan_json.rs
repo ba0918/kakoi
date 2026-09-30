@@ -39,6 +39,7 @@ struct PlanDocument<'a> {
     mounts: Vec<MountItem>,
     skipped_mounts: Vec<SkippedMount>,
     left_visible: Vec<LeftVisible>,
+    not_shown: Vec<NotShown>,
     skipped_paths: Vec<SkippedPath>,
     not_copied: Vec<NotCopied>,
     guards: Vec<Guard>,
@@ -166,6 +167,15 @@ struct SkippedMount {
     reason: String,
 }
 
+/// A `hide` item the "listed" mount mode does not lay: it names nothing shown.
+#[derive(Serialize)]
+struct NotShown {
+    path: String,
+    written: String,
+    origin: Origin,
+    reason: String,
+}
+
 #[derive(Serialize)]
 struct LeftVisible {
     link: String,
@@ -267,6 +277,17 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                 .map(|left| LeftVisible {
                     link: text(&left.link),
                     reason: left.reason.clone(),
+                })
+                .collect(),
+            not_shown: plan
+                .mounts
+                .not_shown
+                .iter()
+                .map(|not_shown| NotShown {
+                    path: text(&not_shown.item.real),
+                    written: not_shown.item.written.clone(),
+                    origin: item_origin(&not_shown.item.origin),
+                    reason: not_shown.reason.clone(),
                 })
                 .collect(),
             skipped_paths: plan

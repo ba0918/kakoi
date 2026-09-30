@@ -469,6 +469,15 @@ pub struct ResolvedMounts {
     pub items: Vec<ResolvedItem>,
     pub skipped: Vec<SkippedItem>,
     pub left_visible: Vec<LeftVisible>,
+    /// The `hide` items the "listed" mount mode does not lay, with the reason.
+    pub not_shown: Vec<NotShown>,
+}
+
+/// A `hide` item, written or generated, that names nothing the "listed" mount mode shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotShown {
+    pub item: ResolvedItem,
+    pub reason: String,
 }
 
 /// The written mount items resolved to real paths, before the generated items of

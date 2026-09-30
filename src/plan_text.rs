@@ -189,6 +189,15 @@ fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
             escape_control(&left.reason)
         );
     }
+    for not_shown in &plan.mounts.not_shown {
+        let _ = writeln!(
+            text,
+            "  not laid hide {} (from {}): {}",
+            shown(&not_shown.item.real),
+            item_origin(&not_shown.item.origin),
+            escape_control(&not_shown.reason)
+        );
+    }
     for skipped in &plan.skipped_paths {
         let role = match skipped.role {
             SkippedRole::ScanRoot => "mounts.scan root",

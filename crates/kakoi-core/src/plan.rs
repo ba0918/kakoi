@@ -14,7 +14,7 @@ use crate::isolated_env::{
     assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
 };
 use crate::layers::{Directive, Layer, Policy, PolicySource};
-use crate::listed::{listed_root, ListedRoot};
+use crate::listed::{listed_root, set_aside_unshown, unshown_generators, ListedRoot};
 use crate::mounts::{
     generate, policy_sources, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
     MountFacts, ResolvedItem, ResolvedMounts, SkippedPath,
@@ -101,7 +101,7 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     );
-    let mounts = generate(
+    let mut mounts = generate(
         before_generation,
         inputs.expanded,
         inputs.layers,
@@ -109,6 +109,20 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         &facts.mounts,
         &swappable_ro,
     )?;
+    let mut skipped = skipped_paths(inputs.expanded, &facts.mounts);
+    let listed = (inputs.policy.mounts_mode == ListMode::Listed).then(|| {
+        let (root, skipped_base) = listed_root(
+            inputs.policy.mounts_system,
+            inputs.policy.network_mode,
+            &mounts.items,
+            inputs.expanded,
+            &facts.mounts,
+        );
+        skipped.extend(skipped_base);
+        skipped.extend(unshown_generators(inputs.expanded, &facts.mounts, &root));
+        set_aside_unshown(&mut mounts, &root);
+        root
+    });
     let protected = ProtectedPaths {
         shared_files: inputs
             .shared_files
@@ -125,6 +139,9 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     )?;
+    if let Some(root) = &listed {
+        check_current_dir_shown(inputs.current_dir, root)?;
+    }
     // A `path-prepend` entry enters `PATH` as its real path; one that names nothing is
     // skipped like a mount item would be, and reported (specification section 5.2).
     let path_prepend: Vec<PathBuf> = inputs
@@ -137,18 +154,6 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     let assembled =
         assemble_environment(inputs.policy, inputs.host, &facts.secrets, &path_prepend)?;
     warnings.extend(assembled.warnings);
-    let mut skipped = skipped_paths(inputs.expanded, &facts.mounts);
-    let listed = (inputs.policy.mounts_mode == ListMode::Listed).then(|| {
-        let (root, skipped_base) = listed_root(
-            inputs.policy.mounts_system,
-            inputs.policy.network_mode,
-            &mounts.items,
-            inputs.expanded,
-            &facts.mounts,
-        );
-        skipped.extend(skipped_base);
-        root
-    });
     Ok(Isolation {
         mounts,
         skipped_paths: skipped,
@@ -157,6 +162,18 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         policy_sources: policy_sources(inputs.layers, &facts.mounts),
         listed,
     })
+}
+
+/// The current directory of a "listed" isolation is one of the places it shows
+/// (specification REQ-483): any other is not there, and bwrap would fail to enter it.
+fn check_current_dir_shown(current_dir: &Path, root: &ListedRoot) -> Result<(), Diagnostic> {
+    if root.shows(current_dir) {
+        return Ok(());
+    }
+    Err(Diagnostic::path(format!(
+        "the current directory {} is not among the places the \"listed\" mount mode shows",
+        current_dir.display()
+    )))
 }
 
 /// Whether a run puts anything from the shared file place: the empty file of a `hide` of a
@@ -432,7 +449,12 @@ pub fn bwrap_arguments(
     if network_mode == NetworkMode::Filtered {
         // Apply after user mounts so a copied/hidden host resolver file cannot
         // silently redirect the application's ordinary DNS lookups.
-        arguments.extend(provisions.put(SharedFile::Resolver, "/etc/resolv.conf"));
+        let destination = provisions
+            .listed
+            .as_ref()
+            .and_then(|root| root.filtered_resolver.as_deref())
+            .unwrap_or(Path::new("/etc/resolv.conf"));
+        arguments.extend(provisions.put(SharedFile::Resolver, destination.as_os_str()));
     }
     arguments.extend(guard_arguments(guards));
     if provisions.listed.is_some() {
