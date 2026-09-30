@@ -16,7 +16,7 @@
 - `commands.mode = "listed"` with `commands.allow` lets only the listed programs (and the
   dynamic linker and `kakoi` itself) start inside, with Landlock: `kakoi` becomes the
   isolation's first process and restricts execution before it starts the command. It is a
-  guardrail, not a boundary (known gaps 18 and 19); a host without Landlock stops with `bwrap`.
+  guardrail, not a boundary (known gaps 17 and 18); a host without Landlock stops with `bwrap`.
   See [Allowing only listed programs](docs/policy.md#allowing-only-listed-programs-commandsmode).
 - A command guard rule can have `only`: a run whose words match none of its sequences is
   denied, after the `deny` forms, rule by rule. See [Command guards](docs/policy.md#command-guards).
@@ -65,9 +65,19 @@
 - The resolver of a `filtered` isolation also answers at `127.0.0.54`, where a nested `kakoi`
   that follows the isolation's resolver configuration sends its questions; that configuration
   still names `127.0.0.53` alone.
+- A command is no longer found where the isolation cannot start it. Looking it up on `PATH`
+  passes over a name whose place, real file, or a link on the way is hidden (as a command guard
+  already did), and a command given by a path hidden that way is `command not found` (127). It
+  used to be picked and then fail at `bwrap`'s `exec` with exit code 1. Known gap 1 is gone, and
+  the other known gaps are numbered one lower.
+- The command guards also pass over a name reached through a link in a hidden place.
 
 ### Security
 
+- A launch stops with `path` when an `rw` or `rw-file` item is the configuration directory's
+  real path or inside it, such as `--rw ~/.config/kakoi/profile`. It used to pass when the
+  policy files read were elsewhere (with the built-in default, for one), and a profile or a
+  secret file planted from inside was read on the next launch.
 - The bundled profile (`examples/profile/default.toml`, what `kakoi init` writes) now hides
   `/mnt/wslg`. On WSL2 with WSLg, `/mnt/wslg/distro` mounts the distro's root a second time and
   `/mnt/wslg/run/user` mounts the session's `/run/user` a second time; since `hide` acts only on

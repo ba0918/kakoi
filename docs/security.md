@@ -59,7 +59,7 @@ When the launch is not refused:
 - Kernel isolation: the process shares the host's kernel, as with any namespace-based sandbox.
 - That an `rw` area stays harmless afterwards. What the process writes there (`.git/hooks`,
   `.git/config`, build scripts) is read by whatever you later run on the host.
-- Complete protection of `ro` and `hide` items placed inside an `rw` area; see known gap 15.
+- Complete protection of `ro` and `hide` items placed inside an `rw` area; see known gap 14.
 - That a command guard stops what it names: a guard is a guardrail, not part of the boundary
   (see below). The same holds for the `listed` command mode.
 
@@ -124,7 +124,7 @@ does not watch:
   real program is relocated by the path resolved when the plan was made, and `bwrap` resolves
   that path again when it starts, so another isolation that can write where the real program
   lies can put a hidden file there in between, and it shows at the relocated place. This is the
-  same kind of gap as item 15 of the known gaps below.
+  same kind of gap as item 14 of the known gaps below.
 
 A denial is reported only by the guard's own line on standard error and exit code 126; nothing
 is sent outside the isolation. To stop an operation for certain, give the process a token with
@@ -142,29 +142,26 @@ for anything to start, runs any readable file as a program when it is started by
 path; an allowed interpreter (`python3`, `node`) can read a file and run it as code from memory;
 and an executable copied into a `memfd` starts. Allowing an interpreter opens that way, so a list
 that should mean something leaves them out. What keeps sockets and credentials out of reach is
-the `listed` mount mode and the `filtered` network, not the list of programs. See known gaps 18
-and 19.
+the `listed` mount mode and the `filtered` network, not the list of programs. See known gaps 17
+and 18.
 
 ## Known gaps
 
-1. A command inside a hidden directory is still found by the `PATH` search, which runs on the
-   host file system; the launch then fails at `bwrap`'s `exec` with `bwrap`'s own output and
-   exit code.
-2. A file that appears after start-up is not hidden. `bwrap` would create a mount point for a
+1. A file that appears after start-up is not hidden. `bwrap` would create a mount point for a
    missing path and leave an empty file on the host, so nothing is mounted on a path that does
    not exist.
-3. A file hidden by the scan that git tracks shows up inside as a change that emptied it.
-4. `hide` acts on the real path it names. A bind mount or a hard link that reaches the same
+2. A file hidden by the scan that git tracks shows up inside as a change that emptied it.
+3. `hide` acts on the real path it names. A bind mount or a hard link that reaches the same
    content by another path is not hidden.
-5. The paths of mount items and secret files are `bwrap` arguments and visible in the process
+4. The paths of mount items and secret files are `bwrap` arguments and visible in the process
    list; the secret values are in the isolated process's environment and readable from the host
    through `/proc`. The host is the trusted side.
-6. With `env.mode = "inherit"`, a credential in the host environment whose name matches none of
+5. With `env.mode = "inherit"`, a credential in the host environment whose name matches none of
    the `unset` patterns enters the isolation.
-7. Only `TIOCSTI` is blocked by the seccomp filter. `TIOCLINUX`, injection through terminal
+6. Only `TIOCSTI` is blocked by the seccomp filter. `TIOCLINUX`, injection through terminal
    responses, and input synthesis through a display server's socket are not; the bundled profile
    cuts the socket paths with `hide` and the variables with `unset`.
-8. Nesting and isolations made inside one have limits. A process inside that makes a namespace
+7. Nesting and isolations made inside one have limits. A process inside that makes a namespace
    of its own and covers `/dev` hides the nesting mark from a `kakoi` it starts there, which
    then does not take itself to be nested; nor does a `kakoi` started inside an isolation of an
    older version, which put no mark. A third isolation, made with `--nested=isolate` inside one
@@ -176,22 +173,22 @@ and 19.
    writable place of the outer isolation, and the outer agent can then put content into the
    files that launch hides. When the outer and the inner policy make the same file
    `rw-copy`, the inner isolation cannot be made.
-9. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`,
+8. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`,
    `PATH`, and the current directory. That includes the current directory: `cd` into a
    path that passes through an `rw` area, after a link there was swapped from inside, and the
    link's new target becomes the work place.
-10. An `rw` area is a place for anything the user later runs on the host. `.git/hooks` and
-    `.git/config` are read by the user's own `git`; the isolation cannot prevent that, only a
-    look at the diff can.
-11. 32-bit and x32 binaries do not run inside: the seccomp filter ends any process that makes a
+9. An `rw` area is a place for anything the user later runs on the host. `.git/hooks` and
+   `.git/config` are read by the user's own `git`; the isolation cannot prevent that, only a
+   look at the diff can.
+10. 32-bit and x32 binaries do not run inside: the seccomp filter ends any process that makes a
     system call for another architecture or with the x32 bit set.
-12. Deleting the worktree's `.git` from inside can make the next launch derive the worktree from
+11. Deleting the worktree's `.git` from inside can make the next launch derive the worktree from
     an ancestor repository. The home directory and its ancestors are refused as a worktree;
     ancestors below that are not.
-13. A main worktree made with `git init --separate-git-dir` (`.git` is a regular file whose
+12. A main worktree made with `git init --separate-git-dir` (`.git` is a regular file whose
     target has neither `commondir` nor `core.worktree`) matches neither of the two verified
     layouts and stops with `path`.
-14. The check on redirected items is made against the writable items of the current launch. An
+13. The check on redirected items is made against the writable items of the current launch. An
     item written literally below the worktree (`rw = ["${worktree}", "~/work/a/b"]`) can have
     `~/work/a` swapped for a link while the worktree is `~/work`, and a later launch with a
     different worktree does not see that and applies `rw` to the link's target. The same holds
@@ -199,7 +196,7 @@ and 19.
     `--workspace ~/work/a/b/inner` given from elsewhere on the next launch). Launched from the
     same worktree, both stop. Closing this would need remembering the previous launch, which
     `kakoi` does not do; write subdirectories of the worktree with variables.
-15. `ro` and `hide` items inside an `rw` area protect less than they seem to. An `ro` written as
+14. `ro` and `hide` items inside an `rw` area protect less than they seem to. An `ro` written as
     a link protects only the link's target: from inside, the link can be deleted and a regular
     file of the same name put in its place, and whatever reads that path in the same launch sees
     the new content (an editor that saves through a temporary file and `rename` replaces the link
@@ -210,21 +207,21 @@ and 19.
     Even without links, renaming an ancestor directory and placing another file at the same path
     changes what the next launch reads. What `ro` guarantees is that the content the agent reads
     is not changed under it, not that the agent cannot be steered into reading something else.
-16. The shim template does not know which of the wrapped command's options take a value, so a
+15. The shim template does not know which of the wrapped command's options take a value, so a
     word equal to the name of an option it copies is read as that option wherever it stands,
     as the value of another option or as a positional argument, and `--workspace` or `--rw`
     widens to the word that follows it: `codex -m --cd /etc exec` sends `kakoi`
     `--workspace /etc`. This misreading is accepted; the other misreadings of the template
     only leave a directory out.
-17. From inside a `host` isolation whose policy sets `network.allow-nested-filtered = true`,
+16. From inside a `host` isolation whose policy sets `network.allow-nested-filtered = true`,
     persistent tun and tap devices in the host's network namespace that have no owner set, or
     are owned by your user, can be read and written.
-18. The `listed` command mode stops unlisted programs from starting with Landlock, as a
+17. The `listed` command mode stops unlisted programs from starting with Landlock, as a
     guardrail and not a boundary. It does not stop the dynamic linker started by its absolute
     path from running a readable file as a program, an allowed interpreter (`python3`, `node`)
     from loading a readable file into executable memory, or an executable copied into a
     `memfd` from starting.
-19. Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
+18. Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
     isolation: Landlock forbids mounting there.
 
 ## Not supported yet
@@ -239,7 +236,7 @@ and 19.
 - aarch64, 32-bit, and x32 binaries
 - protection of `.git/hooks` and `.git/config`
 - stopping every way of running a program written or downloaded into a writable place (the
-  `listed` command mode stops starting it directly, but not the ways of known gap 18)
+  `listed` command mode stops starting it directly, but not the ways of known gap 17)
 - tool-section values for any command other than codex (fill in your own in a copy of
   [`examples/shim/codex`](../examples/shim/codex))
 - `init --force` (remove the file first)
