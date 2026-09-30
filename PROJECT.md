@@ -64,7 +64,8 @@ later), and fail rather than skip without it. Inside the isolation they start `/
 `PATH`, and the `git` found on `PATH` by its absolute path. Their homes and workspaces are placed under the build's own temporary directory
 (`CARGO_TARGET_TMPDIR`) rather than under `/tmp`, which the "listed" mount mode replaces; a
 workspace there is given a `.git` directory of its own so that the repository the build is in
-is not taken as its worktree. A few of them make
+is not taken as its worktree. The build's target directory must therefore not be under
+`/tmp` itself (as with a `CARGO_TARGET_DIR` there): those tests then fail. A few of them make
 a directory under the host's `/tmp` or `/dev/shm`, which the isolation replaces with its own.
 Inside the isolation they
 start `/usr/bin/python3`, `/usr/bin/git`, `/bin/sh`, and `/bin/true` by absolute path, and
