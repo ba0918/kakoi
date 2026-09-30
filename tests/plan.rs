@@ -1674,3 +1674,86 @@ fn req_460_files_of_the_place_are_bound_read_only_and_fall_back_to_data() {
     );
     assert_eq!(in_data_form(&planned), from_data);
 }
+
+/// The summary and the JSON plan of a home whose profile is `profile` with the workspace
+/// `rw`.
+fn summary_and_json(profile: &str) -> (String, serde_json::Value) {
+    let (home, workspace) = home_with_workspace();
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("[mounts]\nrw = [\"${{workspace}}\"]\n{profile}"),
+    );
+    let run = |form: &str| {
+        let output = binary(home.path())
+            .current_dir(&workspace)
+            .args(["--workspace", workspace.to_str().unwrap(), form])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+        output.stdout
+    };
+    let summary = String::from_utf8(run("--print-plan")).unwrap();
+    let json = serde_json::from_slice(&run("--print-plan=json")).unwrap();
+    (summary, json)
+}
+
+/// The one line of the summary that names `what`.
+fn line_naming<'a>(summary: &'a str, what: &str) -> &'a str {
+    let lines: Vec<&str> = summary.lines().filter(|line| line.contains(what)).collect();
+    assert_eq!(lines.len(), 1, "{summary}");
+    lines[0]
+}
+
+// @kotowari[EX-918]
+#[test]
+fn ex_918_the_mount_mode_and_the_system_show_in_the_summary_and_the_json() {
+    let (summary, json) = summary_and_json("mode = \"listed\"\nsystem = false\n");
+
+    let line = line_naming(&summary, "mount mode");
+    assert!(line.contains("listed") && line.contains("false"), "{line}");
+    assert_eq!(json["policy"]["mounts_mode"], "listed", "{json}");
+    assert_eq!(json["policy"]["mounts_system"], false, "{json}");
+    assert_eq!(json["format_version"], 1);
+}
+
+// @kotowari[EX-919]
+#[test]
+fn ex_919_an_unwritten_mount_mode_shows_as_host() {
+    let (summary, json) = summary_and_json("");
+
+    let line = line_naming(&summary, "mount mode");
+    assert!(line.contains("host"), "{line}");
+    assert_eq!(json["policy"]["mounts_mode"], "host", "{json}");
+    assert_eq!(json["policy"]["mounts_system"], true, "{json}");
+}
+
+// @kotowari[EX-929, REQ-476]
+#[test]
+fn ex_929_the_command_mode_and_the_allowed_programs_show_in_the_summary_and_the_json() {
+    let (summary, json) = summary_and_json(
+        "[commands]\nmode = \"listed\"\n\
+         allow = [\"/usr/bin/git\", \"/opt/kakoi-no-such-program\", \"/bin/sh\"]\n",
+    );
+
+    let line = line_naming(&summary, "command mode");
+    assert!(line.contains("listed") && line.contains('2'), "{line}");
+    assert_eq!(json["policy"]["commands_mode"], "listed", "{json}");
+    assert_eq!(
+        json["commands_allowed"],
+        serde_json::json!(["/usr/bin/git", "/bin/sh"]),
+        "{json}"
+    );
+    assert_eq!(json["format_version"], 1);
+}
+
+// @kotowari[EX-930]
+#[test]
+fn ex_930_an_unwritten_command_mode_shows_as_host_without_a_count() {
+    let (summary, json) = summary_and_json("");
+
+    let line = line_naming(&summary, "command mode");
+    assert!(line.contains("host"), "{line}");
+    assert!(!line.chars().any(|c| c.is_ascii_digit()), "{line}");
+    assert_eq!(json["policy"]["commands_mode"], "host", "{json}");
+    assert_eq!(json["commands_allowed"], serde_json::json!([]), "{json}");
+}

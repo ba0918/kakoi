@@ -81,6 +81,24 @@ fn render_summary(text: &mut String, plan: &Plan) {
              inside can make filtered\n",
         );
     }
+    let _ = writeln!(
+        text,
+        "mount mode: {} (system: {})",
+        plan.policy.mounts_mode.name(),
+        plan.policy.mounts_system
+    );
+    match &plan.commands {
+        Some(limits) => {
+            let _ = writeln!(
+                text,
+                "command mode: listed ({} allowed from commands.allow)",
+                limits.allowed.len()
+            );
+        }
+        None => {
+            let _ = writeln!(text, "command mode: {}", plan.policy.commands_mode.name());
+        }
+    }
     let _ = writeln!(text, "mounts (~ is {}):", shown(&plan.home));
     for item in &plan.mounts.items {
         let _ = writeln!(
@@ -326,6 +344,16 @@ fn render_network_rules(text: &mut String, policy: &Policy) {
 
 fn render_policy(text: &mut String, policy: &Policy) {
     text.push_str("policy (merged):\n");
+    let _ = writeln!(text, "  mounts.mode = {}", policy.mounts_mode.name());
+    let _ = writeln!(text, "  mounts.system = {}", policy.mounts_system);
+    let _ = writeln!(text, "  commands.mode = {}", policy.commands_mode.name());
+    for item in &policy.commands_allow {
+        let _ = writeln!(
+            text,
+            "  commands.allow `{}`",
+            escape_control(&item.to_string())
+        );
+    }
     for item in &policy.mounts {
         let _ = writeln!(
             text,
