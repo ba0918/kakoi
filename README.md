@@ -99,6 +99,13 @@ built-in default, and [Writing a policy](docs/policy.md) explains each key. It u
 `env.unset`; `secrets` and a `commands.guard` rule for `git` are commented examples, and
 `rw-copy`, `env.pass`, `env.set`, `env.path-prepend`, and `git.instead-of` are not used.
 
+For a stricter start, `kakoi init NAME --example listed` writes out
+[`examples/profile/listed.toml`](examples/profile/listed.toml): with `mounts.mode = "listed"`
+only the base (`/usr`, `/etc`, ...) and the places the policy lists are there inside, so the
+sockets under `/run` and the rest of your home do not exist. `commands.mode = "listed"` narrows
+the programs that can start as well; see
+[Showing only what is listed](docs/policy.md#showing-only-what-is-listed-mountsmode).
+
 ## How it works
 
 Up to three written layers are merged, lowest first, and the upper layer wins:
@@ -206,13 +213,15 @@ What it does not guarantee:
   not by the environment);
 - resource limits (no cgroups) or kernel isolation;
 - what an allowed network destination does with the traffic it receives;
-- that a command guard stops a process that means to get around it: guards catch mistakes, and
-  a use that must not happen needs a narrower token or `filtered` rules;
+- that a command guard, or the `listed` command mode, stops a process that means to get around
+  it: both catch mistakes, and a use that must not happen needs a narrower token or `filtered`
+  rules;
 - that an `rw` area stays harmless afterwards: `.git/hooks` and `.git/config` in a repository
   you later use on the host are yours to review.
 
 The full threat model, the placement checks that refuse a policy file inside a writable area,
-and the seventeen known gaps are in [Security model](docs/security.md).
+and the nineteen [known gaps](docs/security.md#known-gaps) are in
+[Security model](docs/security.md).
 
 ## Documentation
 

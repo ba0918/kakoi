@@ -4,6 +4,30 @@
 
 ### Added
 
+- `mounts.mode = "listed"` shows only the base (`/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`,
+  `/etc`, read-only) and the places the policy lists; every other path, such as the sockets
+  under `/run` and the rest of the home, is not there inside. The directories on the way are
+  made read-only, links on a listed path are made again, `/tmp` is an empty one of the
+  isolation's own, and the file `/etc/resolv.conf` points at outside the base is shown.
+  `mounts.system = false` leaves the base out. With the `host` network, abstract UNIX sockets
+  made outside are cut with Landlock (ABI 6); a host without it stops with `bwrap`. Once a layer
+  writes `listed`, an upper layer cannot go back. See
+  [Showing only what is listed](docs/policy.md#showing-only-what-is-listed-mountsmode).
+- `commands.mode = "listed"` with `commands.allow` lets only the listed programs (and the
+  dynamic linker and `kakoi` itself) start inside, with Landlock: `kakoi` becomes the
+  isolation's first process and restricts execution before it starts the command. It is a
+  guardrail, not a boundary (known gaps 18 and 19); a host without Landlock stops with `bwrap`.
+  See [Allowing only listed programs](docs/policy.md#allowing-only-listed-programs-commandsmode).
+- A command guard rule can have `only`: a run whose words match none of its sequences is
+  denied, after the `deny` forms, rule by rule. See [Command guards](docs/policy.md#command-guards).
+- `kakoi init NAME --example listed` writes out the bundled
+  [`examples/profile/listed.toml`](examples/profile/listed.toml); `--example default`, or no
+  `--example`, writes the built-in default as before.
+- `--print-plan` shows the mount mode and `mounts.system`, and the command mode with the number
+  of programs allowed; `--print-plan=json` gains `policy.mounts_mode`, `policy.mounts_system`,
+  `policy.commands_mode`, `commands_allowed`, `skipped_command_allow`, and `not_shown`, and the
+  roles `base` and `resolver-target` in `skipped_paths`; `format_version` stays `1`.
+
 - `--nested=exec|isolate` chooses what a nested run does. `exec`, the default, runs the command
   under the outer isolation as before. `isolate` reads and checks the policy and makes an
   isolation inside the outer one, whose limits still hold there; when it cannot be made (a
