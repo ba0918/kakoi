@@ -88,15 +88,10 @@ impl<'ns> DynamicPermissions<'ns> {
                         self.failed = true;
                         return Err(error);
                     }
-                    // Another attempt only helps when it may use a longer reserve.
                     let room = self.room(grants, Instant::now()).unwrap_or_default();
-                    if room <= reserve {
-                        return Err(io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "DNS staging reserve exceeded",
-                        ));
-                    }
-                    cap = reserve * 2;
+                    cap = next_reserve(reserve, room).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::TimedOut, "DNS staging reserve exceeded")
+                    })?;
                 }
             }
         }
@@ -236,6 +231,14 @@ impl<'ns> DynamicPermissions<'ns> {
 
 /// The first reserve for staging; doubled on each late attempt.
 const INITIAL_RESERVE: Duration = Duration::from_millis(50);
+
+/// The reserve for the attempt after a staging that ran out `late`, when at
+/// most `room` may be reserved now: twice `late`, cut to `room`. `None` when
+/// `room` is no longer than `late`, since another attempt only helps when it
+/// may use a longer reserve.
+pub fn next_reserve(late: Duration, room: Duration) -> Option<Duration> {
+    (room > late).then(|| (late * 2).min(room))
+}
 
 struct Attempt {
     leases: LeaseBook,

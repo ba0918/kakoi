@@ -235,6 +235,10 @@ else:
     raise AssertionError('supervisor descriptors are visible')
 print('bounded', flush=True)
 "#;
+    // A caller's ignored Ctrl+C is rightly passed on to the application, and a
+    // test binary started in the background by a shell inherits one.
+    // SAFETY: changes this process's disposition of one signal to its default.
+    unsafe { libc::signal(libc::SIGINT, libc::SIG_DFL) };
     let (_home, _workspace, plan) = filtered_plan(script);
     let (mut application, _namespace) = spawn(&plan, Duration::from_secs(1));
     let output = read_until_all_exit(application.take_stdout().unwrap());
