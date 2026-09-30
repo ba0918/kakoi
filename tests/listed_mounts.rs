@@ -775,6 +775,40 @@ fn a_hide_mounts_under_outside_what_is_shown_needs_no_mount_list() {
     );
 }
 
+// @kotowari[REQ-468]
+#[test]
+fn a_scan_root_above_what_is_shown_hides_inside_and_skips_outside() {
+    let scene = Scene::new(&[], "");
+    // The root holds both the workspace, which is shown, and the home, which is not.
+    let root = scene.home.parent().unwrap().to_path_buf();
+    scene.write(
+        ".config/kakoi/profile/default.toml",
+        &format!(
+            "[mounts]\nmode = \"listed\"\nrw = [\"${{workspace}}\"]\n\
+             [[mounts.scan]]\nroot = \"{}\"\nnames = [\".env\"]\n",
+            root.display()
+        ),
+    );
+    let inside = scene.workspace.join(".env");
+    fs::write(&inside, "secret\n").unwrap();
+    let outside = scene.write(".env", "secret\n");
+
+    let output = scene.run(&format!("cat '{}'; echo end", inside.display()));
+    let plan = scene.json_plan();
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), "end\n", "{}", output_report(&output));
+    let skipped_roots: Vec<_> = plan["skipped_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|skipped| skipped["role"] == "scan-root")
+        .collect();
+    assert!(skipped_roots.is_empty(), "{plan}");
+    let not_shown: Vec<String> = not_shown(&plan).into_iter().map(|(_, path)| path).collect();
+    assert!(not_shown.contains(&outside.display().to_string()), "{plan}");
+}
+
 /// A name for an abstract UNIX socket no other test uses.
 fn abstract_name() -> String {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
