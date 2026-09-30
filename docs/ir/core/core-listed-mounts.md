@@ -53,6 +53,13 @@
 
 マウントのモードが "listed" のとき、作業ディレクトリの実体がどの `見せた場所` の中にも無ければ、種類 "path" の診断で終わる。この検査は計画表示でも行う。
 
+### REQ-484: "listed" のコマンドの探索
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A57
+- verification: unit
+
+マウントのモードが "listed" のとき、REQ-260 のコマンドの探索は、その場所と実体が隔離の中に見えていない候補を飛ばして、隔離へ渡す PATH の先を探す。どこにも見つからなければ、名前を説明とする command not found で 127 とする。
+
 ### REQ-473: マウントのモードの計画表示
 - kind: ubiquitous
 - source: docs/decision/brainstorm/2026-09-30-allowlist.md#A11, docs/decision/brainstorm/2026-09-30-allowlist.md#A37
@@ -206,4 +213,16 @@ Scenario: リンクで書いた設定をいつものパスで読める
   Given ホームの "a" が "b" を指すリンクで、マウントのモードが "listed" で "~/a" を "ro" に書いている
   When 隔離の中で "~/a" の下のファイルを読む
   Then 読めて、"~/a" は "b" を指すリンクで、そのリンクを書き換えられない
+
+@id=EX-950 @about=REQ-484 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A57
+Scenario: 見せていないシムを飛ばして見えている本物を起動する
+  Given ホストの PATH の先頭の見せていないディレクトリと "/usr/bin" の両方に同じ名前のプログラムがあり、マウントのモードが "listed"
+  When その名前でコマンドを起動する
+  Then "/usr/bin" のプログラムが起動する
+
+@id=EX-951 @about=REQ-484 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A57
+Scenario: 見えている場所に無ければ見つからない
+  Given プログラムがホストの PATH の見せていないディレクトリにだけあり、マウントのモードが "listed"
+  When その名前でコマンドを起動する
+  Then command not found で 127 となる
 ```

@@ -13,10 +13,10 @@
 
 ### REQ-475: 許していないプログラムの起動を止める
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58
 - verification: unit
 
-コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を標準エラーに出して 126 で終わる。
+コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を出して 126 で終わる。`隔離の中の最初のプロセス` が項目を開けなければ、その項目を許さずに進め、標準エラーに警告を1行出す。動的リンカが隔離の中に無ければ、それを許さずに進める。kakoi 自身の実行ファイルの場所が分からなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。
 
 ### REQ-476: 許すプログラムがホストに無いとき
 - kind: ubiquitous
