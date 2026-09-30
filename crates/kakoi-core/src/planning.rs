@@ -19,8 +19,8 @@ use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::{file_id, first_executable, named};
 use crate::guard_placement::{
-    place_guards, real_program, GuardPlan, GuardTable, NameFact, PlacedGuard, GUARD_LOCATION,
-    GUARD_TABLE,
+    name_hidden, place_guards, real_program, GuardPlan, GuardTable, NameFact, PlacedGuard,
+    GUARD_LOCATION, GUARD_TABLE,
 };
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::listed::ListedRoot;
@@ -187,7 +187,12 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             arguments: arguments.to_vec(),
             path: through_guard(
                 command,
-                locate_shown_command(command, search_in, isolation.listed.as_ref())?,
+                locate_shown_command(
+                    command,
+                    search_in,
+                    &isolation.mounts.items,
+                    isolation.listed.as_ref(),
+                )?,
                 path_of(search_in),
                 &isolation.mounts.items,
                 isolation.listed.as_ref(),
@@ -371,11 +376,12 @@ fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFac
         .collect()
 }
 
-/// Stage 9 as the isolation sees it: a name on `PATH` a "listed" isolation does not show
-/// is passed over (specification REQ-484).
+/// Stage 9 as the isolation sees it: a name on `PATH` a "listed" isolation does not show,
+/// or whose place or real file `mounts` hides, is passed over (specification REQ-484).
 fn locate_shown_command(
     command: &OsStr,
     environment: &BTreeMap<OsString, OsString>,
+    mounts: &[ResolvedItem],
     listed: Option<&ListedRoot>,
 ) -> Result<PathBuf, Diagnostic> {
     if listed.is_none() || command.as_bytes().contains(&b'/') {
@@ -386,6 +392,7 @@ fn locate_shown_command(
         listed,
     )
     .into_iter()
+    .filter(|fact| !name_hidden(fact, mounts))
     .map(|fact| fact.candidate)
     .collect();
     resolve_command(command, first_executable(&candidates))

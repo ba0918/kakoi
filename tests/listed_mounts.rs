@@ -689,6 +689,25 @@ fn a_program_reached_through_an_unshown_link_on_path_is_passed_over() {
     assert_eq!(stdout(&output), format!("{}\n", unsafe { libc::getuid() }));
 }
 
+// @kotowari[REQ-484]
+#[test]
+fn a_hidden_program_first_on_path_is_passed_over_for_a_shown_one() {
+    let scene = Scene::new(&[], "hide = [\"${workspace}/bin/id\"]\n");
+    let bin = scene.workspace.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    common::write_executable(&bin.join("id"), "#!/bin/sh\necho hidden id\n");
+    let path = format!("{}:/usr/bin:/bin", bin.display());
+
+    let output = scene.kakoi(
+        &scene.workspace,
+        Some(&path),
+        &[OsStr::new("--"), OsStr::new("id"), OsStr::new("-u")],
+    );
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), format!("{}\n", unsafe { libc::getuid() }));
+}
+
 // @kotowari[REQ-468]
 #[test]
 fn a_guard_passes_over_a_real_program_reached_through_an_unshown_link() {

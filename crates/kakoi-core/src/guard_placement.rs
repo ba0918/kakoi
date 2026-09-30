@@ -50,17 +50,17 @@ pub struct NameFact {
 /// Directories, dangling links, regular files that cannot be executed, and names whose
 /// place or real file is hidden are passed over.
 pub fn real_program<'a>(names: &'a [NameFact], mounts: &[ResolvedItem]) -> Option<&'a NameFact> {
-    names.iter().find(|fact| {
-        fact.executable
-            && fact
-                .real
-                .as_deref()
-                .is_some_and(|real| !hidden(real, mounts))
-            && !fact
-                .name
-                .as_deref()
-                .is_some_and(|name| hidden(name, mounts))
-    })
+    names
+        .iter()
+        .find(|fact| fact.executable && fact.real.is_some() && !name_hidden(fact, mounts))
+}
+
+/// Whether `mounts` hides where the name of `fact` is or what it resolves to.
+pub(crate) fn name_hidden(fact: &NameFact, mounts: &[ResolvedItem]) -> bool {
+    [fact.name.as_deref(), fact.real.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|path| hidden(path, mounts))
 }
 
 /// A file told apart from every other by its device and inode, whatever path names it:
