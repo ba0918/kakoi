@@ -6,10 +6,10 @@
 
 ### REQ-151: 固定キー・TOML・必須値
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-30-allowlist.md#A7, docs/decision/brainstorm/2026-09-30-allowlist.md#A30
 - verification: unit
 
-TOML。固定キーは mounts の rw・rw-file・rw-copy・ro・hide・scan・hide-mounts、scan の root・names・exclude・prune、hide-mounts の under・fstype、env の mode・pass・set・unset・path-prepend、secrets、git.instead-of とする。
+TOML。固定キーは mounts の mode・system・rw・rw-file・rw-copy・ro・hide・scan・hide-mounts、commands の mode・allow、scan の root・names・exclude・prune、hide-mounts の under・fstype、env の mode・pass・set・unset・path-prepend、secrets、git.instead-of とする。
 
 network と process の追加キーはネットワーク IR で、commands.guard の規則のキーは core-command-guard-rules.md で定める。固定のキー名について、これ以外の固定キーはポリシー読み込み失敗。TOML として解析できないファイルもポリシー読み込み失敗。"env.set"、"secrets"、"git.instead-of" の 3 つのテーブルだけは、キー名が利用者の書く値である。
 
@@ -117,11 +117,12 @@ network と process の追加キーはネットワーク IR で、commands.guard
 | "${config_dir}" | 設定ディレクトリの実体のパス。設定ディレクトリが存在しなければ値を持たない |
 
 ### TBL-152: 段の合成
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-30-allowlist.md#A4, docs/decision/brainstorm/2026-09-30-allowlist.md#A7, docs/decision/brainstorm/2026-09-30-allowlist.md#A30
 
 | 種類 | 対象 | 規則 |
 |---|---|---|
-| リスト | "mounts.rw" "rw-file" "rw-copy" "ro" "hide" "scan" "hide-mounts"、"env.pass" "unset" "path-prepend"、"commands.guard" | 連結。上の段が下の段に足す |
+| リスト | "mounts.rw" "rw-file" "rw-copy" "ro" "hide" "scan" "hide-mounts"、"env.pass" "unset" "path-prepend"、"commands.guard" "allow" | 連結。上の段が下の段に足す |
+| 厳しい側が残るスカラー | "mounts.mode"、"commands.mode"、"mounts.system" | どれかの段が "listed"（"mounts.system" は false）なら、上の段の値によらずそれになる |
 | スカラー | "network.mode"、"env.mode" | 上の段が上書き |
 | テーブル | "env.set"、"secrets"、"git.instead-of" | キー単位でマージ。同じキーは上の段が勝つ |
 
