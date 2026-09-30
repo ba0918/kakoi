@@ -19,12 +19,24 @@ use crate::wildcard::matches;
 pub const SECRET_VALUE_LIMIT: usize = 64 * 1024;
 
 /// What the outer layer found at a secret's file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum SecretFile {
     Absent,
     Bytes(Vec<u8>),
     /// Exists but cannot be used, with the reason.
     Unreadable(String),
+}
+
+/// Written by hand for the reason given at `Environment`'s: the content read is the
+/// secret's value, and every type holding a `SecretFile` inherits this form.
+impl fmt::Debug for SecretFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SecretFile::Absent => f.write_str("Absent"),
+            SecretFile::Bytes(bytes) => write!(f, "Bytes(<{} bytes>)", bytes.len()),
+            SecretFile::Unreadable(reason) => f.debug_tuple("Unreadable").field(reason).finish(),
+        }
+    }
 }
 
 /// The final environment. The names of the secrets are kept so that any display masks

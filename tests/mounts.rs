@@ -11,7 +11,7 @@ use common::TempDir;
 use kakoi_core::diagnostic::{Diagnostic, Kind};
 use kakoi_core::environment::{HostEnvironment, RealEntry};
 use kakoi_core::layers::{Directive, Layer, LayerOrigin};
-use kakoi_core::mount_facts::collect_mount_facts;
+use kakoi_core::mount_facts::{collect_generator_facts, collect_mount_facts};
 use kakoi_core::mount_list::read_mount_list;
 use kakoi_core::mounts::{
     candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
@@ -1069,6 +1069,27 @@ fn the_directories_a_resolution_passes_through_are_reported_by_their_real_path()
         .contains(&root));
 }
 
+// The mounts to hide are chosen by the real path the facts hold for the `under`, so the
+// facts of those mounts are taken from that same real path, not from a second lookup that
+// could land elsewhere.
+// @kotowari[REQ-169]
+#[test]
+fn the_mounts_under_a_hide_mounts_under_are_looked_up_by_its_real_path_in_the_facts() {
+    let mut facts = Facts::new()
+        .link_to_dir("/nonexistent-under", "/")
+        .mount_facts();
+
+    collect_generator_facts(
+        &Candidates {
+            hide_mounts_under: vec![PathBuf::from("/nonexistent-under")],
+            ..Candidates::default()
+        },
+        &mut facts,
+    );
+
+    assert_eq!(facts.entry(Path::new("/")), dir_at("/"));
+}
+
 // @kotowari[REQ-169]
 #[test]
 fn mount_facts_are_collected_from_the_file_system() {
@@ -1078,7 +1099,13 @@ fn mount_facts_are_collected_from_the_file_system() {
     std::os::unix::fs::symlink(root.join("proj"), root.join("link")).unwrap();
 
     let facts = collect_mount_facts(&Candidates {
-        paths: vec![root.join("link"), env.clone(), root.join("missing")],
+        // The scan root and the `under` are among the paths, as `candidates` puts them.
+        paths: vec![
+            root.join("link"),
+            env.clone(),
+            root.join("missing"),
+            PathBuf::from("/"),
+        ],
         scans: vec![ScanRequest {
             root: root.join("link"),
             names: vec![".env".to_string()],

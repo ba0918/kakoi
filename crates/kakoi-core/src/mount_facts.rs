@@ -64,7 +64,7 @@ pub fn collect_generator_facts(candidates: &Candidates, facts: &mut MountFacts) 
         let unders: Vec<_> = candidates
             .hide_mounts_under
             .iter()
-            .filter_map(|under| real_entry(under).path().map(Path::to_path_buf))
+            .filter_map(|under| facts.entry(under).path().map(Path::to_path_buf))
             .collect();
         for mount in &facts.mounts {
             if unders.iter().any(|under| mount.target.starts_with(under)) {

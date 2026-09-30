@@ -126,10 +126,7 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         root
     });
     let protected = ProtectedPaths {
-        shared_files: inputs
-            .shared_files
-            .filter(|_| places_shared_files(inputs.policy.network_mode, &mounts.items))
-            .map(Path::to_path_buf),
+        shared_files: used_shared_files(inputs, &mounts.items),
         ..protected_paths(inputs.expanded, inputs.layers, inputs.config_dir)
     };
     let mut warnings = check_placement(
@@ -201,6 +198,16 @@ fn check_current_dir_shown(current_dir: &Path, root: &ListedRoot) -> Result<(), 
     )))
 }
 
+/// The shared file place when the run puts anything from it: what the placement check
+/// protects and what the arguments bind from are the same place, or none (specification
+/// REQ-460 and REQ-462).
+fn used_shared_files(inputs: &Inputs, items: &[ResolvedItem]) -> Option<PathBuf> {
+    inputs
+        .shared_files
+        .filter(|_| places_shared_files(inputs.policy.network_mode, items))
+        .map(Path::to_path_buf)
+}
+
 /// Whether a run puts anything from the shared file place: the empty file of a `hide` of a
 /// file, or the resolver configuration of filtered (specification REQ-460). Only such a
 /// run uses the place, and only its place is protected (specification REQ-462).
@@ -258,7 +265,7 @@ pub fn plan(
     commands: Option<CommandLimits>,
 ) -> Plan {
     let provisions = Provisions {
-        shared_files: inputs.shared_files.map(Path::to_path_buf),
+        shared_files: used_shared_files(inputs, &isolation.mounts.items),
         tun: inputs.policy.allow_nested_filtered,
         outer_guard: inputs.outer_guard,
         listed: isolation.listed.clone(),
@@ -344,7 +351,8 @@ pub enum Argument {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Provisions {
     /// The shared file place the files that are always the same are bound from; none
-    /// when they are made from data (specification REQ-460).
+    /// when they are made from data, and when the run puts nothing from the place
+    /// (specification REQ-460).
     pub shared_files: Option<PathBuf>,
     /// Whether the host's tun device is shown inside (specification REQ-458).
     pub tun: bool,

@@ -391,6 +391,17 @@ fn a_secret_git_config_count_that_is_not_a_number_is_reported_without_its_value(
 
 // @kotowari[REQ-274]
 #[test]
+fn the_debug_form_of_a_secret_file_read_does_not_show_its_content() {
+    let content = b"hunter2\n".to_vec();
+    let debug = format!("{:?}", SecretFile::Bytes(content.clone()));
+
+    // A derived form would show the bytes as numbers, not as text.
+    assert!(!debug.contains(&format!("{content:?}")[1..8]), "{debug}");
+    assert!(!debug.contains("hunter2"), "{debug}");
+}
+
+// @kotowari[REQ-274]
+#[test]
 fn secret_values_never_appear_in_the_plan_or_its_warnings() {
     let assembled = assemble(
         "[secrets]\nS = \"/home/u/tokens/s\"\nT = \"/home/u/tokens/t\"",
