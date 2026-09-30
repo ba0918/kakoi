@@ -161,17 +161,22 @@ impl DnsRuntime {
 
     /// Reads the host's DNS configuration when it is due. A changed content takes
     /// effect for every question from now on, including those already asked.
-    fn follow(&mut self, now: Instant) -> io::Result<()> {
+    fn follow(&mut self, now: Instant) -> io::Result<bool> {
         let Some(following) = &mut self.following else {
-            return Ok(());
+            return Ok(true);
         };
         if now < following.next {
-            return Ok(());
+            return Ok(true);
         }
+        // Reading a changed file during activation could retire an answer
+        // whose old permission transaction is still able to commit.
+        let Some(_activation) = self.adoption.try_activation_guard()? else {
+            return Ok(false);
+        };
         following.next = now + FOLLOW_INTERVAL;
         let text = std::fs::read_to_string(&following.source.path).ok();
         if text == following.text {
-            return Ok(());
+            return Ok(true);
         }
         let upstreams = text
             .as_deref()
@@ -192,7 +197,7 @@ impl DnsRuntime {
         self.retired.extend(self.inflight.keys().copied());
         self.retired.extend(self.adopting.keys().copied());
         self.workers.retire();
-        Ok(())
+        Ok(true)
     }
 
     fn dispatch(
@@ -235,7 +240,9 @@ impl DnsRuntime {
     }
 
     fn poll_inner(&mut self, now: Instant) -> io::Result<()> {
-        self.follow(now)?;
+        if !self.follow(now)? {
+            return Ok(());
+        }
         // Collect before admitting more work so physical slots are reclaimed
         // without confusing an expired request with a finished worker.
         self.collect_adoptions(now)?;
