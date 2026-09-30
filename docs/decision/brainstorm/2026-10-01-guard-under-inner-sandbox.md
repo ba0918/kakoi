@@ -11,7 +11,7 @@ codex は自分の sandbox で `/dev` を作り直すので、見張り役の表
 事実（同日、利用者の codex のセッション）: 隔離の最初のプロセスの引数に、`--ro-bind ~/.cargo/bin/kakoi ~/.local/bin/mise` と `--ro-bind ~/.local/bin/mise /dev/kakoi-guard/real/1/mise` があった。`~/.local/share/mise/shims/gh` は `~/.local/bin/mise` へのリンクである。
 事実（同日、利用者）: codex 0.159.2 は、起動引数に `--dangerously-bypass-approvals-and-sandbox` を付けても、設定ファイルに書いた `sandbox_mode` の sandbox でコマンドを動かした。設定ファイルを `sandbox_mode = "danger-full-access"` にすると git が動いた。コマンドを動かしていたのは常駐する `codex app-server --managed-daemon` の子だった。
 
-Position: A1〜A4 を IR（REQ-446、REQ-450、REQ-453、TBL-160、REQ-359、EX-658、EX-964、EX-965）に写し、照合を 2 回行って指摘 0 件。承認待ち。
+Position: A1〜A4 は承認・コミット済み（160a9fc）。差分レビューの指摘から A5・A6 を足した。承認待ち。
 
 ## Agreements
 
@@ -19,13 +19,26 @@ Position: A1〜A4 を IR（REQ-446、REQ-450、REQ-453、TBL-160、REQ-359、EX-
   - why: mise や busybox のように、一つの実行ファイルが起動された名前で別のプログラムとして動くものに重ねると、そのプログラムの規則が、その実行ファイルを通して起動するほかのすべてのプログラムに当たる。
   - rejected: 今のまま、同じ本物を指す名前にすべての規則を当て、既知の隙間に書くだけにする案。
   - decided_by: 利用者（推奨を採用）
+  - superseded_by: [A5](#A5)
 - A2 起動された実行ファイルのファイル名が "kakoi" でなく、見張り役の場所とプログラムの対応を読めないときは、kakoi として動かず、コマンドを実行せずに種類 "guard" の診断で 126 とする。説明には対応の置き場を読めないことと、`/dev` を作り直す sandbox の中ではこの見張り役を使えないことを含める。ファイル名が "kakoi" なら、今までどおり見張り役として動かない。
   - why: 対応を読めないときに kakoi として動くと、`git --version` が kakoi の版を返し、`git status` が kakoi の使い方の誤りになるなど、原因の分からない壊れ方をする。見張り役として重ねた場所から起動された kakoi は、その場所のファイル名（`git`）で起動される。
   - rejected: 今のまま kakoi として動く案。
   - decided_by: 利用者（推奨を採用）
+  - superseded_by: [A6](#A6)
 - A3 A2 の組み合わせ（"guard-absolute-path" の見張り役と、`/dev` を作り直す sandbox を中で作るツール）で、そのプログラムを使えないことを既知の隙間に加え、中で sandbox を作るツールを使うならその sandbox を切るか "guard-absolute-path" を外す、と案内する。
   - why: A2 は壊れ方を分かるようにするだけで、使えるようにはしない。
   - decided_by: 利用者（推奨を採用。「A と一緒に B」の提案）
 - A4 codex のシムの見本は変えず、codex では起動引数の `--dangerously-bypass-approvals-and-sandbox` が設定ファイルの `sandbox_mode` を上書きしなかったことと、そのときは設定ファイルで `sandbox_mode = "danger-full-access"` にすることを、シムの説明の文書に書く。
   - why: シムが起動引数で渡せるものでは直らない（利用者の実測）。書くのは codex の一つの版での観測であり、シムの雛形の仕組みは変えない。
   - decided_by: LLM（利用者の実測の整理）
+- A5 A1 の「実体のファイル名がそのプログラムの名前と違う」は、その実体を指すどのプログラムの名前とも違うことを指す。どれか一つの名前と同じなら、その実体を指すすべてのプログラムについて実体に重ね、本物を置き直す。名前の違う実体には、版や別の実装の名前を持つ普通のリンク（`python3` が `python3.12` を、`vi` が `vim.basic` を指すなど）も当たり、そのプログラムは絶対パスで起動すると見張られない。このことを文書に書く。
+  - why: `git` と、`git` へのリンクの `git2` の両方に規則があるとき、実体 `git` には `git` の規則で見張り役が重なるのに、A1 の書き方では `git2` について「重ねなかった」と示し、計画が事実と食い違った（差分レビューで実測）。版の名前のリンクが対象になることは、mise の例だけでは読み取れない。
+  - decided_by: LLM（差分レビューの指摘の整理）
+- A6 A2 で止めるのは、起動された実行ファイルのファイル名が "kakoi" でなく、見張り役の場所とプログラムの対応を読めず、さらに環境変数 `KAKOI` が "1" のときに限る。`KAKOI` が "1" でなければ、今までどおり kakoi として動く。
+  - why: A2 のままでは、隔離の外で "kakoi" 以外の名前に置いた kakoi（版で名前を分けた写し、パッケージ管理が包んで改名した実体）が、どの起動でも見張り役の診断で止まった（差分レビューで実測）。見張り役は隔離の中で起動され、隔離の中には `KAKOI=1` がある（中で sandbox を作るツールもふつう環境を引き継ぐ）。その sandbox が環境を消すと、見張り役は A2 の前と同じく kakoi として動く。
+  - decided_by: LLM（差分レビューの指摘の整理）
+
+## Revisions
+
+- A1 の判定を A5 で「実体を指すどのプログラムの名前とも違う」に絞った。
+- A2 の止まる条件に、A6 で環境変数 KAKOI が "1" であることを加えた。
