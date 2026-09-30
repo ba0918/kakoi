@@ -189,7 +189,8 @@ On top of the written layers, `kakoi` generates `hide` items:
 A scan hit that is a symbolic link is hidden at its target, except when the target lies inside
 an `ro` item you wrote: hiding it would empty your own read-only file, so the link is left
 visible and the plan says why. If that `ro` item could itself be re-pointed from inside (its
-path passes through a writable item), the launch stops with `path` instead. With a
+path passes through a writable item), the launch stops with `path` instead; when several `ro`
+items enclose the target, one that could be re-pointed is enough to stop it. With a
 `hide-mounts` written, the mount list must be readable, or the launch stops with `path` rather
 than miss a mount.
 
