@@ -19,6 +19,7 @@ pub mod executables;
 pub mod guard;
 pub mod guard_placement;
 pub mod isolated_env;
+pub mod landlock;
 pub mod launch;
 pub mod layers;
 pub mod listed;

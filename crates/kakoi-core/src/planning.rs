@@ -25,7 +25,7 @@ use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
 };
-use crate::policy::ListMode;
+use crate::policy::{ListMode, NetworkMode};
 use crate::secret_facts::read_secret_files;
 use crate::shared_files;
 use crate::variables::derive_variables;
@@ -54,6 +54,8 @@ pub struct Request {
     /// Whether the command guards of the run around this nested one are handed on: they
     /// were there when it started (specification REQ-465).
     pub outer_guard: bool,
+    /// The host's Landlock ABI version; none when it has no Landlock.
+    pub landlock_abi: Option<u32>,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -126,6 +128,20 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     if policy.allow_nested_filtered && Path::new(TUN_DEVICE).symlink_metadata().is_err() {
         return Err(Diagnostic::bwrap(format!(
             "network.allow-nested-filtered shows {TUN_DEVICE} inside, but the host has none"
+        )));
+    }
+    // With `bwrap`, since the scope is a fact of the host as bwrap is (specification
+    // REQ-472).
+    if policy.mounts_mode == ListMode::Listed
+        && policy.network_mode == NetworkMode::Host
+        && !request
+            .landlock_abi
+            .is_some_and(|abi| abi >= crate::landlock::SCOPE_ABI)
+    {
+        return Err(Diagnostic::bwrap(format!(
+            "the \"listed\" mount mode with the host network needs the Landlock scope on \
+             abstract UNIX sockets (ABI {}), which the host does not have",
+            crate::landlock::SCOPE_ABI
         )));
     }
     // A plan that is only shown, that of a nested run without `--nested=isolate`,

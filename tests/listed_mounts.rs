@@ -672,3 +672,157 @@ fn a_scan_root_or_a_hide_mounts_under_outside_what_is_shown_is_skipped_with_a_re
         "{arguments:?}"
     );
 }
+
+/// A name for an abstract UNIX socket no other test uses.
+fn abstract_name() -> String {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    format!(
+        "kakoi-test-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    )
+}
+
+/// A Python script in the workspace that connects to the abstract UNIX socket named by
+/// its argument and prints how it went.
+fn connect_script(scene: &Scene) -> PathBuf {
+    let script = scene.workspace.join("connect.py");
+    fs::write(
+        &script,
+        "import socket, sys\n\
+         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n\
+         try:\n    s.connect('\\0' + sys.argv[1])\n    print('connected')\n\
+         except PermissionError:\n    print('refused')\n",
+    )
+    .unwrap();
+    script
+}
+
+// @kotowari[EX-916]
+#[test]
+fn ex_916_an_abstract_socket_made_outside_cannot_be_reached_under_listed_and_host() {
+    use std::os::linux::net::SocketAddrExt;
+    let name = abstract_name();
+    let address = std::os::unix::net::SocketAddr::from_abstract_name(name.as_bytes()).unwrap();
+    let _listener = std::os::unix::net::UnixListener::bind_addr(&address).unwrap();
+    let scene = Scene::new(&[], "");
+    let connect = connect_script(&scene);
+
+    let output = scene.run(&format!(
+        "/usr/bin/python3 '{}' '{name}'",
+        connect.display()
+    ));
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), "refused\n");
+}
+
+// @kotowari[REQ-472]
+#[test]
+fn an_abstract_socket_made_inside_can_still_be_reached_from_inside() {
+    let scene = Scene::new(&[], "");
+    let name = abstract_name();
+    let connect = connect_script(&scene);
+    let serve = scene.workspace.join("serve.py");
+    fs::write(
+        &serve,
+        "import socket, subprocess, sys\n\
+         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n\
+         server.bind('\\0' + sys.argv[2])\n\
+         server.listen(1)\n\
+         subprocess.run(['/usr/bin/python3', sys.argv[1], sys.argv[2]], check=True)\n",
+    )
+    .unwrap();
+
+    let output = scene.run(&format!(
+        "/usr/bin/python3 '{}' '{}' '{name}'",
+        serve.display(),
+        connect.display()
+    ));
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), "connected\n");
+}
+
+impl Scene {
+    /// The plan `plan_for` makes of the scene with the network mode written in the
+    /// policy file `policy`, the command `command`, and the Landlock ABI version `abi`
+    /// standing for the host's.
+    fn plan_with_landlock(
+        &self,
+        policy: &str,
+        command: &[&str],
+        abi: Option<u32>,
+    ) -> Result<kakoi_core::plan::Plan, Diagnostic> {
+        let policy_file = self.home.join("policy.toml");
+        fs::write(&policy_file, policy).unwrap();
+        let mut host = BTreeMap::new();
+        host.insert(OsString::from("HOME"), self.home.clone().into_os_string());
+        host.insert(
+            OsString::from("XDG_CONFIG_HOME"),
+            self.home.join(".config").into_os_string(),
+        );
+        host.insert(
+            OsString::from("PATH"),
+            std::env::var_os("PATH").unwrap_or_default(),
+        );
+        kakoi_core::planning::plan_for(&kakoi_core::planning::Request {
+            layers: kakoi_core::layers::LayerSelection {
+                profile: "default".into(),
+                policy_file: Some(policy_file),
+                rw: vec![],
+                hide: vec![],
+            },
+            workspace: Some(self.workspace.clone()),
+            command: command.iter().map(OsString::from).collect(),
+            current_dir: self.workspace.clone(),
+            host,
+            executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
+            nested: false,
+            applied: true,
+            outer_guard: false,
+            landlock_abi: abi,
+        })
+    }
+}
+
+// @kotowari[EX-917]
+#[test]
+fn ex_917_a_host_without_the_abstract_socket_scope_does_not_start_listed_and_host() {
+    let scene = Scene::new(&[], "");
+
+    for abi in [None, Some(5)] {
+        let error = scene
+            .plan_with_landlock("[network]\nmode = \"host\"\n", &["/bin/true"], abi)
+            .unwrap_err();
+        assert_eq!(
+            error.kind(),
+            kakoi_core::diagnostic::Kind::Bwrap,
+            "{error:?}"
+        );
+        assert_eq!(error.exit_code(), 125);
+    }
+}
+
+// @kotowari[REQ-472]
+#[test]
+fn listed_with_the_none_network_needs_no_abstract_socket_scope() {
+    let scene = Scene::new(&[], "");
+    let marker = scene.workspace.join("ran");
+
+    let plan = scene
+        .plan_with_landlock(
+            "[network]\nmode = \"none\"\n",
+            &["/usr/bin/touch", marker.to_str().unwrap()],
+            None,
+        )
+        .unwrap();
+    let output = kakoi_core::launch::assemble(&plan)
+        .unwrap()
+        .command
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    assert!(marker.exists());
+}

@@ -112,6 +112,7 @@ where
         // Only kakoi makes `/dev`, so what is there was placed by the run around this one
         // (specification REQ-465).
         outer_guard: nested && applied && Path::new(GUARD_ROOT).symlink_metadata().is_ok(),
+        landlock_abi: kakoi_core::landlock::abi_version(),
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,

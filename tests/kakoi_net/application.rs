@@ -87,6 +87,7 @@ print('isolated')
         nested: false,
         applied: true,
         outer_guard: false,
+        landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
@@ -225,6 +226,7 @@ print('managed-dns')
         nested: false,
         applied: true,
         outer_guard: false,
+        landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();
     let mut launch = application::prepare(&plan, &ns).unwrap();
@@ -264,6 +266,15 @@ print('managed-dns')
 /// workspace `rw` and `mounts`, over a network namespace of its own, and returns the
 /// plan's bwrap arguments and the output.
 fn filtered_run(mounts: &str, script: &str) -> (Vec<String>, std::process::Output) {
+    filtered_run_with_landlock(mounts, script, kakoi_core::landlock::abi_version())
+}
+
+/// `filtered_run` with the Landlock ABI version `abi` standing for the host's.
+fn filtered_run_with_landlock(
+    mounts: &str,
+    script: &str,
+    abi: Option<u32>,
+) -> (Vec<String>, std::process::Output) {
     let (home, workspace) = home_with_workspace();
     home.write(
         ".config/kakoi/profile/default.toml",
@@ -292,6 +303,7 @@ fn filtered_run(mounts: &str, script: &str) -> (Vec<String>, std::process::Outpu
         nested: false,
         applied: true,
         outer_guard: false,
+        landlock_abi: abi,
     })
     .unwrap();
     let arguments = plan
@@ -353,4 +365,17 @@ fn a_listed_filtered_isolation_reads_its_own_resolver_configuration_without_the_
         makes_directory(&arguments, std::path::Path::new("/etc")),
         "{arguments:?}"
     );
+}
+
+// @kotowari[REQ-472]
+#[test]
+fn listed_with_the_filtered_network_needs_no_abstract_socket_scope() {
+    let (_, output) = filtered_run_with_landlock("mode = 'listed'\n", "print('ran')", None);
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"ran\n");
 }
