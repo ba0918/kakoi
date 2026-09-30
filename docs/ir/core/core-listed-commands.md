@@ -13,10 +13,10 @@
 
 ### REQ-475: 許していないプログラムの起動を止める
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58, docs/decision/brainstorm/2026-09-30-allowlist.md#A63
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58, docs/decision/brainstorm/2026-09-30-allowlist.md#A63, docs/decision/brainstorm/2026-09-30-allowlist.md#A71
 - verification: unit
 
-コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである。許した項目の実体を見張り役が "guard-absolute-path" で置き直したときは、置き直した先をその項目の実体として許す。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を出して 126 で終わる。`隔離の中の最初のプロセス` が項目を開けなければ、その項目を許さずに進め、標準エラーに警告を1行出す。動的リンカが隔離の中に無ければ、それを許さずに進める。kakoi 自身の実行ファイルの場所が分からなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。
+コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである（外の見張り役を引き継ぐ入れ子では、REQ-485 の外の見張り役の実行ファイルも許す）。許した項目の実体を見張り役が "guard-absolute-path" で置き直したときは、置き直した先をその項目の実体として許す。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を出して 126 で終わる。`隔離の中の最初のプロセス` が項目を開けなければ、その項目を許さずに進め、標準エラーに警告を1行出す。動的リンカが隔離の中に無ければ、それを許さずに進める。kakoi 自身の実行ファイルの場所が分からなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。
 
 ### REQ-476: 許すプログラムがホストに無いとき
 - kind: ubiquitous
@@ -41,10 +41,10 @@
 
 ### REQ-485: 外の見張り役を引き継ぐ入れ子とコマンドのモード
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A65, docs/decision/brainstorm/2026-09-30-allowlist.md#A66, docs/decision/brainstorm/2026-09-30-allowlist.md#A67
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A65, docs/decision/brainstorm/2026-09-30-allowlist.md#A67, docs/decision/brainstorm/2026-09-30-allowlist.md#A68, docs/decision/brainstorm/2026-09-30-allowlist.md#A69, docs/decision/brainstorm/2026-09-30-allowlist.md#A70
 - verification: unit
 
-"--nested=isolate" の起動が "/dev/kakoi-guard" を引き継ぐ（REQ-465）ときも、中の合成後のポリシーのコマンドのモード "listed" を使える。このとき、外の見張り役の規則と実行ファイルは中の隔離でも外と同じに働き、中の Landlock は外の見張り役の実行ファイルを自動で許す。中の "commands.allow" で許したプログラムは、名前で起動しても絶対パスで起動しても外の見張り役を通って起動し、外の規則で禁止なら REQ-447 のとおり 126 で終わる。中で許していないプログラムは、外の見張り役があっても起動しない。外の見張り役が本物の場所に重なっているときは、中の "commands.allow" にその場所を書いた項目を本物の実体として扱う。中の合成後のポリシーにも見張り役の規則があるときは REQ-466 のとおり止める。
+"--nested=isolate" の起動が "/dev/kakoi-guard" を引き継ぐ（REQ-465）ときも、中の合成後のポリシーのコマンドのモード "listed" を使える。このとき、外の見張り役の規則と実行ファイルは中の隔離でも外と同じに働き、中の Landlock は外の見張り役の実行ファイル（見張り役の置き場にあるものも本物の場所に重なっているものもすべて）を自動で許す。中の "commands.allow" で許したプログラムは、名前で起動したときと、"guard-absolute-path" の見張り役が覆う場所を絶対パスで起動したときに外の見張り役を通って起動し、外の規則で禁止なら REQ-447 のとおり 126 で終わる。中で許していないプログラムは、外の見張り役があっても起動しない。外の見張り役が本物の場所に重なっているときは、中の "commands.allow" にその場所を書いた項目を本物の実体として扱う。外の見張り役の表を読めないか解釈できなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。中の合成後のポリシーにも見張り役の規則があるときは REQ-466 のとおり止める。
 
 ### REQ-479: 見せるものを選ぶ形の公開文書
 - kind: ubiquitous
@@ -153,13 +153,13 @@ Scenario: 外の見張り役の下で、中で許したプログラムは外の�
   When 外の隔離の中で "--nested=isolate" を付け、中で "git --version" と "git push" を起動する
   Then "git --version" は動き、"git push" は外の見張り役で 126 になる
 
-@id=EX-953 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65,docs/decision/brainstorm/2026-09-30-allowlist.md#A66
+@id=EX-953 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65,docs/decision/brainstorm/2026-09-30-allowlist.md#A70
 Scenario: 外の見張り役の下でも、中で許していないプログラムは起動しない
   Given 外のポリシーが git の見張り役の規則を持ち、中のポリシーがコマンドのモードを "listed" にして "/bin/sh" だけを許している
   When 外の隔離の中で "--nested=isolate" を付け、中で git を起動する
   Then git は起動しない
 
-@id=EX-954 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65
+@id=EX-954 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65,docs/decision/brainstorm/2026-09-30-allowlist.md#A69
 Scenario: 本物の場所に重なる外の見張り役も中で効く
   Given 外のポリシーが "guard-absolute-path = true" の git の見張り役の規則で "git push" を禁じ、中のポリシーがコマンドのモードを "listed" にして "/usr/bin/git" と "/bin/sh" を許している
   When 外の隔離の中で "--nested=isolate" を付け、中で "/usr/bin/git --version" と "/usr/bin/git push" を起動する
