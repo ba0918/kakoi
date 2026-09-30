@@ -796,13 +796,14 @@ fn address_records_outside_the_question_do_not_reach_the_application() {
     assert!(!screened.wire.windows(16).any(|data| data == v6));
 }
 
+// @kotowari[REQ-024]
 #[test]
-fn an_unrelated_name_sharing_an_allowed_address_does_not_reach_the_application() {
+fn an_unrelated_name_sharing_an_allowed_address_cannot_extend_its_permission() {
     let question = Question::parse(&query(1)).unwrap();
     let start = Instant::now();
     let mut wire = response(1, 0x80);
     answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
-    answer(&mut wire, "other.example.com", 1, 30, &[1, 1, 1, 1]);
+    answer(&mut wire, "other.example.com", 1, 300, &[1, 1, 1, 1]);
     let response = question.validate_response(&wire).unwrap();
     let AddressProgress::Complete(candidates) = question
         .address_chain(16)
@@ -812,8 +813,14 @@ fn an_unrelated_name_sharing_an_allowed_address_does_not_reach_the_application()
     else {
         panic!("no addresses")
     };
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].deadline, start + Duration::from_secs(30));
     let screened = response
         .screen_addresses(&candidates, |_| DnsAdmission::Dynamic)
         .unwrap();
-    assert_eq!(answer_ttls(&screened.wire).len(), 1);
+    assert_eq!(screened.dynamic_grants.len(), 1);
+    assert_eq!(
+        screened.dynamic_grants[0].deadline,
+        start + Duration::from_secs(30)
+    );
 }
