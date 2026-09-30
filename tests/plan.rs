@@ -411,12 +411,13 @@ fn a_scan_link_into_a_swappable_ro_item_inside_an_unswappable_one_is_a_path_diag
     .unwrap_err();
 
     assert_eq!(diagnostic.kind(), Kind::Path, "{diagnostic}");
+    let description = diagnostic.description();
+    assert!(description.contains("/home/u/proj/.env"), "{diagnostic}");
     assert!(
-        diagnostic
-            .description()
-            .contains("/home/u/.claude/settings.json"),
+        description.contains("`~/.claude/settings.json`"),
         "{diagnostic}"
     );
+    assert!(!description.contains("`/home/u`"), "{diagnostic}");
 }
 
 // @kotowari[REQ-295]
