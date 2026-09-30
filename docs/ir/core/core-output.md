@@ -104,9 +104,9 @@ Scenario: 所在確認の後に実行できないbwrap
   When host起動でbwrapをexecする
   Then bwrapの診断で125となる
 
-@id=EX-756 @about=REQ-401 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A11
+@id=EX-756 @about=REQ-401 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A11,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A8
 Scenario: 包んだコマンドのexecの失敗
-  Given 包むコマンドが隠された場所にある
+  Given 包むコマンドが隔離の中に無いインタプリタを指す実行可能なスクリプトである
   When host起動で包んだコマンドのexecが失敗する
   Then kakoiの診断を出さずbwrapの失敗出力と終了コードを返す
 
