@@ -522,7 +522,8 @@ deepest existing ancestor is checked, because what is missing can be created fro
 isolation and read on the next launch.
 
 The shared file place `$XDG_RUNTIME_DIR/kakoi/` is protected the same way whenever a launch
-uses it (see [Hidden files and the shared file place](#hidden-files-and-the-shared-file-place)): it
+uses it, that is, a launch that is not nested and hides a file or runs in `filtered` mode (see
+[Hidden files and the shared file place](#hidden-files-and-the-shared-file-place)): it
 must not be inside an `rw` or `rw-file` item, and no such item may lie inside it. Either stops the
 launch, and `--print-plan`, with a `path` diagnostic, after the other protected paths.
 

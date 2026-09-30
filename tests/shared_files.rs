@@ -504,6 +504,30 @@ fn req_462_the_place_is_checked_only_when_it_would_be_used() {
     assert_eq!(assert_quiet(&without), "ran\n");
 }
 
+// @kotowari[REQ-462]
+#[test]
+fn req_462_a_run_that_places_nothing_from_the_place_may_cover_it_with_rw() {
+    let scene = Scene::new();
+    scene.home.write(
+        ".config/kakoi/profile/default.toml",
+        format!(
+            "[mounts]\nrw = [\"${{workspace}}\", \"{}\"]\n",
+            scene.runtime.display()
+        ),
+    );
+
+    let plan = scene
+        .kakoi(Some(scene.runtime.as_os_str()))
+        .arg("--print-plan")
+        .output()
+        .unwrap();
+    let run = scene.run_with_place("echo ran");
+
+    let report = output_report(&plan);
+    assert_eq!(plan.status.code(), Some(0), "{report}");
+    assert_eq!(assert_quiet(&run), "ran\n");
+}
+
 // @kotowari[REQ-295, REQ-462]
 #[test]
 fn req_295_the_place_is_named_after_the_other_protected_paths() {

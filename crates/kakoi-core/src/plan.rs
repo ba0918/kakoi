@@ -107,7 +107,10 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         &swappable_ro,
     )?;
     let protected = ProtectedPaths {
-        shared_files: inputs.shared_files.map(Path::to_path_buf),
+        shared_files: inputs
+            .shared_files
+            .filter(|_| places_shared_files(inputs.policy.network_mode, &mounts.items))
+            .map(Path::to_path_buf),
         ..protected_paths(inputs.expanded, inputs.layers, inputs.config_dir)
     };
     let mut warnings = check_placement(
@@ -138,6 +141,16 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         warnings,
         policy_sources: policy_sources(inputs.layers, &facts.mounts),
     })
+}
+
+/// Whether a run puts anything from the shared file place: the empty file of a `hide` of a
+/// file, or the resolver configuration of filtered (specification REQ-460). Only such a
+/// run uses the place, and only its place is protected (specification REQ-462).
+fn places_shared_files(network_mode: NetworkMode, items: &[ResolvedItem]) -> bool {
+    network_mode == NetworkMode::Filtered
+        || items
+            .iter()
+            .any(|item| item.directive == Directive::Hide && item.kind == EntryKind::NotDirectory)
 }
 
 /// The plan: what `--print-plan` shows and what the start uses (specification
