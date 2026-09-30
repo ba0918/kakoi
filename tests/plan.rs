@@ -354,6 +354,37 @@ fn a_scan_link_into_an_unswappable_ro_item_is_left_visible_with_a_reason() {
     assert!(!isolation.mounts.left_visible[0].reason.is_empty());
 }
 
+// @kotowari[REQ-170, EX-963]
+#[test]
+fn a_scan_link_into_nested_unswappable_ro_items_is_left_visible_naming_the_outermost() {
+    let target = "/home/u/.config/opencode/x";
+    let isolation = isolation(
+        &format!(
+            "[mounts]\nrw = [\"${{worktree}}\"]\n\
+             ro = [\"/home/u\", \"/home/u/.config/opencode\"]\n{SCAN_ENV}"
+        ),
+        Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .dir_with_ancestors("/home/u/.config/opencode")
+            .file_with_ancestors(target)
+            .file_with_ancestors(PROFILE)
+            .file_with_ancestors(POLICY_FILE)
+            .scan_link_to_file("/home/u/proj/.env", target),
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(
+        isolation.mounts.left_visible.len(),
+        1,
+        "{:?}",
+        isolation.mounts
+    );
+    let reason = &isolation.mounts.left_visible[0].reason;
+    assert!(reason.contains("`/home/u`"), "{reason}");
+    assert!(!reason.contains("`/home/u/.config/opencode`"), "{reason}");
+}
+
 /// The facts of a worktree whose `.env` (and any further name given) is a link to
 /// `~/.claude/settings.json`, an `ro` item inside `rw ~/.claude`.
 fn env_links_into_claude_settings(links: &[&str]) -> Facts {
@@ -397,7 +428,7 @@ fn a_scan_link_into_a_swappable_ro_item_is_a_path_diagnostic() {
 
 // An `ro` item that cannot be swapped around the swappable one does not make the link
 // safe to leave: the swappable item inside it is what the next start could re-point.
-// @kotowari[REQ-403]
+// @kotowari[REQ-403, EX-962]
 #[test]
 fn a_scan_link_into_a_swappable_ro_item_inside_an_unswappable_one_is_a_path_diagnostic() {
     let diagnostic = isolation(
