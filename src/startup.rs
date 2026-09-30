@@ -6,12 +6,13 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::cli::{self, Invocation, Parsed};
+use crate::cli::{self, Invocation, Nesting, Parsed};
 use kakoi_core::diagnostic::{Diagnostic, Warning};
 use kakoi_core::environment::{HostEnvironment, RealEntry};
-use kakoi_core::plan::{is_nested, Plan};
+use kakoi_core::guard_placement::GUARD_ROOT;
+use kakoi_core::plan::{Plan, NESTING_MARK};
 use kakoi_core::planning::{locate_command, plan_for, Request};
 use kakoi_core::workspace_facts::real_entry;
 
@@ -78,10 +79,13 @@ where
         }
         Parsed::Invocation(invocation) => invocation,
     };
-    // Stage 2, nested without `--print-plan`: stages 3 to 8 are skipped, nothing is read
-    // and nothing changed, and the command is resolved on the host's `PATH`
-    // (specification sections 12.1 and 13).
-    if is_nested(&host) && invocation.print_plan.is_none() {
+    // Stage 2, nested with `--nested=exec` and without `--print-plan`: stages 3 to 8 are
+    // skipped, nothing is read and nothing changed, and the command is resolved on the
+    // host's `PATH` (specification REQ-284). With `--nested=isolate` a nested run goes
+    // through every stage as any other run does (REQ-456).
+    let nested = inside_an_isolation();
+    let applied = !nested || invocation.nested == Nesting::Isolate;
+    if !applied && invocation.print_plan.is_none() {
         return Ok(Outcome::Nested(Nested {
             warning: nested_warning(),
             command: locate_command(&invocation.command[0], &host),
@@ -103,6 +107,11 @@ where
         current_dir: current_dir.clone(),
         host,
         executable: std::env::current_exe().ok(),
+        nested,
+        applied,
+        // Only kakoi makes `/dev`, so what is there was placed by the run around this one
+        // (specification REQ-465).
+        outer_guard: nested && applied && Path::new(GUARD_ROOT).symlink_metadata().is_ok(),
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,
@@ -111,10 +120,17 @@ where
     })))
 }
 
+/// Whether the nesting mark is there: only an isolation of kakoi puts it, read-only, and
+/// the environment, which the isolation's processes can change, is not asked
+/// (specification REQ-455).
+fn inside_an_isolation() -> bool {
+    Path::new(NESTING_MARK).symlink_metadata().is_ok()
+}
+
 /// The one line a nested run prints (specification section 12.1).
 fn nested_warning() -> Warning {
     Warning::new(
-        "KAKOI=1: already inside an isolation, so the policy is not applied and the \
+        "already inside an isolation, so the policy is not applied and the \
          command runs under the outer boundary",
     )
 }

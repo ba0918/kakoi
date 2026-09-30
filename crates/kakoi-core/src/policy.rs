@@ -188,6 +188,10 @@ pub struct Network {
     pub allow: Vec<crate::network::Allow>,
     pub limits: crate::network::LimitOverrides,
     pub dns_upstream: Vec<crate::network::DnsUpstream>,
+    /// Whether the host's `/dev/net/tun` is shown inside, so that a kakoi nested inside
+    /// can make filtered (specification REQ-458). Not one of the settings that only
+    /// filtered uses: it applies in every mode.
+    pub allow_nested_filtered: Option<bool>,
     pub(crate) settings_present: bool,
 }
 
@@ -198,6 +202,7 @@ struct NetworkInput {
     publish: Option<Vec<crate::network::FixedPublication>>,
     allow: Option<Vec<crate::network::Allow>>,
     dns_upstream: Option<Vec<crate::network::DnsUpstream>>,
+    allow_nested_filtered: Option<bool>,
     #[serde(flatten)]
     limits: crate::network::LimitOverrides,
 }
@@ -214,6 +219,7 @@ impl From<NetworkInput> for Network {
             allow: input.allow.unwrap_or_default(),
             limits: input.limits,
             dns_upstream: input.dns_upstream.unwrap_or_default(),
+            allow_nested_filtered: input.allow_nested_filtered,
         }
     }
 }

@@ -45,6 +45,8 @@ mod leases;
 mod limits;
 #[path = "kakoi_net/namespace.rs"]
 mod namespace;
+#[path = "kakoi_net/nested.rs"]
+mod nested;
 #[path = "kakoi_net/nft.rs"]
 mod nft;
 #[path = "kakoi_net/notification.rs"]

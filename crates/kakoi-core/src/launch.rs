@@ -1,6 +1,7 @@
-//! The start of bwrap (specification section 14): the empty file each `hide` of a file is
-//! bound from, the content of each file an `rw-copy` item starts the isolation with, and
-//! the seccomp filter are handed over as file descriptors, the symbols of
+//! The start of bwrap (specification section 14): the files of the shared file place are
+//! checked and made again, or else put from data (specification REQ-461); the empty files
+//! and the content of each file an `rw-copy` item starts the isolation with, and the
+//! seccomp filter, are handed over as file descriptors, the symbols of
 //! the plan are replaced by their numbers, and the `bwrap` command line is assembled with
 //! the plan's arguments (the command and its arguments included) and the assembled
 //! environment. Executing it in place is left to the caller. The outer layer; nothing
@@ -16,6 +17,7 @@ use std::process::Command;
 use crate::diagnostic::Diagnostic;
 use crate::plan::{Argument, Plan};
 use crate::seccomp::filter_bytes;
+use crate::shared_files;
 
 /// The `bwrap` command line ready to be executed in place: the program at the plan's
 /// path, the arguments with each descriptor's number in place of its symbol, and the
@@ -80,7 +82,8 @@ pub fn assemble_for_network_executor(
 fn assemble_with_prefix(plan: &Plan, prefix: &[OsString]) -> Result<BwrapCommand, Diagnostic> {
     raise_open_file_limit();
     let mut descriptors = Vec::new();
-    let arguments = numbered_arguments(&plan.arguments, &mut descriptors).map_err(|error| {
+    let arguments = shared_files::settle(&plan.arguments);
+    let arguments = numbered_arguments(&arguments, &mut descriptors).map_err(|error| {
         Diagnostic::bwrap(format!(
             "a file descriptor for bwrap could not be prepared: {error}"
         ))
@@ -162,6 +165,7 @@ fn numbered_arguments(
                 descriptors.push(fd);
                 number
             }
+            Argument::SharedFile { path, .. } => path.clone().into_os_string(),
         };
         numbered.push(text);
     }

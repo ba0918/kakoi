@@ -31,6 +31,7 @@ pub fn render(plan: &Plan) -> String {
 struct PlanDocument<'a> {
     format_version: u32,
     nested: bool,
+    applied: bool,
     policy_sources: Vec<Source>,
     variables: Variables,
     home: String,
@@ -70,6 +71,7 @@ struct MergedPolicy<'a> {
     scan: Vec<Scan>,
     hide_mounts: Vec<HideMounts>,
     network_mode: &'static str,
+    allow_nested_filtered: bool,
     network_allow: Vec<kakoi_core::network::Allow>,
     network_publish: Vec<kakoi_core::network::FixedPublication>,
     network_limits: kakoi_core::network::NetworkLimits,
@@ -222,6 +224,7 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
         PlanDocument {
             format_version: FORMAT_VERSION,
             nested: plan.nested,
+            applied: plan.applied,
             policy_sources: plan.policy_sources.iter().map(source).collect(),
             variables: Variables {
                 workspace: text(&plan.variables.workspace),
@@ -346,6 +349,9 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                     Argument::CopiedFile(content) => BwrapArgument::CopiedFile {
                         bytes: content.bytes().len(),
                     },
+                    Argument::SharedFile { path, .. } => {
+                        BwrapArgument::Literal { value: text(path) }
+                    }
                 })
                 .collect(),
         }
@@ -387,6 +393,7 @@ fn merged_policy(policy: &Policy) -> MergedPolicy<'_> {
         dns_upstream: policy.dns_upstream.clone(),
         shutdown_grace_seconds: policy.shutdown_grace_seconds,
         network_mode: policy.network_mode.name(),
+        allow_nested_filtered: policy.allow_nested_filtered,
         env_mode: policy.env_mode.name(),
         env_pass: policy.env_pass.clone(),
         env_set: policy.env_set.clone(),

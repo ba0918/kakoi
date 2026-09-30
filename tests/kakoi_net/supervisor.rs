@@ -47,6 +47,9 @@ pub(crate) fn filtered_plan(script: &str) -> (TempDir, PathBuf, Plan) {
         current_dir: workspace.clone(),
         host,
         executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
+        nested: false,
+        applied: true,
+        outer_guard: false,
     })
     .unwrap();
     (home, workspace, plan)

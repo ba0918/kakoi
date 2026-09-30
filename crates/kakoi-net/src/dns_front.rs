@@ -26,7 +26,13 @@ pub struct IncomingQuery {
 pub struct ReplyToken(ReplyDestination);
 
 enum ReplyDestination {
-    Udp { peer: SocketAddr, limit: usize },
+    /// `second` tells which of the two UDP sockets the query came in on, and so
+    /// which one the reply leaves from.
+    Udp {
+        second: bool,
+        peer: SocketAddr,
+        limit: usize,
+    },
     Tcp(u64),
 }
 
@@ -63,8 +69,12 @@ impl DnsFront {
                 "invalid DNS frontend limits",
             ));
         }
-        sockets.udp.set_nonblocking(true)?;
-        sockets.tcp.set_nonblocking(true)?;
+        for udp in [&sockets.udp, &sockets.second_udp] {
+            udp.set_nonblocking(true)?;
+        }
+        for tcp in [&sockets.tcp, &sockets.second_tcp] {
+            tcp.set_nonblocking(true)?;
+        }
         Ok(Self {
             sockets,
             peers: BTreeMap::new(),
@@ -75,7 +85,8 @@ impl DnsFront {
         })
     }
 
-    /// At most 32 datagrams, 16 accepts and 64 round-robin stream steps per call.
+    /// At most 32 datagrams and 16 accepts per address and 64 round-robin stream
+    /// steps per call.
     /// Idle/trickling frames and blocked replies have an absolute I/O deadline.
     pub fn poll(&mut self, now: Instant) -> io::Result<Vec<IncomingQuery>> {
         self.peers.retain(|_, peer| now < peer.deadline);
@@ -88,9 +99,28 @@ impl DnsFront {
     }
 
     fn receive_datagrams(&mut self, incoming: &mut Vec<IncomingQuery>) -> io::Result<()> {
+        for second in [false, true] {
+            self.receive_datagrams_on(second, incoming)?;
+        }
+        Ok(())
+    }
+
+    fn udp(&self, second: bool) -> &std::net::UdpSocket {
+        if second {
+            &self.sockets.second_udp
+        } else {
+            &self.sockets.udp
+        }
+    }
+
+    fn receive_datagrams_on(
+        &mut self,
+        second: bool,
+        incoming: &mut Vec<IncomingQuery>,
+    ) -> io::Result<()> {
         let mut datagram = [0; u16::MAX as usize];
         for _ in 0..32 {
-            match self.sockets.udp.recv_from(&mut datagram) {
+            match self.udp(second).recv_from(&mut datagram) {
                 Ok((size, peer)) => {
                     let wire = datagram[..size].to_vec();
                     let limit = Message::from_vec(&wire)
@@ -101,7 +131,11 @@ impl DnsFront {
                         .unwrap_or(MIN_UDP_PAYLOAD);
                     incoming.push(IncomingQuery {
                         wire,
-                        reply: ReplyToken(ReplyDestination::Udp { peer, limit }),
+                        reply: ReplyToken(ReplyDestination::Udp {
+                            second,
+                            peer,
+                            limit,
+                        }),
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
@@ -113,8 +147,20 @@ impl DnsFront {
     }
 
     fn accept_streams(&mut self, now: Instant) -> io::Result<()> {
+        for second in [false, true] {
+            self.accept_streams_on(second, now)?;
+        }
+        Ok(())
+    }
+
+    fn accept_streams_on(&mut self, second: bool, now: Instant) -> io::Result<()> {
         for _ in 0..16 {
-            match self.sockets.tcp.accept() {
+            let listener = if second {
+                &self.sockets.second_tcp
+            } else {
+                &self.sockets.tcp
+            };
+            match listener.accept() {
                 Ok((socket, _)) => {
                     if self.peers.len() == self.max_connections {
                         continue;
@@ -174,7 +220,11 @@ impl DnsFront {
             ));
         }
         match token.0 {
-            ReplyDestination::Udp { peer, limit } => {
+            ReplyDestination::Udp {
+                second,
+                peer,
+                limit,
+            } => {
                 let truncated;
                 let answer = if wire.len() > limit {
                     let mut message = Message::from_vec(wire)
@@ -195,7 +245,7 @@ impl DnsFront {
                 } else {
                     wire
                 };
-                match self.sockets.udp.send_to(answer, peer) {
+                match self.udp(second).send_to(answer, peer) {
                     Ok(size) => Ok(size == answer.len()),
                     Err(error)
                         if matches!(

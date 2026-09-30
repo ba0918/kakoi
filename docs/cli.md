@@ -18,6 +18,7 @@ kakoi --help
 | `--rw PATH` | An `rw` directive on the command-line layer. Repeatable. |
 | `--hide PATH` | A `hide` directive on the command-line layer. Repeatable. |
 | `--print-plan[=FORM]` | Print the plan and exit without running the command. `FORM` is `summary` (the default), `full`, or `json`; see [The plan](#the-plan). The value is written with `=` only. |
+| `--nested=MODE` | What to do when started inside an isolation: `exec` (the default) runs the command under the outer isolation as it is, `isolate` makes an isolation of this policy inside it; see [Nesting](#nesting). The value is written with `=` only. Outside an isolation both isolate. |
 | `--version`, `--help` | Print the version or the usage. Each is used alone. |
 | `init [NAME]` | Write the built-in default to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. Used alone; see [Getting started](getting-started.md#write-the-boundary-out-and-edit-it). |
 
@@ -119,11 +120,12 @@ meaning while `format_version` is the same; keys may be added.
 | Key | Value |
 | --- | --- |
 | `format_version` | `1`. Raised when a key is removed or changes its meaning. |
-| `nested` | Whether the run is nested (`KAKOI=1`). |
+| `nested` | Whether the run is nested: it was started inside an isolation, where it found the nesting mark. |
+| `applied` | Whether the plan is used: `true` outside an isolation and for a nested run with `--nested=isolate`, `false` for a nested run with `--nested=exec`, which only shows it. |
 | `policy_sources` | The policy files read, each `{"kind": "file", "path": ...}` or `{"kind": "built-in-default"}`. |
 | `variables` | `workspace`, `worktree`, `git_common_dir`, `config_dir`; `null` where a variable has no value. |
 | `home` | The home directory. |
-| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`, `guards` (each rule as written, with `origin`). |
+| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `allow_nested_filtered`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`, `guards` (each rule as written, with `origin`). |
 | `mounts` | The items applied, in order: `directive`, `path` (real), `kind` (`directory` or `not-directory`), `written`, `origin`. |
 | `skipped_mounts` | Written items skipped: `directive`, `written`, `origin`, `reason`. |
 | `left_visible` | Scan hits left visible: `link`, `reason`. |
@@ -153,7 +155,7 @@ the values the policy set.
 
 A failure of `kakoi` itself is one line on standard error of the form
 `kakoi: <kind>: <description>`, and the exit code is 125. Two exceptions: a command that
-cannot be found exits 127, and, in a nested run, a command that was found but cannot be executed
+cannot be found exits 127, and, in a nested run with `--nested=exec`, a command that was found but cannot be executed
 (a script whose interpreter does not exist, or, in the published build, a file of a format the
 kernel cannot run) exits 126, and so does a run a [command guard](policy.md#command-guards)
 denies, with the line `kakoi: guard: <program> <the words that matched>: <reason>` from inside
@@ -168,8 +170,8 @@ do not stop the run.
 When the command runs, its exit code is returned as it is; a command killed by signal `s` yields
 128 + `s`. `kakoi` executes `bwrap` in place rather than waiting for it as a child, so a
 failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
-own output and exit code. Only where `kakoi` executes the command itself, in a nested run or as
-a command guard executing the real program, does a failed `exec` become the
+own output and exit code. Only where `kakoi` executes the command itself, in a nested run with
+`--nested=exec` or as a command guard executing the real program, does a failed `exec` become the
 `command not executable` diagnostic above. The failure a
 fresh machine meets first is a user namespace the kernel will not let `bwrap` create; see
 [Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
@@ -201,19 +203,49 @@ Pressed while the processes left behind are in their grace, it ends them at once
 
 ## Nesting
 
-`kakoi` sets `KAKOI=1` inside the isolation. When it finds that variable already
-set, it does not isolate again: it prints a nesting warning and executes the command itself,
-without `bwrap`. With `--print-plan`, it reads the policy and prints the plan instead, runs
-nothing, and prints no nesting warning (warnings from the policy can still precede the plan);
-the plan starts with a `nested:` line (the JSON form carries
-`nested` instead). Nesting is detected only through that variable
-([known gap 8](security.md#known-gaps)).
+Every isolation carries a nesting mark, an empty read-only file at `/dev/kakoi-isolated`. A
+`kakoi` started where that file exists is nested, and only then; the environment is not asked.
+`kakoi` still sets `KAKOI=1` inside the isolation, but that variable is a hint for the programs
+inside, not a boundary: a process inside can remove it and is still nested, and `KAKOI=1` set on
+the host does not make a run nested (so the command is isolated there, with no nesting warning).
+
+A nested run does what `--nested` says:
+
+- `--nested=exec`, the default: `kakoi` does not isolate again. It prints a nesting warning and
+  executes the command itself, without `bwrap`, reading no policy and leaving the environment
+  as it received it; the command is found on that environment's `PATH`. With `--print-plan`, it
+  reads the policy and prints the plan instead, runs nothing, and prints no nesting warning
+  (warnings from the policy can still precede the plan); the plan starts with a `nested:` line
+  saying it would not be applied (the JSON form carries `nested` and `applied` instead).
+- `--nested=isolate`: `kakoi` does what it does outside an isolation. It reads and checks the
+  policy, makes an isolation inside the outer one, and runs the command there, with no nesting
+  warning. The outer isolation's limits still hold inside, so the inner one is never wider than
+  the outer one and can be narrower than its plan says; the plan starts with a `nested:` line
+  saying so. When the inner isolation cannot be made, the command does not run: the run ends
+  with the diagnostic of the cause and never falls back to running without an isolation.
+
+Two causes are common. A policy with secrets stops with a `secret` diagnostic inside, because the
+outer isolation shows every secret file empty: give the secret to the outer `kakoi`, or pass the
+variable in from the outer isolation with `env.pass`. And a `filtered` policy needs
+`/dev/net/tun`, which the outer isolation shows only when its policy sets
+[`network.allow-nested-filtered`](policy.md#nested-filtered).
+
+The [command guards](policy.md#command-guards) of the outer run go on working inside an
+isolation made with `--nested=isolate`: their directory is shown there read-only as it is, and
+it is put first on the inner `PATH` when there is one. An inner environment without `PATH` (an
+`env.mode = "clear"` policy that passes none) gets no guard directory on it, as outside, so the
+guards found through `PATH` do not watch there. A
+policy for the inner isolation cannot place guards of its own while it does; that is a `policy`
+diagnostic. The limits of all this are [known gap 8](security.md#known-gaps).
 
 ## Open files
 
-Before making the file descriptors it hands to `bwrap` (one per hidden file, one per file an
-`rw-copy` item starts the isolation with, plus the seccomp
-filter), `kakoi` raises its soft limit on open files to the hard limit, always, so that a
-scan hiding thousands of files starts under the usual limit of 1024 and the same input gives the
-same result. The command inherits the raised limit. A nested run makes no descriptors and leaves
-the limit alone.
+Before making the file descriptors it hands to `bwrap` (one per file an `rw-copy` item starts
+the isolation with, plus the seccomp filter; and, only in a launch that puts them from memory
+rather than from the [shared file place](policy.md#hidden-files-and-the-shared-file-place), one
+per hidden file and one for `/etc/resolv.conf` in `filtered` mode), `kakoi` raises its soft limit
+on open files to the hard limit, always, so that a scan hiding thousands of files starts under
+the usual limit of 1024 and the same input gives the same result. A launch that uses the shared
+file place binds hidden files and the resolver configuration from real files there and makes no
+descriptor for them. The command inherits the raised limit. A nested run with `--nested=exec` makes no
+descriptors and leaves the limit alone.

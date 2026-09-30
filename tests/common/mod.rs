@@ -103,6 +103,27 @@ where
     shell.output().unwrap()
 }
 
+/// The built binary's path, for a script that starts it inside an isolation.
+pub const KAKOI: &str = env!("CARGO_BIN_EXE_kakoi");
+
+/// Runs `script` with `/bin/sh -c` inside the isolation the built binary makes from the
+/// `default` profile of `home`, with the workspace at `workspace`, which is also the
+/// current directory. A [`KAKOI`] the script starts is a nested run.
+pub fn run_inside(home: &Path, workspace: &Path, script: &str) -> Output {
+    binary(home)
+        .current_dir(workspace)
+        .args([
+            OsStr::new("--workspace"),
+            workspace.as_os_str(),
+            OsStr::new("--"),
+            OsStr::new("/bin/sh"),
+            OsStr::new("-c"),
+            OsStr::new(script),
+        ])
+        .output()
+        .unwrap()
+}
+
 /// Everything the binary left behind, for the message of a failed assertion.
 pub fn output_report(output: &Output) -> String {
     format!(

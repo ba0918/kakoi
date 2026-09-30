@@ -20,9 +20,10 @@ use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::mount_facts::collect_mount_facts;
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
-    self, is_nested, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand,
+    self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
 };
 use crate::secret_facts::read_secret_files;
+use crate::shared_files;
 use crate::variables::derive_variables;
 use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 
@@ -40,6 +41,15 @@ pub struct Request {
     /// The path of kakoi's own executable, which each guard is; none when it cannot be
     /// told.
     pub executable: Option<PathBuf>,
+    /// Whether the run is nested: the nesting mark was there when it started
+    /// (specification REQ-455).
+    pub nested: bool,
+    /// Whether the plan is used: outside an isolation, or inside one with
+    /// `--nested=isolate` (specification REQ-457).
+    pub applied: bool,
+    /// Whether the command guards of the run around this nested one are handed on: they
+    /// were there when it started (specification REQ-465).
+    pub outer_guard: bool,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -49,6 +59,13 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let config_dir = env.config_dir(&home);
     let layers = load_layers(&request.layers, &config_dir)?;
     let policy = merge(&layers)?;
+    // The guards of both runs cannot be laid one over the other (specification REQ-466).
+    if request.outer_guard && !policy.guards.is_empty() {
+        return Err(Diagnostic::policy(
+            "the command guards of the isolation around this one are handed on, so the \
+             policy of a nested isolation cannot place guards of its own",
+        ));
+    }
     let workspace = request
         .workspace
         .clone()
@@ -61,13 +78,15 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let protected_config_dir = config_dir.as_path();
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
     let expanded = expand_policy(&policy, &variables, &home);
+    let shared_files = shared_files::place(&request.host, request.nested);
     let wanted = candidates(
         &expanded,
         &layers,
         &variables,
         protected_config_dir,
         request.workspace.as_deref(),
-    );
+    )
+    .with_protected(shared_files.as_deref());
     let facts = IsolationFacts {
         mounts: collect_mount_facts(&wanted),
         secrets: read_secret_files(&expanded.secrets),
@@ -82,19 +101,34 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         workspace: request.workspace.as_deref(),
         current_dir: &request.current_dir,
         host: &request.host,
+        nested: request.nested,
+        applied: request.applied,
+        shared_files: shared_files.as_deref(),
+        outer_guard: request.outer_guard,
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
-    let guards = plan_guards(&policy, &mut isolation, request.executable.as_deref())?;
+    let guards = plan_guards(
+        &policy,
+        &mut isolation,
+        request.executable.as_deref(),
+        request.outer_guard,
+    )?;
     // The last of stage 7: what each `rw-copy` item that applies starts the isolation
     // with, read only for the items that survived the resolution and the checks.
     let copies = read_copy_sources(&isolation.mounts.items)?;
     let bwrap = locate_bwrap(&request.host)?;
-    // A nested run resolves on the host's `PATH` rather than the isolation's
-    // (specification section 4.2).
-    let search_in = if is_nested(&request.host) {
-        &request.host
-    } else {
+    // With `bwrap`, since the device is shown by it (specification REQ-458).
+    if policy.allow_nested_filtered && Path::new(TUN_DEVICE).symlink_metadata().is_err() {
+        return Err(Diagnostic::bwrap(format!(
+            "network.allow-nested-filtered shows {TUN_DEVICE} inside, but the host has none"
+        )));
+    }
+    // A plan that is only shown, that of a nested run without `--nested=isolate`,
+    // resolves on the host's `PATH` as that run would (specification REQ-261).
+    let search_in = if request.applied {
         isolation.environment.values()
+    } else {
+        &request.host
     };
     let command = match request.command.split_first() {
         None => None,
@@ -116,12 +150,15 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
 }
 
 /// The guards of the merged rules, found on the isolation's `PATH` after the mounts are
-/// resolved; the guard location goes first on that `PATH` when a guard is placed
-/// (specification REQ-446 and REQ-449).
+/// resolved; the guard location goes first on that `PATH` when a guard is placed, or when
+/// the guards of the run around a nested one are handed on, since the nested policy may
+/// have set `PATH` afresh or put entries before it (specification REQ-446, REQ-449, and
+/// REQ-465).
 fn plan_guards(
     policy: &Policy,
     isolation: &mut plan::Isolation,
     executable: Option<&Path>,
+    outer_guard: bool,
 ) -> Result<GuardPlan, Diagnostic> {
     let path = path_of(isolation.environment.values());
     let facts = policy
@@ -142,17 +179,24 @@ fn plan_guards(
         kakoi.as_deref(),
         kakoi.as_deref().and_then(file_id),
     );
-    if !guards.placed.is_empty() {
-        if kakoi.is_none() {
-            return Err(Diagnostic::bwrap(
-                "the executable of kakoi itself, which each command guard is, cannot be located",
-            ));
-        }
+    if !guards.placed.is_empty() && kakoi.is_none() {
+        return Err(Diagnostic::bwrap(
+            "the executable of kakoi itself, which each command guard is, cannot be located",
+        ));
+    }
+    if !guards.placed.is_empty() || (outer_guard && !guard_location_is_first(path)) {
         isolation
             .environment
             .put_first_on_path(Path::new(GUARD_LOCATION));
     }
     Ok(guards)
+}
+
+/// Whether `path` already starts with the guard location, as the `PATH` a nested run
+/// inherits from the run around it does.
+fn guard_location_is_first(path: Option<&OsStr>) -> bool {
+    path.and_then(|path| path.as_bytes().split(|&byte| byte == b':').next())
+        == Some(GUARD_LOCATION.as_bytes())
 }
 
 /// Where the real `program` is looked for: the absolute entries of `path` other than the

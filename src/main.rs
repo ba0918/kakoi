@@ -19,7 +19,7 @@ use std::process::Stdio;
 
 fn main() -> ExitCode {
     // A command guard is this executable too, and is told apart before anything else:
-    // inside the isolation `KAKOI=1` would otherwise make it a nested run.
+    // inside the isolation the nesting mark would otherwise make it a nested run.
     if let Some(code) = kakoi::guard::run_if_guard() {
         return code;
     }

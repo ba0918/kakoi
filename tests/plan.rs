@@ -10,7 +10,7 @@ use common::fixture::{
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
 use kakoi_core::command::{command_candidates, resolve_command};
-use kakoi_core::copies::CopySources;
+use kakoi_core::copies::{CopySources, FileContent};
 use kakoi_core::diagnostic::{Diagnostic, Kind};
 use kakoi_core::executables::first_executable;
 use kakoi_core::guard_placement::GuardPlan;
@@ -20,10 +20,11 @@ use kakoi_core::mounts::{
     candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole,
 };
 use kakoi_core::plan::{
-    bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts,
+    bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts, Provisions,
     ResolvedCommand,
 };
 use kakoi_core::policy::NetworkMode;
+use kakoi_core::shared_files::{in_data_form, SharedFile};
 use kakoi_core::variables::Variables;
 
 /// Writes an executable script at `relative` under `dir`.
@@ -141,6 +142,7 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
         &items,
         &CopySources::default(),
         &GuardPlan::default(),
+        &Provisions::default(),
         Some(&sh_dash_c_echo()),
     );
 
@@ -152,6 +154,9 @@ fn the_fixed_arguments_end_with_argv0_and_the_command_follows_the_separator() {
             literal("/"),
             literal("--dev"),
             literal("/dev"),
+            literal("--ro-bind-data"),
+            Argument::EmptyFile,
+            literal("/dev/kakoi-isolated"),
             literal("--proc"),
             literal("/proc"),
             literal("--unshare-all"),
@@ -198,6 +203,7 @@ fn print_plan_without_a_command_has_no_argv0_and_no_separator() {
         &items,
         &CopySources::default(),
         &GuardPlan::default(),
+        &Provisions::default(),
         None,
     );
 
@@ -219,6 +225,7 @@ fn share_net_is_present_only_for_host_mode() {
         &[],
         &CopySources::default(),
         &GuardPlan::default(),
+        &Provisions::default(),
         None,
     );
     let none = bwrap_arguments(
@@ -227,6 +234,7 @@ fn share_net_is_present_only_for_host_mode() {
         &[],
         &CopySources::default(),
         &GuardPlan::default(),
+        &Provisions::default(),
         None,
     );
 
@@ -246,6 +254,7 @@ fn the_argument_list_carries_no_environment_flags() {
         &items,
         &CopySources::default(),
         &GuardPlan::default(),
+        &Provisions::default(),
         Some(&sh_dash_c_echo()),
     );
 
@@ -286,6 +295,10 @@ fn isolation_with(
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
+        nested: false,
+        applied: true,
+        outer_guard: false,
+        shared_files: None,
     };
     let facts = IsolationFacts {
         mounts: facts.mount_facts(),
@@ -1137,6 +1150,10 @@ fn a_missing_configuration_directory_leaves_config_dir_valueless() {
         workspace: None,
         current_dir: Path::new(WORKTREE),
         host: &BTreeMap::new(),
+        nested: false,
+        applied: true,
+        outer_guard: false,
+        shared_files: None,
     };
     let facts = IsolationFacts {
         mounts: Facts::new()
@@ -1595,4 +1612,65 @@ fn an_ro_through_a_link_inside_an_rw_into_a_hide_is_a_path_diagnostic() {
     let output = plan_output(&home, &workspace, &[]);
 
     assert_diagnostic(&output, 125, "path");
+}
+
+// @kotowari[REQ-460]
+#[test]
+fn req_460_files_of_the_place_are_bound_read_only_and_fall_back_to_data() {
+    let items = [item(
+        Directive::Hide,
+        "/home/u/proj/.env",
+        EntryKind::NotDirectory,
+    )];
+    let place = PathBuf::from("/run/user/1000/kakoi");
+    let with_place = Provisions {
+        shared_files: Some(place.clone()),
+        ..Provisions::default()
+    };
+    let arguments = |provisions: &Provisions| {
+        bwrap_arguments(
+            NetworkMode::Filtered,
+            Path::new("/home/u/proj"),
+            &items,
+            &CopySources::default(),
+            &GuardPlan::default(),
+            provisions,
+            None,
+        )
+    };
+    let over = |arguments: &[Argument], destination: &str| {
+        let at = arguments
+            .iter()
+            .rposition(|argument| *argument == literal(destination))
+            .unwrap();
+        arguments[at - 2..at].to_vec()
+    };
+
+    let planned = arguments(&with_place);
+    let from_data = arguments(&Provisions::default());
+
+    let bound_from_the_place =
+        |destination: &str, expected: SharedFile| match &over(&planned, destination)[..] {
+            [bind, Argument::SharedFile { file, path }] => {
+                assert_eq!(*bind, literal("--ro-bind"), "{destination}");
+                assert_eq!(*file, expected, "{destination}");
+                assert_eq!(path.parent(), Some(place.as_path()), "{destination}");
+            }
+            other => panic!("{destination}: {other:?}"),
+        };
+
+    bound_from_the_place("/home/u/proj/.env", SharedFile::Empty);
+    bound_from_the_place("/etc/resolv.conf", SharedFile::Resolver);
+    assert_eq!(
+        over(&from_data, "/home/u/proj/.env"),
+        [literal("--ro-bind-data"), Argument::EmptyFile]
+    );
+    assert_eq!(
+        over(&from_data, "/etc/resolv.conf"),
+        [
+            literal("--ro-bind-data"),
+            Argument::CopiedFile(FileContent::new(b"nameserver 127.0.0.53\n".to_vec()))
+        ]
+    );
+    assert_eq!(in_data_form(&planned), from_data);
 }

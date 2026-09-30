@@ -3,7 +3,7 @@
 //! (section 14). Pure.
 
 use std::collections::BTreeMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
@@ -20,8 +20,10 @@ use crate::mounts::{
 };
 use crate::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
+    ProtectedPaths,
 };
 use crate::policy::NetworkMode;
+use crate::shared_files::SharedFile;
 use crate::variables::Variables;
 
 /// Everything stage 7 decides from besides the facts: the layers and their merge, the
@@ -41,6 +43,18 @@ pub struct Inputs<'a> {
     pub workspace: Option<&'a Path>,
     pub current_dir: &'a Path,
     pub host: &'a BTreeMap<OsString, OsString>,
+    /// Whether the run is nested: the nesting mark was there when it started
+    /// (specification REQ-455).
+    pub nested: bool,
+    /// Whether the plan is used: outside an isolation, or inside one with
+    /// `--nested=isolate` (specification REQ-457).
+    pub applied: bool,
+    /// The shared file place the run plans with; none when it makes those files from data
+    /// (specification REQ-460).
+    pub shared_files: Option<&'a Path>,
+    /// Whether the run hands the command guards of the run around it on (specification
+    /// REQ-465).
+    pub outer_guard: bool,
 }
 
 /// The facts stage 7 needs.
@@ -92,7 +106,13 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         &facts.mounts,
         &swappable_ro,
     )?;
-    let protected = protected_paths(inputs.expanded, inputs.layers, inputs.config_dir);
+    let protected = ProtectedPaths {
+        shared_files: inputs
+            .shared_files
+            .filter(|_| places_shared_files(inputs.policy.network_mode, &mounts.items))
+            .map(Path::to_path_buf),
+        ..protected_paths(inputs.expanded, inputs.layers, inputs.config_dir)
+    };
     let mut warnings = check_placement(
         &mounts,
         &protected,
@@ -123,13 +143,25 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     })
 }
 
+/// Whether a run puts anything from the shared file place: the empty file of a `hide` of a
+/// file, or the resolver configuration of filtered (specification REQ-460). Only such a
+/// run uses the place, and only its place is protected (specification REQ-462).
+fn places_shared_files(network_mode: NetworkMode, items: &[ResolvedItem]) -> bool {
+    network_mode == NetworkMode::Filtered
+        || items
+            .iter()
+            .any(|item| item.directive == Directive::Hide && item.kind == EntryKind::NotDirectory)
+}
+
 /// The plan: what `--print-plan` shows and what the start uses (specification
 /// sections 2 and 13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Plan {
-    /// Whether the run is nested (specification section 12.1): the plan is shown, not
-    /// applied.
+    /// Whether the run is nested (specification REQ-455).
     pub nested: bool,
+    /// Whether the plan is used; a nested run without `--nested=isolate` only shows it
+    /// (specification REQ-457).
+    pub applied: bool,
     pub policy: Policy,
     /// Where the policies read came from: files at their real paths, or the built-in
     /// default.
@@ -164,12 +196,18 @@ pub fn plan(
     command: Option<ResolvedCommand>,
     guards: GuardPlan,
 ) -> Plan {
+    let provisions = Provisions {
+        shared_files: inputs.shared_files.map(Path::to_path_buf),
+        tun: inputs.policy.allow_nested_filtered,
+        outer_guard: inputs.outer_guard,
+    };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
         inputs.current_dir,
         &isolation.mounts.items,
         &copies,
         &guards,
+        &provisions,
         command.as_ref(),
     );
     let environment_changes =
@@ -182,7 +220,8 @@ pub fn plan(
         ));
     }
     Plan {
-        nested: is_nested(inputs.host),
+        nested: inputs.nested,
+        applied: inputs.applied,
         policy: inputs.policy.clone(),
         policy_sources: isolation.policy_sources,
         variables: inputs.variables.clone(),
@@ -200,11 +239,12 @@ pub fn plan(
     }
 }
 
-/// Whether `host` marks a nested run: `KAKOI` is `1` (specification section 12.1).
-pub fn is_nested(host: &BTreeMap<OsString, OsString>) -> bool {
-    host.get(OsStr::new("KAKOI"))
-        .is_some_and(|value| value == "1")
-}
+/// The nesting mark: an empty file every isolation carries, read-only, under bwrap's own
+/// `/dev`. A kakoi started where it exists is nested (specification REQ-455).
+pub const NESTING_MARK: &str = "/dev/kakoi-isolated";
+
+/// The tun device a kakoi nested inside needs for filtered (specification REQ-458).
+pub const TUN_DEVICE: &str = "/dev/net/tun";
 
 /// The command as given on the command line (`COMMAND` and `ARGS`) and where `COMMAND`
 /// resolved to (specification section 4.2). The process sees `command` as its argv[0]
@@ -227,6 +267,47 @@ pub enum Argument {
     Seccomp,
     /// The descriptor one file of an `rw-copy` item is filled from.
     CopiedFile(FileContent),
+    /// A file of the shared file place at `path`, bound read-only. Right before the start
+    /// it becomes `path`, or the same file put from data when the place does not hold
+    /// (specification REQ-460).
+    SharedFile {
+        file: SharedFile,
+        path: PathBuf,
+    },
+}
+
+/// What the host provides the isolation with besides the mount items.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Provisions {
+    /// The shared file place the files that are always the same are bound from; none
+    /// when they are made from data (specification REQ-460).
+    pub shared_files: Option<PathBuf>,
+    /// Whether the host's tun device is shown inside (specification REQ-458).
+    pub tun: bool,
+    /// Whether the command guards of the run around a nested one are shown inside as
+    /// they are (specification REQ-465).
+    pub outer_guard: bool,
+}
+
+impl Provisions {
+    /// The arguments that put `file` at `destination`, read-only.
+    fn put(&self, file: SharedFile, destination: impl Into<OsString>) -> [Argument; 3] {
+        match &self.shared_files {
+            Some(place) => [
+                Argument::text("--ro-bind"),
+                Argument::SharedFile {
+                    file,
+                    path: place.join(file.name()),
+                },
+                Argument::text(destination),
+            ],
+            None => [
+                Argument::text("--ro-bind-data"),
+                file.from_data(),
+                Argument::text(destination),
+            ],
+        }
+    }
 }
 
 impl Argument {
@@ -235,7 +316,8 @@ impl Argument {
     }
 }
 
-/// The bwrap arguments: the fixed part in the order of specification section 14, ending
+/// The bwrap arguments: the fixed part in the order of specification section 14 (the
+/// nesting mark right after `/dev`), ending
 /// with `--argv0 <COMMAND as given>` so that the process sees the name it was called by;
 /// then the mount items in the order they were resolved; then `--`, the resolved path, and
 /// `ARGS`. The `--` keeps the path from being read as an option of bwrap (specification
@@ -248,6 +330,7 @@ pub fn bwrap_arguments(
     items: &[ResolvedItem],
     copies: &CopySources,
     guards: &GuardPlan,
+    provisions: &Provisions,
     command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
     let mut arguments = vec![
@@ -256,10 +339,29 @@ pub fn bwrap_arguments(
         Argument::text("/"),
         Argument::text("--dev"),
         Argument::text("/dev"),
+        Argument::text("--ro-bind-data"),
+        Argument::EmptyFile,
+        Argument::text(NESTING_MARK),
+    ];
+    if provisions.tun {
+        arguments.extend([
+            Argument::text("--dev-bind"),
+            Argument::text(TUN_DEVICE),
+            Argument::text(TUN_DEVICE),
+        ]);
+    }
+    if provisions.outer_guard {
+        arguments.extend([
+            Argument::text("--ro-bind"),
+            Argument::text(GUARD_ROOT),
+            Argument::text(GUARD_ROOT),
+        ]);
+    }
+    arguments.extend([
         Argument::text("--proc"),
         Argument::text("/proc"),
         Argument::text("--unshare-all"),
-    ];
+    ]);
     if matches!(network_mode, NetworkMode::Host | NetworkMode::Filtered) {
         arguments.push(Argument::text("--share-net"));
     }
@@ -295,20 +397,14 @@ pub fn bwrap_arguments(
                 arguments.extend([Argument::text("--tmpfs"), real]);
             }
             (Directive::Hide, EntryKind::NotDirectory) => {
-                arguments.extend([Argument::text("--ro-bind-data"), Argument::EmptyFile, real]);
+                arguments.extend(provisions.put(SharedFile::Empty, item.real.as_os_str()));
             }
         }
     }
     if network_mode == NetworkMode::Filtered {
         // Apply after user mounts so a copied/hidden host resolver file cannot
         // silently redirect the application's ordinary DNS lookups.
-        arguments.extend([
-            Argument::text("--ro-bind-data"),
-            Argument::CopiedFile(FileContent::new(
-                format!("nameserver {}\n", crate::network::DNS_RESOLVER_ADDRESS,).into_bytes(),
-            )),
-            Argument::text("/etc/resolv.conf"),
-        ]);
+        arguments.extend(provisions.put(SharedFile::Resolver, "/etc/resolv.conf"));
     }
     arguments.extend(guard_arguments(guards));
     if let Some(command) = command {

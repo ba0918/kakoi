@@ -32,8 +32,15 @@ pub fn render(plan: &Plan, form: PlanForm) -> String {
 /// files, the variables), then `body`.
 fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
     let mut text = String::new();
-    if plan.nested {
-        text.push_str("nested: yes (KAKOI=1; the plan is shown but would not be applied)\n");
+    match (plan.nested, plan.applied) {
+        (false, _) => {}
+        (true, false) => text.push_str(
+            "nested: yes (inside an isolation; the plan is shown but would not be applied)\n",
+        ),
+        (true, true) => text.push_str(
+            "nested: yes (--nested=isolate: the plan is applied inside the outer isolation, \
+             whose limits still hold and may narrow it)\n",
+        ),
     }
     text.push_str("policy files:\n");
     for source in &plan.policy_sources {
@@ -68,6 +75,12 @@ fn text_form(plan: &Plan, body: fn(&mut String, &Plan)) -> String {
 fn render_summary(text: &mut String, plan: &Plan) {
     let _ = writeln!(text, "network: {}", plan.policy.network_mode.name());
     render_network_rules(text, &plan.policy);
+    if plan.policy.allow_nested_filtered {
+        text.push_str(
+            "  /dev/net/tun shown inside (network.allow-nested-filtered), so a kakoi nested \
+             inside can make filtered\n",
+        );
+    }
     let _ = writeln!(text, "mounts (~ is {}):", shown(&plan.home));
     for item in &plan.mounts.items {
         let _ = writeln!(
@@ -322,6 +335,9 @@ fn render_policy(text: &mut String, policy: &Policy) {
         );
     }
     let _ = writeln!(text, "  network.mode = {}", policy.network_mode.name());
+    if policy.allow_nested_filtered {
+        text.push_str("  network.allow-nested-filtered = true\n");
+    }
     render_network_rules(text, policy);
     if policy.network_settings_present || policy.network_mode == NetworkMode::Filtered {
         let limits = &policy.network_limits;
@@ -475,6 +491,7 @@ fn argument_text(argument: &Argument) -> String {
         Argument::CopiedFile(content) => {
             format!("<fd: copied file, {} bytes>", content.bytes().len())
         }
+        Argument::SharedFile { path, .. } => shown(path),
     }
 }
 

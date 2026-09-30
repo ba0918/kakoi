@@ -13,10 +13,10 @@ kakoi自身の出力へ埋め込む値の0x00〜0x1Fと0x7Fを見える表記に
 
 ### REQ-290: 診断の終了コード
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A10, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A40
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A10, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A40, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
 - verification: unit
 
-usage、policy、path、secret、env、bwrapは125、command not foundは127、入れ子と見張り役のcommand not executableと見張り役のguardは126で終わり標準出力を出さない。診断条件の詳細は各責務の検査規則に従う。
+usage、policy、path、secret、env、bwrapは125、command not foundは127、"--nested=exec"の入れ子と見張り役のcommand not executableと見張り役のguardは126で終わり標準出力を出さない。診断条件の詳細は各責務の検査規則に従う。
 
 ### REQ-291: コマンドとbwrapの終了
 - kind: ubiquitous
@@ -34,10 +34,10 @@ host/noneではbwrapへexecし、bwrap自身の失敗出力・終了コードを
 
 ### REQ-293: 検査の段階
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
 - verification: unit
 
-検査はhelp/version、文法、cwd、HOME、ポリシー読込合成、workspaceと変数、マウント解決、bwrap所在、コマンド解決、起動の順で最初の診断に止まる。initは文法後HOMEと書込みのみ、計画なし入れ子は文法後に警告してコマンド解決へ進む。
+検査はhelp/version、文法、cwd、HOME、ポリシー読込合成、workspaceと変数、マウント解決、bwrap所在、コマンド解決、起動の順で最初の診断に止まる。initは文法後HOMEと書込みのみ、計画なしの"--nested=exec"の入れ子は文法後に警告してコマンド解決へ進む。
 
 ### REQ-400: カレントディレクトリの取得の失敗
 - kind: ubiquitous
@@ -48,10 +48,10 @@ REQ-293 のcwdの段階でカレントディレクトリを取得できないと
 
 ### REQ-401: bwrap自身のexecの失敗
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A11, docs/decision/brainstorm/2026-09-25-command-policy.md#A40
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A11, docs/decision/brainstorm/2026-09-25-command-policy.md#A40, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
 - verification: unit
 
-host/noneの起動の段階でbwrap自身のexecに失敗したとき（所在確認の後に消された、実行できない）は、まだkakoiが動いているので種類bwrapの診断を出して125で終わる。包んだコマンドのexecの失敗はbwrapが報告し、REQ-291のとおりbwrapの失敗出力と終了コードをそのまま返す。入れ子ではkakoiがコマンドを直接execするので、同じ失敗がREQ-290のcommand not executableの126になる。見張り役が本物をexecするときも同じである。この非対称は受け入れる。
+host/noneの起動の段階でbwrap自身のexecに失敗したとき（所在確認の後に消された、実行できない）は、まだkakoiが動いているので種類bwrapの診断を出して125で終わる。包んだコマンドのexecの失敗はbwrapが報告し、REQ-291のとおりbwrapの失敗出力と終了コードをそのまま返す。"--nested=exec"の入れ子ではkakoiがコマンドを直接execするので、同じ失敗がREQ-290のcommand not executableの126になる。見張り役が本物をexecするときも同じである。この非対称は受け入れる。
 
 ## Examples
 

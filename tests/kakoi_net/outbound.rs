@@ -555,3 +555,66 @@ print('plain queries', len(asked), 'tls queries', len(tls_queries))
         "{output}"
     );
 }
+
+/// Asks `server` at port 53 for the A record of `name`, over UDP or TCP, and
+/// describes the answer as its response code, its number of answers, and the
+/// last answer's address.
+const ASK: &str = r#"
+import struct
+def ask(server, name, tcp=False):
+    query = b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0'
+    query += b''.join(bytes([len(label)]) + label.encode() for label in name.split('.'))
+    query += b'\0\0\x01\0\x01'
+    if tcp:
+        with socket.create_connection((server, 53), timeout=PERMITTED) as stream:
+            stream.sendall(struct.pack('!H', len(query)) + query)
+            length = b''
+            while len(length) < 2:
+                length += stream.recv(2 - len(length))
+            reply = b''
+            while len(reply) < struct.unpack('!H', length)[0]:
+                reply += stream.recv(65535)
+    else:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as datagram:
+            datagram.settimeout(PERMITTED)
+            datagram.sendto(query, (server, 53))
+            reply = datagram.recv(65535)
+    count = int.from_bytes(reply[6:8], 'big')
+    address = socket.inet_ntoa(reply[-4:]) if count else '-'
+    return f'{reply[3] & 15} {count} {address}'
+"#;
+
+// @kotowari[REQ-459]
+#[test]
+fn req_459_the_resolver_answers_at_127_0_0_54_as_at_127_0_0_53() {
+    let host = FakeHost::new(
+        "\n[[network.allow]]\ndestination = { dns = 'app.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
+        &["11.0.0.5/32"],
+    );
+    let app = format!(
+        r#"{ASK}
+for server in ['127.0.0.53', '127.0.0.54']:
+    print(server, '|', ask(server, 'app.example'), '|', ask(server, 'other.example'), '|',
+          ask(server, 'app.example', tcp=True))
+print(repr(open('/etc/resolv.conf').read()))
+"#
+    );
+    let output = host.run(&format!(
+        r#"
+dns({{('app.example', 1): [('11.0.0.5', 300)], ('other.example', 1): [('11.0.0.6', 300)]}})
+process = kakoi({app:?})
+print(process.stdout.read().decode(), end='')
+assert finish(process) == 0
+"#
+    ));
+
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 3, "{output}");
+    let (first, first_answers) = lines[0].split_once(" | ").unwrap();
+    let (second, second_answers) = lines[1].split_once(" | ").unwrap();
+    assert_eq!([first, second], ["127.0.0.53", "127.0.0.54"], "{output}");
+    assert_eq!(first_answers, second_answers, "{output}");
+    assert!(first_answers.starts_with("0 1 11.0.0.5 | "), "{output}");
+    assert!(!first_answers.contains("11.0.0.6"), "{output}");
+    assert_eq!(lines[2], "'nameserver 127.0.0.53\\n'", "{output}");
+}

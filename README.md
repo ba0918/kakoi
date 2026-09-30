@@ -137,7 +137,10 @@ directory inside it. Paths can use `~` and the variables `${workspace}`, `${work
   the host's loopback is reached only through rules you write, and ports are published to the
   host's loopback only when you name them. See [Network](docs/policy.md#network).
 - **Environment** is inherited or cleared, then shaped by `unset` patterns, `set`, secrets, and
-  `path-prepend`. `KAKOI=1` marks the inside.
+  `path-prepend`. `KAKOI=1` tells the programs inside that they run in an isolation; `kakoi`
+  itself tells a nested run by a read-only mark, and runs the command there under the outer
+  isolation, or, with `--nested=isolate`, makes an isolation inside it. See
+  [Nesting](docs/cli.md#nesting).
 - **Command guards** stop one way of using a program the isolated process starts, such as
   `git push`, while the rest of the program stays usable: a rule under `[[commands.guard]]`
   puts a guard first on `PATH`, and a denied run ends with one line naming the reason and exit
@@ -196,8 +199,11 @@ What `kakoi` guarantees, when the launch is not refused:
 
 What it does not guarantee:
 
-- anything about the host: `kakoi` trusts `HOME`, `PATH`, the current directory, and the
-  environment it starts in;
+- anything about the host: `kakoi` trusts the environment it starts in, `HOME`,
+  `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`, `PATH`, and the current directory among it, so what
+  you change there on the host changes which profile is read, where the shared file place is,
+  and where the work place is (whether a run is nested is told by a mark inside the isolation,
+  not by the environment);
 - resource limits (no cgroups) or kernel isolation;
 - what an allowed network destination does with the traffic it receives;
 - that a command guard stops a process that means to get around it: guards catch mistakes, and
@@ -206,7 +212,7 @@ What it does not guarantee:
   you later use on the host are yours to review.
 
 The full threat model, the placement checks that refuse a policy file inside a writable area,
-and the sixteen known gaps are in [Security model](docs/security.md).
+and the seventeen known gaps are in [Security model](docs/security.md).
 
 ## Documentation
 

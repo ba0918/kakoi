@@ -28,6 +28,7 @@ fstype = ["9p", "drvfs"]               # required, not empty
 
 [network]
 mode = "host"            # "host" | "none" | "filtered"; default "host"
+allow-nested-filtered = false  # show the host's /dev/net/tun inside; see "Nested filtered"
 
 [env]
 mode         = "inherit" # "inherit" | "clear"; default "inherit"
@@ -298,6 +299,31 @@ returns.
 shutdown-grace-seconds = 5
 ```
 
+### Nested filtered
+
+```toml
+[network]
+allow-nested-filtered = true   # default false
+```
+
+A `kakoi` started inside this isolation with `--nested=isolate` and a `filtered` policy needs
+the tun device, which `bwrap`'s `/dev` does not have. With this key `true`, the host's
+`/dev/net/tun` is shown inside, whatever the mode, and the summary of the plan says so in one
+line; without it, such a nested run stops without running its command. The key is not one of
+the settings only `filtered` uses: in `host` or `none` it raises no warning and needs no
+`network.mode`. It takes the upper layer. When the host has no `/dev/net/tun`, the launch and
+`--print-plan` stop with a `bwrap` diagnostic.
+
+Showing the device changes the outer isolation too: every process in it can open the tun
+device, and in `host` mode that reaches persistent tun and tap devices of the host's network
+namespace owned by your user ([known gap 17](security.md#known-gaps)). So it is off unless you
+turn it on.
+
+Inside, the resolver of a `filtered` isolation also answers at `127.0.0.54`, where a nested
+`kakoi` that follows the isolation's resolver configuration (`nameserver 127.0.0.53`, read as
+systemd-resolved's stub) sends its questions; the configuration itself still names
+`127.0.0.53` only.
+
 ### Layers
 
 `network.allow`, `network.dns-upstream`, and `network.publish` add up across the layers; an
@@ -467,6 +493,22 @@ under random names and cannot be hidden one by one. `/tmp/kakoi` is the one dire
 shared with the host. You, or your shim, create it; `kakoi` never does. When it does not
 exist the item is skipped and `/tmp` stays empty inside.
 
+## Hidden files and the shared file place
+
+A hidden file is an empty file bound read-only over the path, and in `filtered` mode
+`/etc/resolv.conf` is a one-line file bound the same way. A launch that is not nested binds both
+from real files in the shared file place `$XDG_RUNTIME_DIR/kakoi/`, so that a `kakoi` nested
+inside with `--nested=isolate` can mount over them again. Right before `bwrap` starts, `kakoi`
+makes the place (mode 0700) when it is missing, and makes a file of it again when it is not your
+own regular file of mode 0600 with its fixed content. These two files and the directory are the
+only things a launch that wraps a command writes on the host; `--print-plan` writes nothing.
+
+A nested launch, and a launch where the place cannot be used (`XDG_RUNTIME_DIR` missing, empty,
+or not an absolute path, or a place that is a link, is not yours, or has another mode), puts the
+same files from memory instead, without a warning. Either way the file looks the same inside:
+mode 0600, empty or `nameserver 127.0.0.53`. Whether the place itself is visible inside is up to
+the policy, like any other path.
+
 ## Paths that are refused
 
 A policy file, the configuration directory, a secret file, or a `path-prepend` entry must not
@@ -478,6 +520,12 @@ changed from inside, and the next launch reads what this one read. Keeping a pro
 yet is held to the same rule: the missing name itself carries nothing to protect, but its
 deepest existing ancestor is checked, because what is missing can be created from inside the
 isolation and read on the next launch.
+
+The shared file place `$XDG_RUNTIME_DIR/kakoi/` is protected the same way whenever a launch
+uses it, that is, a launch that is not nested and hides a file or runs in `filtered` mode (see
+[Hidden files and the shared file place](#hidden-files-and-the-shared-file-place)): it
+must not be inside an `rw` or `rw-file` item, and no such item may lie inside it. Either stops the
+launch, and `--print-plan`, with a `path` diagnostic, after the other protected paths.
 
 This can look wrong at first: mounting the file read-only would seem to suffice. It does not.
 The file itself cannot be moved, but its ancestor directory can be renamed from inside the

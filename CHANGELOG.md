@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+### Added
+
+- `--nested=exec|isolate` chooses what a nested run does. `exec`, the default, runs the command
+  under the outer isolation as before. `isolate` reads and checks the policy and makes an
+  isolation inside the outer one, whose limits still hold there; when it cannot be made (a
+  secret the outer isolation shows empty, no `/dev/net/tun` for `filtered`) the command does
+  not run. The command guards of the outer run are shown inside as they are, and an inner
+  policy that places guards of its own stops with `policy`. See
+  [Nesting](docs/cli.md#nesting).
+- `--print-plan` marks a nested `--nested=isolate` plan as applied inside the outer isolation,
+  and `--print-plan=json` gains `applied` (whether the plan is used) and
+  `policy.allow_nested_filtered`; `format_version` stays `1`.
+- `network.allow-nested-filtered = true` shows the host's `/dev/net/tun` inside, in any mode,
+  so that a `kakoi` nested there can make `filtered`; the plan's summary says so. It is off by
+  default, and a host without the device stops the launch with `bwrap`. See
+  [Nested filtered](docs/policy.md#nested-filtered).
+
+### Changed
+
+- **Breaking**: a nested run is told by a mark inside the isolation, an empty read-only file at
+  `/dev/kakoi-isolated` that every isolation now carries, and no longer by `KAKOI=1`. A process
+  inside that removes `KAKOI` still starts a nested run, and `KAKOI=1` set on the host no longer
+  skips the isolation: the command is isolated, without the nesting warning. A `kakoi` started
+  inside an isolation of an earlier version, which carries no mark, is not nested. `KAKOI=1` is
+  still set inside the isolation, as a hint for the programs there. The plan's `nested:` line
+  now says "inside an isolation" instead of naming the variable.
+- A hidden file and, in `filtered` mode, `/etc/resolv.conf` are bound read-only from real files
+  in the shared file place `$XDG_RUNTIME_DIR/kakoi/`, so that a `kakoi` nested inside can mount
+  over them again. `kakoi` makes the place (0700) and its files (0600, empty or
+  `nameserver 127.0.0.53`) right before `bwrap` starts, and makes a file again when it was
+  changed; these are the only files a launch that wraps a command writes on the host, and
+  `--print-plan` writes none. A nested launch, and one without a usable place (`XDG_RUNTIME_DIR`
+  missing or relative, or a place that is a link, not yours, or of another mode), puts the same
+  files from memory as before, without a warning. Inside, both look as before.
+- A launch that uses the shared file place stops with `path` when the place is inside an `rw`
+  or `rw-file` item, or such an item is inside it, as it does for a policy file.
+- The resolver of a `filtered` isolation also answers at `127.0.0.54`, where a nested `kakoi`
+  that follows the isolation's resolver configuration sends its questions; that configuration
+  still names `127.0.0.53` alone.
+
 ### Security
 
 - The bundled profile (`examples/profile/default.toml`, what `kakoi init` writes) now hides
