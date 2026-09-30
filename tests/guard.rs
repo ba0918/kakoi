@@ -836,6 +836,45 @@ fn a_directory_and_a_dangling_link_of_the_same_name_are_passed_over_and_the_real
     assert_passed(&not_denied, "real status\n");
 }
 
+// @kotowari[REQ-446, EX-961]
+#[test]
+fn a_name_through_a_link_in_a_hidden_place_is_passed_over_and_the_real_program_behind_it_is_guarded(
+) {
+    let scene = Scene::new(&["git"]);
+    let visible = scene.home.path().join("visible");
+    std::fs::create_dir(&visible).unwrap();
+    common::write_executable(&visible.join("git"), FAKE_PROGRAM);
+    let hidden = scene.home.path().join("hidden");
+    std::fs::create_dir(&hidden).unwrap();
+    std::os::unix::fs::symlink(&visible, hidden.join("lnk")).unwrap();
+    // `path-prepend` entries are resolved to their real paths, so the link is put on the
+    // `PATH` the isolation inherits instead.
+    let policy = scene.home.write(
+        "policy.toml",
+        format!("[mounts]\nhide = [\"{}\"]\n{GIT_PUSH}", hidden.display()),
+    );
+    let path = std::env::join_paths(
+        [hidden.join("lnk"), scene.bin.clone()]
+            .into_iter()
+            .chain(std::env::split_paths(&host_path())),
+    )
+    .unwrap();
+
+    let output = scene
+        .command(&policy, &["--print-plan=json"])
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    assert_loads(&output);
+    let plan: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    assert_eq!(
+        guard(&plan, "git")["found"],
+        scene.bin.join("git").to_str().unwrap(),
+        "{plan}"
+    );
+}
+
 // The kernel follows 40 links to start a program, whatever C library kakoi is built with.
 // @kotowari[REQ-446]
 #[test]

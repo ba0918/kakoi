@@ -13,10 +13,10 @@
 
 ### REQ-295: 同段階の診断順序
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A36
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A36, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
 - verification: unit
 
-同検査のマウントは適用順、環境と秘密は名前のバイト順で最初を診断する。保護対象はprofile、policy-file、設定ディレクトリ、秘密名順、合成後path-prepend順、共有ファイルの置き場。scan rootがunderより先、生成前の検査が書かれた項目より先。根と露出組は項目順の後workspaceを見て、2検査の交互配置は委譲する。
+同検査のマウントは適用順、環境と秘密は名前のバイト順で最初を診断する。保護対象はprofile、policy-file、設定ディレクトリ（REQ-158の検査、続いてREQ-486の検査）、秘密名順、合成後path-prepend順、共有ファイルの置き場。scan rootがunderより先、生成前の検査が書かれた項目より先。根と露出組は項目順の後workspaceを見て、2検査の交互配置は委譲する。
 
 ### REQ-296: 要約の内容
 - kind: ubiquitous

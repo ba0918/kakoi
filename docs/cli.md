@@ -158,9 +158,19 @@ with replacement characters; control characters are JSON-escaped.
 In every form only the values of the variables the policy names under `secrets` are masked.
 In the full and JSON forms every other variable of the final environment is printed with its
 value as it is, and with `env.mode = "inherit"` that includes any host credential whose name
-matches none of the `unset` patterns ([known gap 6](security.md#known-gaps)). Treat the
+matches none of the `unset` patterns ([known gap 5](security.md#known-gaps)). Treat the
 output of `--print-plan=full` and `--print-plan=json` as sensitive; the summary prints only
 the values the policy set.
+
+## Finding the command
+
+`COMMAND` with a `/` is used as the path it names; any other name is looked up on the `PATH`
+the isolation gets. The lookup runs on the host but picks only what the isolation has: a name
+whose place, real file, or a link on the way is hidden by a `hide` item (one `kakoi` generates
+included) is passed over for the next one on `PATH`, and a command given by a path hidden that
+way is not found. Under the `listed` mount mode, what is not shown counts the same. A command
+not found exits 127 with `kakoi: command not found: <COMMAND>`; when a program runs in a shell
+on the host but not through `kakoi`, `--print-plan` shows whether its place is hidden.
 
 ## Exit codes and diagnostics
 
@@ -251,12 +261,12 @@ it is put first on the inner `PATH` when there is one. An inner environment with
 `env.mode = "clear"` policy that passes none) gets no guard directory on it, as outside, so the
 guards found through `PATH` do not watch there. A
 policy for the inner isolation cannot place guards of its own while it does; that is a `policy`
-diagnostic. The limits of all this are [known gap 8](security.md#known-gaps).
+diagnostic. The limits of all this are [known gap 7](security.md#known-gaps).
 
 Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
 isolation: Landlock, which restricts the programs there, forbids mounting, so the inner
 `bwrap` stops (even when `bwrap` is in `commands.allow`). The mount mode `listed` alone does
-not prevent it. See [known gap 19](security.md#known-gaps). The other way round works: an inner
+not prevent it. See [known gap 18](security.md#known-gaps). The other way round works: an inner
 isolation given the outer guards can use the `listed` command mode. The outer guards, those in
 their directory and those over real programs alike, are allowed there without being listed, a
 program the inner `commands.allow` allows still starts through them under the outer rules (by

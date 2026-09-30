@@ -38,6 +38,10 @@ pub struct NameFact {
     pub name: Option<PathBuf>,
     /// The real path it resolves to; none for a dangling link.
     pub real: Option<PathBuf>,
+    /// The places of the links followed on the way from the name to what it resolves to,
+    /// each by its parent's real path and its name: a link a `hide` item covers is not
+    /// there inside, so neither is anything reached through it.
+    pub links: Vec<PathBuf>,
     /// Whether that is a regular file this process may execute.
     pub executable: bool,
     /// Which file that is; none when it cannot be told.
@@ -45,21 +49,24 @@ pub struct NameFact {
 }
 
 /// The real program among `names` (in the order of `PATH`): the first the shell inside
-/// would start by that name, one whose name and what it resolves to are not hidden by
-/// `mounts` and that resolves to an executable regular file (specification REQ-446).
-/// Directories, dangling links, regular files that cannot be executed, and names whose
-/// place or real file is hidden are passed over.
+/// would start by that name, one whose name, what it resolves to, and the links on the
+/// way are not hidden by `mounts` and that resolves to an executable regular file
+/// (specification REQ-446). Directories, dangling links, regular files that cannot be
+/// executed, and names whose place, real file, or a link on the way is hidden are passed
+/// over.
 pub fn real_program<'a>(names: &'a [NameFact], mounts: &[ResolvedItem]) -> Option<&'a NameFact> {
     names
         .iter()
         .find(|fact| fact.executable && fact.real.is_some() && !name_hidden(fact, mounts))
 }
 
-/// Whether `mounts` hides where the name of `fact` is or what it resolves to.
+/// Whether `mounts` hides where the name of `fact` is, what it resolves to, or a link
+/// followed on the way.
 pub(crate) fn name_hidden(fact: &NameFact, mounts: &[ResolvedItem]) -> bool {
     [fact.name.as_deref(), fact.real.as_deref()]
         .into_iter()
         .flatten()
+        .chain(fact.links.iter().map(PathBuf::as_path))
         .any(|path| hidden(path, mounts))
 }
 

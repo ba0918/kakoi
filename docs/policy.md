@@ -234,7 +234,8 @@ shown. A scan whose root holds a shown place still runs: with `root = "~"` and o
 workspace shown, what it finds in the workspace (an `.env` it matches) is hidden, and what it
 finds elsewhere is skipped. A command guard wraps, and a command given by name is found as, only a program whose
 place and file are shown: a shim first on `PATH` that is not shown is passed over for the next
-one that is, and a name found nowhere shown is `command not found` (127). The current directory
+one that is, a name found nowhere shown is `command not found` (127), and so is a command given
+by a path that is not shown. The current directory
 has to be inside a shown place, or the run stops with `path`, `--print-plan` included.
 
 With the `host` network, abstract UNIX sockets (which live outside the file system, such as a
@@ -300,8 +301,8 @@ a shell would otherwise start the real program past the outer rules. A program t
 It is a guardrail, not a boundary: the dynamic linker started by its absolute path runs any
 readable file as a program, and an allowed interpreter (`python3`, `node`) can load and run code
 it reads. Keeping those out of `allow` is what makes the list mean something (see
-[known gap 18](security.md#known-gaps)). Inside such an isolation `--nested=isolate` cannot make
-another one ([known gap 19](security.md#known-gaps)). The bundled `listed` example keeps the
+[known gap 17](security.md#known-gaps)). Inside such an isolation `--nested=isolate` cannot make
+another one ([known gap 18](security.md#known-gaps)). The bundled `listed` example keeps the
 mode as a comment for this reason, and stops the dynamic linker started by name with a
 [command guard](#command-guards) instead.
 
@@ -444,7 +445,7 @@ the settings only `filtered` uses: in `host` or `none` it raises no warning and 
 
 Showing the device changes the outer isolation too: every process in it can open the tun
 device, and in `host` mode that reaches persistent tun and tap devices of the host's network
-namespace owned by your user ([known gap 17](security.md#known-gaps)). So it is off unless you
+namespace owned by your user ([known gap 16](security.md#known-gaps)). So it is off unless you
 turn it on.
 
 Inside, the resolver of a `filtered` isolation also answers at `127.0.0.54`, where a nested
@@ -622,7 +623,7 @@ finds its resources relative to its own location (Python's standard library, for
 when it is moved this way; use it for programs such as `git` that do not. The program is
 relocated by the path resolved when the plan was made, and `bwrap` resolves that path again when
 it starts: another isolation that can write where the real program lies can swap in a hidden file
-between the two, and it shows at the relocated place (the same kind of gap as item 15 of
+between the two, and it shows at the relocated place (the same kind of gap as item 14 of
 [Known gaps](security.md#known-gaps)).
 
 **`git.instead-of` and `GIT_CONFIG_*`.** `git.instead-of` works by putting `GIT_CONFIG_*`
@@ -670,6 +671,12 @@ yet is held to the same rule: the missing name itself carries nothing to protect
 deepest existing ancestor is checked, because what is missing can be created from inside the
 isolation and read on the next launch.
 
+No `rw` or `rw-file` item may lie inside the configuration directory either, such as
+`--rw ~/.config/kakoi/profile` or a link there: what it holds is read by the next launch even
+when this one read none of it, as with the built-in default. The launch, and `--print-plan`,
+stops with `path`, right after the configuration directory's own check. `rw-copy` and `ro`
+items there are allowed.
+
 The shared file place `$XDG_RUNTIME_DIR/kakoi/` is protected the same way whenever a launch
 uses it, that is, a launch that is not nested and hides a file or runs in `filtered` mode (see
 [Hidden files and the shared file place](#hidden-files-and-the-shared-file-place)): it
@@ -708,7 +715,7 @@ In short: the path of a link you placed inside an `rw` area stops the launch whe
 `hide`, as a scan `root`, or as a `hide-mounts` `under`, wherever it lands, and when written as
 `rw` or `rw-file` unless the link's target lies inside an item that cannot be redirected from
 inside. Write the link's real target instead. The same link written as `ro` passes, but what
-that `ro` protects is only as much as [known gap 15](security.md#known-gaps) says.
+that `ro` protects is only as much as [known gap 14](security.md#known-gaps) says.
 
 Landing inside something hidden is refused too, whatever the item was written as: an `rw`,
 `rw-file`, `rw-copy`, or `ro` item whose path passes through a writable item and lands on or

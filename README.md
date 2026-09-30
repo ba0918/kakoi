@@ -220,7 +220,7 @@ What it does not guarantee:
   you later use on the host are yours to review.
 
 The full threat model, the placement checks that refuse a policy file inside a writable area,
-and the nineteen [known gaps](docs/security.md#known-gaps) are in
+and the eighteen [known gaps](docs/security.md#known-gaps) are in
 [Security model](docs/security.md).
 
 ## Documentation

@@ -14,19 +14,19 @@
 
 ### REQ-359: 既知の隙間の公開
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
 - verification: review
-- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、19件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
+- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、18件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
 
-表 TBL-160 の既知の隙間19件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。19件のどれも省かない。
+表 TBL-160 の既知の隙間18件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。18件のどれも省かない。
 
 ### REQ-360: 配置保護の説明
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
 - verification: review
-- how_to_verify: "docs/policy.md" を読み、祖先の改名で保護を迂回できる理由と拒否、dotfilesの設定実体がworktree内のときの下位workspaceとrwのworkspace/git_common_dirの例、下位workspaceはそこで起動し別の場所からリンク越しに指定すると拒否されることと実体の指定による回避、rw内のリンクのhide/root/underは着地先を問わず拒否されること、rw/rw-fileは根の外へ着地すると拒否されること、roの許容と既知の隙間15が説明されていることを確かめる。
+- how_to_verify: "docs/policy.md" を読み、祖先の改名で保護を迂回できる理由と拒否、dotfilesの設定実体がworktree内のときの下位workspaceとrwのworkspace/git_common_dirの例、下位workspaceはそこで起動し別の場所からリンク越しに指定すると拒否されることと実体の指定による回避、rw内のリンクのhide/root/underは着地先を問わず拒否されること、rw/rw-fileは根の外へ着地すると拒否されること、roの許容と既知の隙間14が説明されていることを確かめる。
 
-"docs/policy.md"は祖先の改名で保護を迂回できる理由と拒否を説明する。dotfilesの設定実体がworktree内なら下位workspaceとrwのworkspace/git_common_dirを例示する。下位workspaceはそこで起動し、別場所からリンク越しに指定すると拒否されること、実体指定による回避を示す。rw内リンクのhide/root/underは着地先を問わず拒否、rw/rw-fileは根の外へ着地すれば拒否、roの許容と既知の隙間15も説明する。
+"docs/policy.md"は祖先の改名で保護を迂回できる理由と拒否を説明する。dotfilesの設定実体がworktree内なら下位workspaceとrwのworkspace/git_common_dirを例示する。下位workspaceはそこで起動し、別場所からリンク越しに指定すると拒否されること、実体指定による回避を示す。rw内リンクのhide/root/underは着地先を問わず拒否、rw/rw-fileは根の外へ着地すれば拒否、roの許容と既知の隙間14も説明する。
 
 ### REQ-361: rw-copyと一時領域の説明
 - kind: ubiquitous
@@ -63,29 +63,28 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 ## Decision tables
 
 ### TBL-160: 既知の隙間
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
 
 | 番号 | 既知の隙間 |
 |---|---|
-| 1 | "hide" したディレクトリの中のコマンドが「見つかった」と判定される（core-command-resolution.md） |
-| 2 | 起動後に現れたファイルは隠れない（core-mounts.md） |
-| 3 | 走査で隠したファイルが Git に追跡されていると、隔離の中で空の変更として見える（core-mounts.md） |
-| 4 | bind mount やハードリンクによる別の経路は隠せない。"hide" と "rw-copy" は、指定した実体のパスにだけ効く。"rw-copy" の複製元と同じ inode へのハードリンクが "rw" の中にあれば、そこへの書き込みはホストのファイルに届く |
-| 5 | マウントするパスと秘密ファイルのパスは bwrap の引数に載り、秘密の値は "/proc" を通してホストから読める（core-environment.md） |
-| 6 | 名前が規則に合わないホストの認証情報の環境変数は、"inherit" で隔離に入る（core-environment.md） |
-| 7 | "TIOCLINUX"、端末の応答を使った注入、ディスプレイサーバを経由した入力の合成は、seccomp で塞がない（core-terminal.md）。同梱のプロファイルは、これらの経路を "hide" と "unset" で消す |
-| 8 | 入れ子の判定と入れ子の中の隔離の限界。隔離の中で自分で名前空間を作って "/dev" を覆うと、その中で起動した kakoi は入れ子と判定しない。古い版の kakoi の隔離の中では入れ子と判定しない。"--nested=isolate" の入れ子の中でさらに "--nested=isolate" で隔離を作るとき、内側が外側のデータから作って置いたファイル（"hide" のファイル、filtered の "/etc/resolv.conf"）と同じパスにマウントしようとすると止まる。外の起動が共有ファイルの置き場を使えなかったときも同じである（core-process.md）。外と中のポリシーの両方に見張り役の規則があると、中の隔離を作らずに止まる（core-nested-isolation.md）。入れ子と判定しなかった内側の kakoi は、外の隔離の中の書ける場所に共有ファイルの置き場を作ることがあり、そのとき外のエージェントは内側の起動の隠したファイルに中身を入れられる。外と中のポリシーで同じファイルを "rw-copy" にすると、中の隔離を作れずに止まる（core-nested-isolation.md） |
-| 9 | kakoi は起動された環境を信頼する（core-runtime.md）。カレントディレクトリも含む。"rw" の中を通るパスで "cd" し直してから起動すると、隔離の中で差し替えたリンクの先が作業場所になる |
-| 10 | "rw" で渡した領域は、利用者がホスト側で後から実行するものの置き場になりうる。".git/hooks" と ".git/config" は、利用者の "git" の操作で自動的に読まれる。隔離の設計では防げず、利用者が差分を見るしかない |
-| 11 | 32 ビットと x32 のバイナリは動かない（core-terminal.md） |
-| 12 | ワークツリーの ".git" を消すと、次回の起動でワークツリーの導出が祖先のリポジトリに変わりうる（core-mounts.md） |
-| 13 | "git init --separate-git-dir" で作ったメインのワークツリー（".git" が通常ファイルで、その指す先に "commondir" も "core.worktree" も無いもの）は、core-policy.md が定める相互リンクのどちらの形にも当たらず、"path" で止まる |
-| 14 | core-policy-placement.md の根の項目の検査は、今回の起動で書き込める項目を基準にする。ワークツリーの下位を字面で書いた項目（例: "rw" に "${worktree}" と "~/work/a/b" を並べたポリシー）は、ワークツリーが "~/work" である起動の隔離の中で "~/work/a" をリンクに差し替えられる。次にワークツリーが別の場所になる起動ではその差し替えが見えず、リンクの先に "rw" が付く。項目のパス自身がリンクに差し替えられる形（"~/work/a/b" を差し替え、次の起動で "--workspace ~/work/a/b/inner" を別の場所から与える）も同じである。同じワークツリーから起動すれば止まる。閉じるには前回の起動で書き込めた項目を覚える必要があり、永続する状態を持たないという core-runtime.md の境界に反するので、この隙間は受け入れる。ワークツリーの下位は変数で書く |
-| 15 | "rw" の中にある "ro" と "hide" の項目の守りは完全ではない。リンクで書いた "ro" が守るのは、リンク先の実体だけである。隔離の中でリンクを消して同じ名前の通常ファイルを置けば、同じ起動の中で、読む側のパスの内容を変えられる（一時ファイルと rename で保存するエディタも、リンクを置き換える）。リンク先が書き込める項目の外なら、そこは元から読み取り専用であり、"ro" の項目は何も足していない。次の起動では、リンクの差し替えで別の場所が読み取り専用になるか、削除で読み取り専用が外れる。新しく見えるものは、ポリシーを保護する配置の露出する組の検査が止める。リンクで書いた "hide" は、根の項目の検査が 1 回目の起動から止める。リンクでなくても、祖先ディレクトリの改名と、同じパスへの別のファイルの配置で、次の起動が読む内容を変えられる（core-policy-placement.md）。"ro" で守れるのは、エージェントが読む実体の内容が意図せず書き換わらないことまでで、エージェントが別の内容を読むように仕向ける迂回は止められない |
-| 16 | シムの雛形は、包む対象のどのオプションが値を取るかを知らないので、写す対象のオプションと同じ名前の語を、別のオプションの値でも位置引数でも、どこにあってもそのオプションとして読む。そのため "--workspace" や "--rw" が、その語に続く語まで広がりうる。例: "codex -m --cd /etc exec" は kakoi に "--workspace /etc" を渡す（core-shim.md）。この誤読は受け入れる |
-| 17 | "network.allow-nested-filtered" を true にした host の隔離の中からは、ホストのネットワーク名前空間にある、所有者を設定していないか利用者と同じ uid を所有者とする永続の tun と tap の装置を読み書きできる（core-nested-isolation.md） |
-| 18 | コマンドのモード "listed" は Landlock で許していないプログラムの起動を止めるガードレールで、境界ではない。動的リンカを絶対パスで起動して読めるプログラムを読み込ませる形、許したインタプリタ（python、node）が読めるファイルを実行できるメモリとして読み込む形、memfd に写した実行ファイルを起動する形は止まらない（core-listed-commands.md） |
-| 19 | コマンドのモード "listed" の隔離の中では、Landlock がマウントを禁じるので、"--nested=isolate" で中に隔離を作れない（core-listed-commands.md） |
+| 1 | 起動後に現れたファイルは隠れない（core-mounts.md） |
+| 2 | 走査で隠したファイルが Git に追跡されていると、隔離の中で空の変更として見える（core-mounts.md） |
+| 3 | bind mount やハードリンクによる別の経路は隠せない。"hide" と "rw-copy" は、指定した実体のパスにだけ効く。"rw-copy" の複製元と同じ inode へのハードリンクが "rw" の中にあれば、そこへの書き込みはホストのファイルに届く |
+| 4 | マウントするパスと秘密ファイルのパスは bwrap の引数に載り、秘密の値は "/proc" を通してホストから読める（core-environment.md） |
+| 5 | 名前が規則に合わないホストの認証情報の環境変数は、"inherit" で隔離に入る（core-environment.md） |
+| 6 | "TIOCLINUX"、端末の応答を使った注入、ディスプレイサーバを経由した入力の合成は、seccomp で塞がない（core-terminal.md）。同梱のプロファイルは、これらの経路を "hide" と "unset" で消す |
+| 7 | 入れ子の判定と入れ子の中の隔離の限界。隔離の中で自分で名前空間を作って "/dev" を覆うと、その中で起動した kakoi は入れ子と判定しない。古い版の kakoi の隔離の中では入れ子と判定しない。"--nested=isolate" の入れ子の中でさらに "--nested=isolate" で隔離を作るとき、内側が外側のデータから作って置いたファイル（"hide" のファイル、filtered の "/etc/resolv.conf"）と同じパスにマウントしようとすると止まる。外の起動が共有ファイルの置き場を使えなかったときも同じである（core-process.md）。外と中のポリシーの両方に見張り役の規則があると、中の隔離を作らずに止まる（core-nested-isolation.md）。入れ子と判定しなかった内側の kakoi は、外の隔離の中の書ける場所に共有ファイルの置き場を作ることがあり、そのとき外のエージェントは内側の起動の隠したファイルに中身を入れられる。外と中のポリシーで同じファイルを "rw-copy" にすると、中の隔離を作れずに止まる（core-nested-isolation.md） |
+| 8 | kakoi は起動された環境を信頼する（core-runtime.md）。カレントディレクトリも含む。"rw" の中を通るパスで "cd" し直してから起動すると、隔離の中で差し替えたリンクの先が作業場所になる |
+| 9 | "rw" で渡した領域は、利用者がホスト側で後から実行するものの置き場になりうる。".git/hooks" と ".git/config" は、利用者の "git" の操作で自動的に読まれる。隔離の設計では防げず、利用者が差分を見るしかない |
+| 10 | 32 ビットと x32 のバイナリは動かない（core-terminal.md） |
+| 11 | ワークツリーの ".git" を消すと、次回の起動でワークツリーの導出が祖先のリポジトリに変わりうる（core-mounts.md） |
+| 12 | "git init --separate-git-dir" で作ったメインのワークツリー（".git" が通常ファイルで、その指す先に "commondir" も "core.worktree" も無いもの）は、core-policy.md が定める相互リンクのどちらの形にも当たらず、"path" で止まる |
+| 13 | core-policy-placement.md の根の項目の検査は、今回の起動で書き込める項目を基準にする。ワークツリーの下位を字面で書いた項目（例: "rw" に "${worktree}" と "~/work/a/b" を並べたポリシー）は、ワークツリーが "~/work" である起動の隔離の中で "~/work/a" をリンクに差し替えられる。次にワークツリーが別の場所になる起動ではその差し替えが見えず、リンクの先に "rw" が付く。項目のパス自身がリンクに差し替えられる形（"~/work/a/b" を差し替え、次の起動で "--workspace ~/work/a/b/inner" を別の場所から与える）も同じである。同じワークツリーから起動すれば止まる。閉じるには前回の起動で書き込めた項目を覚える必要があり、永続する状態を持たないという core-runtime.md の境界に反するので、この隙間は受け入れる。ワークツリーの下位は変数で書く |
+| 14 | "rw" の中にある "ro" と "hide" の項目の守りは完全ではない。リンクで書いた "ro" が守るのは、リンク先の実体だけである。隔離の中でリンクを消して同じ名前の通常ファイルを置けば、同じ起動の中で、読む側のパスの内容を変えられる（一時ファイルと rename で保存するエディタも、リンクを置き換える）。リンク先が書き込める項目の外なら、そこは元から読み取り専用であり、"ro" の項目は何も足していない。次の起動では、リンクの差し替えで別の場所が読み取り専用になるか、削除で読み取り専用が外れる。新しく見えるものは、ポリシーを保護する配置の露出する組の検査が止める。リンクで書いた "hide" は、根の項目の検査が 1 回目の起動から止める。リンクでなくても、祖先ディレクトリの改名と、同じパスへの別のファイルの配置で、次の起動が読む内容を変えられる（core-policy-placement.md）。"ro" で守れるのは、エージェントが読む実体の内容が意図せず書き換わらないことまでで、エージェントが別の内容を読むように仕向ける迂回は止められない |
+| 15 | シムの雛形は、包む対象のどのオプションが値を取るかを知らないので、写す対象のオプションと同じ名前の語を、別のオプションの値でも位置引数でも、どこにあってもそのオプションとして読む。そのため "--workspace" や "--rw" が、その語に続く語まで広がりうる。例: "codex -m --cd /etc exec" は kakoi に "--workspace /etc" を渡す（core-shim.md）。この誤読は受け入れる |
+| 16 | "network.allow-nested-filtered" を true にした host の隔離の中からは、ホストのネットワーク名前空間にある、所有者を設定していないか利用者と同じ uid を所有者とする永続の tun と tap の装置を読み書きできる（core-nested-isolation.md） |
+| 17 | コマンドのモード "listed" は Landlock で許していないプログラムの起動を止めるガードレールで、境界ではない。動的リンカを絶対パスで起動して読めるプログラムを読み込ませる形、許したインタプリタ（python、node）が読めるファイルを実行できるメモリとして読み込む形、memfd に写した実行ファイルを起動する形は止まらない（core-listed-commands.md） |
+| 18 | コマンドのモード "listed" の隔離の中では、Landlock がマウントを禁じるので、"--nested=isolate" で中に隔離を作れない（core-listed-commands.md） |
 
 ## Examples
 
@@ -100,11 +99,11 @@ Scenario: 公開文書の導線・反例
   Given READMEだけから初回起動を進める
   When 契約への適合を確認する
   Then 起動前に必ずプロファイル設置が必要だと読めることは契約違反である
-@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54,docs/decision/brainstorm/2026-09-30-allowlist.md#A13,docs/decision/brainstorm/2026-09-30-allowlist.md#A51,docs/decision/brainstorm/2026-09-30-allowlist.md#A56
+@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54,docs/decision/brainstorm/2026-09-30-allowlist.md#A13,docs/decision/brainstorm/2026-09-30-allowlist.md#A51,docs/decision/brainstorm/2026-09-30-allowlist.md#A56,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
 Scenario: 既知の隙間の公開・成功
   Given READMEから保証範囲を調べる
   When 契約への適合を確認する
-  Then 一回のリンクで19件の具体的な限界を読める
+  Then 一回のリンクで18件の具体的な限界を読める
 @id=EX-659 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1
 Scenario: 既知の隙間の公開・反例
   Given READMEから保証範囲を調べる

@@ -33,6 +33,13 @@
 
 存在しない成分、読めない成分、先を読めないリンクに至ったら解決をそこで打ち切り、そこまでに参照したもの（先を読めないリンクはその置き場）を検査する。複数の参照が同時に当たるとき、どれを診断に名指すかは第 20 節で委譲する。
 
+### REQ-486: 設定ディレクトリの中の書き込める項目
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-30-hotspot-review.md#A1, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
+- verification: unit
+
+合成後の "rw" または "rw-file" の項目の実体が、設定ディレクトリの実体と同じか、その子孫にあれば、種類 "path" の診断で終わる。リンクを経由して設定ディレクトリの中に着く項目も含む。"rw-copy" と "ro" の項目は対象にしない。この検査は計画表示でも行う。診断の説明は、その項目の指令とパス、設定ディレクトリのパス、隔離の中から次の起動が読むプロファイルを書き換えられるという理由を含む。
+
 ### REQ-159: 根への着地と隠し先・起点のリンク
 - kind: ubiquitous
 - source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
@@ -126,15 +133,15 @@
 
 ### REQ-163: 残る配置上の隙間と受け入れる形
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
 - verification: review
-- how_to_verify: 本文の配置（"rw" の中の "ro" の入れ子、"rw" の中に置いたリンクのパスを "rw"、"rw-file"、"hide"、走査の "root"、"hide-mounts" の "under" に書く配置とリンク先の実体のパスを書く配置、同じリンクのパスを "ro" に書く配置）でkakoiを起動し、それぞれ本文のとおり通るか1回目の起動から止まるかを観測する。"ro" で書いたリンクの守りの限界が表 TBL-160 の既知の隙間15と一致すること、秘密ファイルが保護対象のパスに含まれることをREQ-158と突き合わせて確かめる。
+- how_to_verify: 本文の配置（"rw" の中の "ro" の入れ子、"rw" の中に置いたリンクのパスを "rw"、"rw-file"、"hide"、走査の "root"、"hide-mounts" の "under" に書く配置とリンク先の実体のパスを書く配置、同じリンクのパスを "ro" に書く配置）でkakoiを起動し、それぞれ本文のとおり通るか1回目の起動から止まるかを観測する。"ro" で書いたリンクの守りの限界が表 TBL-160 の既知の隙間14と一致すること、秘密ファイルが保護対象のパスに含まれることをREQ-158と突き合わせて確かめる。
 
 "rw" の中の "hide"・"ro" の項目は着地先を変えられると元の対象を隠せなくなるが、それは下の「読み取り専用で重ねるだけでは足りない理由」のとおり祖先の改名でも起きることで、この規則の穴ではない。入れ子を禁じないのは、第 6.4 節の表にある "rw" の中の "ro" のような形を残すためである。
 
 利用者が "rw" の中に置いたリンク（先がどの根の項目の中でもない。"hide" と走査の "root"・"hide-mounts" の "under" は先を問わない）のパスを"rw"、"rw-file"、"hide" の項目や走査の "root"、"hide-mounts" の "under" に書くと、正直な配置でもこの規則に当たって 1 回目の起動から拒否される。
 
-リンク先の実体のパスを書けば通る。同じリンクのパスを "ro" の項目に書く配置（dotfiles へのリンクを "ro" にする形）は通るが、その守りは第 16 節の既知の隙間 15 の水準である: 隔離の中でリンクを消して同じ名前の通常ファイルを置けば、同じ起動の中で読む側のパスの内容を変えられ（守られるのはリンク先の実体だけ。2026-09-06 に実測）、リンク先が書き込める項目の外なら"--ro-bind / /" で既に読み取り専用なので "ro" の項目は何も足していない。
+リンク先の実体のパスを書けば通る。同じリンクのパスを "ro" の項目に書く配置（dotfiles へのリンクを "ro" にする形）は通るが、その守りは第 16 節の既知の隙間 14 の水準である: 隔離の中でリンクを消して同じ名前の通常ファイルを置けば、同じ起動の中で読む側のパスの内容を変えられ（守られるのはリンク先の実体だけ。2026-09-06 に実測）、リンク先が書き込める項目の外なら"--ro-bind / /" で既に読み取り専用なので "ro" の項目は何も足していない。
 
 秘密ファイルを保護対象にするのは、"rw" の中の秘密ファイルを隔離の中からホストの任意のファイルへのシンボリックリンクに差し替えると、次の起動がその内容を環境変数として隔離に持ち込むためである。
 
@@ -250,4 +257,24 @@ Scenario: 隠し先の再露出
   Given 書き込み内のリンクから ro を hide の中へ置く
   When 露出する組を検査する
   Then path の診断で終了する
+```
+
+```gherkin
+@id=EX-957 @about=REQ-486 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A1,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
+Scenario: 設定ディレクトリの中を書き込める項目にすると止まる
+  Given 設定ディレクトリの中に "profile" ディレクトリがあり、コマンドラインで "--rw" にそのディレクトリを与える
+  When コマンドを起動する
+  Then コマンドを実行せず種類 path の診断で 125 になる
+
+@id=EX-958 @about=REQ-486 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A1,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
+Scenario: リンクを通して設定ディレクトリの中に着く項目も止まる
+  Given ホームのリンクが設定ディレクトリの中の "profile" ディレクトリを指し、ポリシーがそのリンクを "rw" にしている
+  When 計画を表示する
+  Then 種類 path の診断で 125 になる
+
+@id=EX-959 @about=REQ-486 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3
+Scenario: 設定ディレクトリの中を複製にするのは止めない
+  Given ポリシーが設定ディレクトリの中の "profile" ディレクトリを "rw-copy" にしている
+  When 計画を表示する
+  Then この規則を理由としては止めない
 ```

@@ -6,10 +6,12 @@
 
 ### REQ-260: コマンド探索
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A2, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A5, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A6, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A9, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A11
 - verification: unit
 
 COMMANDに/があればそのパスの存在と実行可能性を調べる。それ以外は隔離へ渡すPATHを順に探し、PATHがなければ探索しない。見つからなければ名前を説明とするcommand not found、127。
+
+PATHを探すときは、その名前の場所、リンクを解決した実体、そのパスを解決するときに途中で辿るリンクの置き場のどれかが隠される候補を飛ばして先を探す。隠されるとは、それを含む項目のうちマウント順で最後に効くもの（自動で生成された "hide" を含む）が "hide" であることを指し、REQ-446 の見張り役の本物選びと同じ判定である。COMMANDに/があるときも、そのパスがこの意味で隠されるなら見つからないものとする。マウントのモードが "listed" のときは、これに加えて隔離の中に見えていないものも同じに扱う（REQ-484）。これらはネットワークのモード host、none、filtered のすべてで同じにする。
 
 ### REQ-261: 計画と入れ子のコマンド探索
 - kind: ubiquitous
@@ -34,10 +36,10 @@ COMMANDに/があればそのパスの存在と実行可能性を調べる。そ
 
 ### REQ-264: ホストでの探索の限界
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A2
 - verification: unit
 
-コマンド探索はホストのファイルシステムで行い、hide配下で見つかったコマンドが後にbwrapのexecで失敗することを許容する。PATH要素がrw内かは検査しない。この隙間をREADMEへ記す。
+コマンド探索はホストのファイルシステムで行う。PATH要素がrw内かは検査しない。
 
 ## Examples
 
@@ -66,10 +68,28 @@ Scenario: argv0の保持
   When PATHから見つかったshをCOMMANDのshで起動する
   Then argv[0]は解決先の絶対パスではなくshとなる
 
-@id=EX-504 @about=REQ-264 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
-Scenario: ホストでの探索の限界
-  Given 本体の既存仕様を適用する
-  When hide配下に実行可能コマンドが存在する
-  Then 探索後のbwrap exec失敗をそのまま返す
+@id=EX-504 @about=REQ-260 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A2,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A5
+Scenario: 隠された候補を飛ばして先を探す
+  Given マウントのモードが "host" で、PATHの先頭のディレクトリが "hide" で隠され、そこと "/usr/bin" に同じ名前の実行ファイルがある
+  When その名前をCOMMANDにして起動する
+  Then "/usr/bin" のものを起動する
+
+@id=EX-955 @about=REQ-260 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A2,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A5
+Scenario: 隠された候補しか無ければ見つからない
+  Given マウントのモードが "host" で、ある名前の実行ファイルが "hide" で隠されたディレクトリにしか無い
+  When その名前をCOMMANDにして起動する
+  Then 名前を説明とするcommand not foundで127となる
+
+@id=EX-960 @about=REQ-260 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A9
+Scenario: 隠された場所のリンクを途中で通る候補を飛ばす
+  Given 隠されたディレクトリの中のリンクが見えているディレクトリを指し、PATHの先頭がそのリンクで、後ろの "/usr/bin" に同じ名前の実行ファイルがある
+  When その名前をCOMMANDにして起動する
+  Then "/usr/bin" のものを起動する
+
+@id=EX-956 @about=REQ-260 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A6
+Scenario: 隠されたパスで渡したコマンドは見つからない
+  Given "hide" で隠されたディレクトリに実行ファイルがある
+  When そのパスをCOMMANDにして起動する
+  Then 名前を説明とするcommand not foundで127となる
 
 ```

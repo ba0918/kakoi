@@ -1,6 +1,7 @@
 //! What the built binary does with the real bwrap (specification section 15.2): the rows
 //! of the tables of section 13, and what is seen from inside the isolation.
 
+use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -415,16 +416,11 @@ fn a_bwrap_that_cannot_be_executed_is_a_bwrap_diagnostic() {
     assert_diagnostic(&output, 125, "bwrap");
 }
 
-// @kotowari[REQ-264, REQ-401, EX-756, EX-504]
+// @kotowari[REQ-401, EX-756]
 #[test]
-fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
+fn a_command_that_cannot_be_executed_inside_fails_at_exec_with_bwrap_status() {
     let (home, workspace) = home_with_workspace();
-    let tool = home.write_executable("hidden/tool", "#!/bin/sh\necho ran\n");
-    let hidden = home.path().join("hidden");
-    profile(
-        &home,
-        &format!("{RW_WORKSPACE}hide = [\"{}\"]\n", hidden.display()),
-    );
+    let tool = home.write_executable("tools/tool", "#!/nonexistent/interpreter\n");
 
     let through_kakoi = binary(home.path())
         .args([
@@ -443,9 +439,7 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
         bwrap_alone.env("PATH", path);
     }
     let bwrap_alone = bwrap_alone
-        .args(["--ro-bind", "/", "/", "--tmpfs"])
-        .arg(&hidden)
-        .arg("--")
+        .args(["--ro-bind", "/", "/", "--"])
         .arg(&tool)
         .output()
         .unwrap();
@@ -463,6 +457,155 @@ fn a_command_inside_a_hidden_directory_fails_at_exec_with_bwrap_status() {
     );
     assert!(through_kakoi.stdout.is_empty(), "{report}");
     assert_eq!(through_kakoi.stderr, bwrap_alone.stderr, "{report}");
+}
+
+/// A home whose profile hides `hidden` and whose `hidden/bin` holds the executable `name`,
+/// with the directory `hidden/bin` returned.
+fn hidden_tool(home: &TempDir, name: &str) -> PathBuf {
+    home.write_executable(format!("hidden/bin/{name}"), "#!/bin/sh\necho hidden\n");
+    let hidden = home.path().join("hidden");
+    profile(
+        home,
+        &format!("{RW_WORKSPACE}hide = [\"{}\"]\n", hidden.display()),
+    );
+    hidden.join("bin")
+}
+
+/// Runs the built binary on `workspace` with `PATH` set to `path` and `command`.
+fn run_with_path(home: &TempDir, workspace: &Path, path: &OsStr, command: &[&OsStr]) -> Output {
+    binary(home.path())
+        .env("PATH", path)
+        .arg("--workspace")
+        .arg(workspace)
+        .arg("--")
+        .args(command)
+        .output()
+        .unwrap()
+}
+
+// @kotowari[REQ-260, EX-504]
+#[test]
+fn a_hidden_candidate_on_path_is_passed_over_for_a_later_one() {
+    let (home, workspace) = home_with_workspace();
+    let hidden = hidden_tool(&home, "kakoi-test-tool");
+    home.write_executable("visible/kakoi-test-tool", "#!/bin/sh\necho visible\n");
+    let path = std::env::join_paths(
+        [hidden, home.path().join("visible")]
+            .into_iter()
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[OsStr::new("kakoi-test-tool")]);
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+    assert_eq!(output.stdout, b"visible\n", "{}", output_report(&output));
+}
+
+// @kotowari[REQ-260, EX-955]
+#[test]
+fn a_name_found_only_in_a_hidden_place_is_not_found() {
+    let (home, workspace) = home_with_workspace();
+    let hidden = hidden_tool(&home, "kakoi-test-tool");
+    let path = std::env::join_paths(
+        std::iter::once(hidden).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[OsStr::new("kakoi-test-tool")]);
+
+    let diagnostic = assert_diagnostic(&output, 127, "command not found");
+    assert_eq!(diagnostic, "kakoi: command not found: kakoi-test-tool\n");
+}
+
+// @kotowari[REQ-260, EX-956]
+#[test]
+fn a_command_given_by_a_path_in_a_hidden_place_is_not_found() {
+    let (home, workspace) = home_with_workspace();
+    let tool = hidden_tool(&home, "tool").join("tool");
+    let path = std::env::var_os("PATH").unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[tool.as_os_str()]);
+
+    let diagnostic = assert_diagnostic(&output, 127, "command not found");
+    assert_eq!(
+        diagnostic,
+        format!("kakoi: command not found: {}\n", tool.display())
+    );
+}
+
+/// A home whose profile hides `hidden`, where `hidden/lnk` is a link to the visible
+/// directory `visible` holding the executable `name`; returns `hidden/lnk`.
+fn hidden_link_to_a_visible_tool(home: &TempDir, name: &str) -> PathBuf {
+    home.write_executable(
+        format!("visible/{name}"),
+        "#!/bin/sh\necho through the link\n",
+    );
+    let hidden = home.path().join("hidden");
+    std::fs::create_dir(&hidden).unwrap();
+    std::os::unix::fs::symlink(home.path().join("visible"), hidden.join("lnk")).unwrap();
+    profile(
+        home,
+        &format!("{RW_WORKSPACE}hide = [\"{}\"]\n", hidden.display()),
+    );
+    hidden.join("lnk")
+}
+
+// @kotowari[REQ-260, EX-960]
+#[test]
+fn a_candidate_through_a_link_in_a_hidden_place_is_passed_over() {
+    let (home, workspace) = home_with_workspace();
+    let link = hidden_link_to_a_visible_tool(&home, "kakoi-test-tool");
+    home.write_executable("later/kakoi-test-tool", "#!/bin/sh\necho later\n");
+    let path = std::env::join_paths(
+        [link, home.path().join("later")]
+            .into_iter()
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[OsStr::new("kakoi-test-tool")]);
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+    assert_eq!(output.stdout, b"later\n", "{}", output_report(&output));
+}
+
+// @kotowari[REQ-260]
+#[test]
+fn a_command_given_by_a_path_through_a_link_in_a_hidden_place_is_not_found() {
+    let (home, workspace) = home_with_workspace();
+    let tool = hidden_link_to_a_visible_tool(&home, "tool").join("tool");
+    let path = std::env::var_os("PATH").unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[tool.as_os_str()]);
+
+    assert_diagnostic(&output, 127, "command not found");
+}
+
+// @kotowari[REQ-264]
+#[test]
+fn a_command_on_path_inside_an_rw_item_is_started_without_a_placement_check() {
+    let (home, workspace) = home_with_workspace();
+    std::fs::create_dir(workspace.join("bin")).unwrap();
+    common::write_executable(
+        &workspace.join("bin/kakoi-test-tool"),
+        "#!/bin/sh\necho from the workspace\n",
+    );
+    let path = std::env::join_paths(
+        std::iter::once(workspace.join("bin"))
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[OsStr::new("kakoi-test-tool")]);
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+    assert_eq!(
+        output.stdout,
+        b"from the workspace\n",
+        "{}",
+        output_report(&output)
+    );
 }
 
 // @kotowari[REQ-287, EX-523]

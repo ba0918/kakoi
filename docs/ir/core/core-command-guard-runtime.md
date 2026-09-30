@@ -7,10 +7,10 @@
 ### REQ-446: 見張り役を置く
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A3, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A29, docs/decision/brainstorm/2026-09-25-command-policy.md#A20, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#D1, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A43, docs/decision/brainstorm/2026-09-25-command-policy.md#A44, docs/decision/brainstorm/2026-09-25-command-policy.md#A45
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A3, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A29, docs/decision/brainstorm/2026-09-25-command-policy.md#A20, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#D1, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A43, docs/decision/brainstorm/2026-09-25-command-policy.md#A44, docs/decision/brainstorm/2026-09-25-command-policy.md#A45, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A9
 - verification: unit
 
-合成したポリシーに規則のあるプログラムごとに、kakoiは隔離へ渡すPATH（path-prepend を足した後で、見張り役の場所を除く）でそのプログラムの本物を探し（本物は、隔離の中でその名前で起動されるもので、PATHの項目の順に見て、その名前の場所もリンクを解決した実体もマウントの "hide" で隠されず（自動で生成された "hide" を含め、それを含む項目のうちマウント順で最後に効くものが "hide" でない）、リンクを解決した先が実行できる通常ファイルである最初の同じ名前とする。ディレクトリ、行き先の無いリンク、実行できない通常ファイル、場所か実体が隠される名前は飛ばして先を探す。PATHの項目のうち絶対パスでないもの（空の項目を含む）は使わない）、kakoi専用のtmpfsの中の見張り役の場所に同じ名前の見張り役を置き、その場所をPATHの最も先頭に足す。規則が "guard-absolute-path" を真にしているときは、本物のリンクを解決した実体のパスにも見張り役を重ね、本物をそのtmpfsの中に置き直す。見張り役はkakoi自身の実行ファイルで、見張り役、規則、置き直した本物は、見張り役の場所を通しては隔離の中から書き換えられない（kakoi自身の実行ファイルが書ける項目の下にあるときは、その項目を通して見張り役の中身が変わる）。見張り役を置くのにkakoi自身の実行ファイルの場所が分からないときは、種類bwrapの診断を出して125で終わる。これらは利用者のマウントより後に重ね、host、none、filteredのすべてで同じにする。kakoiに直接渡したコマンドも、隔離の中で起動される以上この見張り役の置き方に従う。
+合成したポリシーに規則のあるプログラムごとに、kakoiは隔離へ渡すPATH（path-prepend を足した後で、見張り役の場所を除く）でそのプログラムの本物を探し（本物は、隔離の中でその名前で起動されるもので、PATHの項目の順に見て、その名前の場所も、リンクを解決した実体も、途中で辿るリンクの置き場もマウントの "hide" で隠されず（自動で生成された "hide" を含め、それを含む項目のうちマウント順で最後に効くものが "hide" でない）、リンクを解決した先が実行できる通常ファイルである最初の同じ名前とする。ディレクトリ、行き先の無いリンク、実行できない通常ファイル、場所、実体、途中で辿るリンクの置き場のどれかが隠される名前は飛ばして先を探す。PATHの項目のうち絶対パスでないもの（空の項目を含む）は使わない）、kakoi専用のtmpfsの中の見張り役の場所に同じ名前の見張り役を置き、その場所をPATHの最も先頭に足す。規則が "guard-absolute-path" を真にしているときは、本物のリンクを解決した実体のパスにも見張り役を重ね、本物をそのtmpfsの中に置き直す。見張り役はkakoi自身の実行ファイルで、見張り役、規則、置き直した本物は、見張り役の場所を通しては隔離の中から書き換えられない（kakoi自身の実行ファイルが書ける項目の下にあるときは、その項目を通して見張り役の中身が変わる）。見張り役を置くのにkakoi自身の実行ファイルの場所が分からないときは、種類bwrapの診断を出して125で終わる。これらは利用者のマウントより後に重ね、host、none、filteredのすべてで同じにする。kakoiに直接渡したコマンドも、隔離の中で起動される以上この見張り役の置き方に従う。
 
 ### REQ-453: 見張り役としての起動を見分ける
 
@@ -64,9 +64,9 @@ kakoiは、起動された実行ファイルの場所が、自分が置いた見
 ### REQ-452: ガードレールの案内
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A6, docs/decision/brainstorm/2026-09-25-command-policy.md#A7, docs/decision/brainstorm/2026-09-25-command-policy.md#A25, docs/decision/brainstorm/2026-09-25-command-policy.md#A31, docs/decision/brainstorm/2026-09-25-command-policy.md#A34, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A42
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A6, docs/decision/brainstorm/2026-09-25-command-policy.md#A7, docs/decision/brainstorm/2026-09-25-command-policy.md#A25, docs/decision/brainstorm/2026-09-25-command-policy.md#A31, docs/decision/brainstorm/2026-09-25-command-policy.md#A34, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A42, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
 - verification: review
-- how_to_verify: "docs/policy.md" と "docs/security.md" を読み、次が書かれていることを確かめる。ガードレールが境界ではなく悪意があれば迂回できる事故防止の柵であること。見張れないもの（見張り役を置いていない場所やハードリンクからの起動、置き直した本物を探しての直接起動、プログラムを起動せずに同じ操作をするライブラリ、設定ファイルや環境変数で作った別名、組み込みのコマンド、長いオプションの省略形、語の並びの途中のオプション、kakoi自身の実行ファイルが書ける項目の下にあるときにその項目を通して変わる見張り役の中身、"guard-absolute-path" で置き直す本物を計画から起動までの間に書ける別の隔離が差し替えたときに置き直し先に見えうる隠したファイル（既知の隙間15と同じ種類））。"guard-absolute-path" を有効にすると自分の場所から資源を探すプログラムが壊れうること。"git.instead-of" と "GIT_CONFIG_*" の禁止を一緒に使えないこと。本当に止めるには権限の狭いトークンや filtered の通信の許可を使うこと。プログラムそのものを使わせないには "hide" で隠し、守るべき資源（たとえば docker のソケット）があればそれを隠すこと。
+- how_to_verify: "docs/policy.md" と "docs/security.md" を読み、次が書かれていることを確かめる。ガードレールが境界ではなく悪意があれば迂回できる事故防止の柵であること。見張れないもの（見張り役を置いていない場所やハードリンクからの起動、置き直した本物を探しての直接起動、プログラムを起動せずに同じ操作をするライブラリ、設定ファイルや環境変数で作った別名、組み込みのコマンド、長いオプションの省略形、語の並びの途中のオプション、kakoi自身の実行ファイルが書ける項目の下にあるときにその項目を通して変わる見張り役の中身、"guard-absolute-path" で置き直す本物を計画から起動までの間に書ける別の隔離が差し替えたときに置き直し先に見えうる隠したファイル（既知の隙間14と同じ種類））。"guard-absolute-path" を有効にすると自分の場所から資源を探すプログラムが壊れうること。"git.instead-of" と "GIT_CONFIG_*" の禁止を一緒に使えないこと。本当に止めるには権限の狭いトークンや filtered の通信の許可を使うこと。プログラムそのものを使わせないには "hide" で隠し、守るべき資源（たとえば docker のソケット）があればそれを隠すこと。
 
 公開文書は、ガードレールが境界ではないこと、見張れないもの、"guard-absolute-path" と "git.instead-of" の注意、確実に止める手段、プログラムや資源を隠す "hide" の使い方を示す。
 
@@ -82,6 +82,12 @@ kakoiは、起動された実行ファイルの場所が、自分が置いた見
 ## Examples
 
 ```gherkin
+@id=EX-961 @about=REQ-446 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A9
+Scenario: 隠された場所のリンクを途中で通る名前には見張り役を置かない
+  Given 規則のあるプログラムの名前が、隠されたディレクトリの中のリンクを途中で通るPATHの項目にあり、後ろの項目に同じ名前の本物がある
+  When 見張り役を置く
+  Then 後ろの項目の本物に見張り役を置く
+
 @id=EX-862 @about=REQ-446 @source=docs/decision/brainstorm/2026-09-25-command-policy.md#A3,docs/decision/brainstorm/2026-09-25-command-policy.md#A10,docs/decision/brainstorm/2026-09-25-command-policy.md#A12
 Scenario: PATHで探す起動が見張り役を通る
   Given "git" の "push" を禁じる規則がある

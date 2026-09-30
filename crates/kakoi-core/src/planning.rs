@@ -24,7 +24,7 @@ use crate::guard_placement::{
 };
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::listed::ListedRoot;
-use crate::mount_facts::{self, collect_generator_facts, collect_path_facts};
+use crate::mount_facts::{collect_generator_facts, collect_path_facts};
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
@@ -189,12 +189,16 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             arguments: arguments.to_vec(),
             path: through_guard(
                 command,
-                locate_shown_command(
-                    command,
-                    search_in,
-                    &isolation.mounts.items,
-                    isolation.listed.as_ref(),
-                )?,
+                if request.applied {
+                    locate_shown_command(
+                        command,
+                        search_in,
+                        &isolation.mounts.items,
+                        isolation.listed.as_ref(),
+                    )?
+                } else {
+                    locate_command(command, search_in)?
+                },
                 path_of(search_in),
                 &isolation.mounts.items,
                 isolation.listed.as_ref(),
@@ -374,8 +378,7 @@ fn through_guard(
 
 /// The names of `names` a "listed" isolation has as they are written on `PATH`: where
 /// each is, what it resolves to, and every link on the way shown or made again
-/// (specification REQ-468 and REQ-484); all of them under "host". A relative name is not
-/// walked, so only where it is and what it resolves to are looked at.
+/// (specification REQ-468 and REQ-484); all of them under "host".
 fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFact> {
     let Some(root) = listed else {
         return names;
@@ -384,24 +387,23 @@ fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFac
         .into_iter()
         .filter(|fact| {
             fact.name.as_deref().is_some_and(|name| root.shows(name))
-                && fact.real.as_deref().is_some_and(|real| {
-                    root.shows_through(&mount_facts::traverse(&fact.candidate).links, real)
-                })
+                && fact
+                    .real
+                    .as_deref()
+                    .is_some_and(|real| root.shows_through(&fact.links, real))
         })
         .collect()
 }
 
-/// Stage 9 as the isolation sees it: a name on `PATH` a "listed" isolation does not show,
-/// or whose place or real file `mounts` hides, is passed over (specification REQ-484).
+/// Stage 9 as the isolation sees it: a name on `PATH` whose place or real file `mounts`
+/// hides, or that a "listed" isolation does not show, is passed over, and a path with `/`
+/// naming such a file is not found (specification REQ-260 and REQ-484).
 fn locate_shown_command(
     command: &OsStr,
     environment: &BTreeMap<OsString, OsString>,
     mounts: &[ResolvedItem],
     listed: Option<&ListedRoot>,
 ) -> Result<PathBuf, Diagnostic> {
-    if listed.is_none() || command.as_bytes().contains(&b'/') {
-        return locate_command(command, environment);
-    }
     let candidates: Vec<PathBuf> = shown_names(
         named(&command_candidates(command, path_of(environment))),
         listed,
