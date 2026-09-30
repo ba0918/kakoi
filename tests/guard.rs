@@ -1044,6 +1044,105 @@ fn assert_passed(output: &Output, stdout: &str) {
 
 const GIT_PUSH_DENIED: &str = "kakoi: guard: git push: push は人が行う";
 
+// @kotowari[EX-964, REQ-446, REQ-450]
+#[test]
+fn ex_964_a_real_program_of_another_name_is_not_overlaid_and_the_plan_says_why() {
+    let scene = Scene::new(&[]);
+    let multi = scene.home.write_executable("multi/mise", FAKE_PROGRAM);
+    std::os::unix::fs::symlink(&multi, scene.bin.join("gh")).unwrap();
+    let policy = scene.policy(
+        "[[commands.guard]]\nprogram = \"gh\"\ndeny = [[\"auth\"]]\nreason = \"r\"\n\
+         guard-absolute-path = true\n",
+    );
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    let gh = guard(&plan, "gh");
+    assert_eq!(gh["relocated"], serde_json::Value::Null, "{plan}");
+    assert!(
+        gh["not_relocated"]
+            .as_str()
+            .is_some_and(|reason| !reason.is_empty()),
+        "{plan}"
+    );
+    let overlaid = plan["bwrap_arguments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|argument| argument["value"] == multi.to_str().unwrap());
+    assert!(!overlaid, "{plan}");
+}
+
+// A real program named as one of the programs pointing at it is overlaid for all of them.
+// @kotowari[REQ-446, REQ-450]
+#[test]
+fn a_real_program_named_as_one_of_its_programs_is_overlaid_for_all_of_them() {
+    let scene = Scene::new(&["git"]);
+    std::os::unix::fs::symlink(scene.bin.join("git"), scene.bin.join("git2")).unwrap();
+    let policy = scene.policy(&format!(
+        "{GIT_PUSH}[[commands.guard]]\nprogram = \"git2\"\ndeny = [[\"push\"]]\n\
+         reason = \"r\"\nguard-absolute-path = true\n"
+    ));
+
+    let plan = scene.json_plan(&policy, &[]);
+
+    for program in ["git", "git2"] {
+        let placed = guard(&plan, program);
+        assert!(placed["relocated"].is_string(), "{program}: {plan}");
+        assert_eq!(
+            placed["not_relocated"],
+            serde_json::Value::Null,
+            "{program}: {plan}"
+        );
+    }
+}
+
+// Outside an isolation there is no table, and kakoi under another name is still kakoi.
+// @kotowari[REQ-453]
+#[test]
+fn kakoi_under_another_name_outside_an_isolation_runs_as_kakoi() {
+    let dir = TempDir::new();
+    let renamed = dir.path().join("kakoi-renamed");
+    common::copy_executable(Path::new(env!("CARGO_BIN_EXE_kakoi")), &renamed);
+    let version = run(dir.path(), ["--version"]);
+
+    let output = std::process::Command::new(&renamed)
+        .env_clear()
+        .arg("--version")
+        .output()
+        .unwrap();
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, version.stdout, "{report}");
+}
+
+// @kotowari[EX-965, REQ-453]
+#[test]
+fn ex_965_a_guard_that_cannot_read_its_table_stops_instead_of_acting_as_kakoi() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(&format!("{GIT_PUSH}guard-absolute-path = true\n"));
+    let git = scene.bin.join("git");
+
+    // bwrap inside the isolation makes /dev anew, as the sandbox of an agent's CLI does.
+    let output = run_script(
+        &scene,
+        &policy,
+        &format!(
+            "bwrap --ro-bind / / --dev /dev --proc /proc -- {} --version",
+            git.display()
+        ),
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).starts_with("kakoi: guard: "),
+        "{report}"
+    );
+}
+
 // @kotowari[EX-862]
 #[test]
 fn ex_862_a_program_started_through_path_passes_the_guard() {

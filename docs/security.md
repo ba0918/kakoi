@@ -223,6 +223,10 @@ and 18.
     `memfd` from starting.
 18. Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
     isolation: Landlock forbids mounting there.
+19. A program with a guard laid over its own path by `guard-absolute-path` cannot be used inside
+    a sandbox that makes `/dev` anew within the isolation (such as the sandbox of an agent's CLI):
+    there the guard's table and the real program are gone, and the guard stops with `guard`.
+    Turn that sandbox off, or leave `guard-absolute-path` out.
 
 ## Not supported yet
 

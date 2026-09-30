@@ -86,7 +86,8 @@ directory and start them by name through `PATH` (`git`, `git2`) and by their abs
 path (with and without `guard-absolute-path`); they also start `sh` through `PATH`, a copy of the
 built `kakoi` placed in a temporary directory under the name `git` by its absolute path, the
 built `kakoi` itself by its absolute path for a nested `--print-plan=json`, and
-`/usr/bin/python3` to try writing into the guards' directory. Tests point `HOME` and
+`/usr/bin/python3` to try writing into the guards' directory. One of them starts `bwrap` inside the isolation, with a `/dev` of its own, to meet a guard
+that cannot read its table. Tests point `HOME` and
 `XDG_CONFIG_HOME` at a temporary directory, hand the binary only `PATH` from the developer's
 environment, and never read the developer's real configuration directory.
 

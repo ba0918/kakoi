@@ -73,6 +73,13 @@
 - The command guards also pass over a name reached through a link in a hidden place.
 - A scan hit that is a link into several nested `ro` items stops the launch with `path` when
   any of them could be re-pointed from inside; only the outermost one used to be looked at.
+- `guard-absolute-path` no longer lays a guard over a real program whose file has another name
+  than the program (`gh` reached as a link to `mise`), which applied the rule to every program
+  started through that file; the plan shows `not relocated` with the reason, and
+  `--print-plan=json` gains `not_relocated` in `guards`.
+- A guard that cannot read its table (inside a sandbox that makes `/dev` anew) stops with
+  `guard` and exit code 126 instead of running as `kakoi`, which answered `git --version` with
+  its own version. This is known gap 19.
 
 ### Security
 

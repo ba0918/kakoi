@@ -14,11 +14,11 @@
 
 ### REQ-359: 既知の隙間の公開
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A3
 - verification: review
-- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、18件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
+- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、19件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
 
-表 TBL-160 の既知の隙間18件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。18件のどれも省かない。
+表 TBL-160 の既知の隙間19件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。19件のどれも省かない。
 
 ### REQ-360: 配置保護の説明
 - kind: ubiquitous
@@ -63,7 +63,7 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 ## Decision tables
 
 ### TBL-160: 既知の隙間
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A3
 
 | 番号 | 既知の隙間 |
 |---|---|
@@ -85,6 +85,7 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 | 16 | "network.allow-nested-filtered" を true にした host の隔離の中からは、ホストのネットワーク名前空間にある、所有者を設定していないか利用者と同じ uid を所有者とする永続の tun と tap の装置を読み書きできる（core-nested-isolation.md） |
 | 17 | コマンドのモード "listed" は Landlock で許していないプログラムの起動を止めるガードレールで、境界ではない。動的リンカを絶対パスで起動して読めるプログラムを読み込ませる形、許したインタプリタ（python、node）が読めるファイルを実行できるメモリとして読み込む形、memfd に写した実行ファイルを起動する形は止まらない（core-listed-commands.md） |
 | 18 | コマンドのモード "listed" の隔離の中では、Landlock がマウントを禁じるので、"--nested=isolate" で中に隔離を作れない（core-listed-commands.md） |
+| 19 | "guard-absolute-path" で実体に見張り役を重ねたプログラムは、隔離の中で "/dev" を作り直す sandbox を作るツール（自分の sandbox を持つエージェントの CLI など）の中では使えない。その sandbox の中では見張り役の対応が見えず、見張り役は種類 guard の診断で止まる。その sandbox を切るか、"guard-absolute-path" を外す（core-command-guard-runtime.md） |
 
 ## Examples
 
@@ -99,11 +100,11 @@ Scenario: 公開文書の導線・反例
   Given READMEだけから初回起動を進める
   When 契約への適合を確認する
   Then 起動前に必ずプロファイル設置が必要だと読めることは契約違反である
-@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54,docs/decision/brainstorm/2026-09-30-allowlist.md#A13,docs/decision/brainstorm/2026-09-30-allowlist.md#A51,docs/decision/brainstorm/2026-09-30-allowlist.md#A56,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10
+@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54,docs/decision/brainstorm/2026-09-30-allowlist.md#A13,docs/decision/brainstorm/2026-09-30-allowlist.md#A51,docs/decision/brainstorm/2026-09-30-allowlist.md#A56,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A10,docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A3
 Scenario: 既知の隙間の公開・成功
   Given READMEから保証範囲を調べる
   When 契約への適合を確認する
-  Then 一回のリンクで18件の具体的な限界を読める
+  Then 一回のリンクで19件の具体的な限界を読める
 @id=EX-659 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1
 Scenario: 既知の隙間の公開・反例
   Given READMEから保証範囲を調べる
