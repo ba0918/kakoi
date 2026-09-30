@@ -12,7 +12,7 @@
 ```
 kakoi [OPTIONS] -- COMMAND [ARGS]...
 kakoi [OPTIONS] --print-plan[=FORM] [-- COMMAND [ARGS]...]
-kakoi init [NAME]
+kakoi init [NAME] [--example VALUE]
 kakoi --version
 kakoi --help
 ```
@@ -21,7 +21,7 @@ kakoi --help
 |---|---|
 | `kakoi [OPTIONS] -- COMMAND [ARGS]...` | 隔離の中で `COMMAND` を実行する |
 | `kakoi [OPTIONS] --print-plan[=FORM] ...` | 実行せずに計画を表示する（[計画の表示](04-plan.md)） |
-| `kakoi init [NAME]` | 組み込みの既定をプロファイルとして書き出す（[init](#init-が書き出すもの)） |
+| `kakoi init [NAME] [--example VALUE]` | 同梱の見本をプロファイルとして書き出す（[init](#init-が書き出すもの)） |
 | `kakoi --version` | 版を表示する |
 | `kakoi --help` | 使い方を表示する |
 
@@ -192,6 +192,7 @@ kakoi: usage: --help and --version cannot be combined with any other argument
 どちらの場合も見つからなければ、種類 `command not found` の診断を出して終了コード 127 で終わる。
 診断の説明は `COMMAND` に与えた名前である。
 探すのに使う `PATH` は、ポリシーで組み立てた隔離の中の値である（[環境変数](08-environment.md)）。
+マウントのモードが `"listed"` のときは、場所と実体が隔離の中に見えていない候補を飛ばして先を探す（[見せるものを選ぶモード](14-listed.md)）。
 `/` を含まない名前を見張り役と同じ探し方で探した結果が、見張り役を置いたプログラムの本物なら、そのコマンドも見張り役を通して起動し、計画のコマンドの欄のパスは見張り役のパスになる（[コマンドのガードレール](13-command-guard.md#見張り役の置き方)）。
 
 ```console
@@ -242,13 +243,14 @@ sh
 解決したコマンドは隔離の中で動くので、隔離の中からその実体を差し替えられても境界の外には届かないためである。
 
 ## init が書き出すもの
-<!-- @kotowari[REQ-256:a3da3d2e, EX-496:05db4ead] -->
+<!-- @kotowari[REQ-256:5105fae2, EX-496:05db4ead] -->
 
-`kakoi init [NAME]` は、組み込みの既定を設定ディレクトリの `profile/NAME.toml` に書き出す。
+`kakoi init [NAME]` は、同梱の見本を設定ディレクトリの `profile/NAME.toml` に書き出す。
 `NAME` を省略すれば `default` になり、`NAME` の制約は `--profile` と同じである（[オプション](#オプション)）。
 設定ディレクトリは `$XDG_CONFIG_HOME/kakoi/`、それが未設定（空や絶対パスでない値を含む）なら `~/.config/kakoi/` である（[用語](02-terms.md)）。
 
-書き出す内容は、同梱の `examples/profile/default.toml` と同じバイト列である。
+書き出す内容は、`--example` で選んだ同梱の見本と同じバイト列である（[init の見本の選択](#init-の見本の選択)）。
+`--example` を書かなければ `examples/profile/default.toml`（組み込みの既定）、`"listed"` なら `examples/profile/listed.toml` である。
 次のディレクトリが無ければ作る。
 
 - 設定ディレクトリの祖先（`~/.config` や `XDG_CONFIG_HOME` の指す先）
@@ -264,6 +266,24 @@ $ kakoi init                     # 設定ディレクトリが無い状態から
 $ kakoi init strict
 /home/alice/.config/kakoi/profile/strict.toml
 ```
+
+## init の見本の選択
+<!-- @kotowari[REQ-482:baa82942, EX-937:e2d0c8e4, EX-938:ff6c9b9a, EX-939:7239015e] -->
+
+`init` は `--example` で書き出す見本を選ぶ。
+値は `"default"` と `"listed"` だけで、`--example=VALUE` と `--example VALUE` のどちらの形でも書ける。
+書かなければ `"default"` になる。
+`"listed"` の見本は、見せるものを選ぶモードを使う（[見せるものを選ぶモード](14-listed.md)）。
+見本の名前とプロファイルの名前は別なので、`listed` の見本を好きな名前で書き出せる。
+
+```console
+$ kakoi init work --example listed
+/home/alice/.config/kakoi/profile/work.toml
+```
+
+ほかの値、値の無い `--example`、2 回以上の `--example` は、何も書かずに種類 `usage` の診断で終了コード 125 になる。
+`--example` は `init` の形でだけ受け付ける。
+実行の形、計画表示の形、単独の `--version`、単独の `--help` に付けると `usage` で 125 になる。
 
 ## init のリンクの辿り方とモード
 <!-- @kotowari[REQ-257:1f5cd0b7, EX-497:e965ea2b] -->
@@ -308,11 +328,11 @@ kakoi: path: /home/alice/.config/kakoi/profile/default.toml already exists
 既に書き出す先があるときに「何も書かず」が `secrets/` のモード変更まで含むかは決まっていない（[未決事項](../appendix/open-issues.md)）。
 
 ## init が行う検査と行わない検査
-<!-- @kotowari[REQ-259:12198cab, EX-499:83b50cdf] -->
+<!-- @kotowari[REQ-259:39cba9fb, EX-499:83b50cdf] -->
 
 `init` は次の順で検査し、最初に当たった診断で終わる。
 
-1. 文法（`usage`）。`NAME` 以外の引数（オプション、`--`、`COMMAND`）を併用すると、ここで終わる。
+1. 文法（`usage`）。`NAME` と `--example` 以外の引数（ほかのオプション、`--`、`COMMAND`）を併用すると、ここで終わる。`--example` の値の誤りもここで終わる。
 2. ホームディレクトリ（`env`）。`XDG_CONFIG_HOME` が設定されていても行う。
 3. 書き込み（`path`）
 
