@@ -175,8 +175,7 @@ and 19.
    A `kakoi` inside that did not take itself to be nested can make a shared file place in a
    writable place of the outer isolation, and the outer agent can then put content into the
    files that launch hides. When the outer and the inner policy make the same file
-   `rw-copy`, the inner isolation cannot be made. And a nested isolation that takes over the
-   outer launch's command guards cannot use the `listed` command mode: it stops with `policy`.
+   `rw-copy`, the inner isolation cannot be made.
 9. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`,
    `PATH`, and the current directory. That includes the current directory: `cd` into a
    path that passes through an `rw` area, after a link there was swapped from inside, and the

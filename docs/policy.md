@@ -284,7 +284,11 @@ done before `bwrap` has made the isolation: `bwrap` starts `kakoi` itself as the
 first process, from a read-only place of its own, and that process restricts execution and then
 starts the command under the name it was given. When a [command guard](#command-guards) with
 `guard-absolute-path` places an allowed program again, the program placed again is allowed as
-that item, so the guarded program still starts. A program that is not allowed fails to start
+that item, so the guarded program still starts. Inside an isolation made with `--nested=isolate`
+under the command guards of the outer run, those guards are allowed without being listed: a
+program allowed inside still starts through them and their rules still apply, a program not
+allowed inside does not start even through them, and an item written at the path an outer guard
+with `guard-absolute-path` covers allows the real program that guard starts. A program that is not allowed fails to start
 (`Permission denied`); the command itself that is not allowed ends the run with
 `command not executable` and 126. A host without Landlock stops the launch with `bwrap`,
 `--print-plan` included.
