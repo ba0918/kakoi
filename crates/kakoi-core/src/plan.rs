@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::command_limits::{AllowedList, CommandLimits, ALLOWED_LIST, FIRST_PROCESS};
 use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
@@ -215,6 +216,8 @@ pub struct Plan {
     pub command: Option<ResolvedCommand>,
     /// The command guards placed and skipped.
     pub guards: GuardPlan,
+    /// The programs the "listed" command mode lets start; none under "host".
+    pub commands: Option<CommandLimits>,
     pub arguments: Vec<Argument>,
 }
 
@@ -228,12 +231,14 @@ pub fn plan(
     bwrap: PathBuf,
     command: Option<ResolvedCommand>,
     guards: GuardPlan,
+    commands: Option<CommandLimits>,
 ) -> Plan {
     let provisions = Provisions {
         shared_files: inputs.shared_files.map(Path::to_path_buf),
         tun: inputs.policy.allow_nested_filtered,
         outer_guard: inputs.outer_guard,
         listed: isolation.listed.clone(),
+        commands: commands.clone(),
     };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
@@ -269,6 +274,7 @@ pub fn plan(
         bwrap,
         command,
         guards,
+        commands,
         arguments,
     }
 }
@@ -324,6 +330,9 @@ pub struct Provisions {
     /// The root of the "listed" mount mode; none under "host", where the host's root is
     /// shown read-only.
     pub listed: Option<ListedRoot>,
+    /// The programs the "listed" command mode lets start: the isolation's first process
+    /// is kakoi, which restricts execution to them and then starts the command.
+    pub commands: Option<CommandLimits>,
 }
 
 impl Provisions {
@@ -456,12 +465,15 @@ pub fn bwrap_arguments(
             .unwrap_or(Path::new("/etc/resolv.conf"));
         arguments.extend(provisions.put(SharedFile::Resolver, destination.as_os_str()));
     }
-    arguments.extend(guard_arguments(guards));
+    arguments.extend(guard_arguments(guards, provisions.commands.as_ref()));
     if provisions.listed.is_some() {
         arguments.extend([Argument::text("--remount-ro"), Argument::text("/")]);
     }
     if let Some(command) = command {
         arguments.push(Argument::text("--"));
+        if provisions.commands.is_some() {
+            arguments.push(Argument::text(FIRST_PROCESS));
+        }
         arguments.push(Argument::text(command.path.as_os_str()));
         arguments.extend(command.arguments.iter().map(Argument::text));
     }
@@ -575,20 +587,22 @@ fn copy_arguments(item: &ResolvedItem, source: Option<&CopySource>) -> Vec<Argum
     }
 }
 
-/// The arguments that place the command guards, after the user's mounts so that none of
-/// them covers a guard: a tmpfs of kakoi's own under bwrap's `/dev`, a bind of kakoi's
-/// executable for each guard (each its own, so that the guard tells where it was started
-/// from), each program of `guard-absolute-path` bound again inside the tmpfs and a guard
-/// bound over its own path, the table, and the tmpfs made read-only. Nothing when no
-/// guard is placed. No argument is a bare `--`.
-fn guard_arguments(guards: &GuardPlan) -> Vec<Argument> {
-    let Some(kakoi) = guards
+/// The arguments that place the command guards and the first process of the "listed"
+/// command mode, after the user's mounts so that none of them covers what kakoi places: a
+/// tmpfs of kakoi's own under bwrap's `/dev`, a bind of kakoi's executable for each guard
+/// (each its own, so that the guard tells where it was started from), each program of
+/// `guard-absolute-path` bound again inside the tmpfs and a guard bound over its own
+/// path, the table, kakoi's executable as the first process with the list of the programs
+/// it allows, and the tmpfs made read-only. Nothing when there is neither. No argument is
+/// a bare `--`.
+fn guard_arguments(guards: &GuardPlan, commands: Option<&CommandLimits>) -> Vec<Argument> {
+    let guard = guards
         .executable
         .as_deref()
-        .filter(|_| !guards.placed.is_empty())
-    else {
+        .filter(|_| !guards.placed.is_empty());
+    if guard.is_none() && commands.is_none() {
         return Vec::new();
-    };
+    }
     let bind = |from: &Path, to: &Path| {
         [
             Argument::text("--ro-bind"),
@@ -604,36 +618,47 @@ fn guard_arguments(guards: &GuardPlan) -> Vec<Argument> {
             Argument::text(path.as_os_str()),
         ]
     };
+    let data = |content: Vec<u8>, to: &str| {
+        [
+            Argument::text("--perms"),
+            Argument::text("0444"),
+            Argument::text("--ro-bind-data"),
+            Argument::CopiedFile(FileContent::new(content)),
+            Argument::text(to),
+        ]
+    };
     let mut arguments = vec![
         Argument::text("--perms"),
         Argument::text("0755"),
         Argument::text("--tmpfs"),
         Argument::text(GUARD_ROOT),
     ];
-    arguments.extend(directory(Path::new(GUARD_LOCATION)));
-    for guard in &guards.placed {
-        arguments.extend(bind(kakoi, &guard.guard()));
-    }
-    for (real, relocated) in &guards.overlaid {
-        // bwrap would make the missing directories itself, readable by their owner only.
-        let parent = relocated
-            .parent()
-            .expect("a relocated program is in a directory");
-        for directory_path in [parent.parent(), Some(parent)].into_iter().flatten() {
-            arguments.extend(directory(directory_path));
+    if let Some(kakoi) = guard {
+        arguments.extend(directory(Path::new(GUARD_LOCATION)));
+        for guard in &guards.placed {
+            arguments.extend(bind(kakoi, &guard.guard()));
         }
-        arguments.extend(bind(real, relocated));
-        arguments.extend(bind(kakoi, real));
+        for (real, relocated) in &guards.overlaid {
+            // bwrap would make the missing directories itself, readable by their owner only.
+            let parent = relocated
+                .parent()
+                .expect("a relocated program is in a directory");
+            for directory_path in [parent.parent(), Some(parent)].into_iter().flatten() {
+                arguments.extend(directory(directory_path));
+            }
+            arguments.extend(bind(real, relocated));
+            arguments.extend(bind(kakoi, real));
+        }
+        arguments.extend(data(guards.table.to_bytes(), GUARD_TABLE));
     }
-    arguments.extend([
-        Argument::text("--perms"),
-        Argument::text("0444"),
-        Argument::text("--ro-bind-data"),
-        Argument::CopiedFile(FileContent::new(guards.table.to_bytes())),
-        Argument::text(GUARD_TABLE),
-        Argument::text("--remount-ro"),
-        Argument::text(GUARD_ROOT),
-    ]);
+    if let Some(limits) = commands {
+        arguments.extend(bind(&limits.executable, Path::new(FIRST_PROCESS)));
+        arguments.extend(data(
+            AllowedList::new(&limits.allowed).to_bytes(),
+            ALLOWED_LIST,
+        ));
+    }
+    arguments.extend([Argument::text("--remount-ro"), Argument::text(GUARD_ROOT)]);
     arguments
 }
 

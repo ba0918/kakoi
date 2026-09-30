@@ -11,6 +11,8 @@ pub const SCOPE_ABI: u32 = 6;
 
 const CREATE_RULESET_VERSION: libc::c_uint = 1;
 const SCOPE_ABSTRACT_UNIX_SOCKET: u64 = 1;
+const ACCESS_FS_EXECUTE: u64 = 1;
+const RULE_PATH_BENEATH: libc::c_uint = 1;
 
 /// `struct landlock_ruleset_attr` as ABI 6 has it. A kernel of an older ABI rejects the
 /// `scoped` field, which is why the scope is asked for only after the version is known.
@@ -45,6 +47,55 @@ pub fn scope_abstract_unix_sockets() -> io::Result<()> {
         scoped: SCOPE_ABSTRACT_UNIX_SOCKET,
     })?;
     restrict_self(&ruleset)
+}
+
+/// `struct landlock_path_beneath_attr`, packed as the kernel declares it.
+#[repr(C, packed)]
+struct PathBeneathAttr {
+    allowed_access: u64,
+    parent_fd: i32,
+}
+
+/// Restricts the calling process, and whatever it starts, to executing only the files
+/// `allowed` names (a directory stands for everything under it; each descriptor is
+/// opened with `O_PATH`). Nothing but execution is restricted.
+pub fn restrict_execution(allowed: &[OwnedFd]) -> io::Result<()> {
+    let ruleset = create_ruleset(&RulesetAttr {
+        handled_access_fs: ACCESS_FS_EXECUTE,
+        handled_access_net: 0,
+        scoped: 0,
+    })?;
+    for file in allowed {
+        let rule = PathBeneathAttr {
+            allowed_access: ACCESS_FS_EXECUTE,
+            parent_fd: file.as_raw_fd(),
+        };
+        // SAFETY: `rule` is a valid `landlock_path_beneath_attr` for the whole call.
+        let added = unsafe {
+            libc::syscall(
+                libc::SYS_landlock_add_rule,
+                ruleset.as_raw_fd(),
+                RULE_PATH_BENEATH,
+                &rule as *const PathBeneathAttr,
+                0u32,
+            )
+        };
+        if added != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    restrict_self(&ruleset)
+}
+
+/// `path` opened as a path only, following links, so that a rule made from it lands on
+/// what it leads to.
+pub fn open_path(path: &std::path::Path) -> io::Result<OwnedFd> {
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH)
+        .open(path)
+        .map(OwnedFd::from)
 }
 
 fn create_ruleset(attr: &RulesetAttr) -> io::Result<OwnedFd> {

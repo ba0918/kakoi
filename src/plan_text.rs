@@ -213,6 +213,14 @@ fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
             escape_control(&skipped.reason)
         );
     }
+    for skipped in plan.commands.iter().flat_map(|limits| &limits.skipped) {
+        let _ = writeln!(
+            text,
+            "  skipped commands.allow `{}`: {}",
+            escape_control(&skipped.written),
+            escape_control(&skipped.reason)
+        );
+    }
     for entry in &plan.not_copied {
         let _ = writeln!(
             text,

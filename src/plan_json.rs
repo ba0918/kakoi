@@ -41,6 +41,7 @@ struct PlanDocument<'a> {
     left_visible: Vec<LeftVisible>,
     not_shown: Vec<NotShown>,
     skipped_paths: Vec<SkippedPath>,
+    skipped_command_allow: Vec<SkippedCommandAllow>,
     not_copied: Vec<NotCopied>,
     guards: Vec<Guard>,
     skipped_guards: Vec<SkippedGuard>,
@@ -164,6 +165,13 @@ struct SkippedMount {
     directive: &'static str,
     written: String,
     origin: Origin,
+    reason: String,
+}
+
+/// An item of `commands.allow` the "listed" command mode does not allow, as written.
+#[derive(Serialize)]
+struct SkippedCommandAllow {
+    written: String,
     reason: String,
 }
 
@@ -301,6 +309,15 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                         SkippedRole::Base => "base",
                         SkippedRole::ResolverTarget => "resolver-target",
                     },
+                    written: skipped.written.clone(),
+                    reason: skipped.reason.clone(),
+                })
+                .collect(),
+            skipped_command_allow: plan
+                .commands
+                .iter()
+                .flat_map(|limits| &limits.skipped)
+                .map(|skipped| SkippedCommandAllow {
                     written: skipped.written.clone(),
                     reason: skipped.reason.clone(),
                 })

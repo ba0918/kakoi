@@ -11,6 +11,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::command::{command_candidates, resolve_command};
+use crate::command_limits::{self, allowed_programs, CommandLimits};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
@@ -93,7 +94,8 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         request.workspace.as_deref(),
     )
     .with_protected(shared_files.as_deref())
-    .with_walked(&listed_lookups(&policy));
+    .with_walked(&listed_lookups(&policy))
+    .with_walked(&command_limits::lookups(&policy, &variables, &home));
     let facts = IsolationFacts {
         mounts: collect_mount_facts(&wanted),
         secrets: read_secret_files(&expanded.secrets),
@@ -144,6 +146,24 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             crate::landlock::SCOPE_ABI
         )));
     }
+    // With `bwrap`, as the scope above (specification REQ-477).
+    if policy.commands_mode == ListMode::Listed && request.landlock_abi.is_none() {
+        return Err(Diagnostic::bwrap(
+            "the \"listed\" command mode needs Landlock, which the host does not have",
+        ));
+    }
+    let commands = (policy.commands_mode == ListMode::Listed)
+        .then(|| {
+            command_limits(
+                &policy,
+                &variables,
+                &home,
+                &facts.mounts,
+                isolation.listed.as_ref(),
+                request,
+            )
+        })
+        .transpose()?;
     // A plan that is only shown, that of a nested run without `--nested=isolate`,
     // resolves on the host's `PATH` as that run would (specification REQ-261).
     let search_in = if request.applied {
@@ -167,8 +187,44 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         }),
     };
     Ok(plan::plan(
-        &inputs, isolation, copies, bwrap, command, guards,
+        &inputs, isolation, copies, bwrap, command, guards, commands,
     ))
+}
+
+/// The programs the "listed" command mode lets start, and kakoi's own executable, which
+/// the isolation's first process is (specification REQ-475 and REQ-476).
+fn command_limits(
+    policy: &Policy,
+    variables: &crate::variables::Variables,
+    home: &crate::environment::HomeDirectory,
+    facts: &crate::mounts::MountFacts,
+    listed: Option<&ListedRoot>,
+    request: &Request,
+) -> Result<CommandLimits, Diagnostic> {
+    // The first process is placed where the guards of the run around this one are
+    // handed on read-only.
+    if request.outer_guard {
+        return Err(Diagnostic::policy(
+            "the command guards of the isolation around this one are handed on, so the \
+             policy of a nested isolation cannot use the \"listed\" command mode",
+        ));
+    }
+    let executable = request
+        .executable
+        .as_deref()
+        .and_then(|path| std::fs::canonicalize(path).ok())
+        .ok_or_else(|| {
+            Diagnostic::bwrap(
+                "the executable of kakoi itself, which the isolation's first process is, \
+                 cannot be located",
+            )
+        })?;
+    let (allowed, skipped) = allowed_programs(policy, variables, home, facts, listed);
+    Ok(CommandLimits {
+        allowed,
+        skipped,
+        executable,
+    })
 }
 
 /// The paths the "listed" mount mode looks up besides the policy's own.
