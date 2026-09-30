@@ -154,8 +154,10 @@ fn host_sockets_under_run() -> Vec<PathBuf> {
 #[test]
 fn ex_905_a_socket_under_run_that_is_not_written_does_not_exist() {
     let scene = Scene::new(&[], "");
-    let mut paths = host_sockets_under_run();
-    paths.push(PathBuf::from("/run"));
+    // Only the sockets: "/run" itself is made as an ancestor when the host's
+    // resolv.conf points under it (systemd-resolved), which REQ-471 shows.
+    let paths = host_sockets_under_run();
+    assert!(!paths.is_empty(), "the host has no socket under /run");
     let script = paths
         .iter()
         .map(|path| format!("! test -e '{0}' && ! test -L '{0}'", path.display()))
