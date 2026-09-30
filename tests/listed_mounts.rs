@@ -515,7 +515,7 @@ fn not_shown(plan: &serde_json::Value) -> Vec<(String, String)> {
         .collect()
 }
 
-// @kotowari[EX-942]
+// @kotowari[EX-942, REQ-473]
 #[test]
 fn ex_942_the_secret_place_of_an_unshown_configuration_directory_is_not_there() {
     let scene = Scene::new(&[], "");
@@ -539,7 +539,7 @@ fn ex_942_the_secret_place_of_an_unshown_configuration_directory_is_not_there() 
     );
 }
 
-// @kotowari[REQ-468]
+// @kotowari[REQ-468, REQ-473]
 #[test]
 fn a_written_hide_outside_what_is_shown_is_skipped_with_a_reason() {
     let scene = Scene::new(&[], "hide = [\"~/.ssh\"]\n");
@@ -775,7 +775,7 @@ fn a_hide_mounts_under_outside_what_is_shown_needs_no_mount_list() {
     );
 }
 
-// @kotowari[REQ-468]
+// @kotowari[REQ-468, REQ-473]
 #[test]
 fn a_scan_root_above_what_is_shown_hides_inside_and_skips_outside() {
     let scene = Scene::new(&[], "");
