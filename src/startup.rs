@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::cli::{self, Invocation, Nesting, Parsed};
+use crate::cli::{self, Example, Invocation, Nesting, Parsed};
 use kakoi_core::diagnostic::{Diagnostic, Warning};
 use kakoi_core::environment::{HostEnvironment, RealEntry};
 use kakoi_core::guard_placement::GUARD_ROOT;
@@ -32,6 +32,8 @@ pub enum Outcome {
 pub struct InitRequest {
     pub config_dir: PathBuf,
     pub name: String,
+    /// The example written out.
+    pub example: Example,
 }
 
 /// A nested run (specification section 12.1): the warning to print first, then the
@@ -68,13 +70,14 @@ where
         // the home directory is the only check it passes (specification section 13,
         // stage 2), because a machine without `bwrap`, and a shell inside an isolation,
         // can still put the configuration in place.
-        Parsed::Init(name) => {
+        Parsed::Init(name, example) => {
             let env = HostEnvironment::from_variables(&host);
             let home =
                 env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
             return Ok(Outcome::Init(InitRequest {
                 config_dir: env.config_dir(&home),
                 name,
+                example,
             }));
         }
         Parsed::Invocation(invocation) => invocation,

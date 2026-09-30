@@ -1915,3 +1915,81 @@ fn two_print_plans_keep_nothing_and_give_the_same_plan() {
     assert_eq!(tree(home.path()), before, "{report}");
     assert_eq!(first.stdout, second.stdout, "{report}");
 }
+
+fn listed_example() -> Vec<u8> {
+    std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/profile/listed.toml"
+    ))
+    .unwrap()
+}
+
+// @kotowari[EX-937, REQ-256]
+#[test]
+fn ex_937_init_writes_the_example_chosen() {
+    for (arguments, expected) in [
+        (
+            ["init", "work", "--example", "listed"].as_slice(),
+            listed_example(),
+        ),
+        (&["init", "work", "--example=listed"], listed_example()),
+        (&["init", "--example", "listed", "work"], listed_example()),
+        (&["init", "work", "--example=default"], bundled_profile()),
+        (&["init", "work"], bundled_profile()),
+    ] {
+        let home = TempDir::new();
+
+        let output = run(home.path(), arguments);
+
+        let report = output_report(&output);
+        assert_eq!(output.status.code(), Some(0), "{arguments:?}: {report}");
+        let written = home.path().join(".config/kakoi/profile/work.toml");
+        assert_eq!(std::fs::read(&written).unwrap(), expected, "{arguments:?}");
+    }
+    let home = TempDir::new();
+    let output = run(home.path(), ["init", "--example", "listed"]);
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+    assert_eq!(
+        std::fs::read(home.path().join(".config/kakoi/profile/default.toml")).unwrap(),
+        listed_example()
+    );
+}
+
+// @kotowari[EX-938, REQ-259]
+#[test]
+fn ex_938_an_unknown_missing_or_repeated_example_is_a_usage_diagnostic_writing_nothing() {
+    for arguments in [
+        ["init", "work", "--example", "strict"].as_slice(),
+        &["init", "work", "--example=strict"],
+        &["init", "work", "--example"],
+        &["init", "work", "--example="],
+        &["init", "work", "--example", "listed", "--example", "listed"],
+        &["init", "work", "--example=default", "--example=listed"],
+        &["init", "work", "--example", "listed", "extra"],
+    ] {
+        let home = TempDir::new();
+
+        let output = run(home.path(), arguments);
+
+        assert_diagnostic(&output, 125, "usage");
+        assert!(
+            !home.path().join(".config").exists(),
+            "{arguments:?} wrote something"
+        );
+    }
+}
+
+// @kotowari[EX-939]
+#[test]
+fn ex_939_example_outside_init_is_a_usage_diagnostic() {
+    for arguments in [
+        ["--example", "listed", "--", "/bin/true"].as_slice(),
+        &["--example=listed", "--print-plan"],
+        &["--version", "--example=listed"],
+        &["--help", "--example", "listed"],
+    ] {
+        let diagnostic = interpret(arguments.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(diagnostic.kind(), Kind::Usage, "{arguments:?}");
+    }
+}
