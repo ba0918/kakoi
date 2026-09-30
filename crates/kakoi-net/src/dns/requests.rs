@@ -171,12 +171,21 @@ impl<W> DnsRequests<W> {
     /// The running resolution `id` is being asked again under the current
     /// settings: what it finds from now on belongs to them.
     pub fn rekey(&mut self, id: ResolutionId) {
-        if let Some(running) = self.running.iter_mut().find(|entry| entry.id == id) {
-            if let Ok(key) = running.question.resolution_key(self.generation) {
-                self.pool.rekey(id, key.clone());
-                running.key = key;
-            }
+        let Some(index) = self.running.iter().position(|entry| entry.id == id) else {
+            return;
+        };
+        let Ok(key) = self.running[index].question.resolution_key(self.generation) else {
+            return;
+        };
+        if self
+            .running
+            .iter()
+            .any(|entry| entry.id != id && entry.key == key)
+        {
+            return;
         }
+        self.pool.rekey(id, key.clone());
+        self.running[index].key = key;
     }
 
     /// Unknown or already expired task IDs have no recipients. They cannot consume

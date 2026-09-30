@@ -58,8 +58,20 @@ impl ValidatedResponse {
                 .answers
                 .iter()
                 .any(|record| Some(record.ttl) > shortest);
-        // Only a screened address of the question's own name and type is kept:
-        // an address record of another name or family was never screened.
+        let mut terminal = self.message.queries[0].name().clone();
+        for _ in 0..self.message.answers.len() {
+            let Some(next) = self.message.answers.iter().find_map(|record| {
+                if record.dns_class == DNSClass::IN && record.name.eq_ignore_root(&terminal) {
+                    if let RData::CNAME(name) = &record.data {
+                        return Some(name.0.clone());
+                    }
+                }
+                None
+            }) else {
+                break;
+            };
+            terminal = next;
+        }
         let kind = self.message.queries[0].query_type();
         let screened = |record: &Record| {
             if record.dns_class != DNSClass::IN {
@@ -70,7 +82,9 @@ impl ValidatedResponse {
                 RData::AAAA(address) => IpAddr::V6(address.0).to_canonical(),
                 _ => return true,
             };
-            record.record_type() == kind && retained.contains(&ip)
+            record.record_type() == kind
+                && record.name.eq_ignore_root(&terminal)
+                && retained.contains(&ip)
         };
         let filter = !signed && !self.message.answers.iter().all(screened);
         let wire = if !align && !filter {

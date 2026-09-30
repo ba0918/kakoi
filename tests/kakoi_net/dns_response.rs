@@ -759,3 +759,25 @@ fn address_records_outside_the_question_do_not_reach_the_application() {
     assert!(!screened.wire.windows(4).any(|data| data == [10, 0, 0, 1]));
     assert!(!screened.wire.windows(16).any(|data| data == v6));
 }
+
+#[test]
+fn an_unrelated_name_sharing_an_allowed_address_does_not_reach_the_application() {
+    let question = Question::parse(&query(1)).unwrap();
+    let start = Instant::now();
+    let mut wire = response(1, 0x80);
+    answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
+    answer(&mut wire, "other.example.com", 1, 30, &[1, 1, 1, 1]);
+    let response = question.validate_response(&wire).unwrap();
+    let AddressProgress::Complete(candidates) = question
+        .address_chain(16)
+        .unwrap()
+        .consume(&response, start, Duration::from_secs(1))
+        .unwrap()
+    else {
+        panic!("no addresses")
+    };
+    let screened = response
+        .screen_addresses(&candidates, |_| DnsAdmission::Dynamic)
+        .unwrap();
+    assert_eq!(answer_ttls(&screened.wire).len(), 1);
+}

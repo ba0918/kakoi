@@ -829,6 +829,42 @@ fn a_question_under_new_settings_joins_the_resolution_re_keyed_for_them() {
     assert_eq!(replies.len(), 2);
 }
 
+#[test]
+fn a_running_new_settings_resolution_remains_joinable_after_an_older_retry_fails() {
+    use kakoi_net::dns::{AcceptedRequest, DnsRequests};
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+    let mut requests = DnsRequests::new(
+        vec![rule("*.example.com")],
+        7,
+        2,
+        4,
+        Duration::from_secs(10),
+    )
+    .unwrap()
+    .with_failure_hold(Duration::from_secs(5));
+    let question = query("a.example.com", 1);
+    let AcceptedRequest::Start(older) = requests.accept(&question, 1, now).unwrap() else {
+        panic!("older resolution did not start")
+    };
+    requests.advance_generation();
+    let AcceptedRequest::Start(newer) = requests.accept(&question, 2, now).unwrap() else {
+        panic!("new settings did not start a resolution")
+    };
+    requests.rekey(older.id);
+    requests.complete(older.id, Err(DnsError::IncompleteResponse), now);
+    assert!(matches!(
+        requests.accept(&question, 3, now).unwrap(),
+        AcceptedRequest::Waiting
+    ));
+    assert_eq!(
+        requests
+            .complete(newer.id, Ok(answered(&question, 30)), now)
+            .len(),
+        2
+    );
+}
+
 // A question arriving while a resolution it could share is running is checked
 // against the allow rules first: an allowed one joins, a refused one is answered
 // on its own and never joins, even with every resolution slot taken.
