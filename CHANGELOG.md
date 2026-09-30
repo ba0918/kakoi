@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
 ### Added
 
 - `mounts.mode = "listed"` shows only the base (`/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`,
@@ -81,8 +83,24 @@
   `guard` and exit code 126 instead of running as `kakoi`, which answered `git --version` with
   its own version. This is known gap 19.
 
+### Fixed
+
+- In `filtered` mode, a DNS question signed with TSIG is sent upstream with its own ID. The
+  resolver replaced the ID of every question, which broke the signature, so signed questions
+  failed.
+- In `filtered` mode, an answer passed to the isolated process carries only address records of
+  the name asked (at the end of its CNAME chain) with addresses the rules allow. An address
+  record of an unrelated name that shared an allowed address, and an address record in the
+  authority or additional section with an address no rule allows, used to be passed on.
+- In `filtered` mode, questions asked right after the host's resolver configuration changed no
+  longer fail together with an earlier question that failed under the old configuration.
+
 ### Security
 
+- In `filtered` mode, a question still being answered when the host's resolver configuration
+  changes is asked again under the new configuration. An answer from the old configuration
+  could be returned to the isolated process, and the addresses in it allowed, after the new
+  configuration had taken effect.
 - A launch stops with `path` when an `rw` or `rw-file` item is the configuration directory's
   real path or inside it, such as `--rw ~/.config/kakoi/profile`. It used to pass when the
   policy files read were elsewhere (with the built-in default, for one), and a profile or a
@@ -275,7 +293,8 @@ layered policy, and returns the command's exit code unchanged.
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
 
-[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ba0918/kakoi/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ba0918/kakoi/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ba0918/kakoi/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ba0918/kakoi/compare/v0.2.0...v0.3.0
