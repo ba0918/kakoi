@@ -389,7 +389,7 @@ pass = ["LANG", "TERM"]
 ```
 
 ## 同梱プロファイル
-<!-- @kotowari[REQ-364:60bdcba9, REQ-365:d660467f, EX-668:a25e360a, EX-669:32ebabe3, EX-670:8abcc2dc, EX-671:05b0e052] -->
+<!-- @kotowari[REQ-364:84c7b16c, REQ-365:d660467f, EX-668:a25e360a, EX-669:32ebabe3, EX-670:8abcc2dc, EX-671:05b0e052] -->
 
 同梱プロファイル `examples/profile/default.toml` は、WSL2 向けの出発点である。
 組み込みの既定はこれと同じ内容で、`kakoi init` がファイルとして書き出す（[コマンドライン](03-cli.md)）。
@@ -401,13 +401,17 @@ README から参照している。
 | 対象 | 内容 |
 |---|---|
 | `mounts.rw` | `${workspace}`、`${worktree}`、`${git_common_dir}`、`/tmp/kakoi` |
-| `mounts.hide` | `/tmp`、`/run/user` |
+| `mounts.hide` | `/tmp`、`/run/user`、`/mnt/wslg` |
 | `mounts.scan` | ワークツリーの中の `.env` と `.env.*` を隠す走査 |
 | `mounts.hide-mounts` | `/mnt` の下の `9p` と `drvfs` のマウントを隠す指定 |
 | `env.unset` | `SSH_AUTH_SOCK`、`DISPLAY`、`WAYLAND_DISPLAY`、`XAUTHORITY`、`*_TOKEN`、`*_API_KEY`、`*_SECRET*`、`*_PASSWORD`、`AWS_*`、`GH_*`、`GITHUB_*` |
 | `secrets` | `${config_dir}/secrets` の下を指すコメント 1 行だけ。有効な項目は無い |
 
 `/tmp` と `/run/user` にはホストの X11 や ssh-agent のソケット（`/run/user` なら D-Bus、gpg-agent、Wayland のソケット）がランダムな名前で置かれるので、名前ではなく丸ごと隠し、`/tmp/kakoi` だけをホストと共有する場所にしている。
+
+`/mnt/wslg` を隠すのは、WSLg がディストリビューションの `/` を `/mnt/wslg/distro` に、セッションの `/run/user` を `/mnt/wslg/run/user` にもう一度マウントしているためである。
+`hide` は書いたパスにしか効かないので、ここを隠さないと、同梱プロファイルが隠す `~/.ssh` やセッションの D-Bus がこの別の経路から見える。
+`/mnt/wsl`（g が無いほう）は隠さない。`/etc/resolv.conf` の指す先がそこにあり、隠すと名前解決が壊れる。
 
 `secrets` をコメントにしてあるのは、秘密ファイルをまだ置いていない状態（組み込みの既定での起動を含む）で、起動のたびに「秘密ファイルが無い」という警告を出さないためである。
 秘密を渡すときは、利用者がコメントを外し、ファイルを置く。
