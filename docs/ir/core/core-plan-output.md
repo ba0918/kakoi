@@ -41,10 +41,10 @@ JSON計画は全量に環境差分を加えた1行1文書を末尾LF1個付き�
 
 ### REQ-299: JSONの主要キー
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A9
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A9, docs/decision/brainstorm/2026-09-30-allowlist.md#A61
 - verification: unit
 
-JSONはformat_version、nested、applied、policy_sources、variables、home、policy、mounts、skipped_mounts、left_visible、skipped_paths、not_copied、guards、skipped_guards、environment、environment_changes、command、bwrap、bwrap_argumentsを持つ。variablesは4変数、不在値はnull。COMMAND省略時commandはnull。mountsは実体パス・種類・記述値・出所を持つ。
+JSONはformat_version、nested、applied、policy_sources、variables、home、policy、mounts、skipped_mounts、left_visible、skipped_paths、not_copied、guards、skipped_guards、environment、environment_changes、command、bwrap、bwrap_argumentsを持ち、マウントのモードとコマンドのモードの鍵（not_shown、commands_allowed、skipped_command_allow と、policy の中の mounts_mode、mounts_system、commands_mode）を core-listed-mounts.md と core-listed-commands.md のとおりに持つ。variablesは4変数、不在値はnull。COMMAND省略時commandはnull。mountsは実体パス・種類・記述値・出所を持つ。
 
 ### REQ-300: JSONの秘密と記述子
 - kind: ubiquitous

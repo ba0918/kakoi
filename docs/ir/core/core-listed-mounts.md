@@ -13,10 +13,10 @@
 
 ### REQ-468: "listed" で見える場所
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A3, docs/decision/brainstorm/2026-09-30-allowlist.md#A5, docs/decision/brainstorm/2026-09-30-allowlist.md#A12, docs/decision/brainstorm/2026-09-30-allowlist.md#A42, docs/decision/brainstorm/2026-09-30-allowlist.md#A43, docs/decision/brainstorm/2026-09-30-allowlist.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A55
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A3, docs/decision/brainstorm/2026-09-30-allowlist.md#A5, docs/decision/brainstorm/2026-09-30-allowlist.md#A12, docs/decision/brainstorm/2026-09-30-allowlist.md#A42, docs/decision/brainstorm/2026-09-30-allowlist.md#A43, docs/decision/brainstorm/2026-09-30-allowlist.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A55, docs/decision/brainstorm/2026-09-30-allowlist.md#A59
 - verification: unit
 
-マウントのモードが "listed" のとき、隔離の中のファイルシステムは、合成後の "mounts.system" が true なら `土台` の各ディレクトリを読み取り専用で見せ、"rw"、"rw-file"、"rw-copy"、"ro" の項目を "host" のときと同じ見え方で見せる。これ以外のパスは、隔離の中に存在しない。`見せた場所` の中の "hide" と走査は "host" のときと同じに隠す。`見せた場所` の外に向いた "hide"（書いたものと、秘密や走査から生成したもの）、`見せた場所` の外を根とする走査、`見せた場所` の外を "under" とする "hide-mounts" は、重ねずに理由を付けて計画に示して飛ばす。見張り役が包む本物（REQ-446）は、その場所と実体が隔離の中に見えているものに限る。`土台` のうちホストに無いディレクトリは、REQ-169 のとおり理由を付けて飛ばす。項目に書いたパスから辿った先の実体までにあるシンボリックリンクは、同じ行き先の文字列を持つ読み取り専用のリンクとして隔離の中に作り直す。"/dev" と "/proc" は "host" のときと同じく隔離用のものを用意する。
+マウントのモードが "listed" のとき、隔離の中のファイルシステムは、合成後の "mounts.system" が true なら `土台` の各ディレクトリを読み取り専用で見せ、"rw"、"rw-file"、"rw-copy"、"ro" の項目を "host" のときと同じ見え方で見せる。`見せた場所` 以外のパスは、隔離の中に存在しない。`見せた場所` の中の "hide" と走査は "host" のときと同じに隠す。`見せた場所` の外に向いた "hide"（書いたものと、秘密や走査から生成したもの）、根の下に `見せた場所` が1つも無い走査と、"under" の下に `見せた場所` が1つも無い "hide-mounts" は、行わずに理由を付けて計画に示して飛ばす。根が `見せた場所` の祖先である走査は行い、そこから生成した hide のうち `見せた場所` の外に向いたものを飛ばす。見張り役が包む本物（REQ-446）は、その場所と実体が隔離の中に見えているものに限る。`土台` のうちホストに無いディレクトリは、REQ-169 のとおり理由を付けて飛ばす。項目に書いたパスから辿った先の実体までにあるシンボリックリンクは、同じ行き先の文字列を持つ読み取り専用のリンクとして隔離の中に作り直す。"/dev" と "/proc" は "host" のときと同じく隔離用のものを用意する。
 
 ### REQ-469: "listed" の根と親のディレクトリ
 - kind: ubiquitous
@@ -62,10 +62,10 @@
 
 ### REQ-473: マウントのモードの計画表示
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A11, docs/decision/brainstorm/2026-09-30-allowlist.md#A37
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A11, docs/decision/brainstorm/2026-09-30-allowlist.md#A37, docs/decision/brainstorm/2026-09-30-allowlist.md#A61, docs/decision/brainstorm/2026-09-30-allowlist.md#A42
 - verification: unit
 
-計画の要約は、合成後のマウントのモードと "mounts.system" の値を1行で示す。計画の JSON は、合成後のマウントのモードと "mounts.system" の値を持つ。"format_version" は 1 のままとする。
+計画の要約は、合成後のマウントのモードと "mounts.system" の値を1行で示す。計画の JSON は、"policy" の中の "mounts_mode" と "mounts_system" に合成後のマウントのモードと "mounts.system" の値を、最上位の "not_shown" に `見せた場所` の外に向いたために飛ばした hide を持つ。"format_version" は 1 のままとする。
 
 ## Examples
 

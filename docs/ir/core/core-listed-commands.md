@@ -13,10 +13,10 @@
 
 ### REQ-475: 許していないプログラムの起動を止める
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58, docs/decision/brainstorm/2026-09-30-allowlist.md#A63
 - verification: unit
 
-コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を出して 126 で終わる。`隔離の中の最初のプロセス` が項目を開けなければ、その項目を許さずに進め、標準エラーに警告を1行出す。動的リンカが隔離の中に無ければ、それを許さずに進める。kakoi 自身の実行ファイルの場所が分からなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。
+コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである。許した項目の実体を見張り役が "guard-absolute-path" で置き直したときは、置き直した先をその項目の実体として許す。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を出して 126 で終わる。`隔離の中の最初のプロセス` が項目を開けなければ、その項目を許さずに進め、標準エラーに警告を1行出す。動的リンカが隔離の中に無ければ、それを許さずに進める。kakoi 自身の実行ファイルの場所が分からなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。
 
 ### REQ-476: 許すプログラムがホストに無いとき
 - kind: ubiquitous
@@ -34,10 +34,17 @@
 
 ### REQ-478: コマンドのモードの計画表示
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A26, docs/decision/brainstorm/2026-09-30-allowlist.md#A37, docs/decision/brainstorm/2026-09-30-allowlist.md#A45
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A26, docs/decision/brainstorm/2026-09-30-allowlist.md#A37, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A61
 - verification: unit
 
-計画の要約は、REQ-473 の行とは別の1行で、合成後のコマンドのモードと、"listed" のときは許すプログラムの項目の数を示す。計画の JSON は、合成後のコマンドのモードと許すプログラムの項目を持つ。数と項目は REQ-476 で飛ばした項目を含まない。"format_version" は 1 のままとする。
+計画の要約は、REQ-473 の行とは別の1行で、合成後のコマンドのモードと、"listed" のときは許すプログラムの項目の数を示す。計画の JSON は、"policy" の中の "commands_mode" に合成後のコマンドのモードを、最上位の "commands_allowed" に許すプログラムの項目を、"skipped_command_allow" に REQ-476 で飛ばした項目を持つ。数と項目は REQ-476 で飛ばした項目を含まない。"format_version" は 1 のままとする。
+
+### REQ-485: 外の見張り役を引き継ぐ入れ子とコマンドのモード
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A60
+- verification: unit
+
+"--nested=isolate" の起動が "/dev/kakoi-guard" を引き継ぐ（REQ-465）ときに、中の合成後のポリシーのコマンドのモードが "listed" なら、コマンドを実行せず種類 policy の診断で 125 とする。
 
 ### REQ-479: 見せるものを選ぶ形の公開文書
 - kind: ubiquitous
@@ -138,5 +145,17 @@ Scenario: 許していないコマンドを直接起動すると 126 で終わ�
 Scenario: 土台の外の kakoi でも最初のプロセスが動く
   Given kakoi がホームの下にあり、マウントのモードとコマンドのモードが "listed" で、kakoi の場所を書いていない
   When 許したコマンドを起動する
+  Then コマンドを実行する
+
+@id=EX-952 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A60
+Scenario: 外の見張り役を引き継ぐ入れ子ではコマンドを絞れない
+  Given 外のポリシーが見張り役の規則を持ち、中のポリシーがコマンドのモードを "listed" にしている
+  When 外の隔離の中で "--nested=isolate" を付けてコマンドを起動する
+  Then 種類 policy の診断で 125 となり、コマンドを実行しない
+
+@id=EX-953 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A60,docs/decision/brainstorm/2026-09-30-allowlist.md#A30,docs/decision/brainstorm/2026-09-30-allowlist.md#A51
+Scenario: 外に見張り役が無ければ入れ子でもコマンドを絞れる
+  Given 外のポリシーがコマンドのモードを書かず見張り役の規則も持たず、中のポリシーがコマンドのモードを "listed" にして "/bin/sh" を許している
+  When 外の隔離の中で "--nested=isolate" を付けて sh を起動する
   Then コマンドを実行する
 ```
