@@ -17,6 +17,9 @@ const KAKOI: &str = "kakoi";
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Commands {
+    pub mode: Option<crate::policy::ListMode>,
+    /// The programs a `listed` command mode lets start.
+    pub allow: Vec<crate::policy::PolicyPath>,
     pub guard: Vec<GuardRule>,
 }
 

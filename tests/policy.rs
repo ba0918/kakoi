@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use kakoi_core::diagnostic::Kind;
-use kakoi_core::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath, Variable};
+use kakoi_core::policy::{parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath, Variable};
 
 const EXAMPLE: &str = r#"
 [mounts]
@@ -265,4 +265,50 @@ fn a_control_character_in_a_variable_name_is_escaped_in_the_diagnostic() {
         !rendered.bytes().any(|byte| byte < 0x20 || byte == 0x7f),
         "{rendered:?}"
     );
+}
+
+// @kotowari[REQ-467, REQ-474, REQ-151]
+#[test]
+fn the_mount_and_command_modes_and_their_keys_load() {
+    let policy = parse_policy(
+        "[mounts]\nmode = \"listed\"\nsystem = false\n\
+         [commands]\nmode = \"listed\"\nallow = [\"/usr/bin/git\", \"~/bin\", \"${workspace}/tool\"]",
+        origin(),
+    )
+    .unwrap();
+
+    assert_eq!(policy.mounts.mode, Some(ListMode::Listed));
+    assert_eq!(policy.mounts.system, Some(false));
+    assert_eq!(policy.commands.mode, Some(ListMode::Listed));
+    assert_eq!(
+        policy.commands.allow,
+        [
+            PolicyPath::Absolute(PathBuf::from("/usr/bin/git")),
+            PolicyPath::Home("/bin".to_string()),
+            PolicyPath::Variable(Variable::Workspace, "/tool".to_string()),
+        ]
+    );
+    let host = parse_policy(
+        "[mounts]\nmode = \"host\"\n[commands]\nmode = \"host\"",
+        origin(),
+    )
+    .unwrap();
+    assert_eq!(host.mounts.mode, Some(ListMode::Host));
+    assert_eq!(host.commands.mode, Some(ListMode::Host));
+}
+
+// @kotowari[REQ-467, REQ-474, EX-903]
+#[test]
+fn an_unknown_mode_value_or_a_non_boolean_system_is_a_policy_diagnostic() {
+    for text in [
+        "[mounts]\nmode = \"clear\"",
+        "[mounts]\nmode = \"Listed\"",
+        "[mounts]\nsystem = \"false\"",
+        "[mounts]\nsystem = 0",
+        "[commands]\nmode = \"allowlist\"",
+        "[commands]\nallow = \"/usr/bin/git\"",
+        "[commands]\nallow = [\"bin/git\"]",
+    ] {
+        assert_policy_diagnostic(text);
+    }
 }

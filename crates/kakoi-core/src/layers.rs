@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use crate::diagnostic::Diagnostic;
 use crate::environment::PathState;
 use crate::guard::GuardRule;
-use crate::policy::{parse_policy, EnvMode, HideMounts, NetworkMode, PolicyFile, PolicyPath, Scan};
+use crate::policy::{
+    parse_policy, EnvMode, HideMounts, ListMode, NetworkMode, PolicyFile, PolicyPath, Scan,
+};
 use crate::regular_file::{read_regular_file, Links};
 use crate::workspace_facts::probe_path;
 
@@ -122,6 +124,10 @@ pub struct MountItem {
 /// The merged policy. Mount items keep their layer and appear lower layer first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
+    /// `listed` once any layer writes it (specification TBL-152).
+    pub mounts_mode: ListMode,
+    /// Whether the base directories are shown; off once any layer turns it off.
+    pub mounts_system: bool,
     pub mounts: Vec<MountItem>,
     pub scan: Vec<Scan>,
     pub hide_mounts: Vec<HideMounts>,
@@ -141,6 +147,10 @@ pub struct Policy {
     pub path_prepend: Vec<PolicyPath>,
     pub secrets: BTreeMap<String, PolicyPath>,
     pub instead_of: BTreeMap<String, String>,
+    /// `listed` once any layer writes it (specification TBL-152).
+    pub commands_mode: ListMode,
+    /// The programs a `listed` command mode lets start, lower layer first.
+    pub commands_allow: Vec<PolicyPath>,
     /// The rules of `commands.guard`, lower layer first, each with its layer.
     pub guards: Vec<GuardEntry>,
 }
@@ -175,6 +185,10 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         ));
     }
     let mut policy = Policy {
+        mounts_mode: strictest_mode(layers.iter().map(|layer| layer.policy.mounts.mode)),
+        mounts_system: layers
+            .iter()
+            .all(|layer| layer.policy.mounts.system != Some(false)),
         mounts: Vec::new(),
         scan: Vec::new(),
         hide_mounts: Vec::new(),
@@ -193,6 +207,8 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         path_prepend: Vec::new(),
         secrets: BTreeMap::new(),
         instead_of: BTreeMap::new(),
+        commands_mode: strictest_mode(layers.iter().map(|layer| layer.policy.commands.mode)),
+        commands_allow: Vec::new(),
         guards: Vec::new(),
     };
     for layer in layers {
@@ -250,11 +266,24 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         policy.secrets.extend(file.secrets.clone());
         policy.instead_of.extend(file.git.instead_of.clone());
         policy
+            .commands_allow
+            .extend(file.commands.allow.iter().cloned());
+        policy
             .guards
             .extend(file.commands.guard.iter().map(|rule| GuardEntry {
                 rule: rule.clone(),
                 origin: layer.origin.clone(),
             }));
+    }
+    if policy.mounts_mode != ListMode::Listed && !policy.mounts_system {
+        return Err(Diagnostic::policy(
+            "`mounts.system = false` has no effect while the merged `mounts.mode` is not `listed`",
+        ));
+    }
+    if policy.commands_mode != ListMode::Listed && !policy.commands_allow.is_empty() {
+        return Err(Diagnostic::policy(
+            "`commands.allow` has no effect while the merged `commands.mode` is not `listed`",
+        ));
     }
     if policy.env_mode == EnvMode::Inherit && !policy.env_pass.is_empty() {
         return Err(Diagnostic::policy(
@@ -293,6 +322,16 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
         .map_err(Diagnostic::policy)?;
     crate::network::validate_upstreams(&policy.dns_upstream).map_err(Diagnostic::policy)?;
     Ok(policy)
+}
+
+/// The merged value of a mode no upper layer can loosen: `listed` once any layer writes
+/// it, else `host` (specification TBL-152).
+fn strictest_mode(mut written: impl Iterator<Item = Option<ListMode>>) -> ListMode {
+    if written.any(|mode| mode == Some(ListMode::Listed)) {
+        ListMode::Listed
+    } else {
+        ListMode::Host
+    }
 }
 
 /// Reads the profile and the `--policy-file` named by `selection` and returns the written

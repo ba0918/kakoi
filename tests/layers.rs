@@ -10,7 +10,7 @@ use kakoi_core::environment::{HomeDirectory, HostEnvironment};
 use kakoi_core::layers::{
     load_layers, merge, Directive, Layer, LayerOrigin, LayerSelection, MountItem,
 };
-use kakoi_core::policy::{parse_policy, EnvMode, NetworkMode, PolicyPath};
+use kakoi_core::policy::{parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath};
 use kakoi_core::workspace_facts::real_entry;
 
 fn profile(text: &str) -> Layer {
@@ -478,4 +478,105 @@ fn guard_rules_concatenate_across_layers_lower_first_with_their_layer() {
             ),
         ]
     );
+}
+
+// @kotowari[REQ-467, EX-902, TBL-152]
+#[test]
+fn a_listed_mount_mode_is_kept_whatever_an_upper_layer_writes() {
+    let policy = merge(&[
+        profile("[mounts]\nmode = \"listed\""),
+        policy_file("[mounts]\nmode = \"host\""),
+    ])
+    .unwrap();
+    assert_eq!(policy.mounts_mode, ListMode::Listed);
+
+    let raised = merge(&[profile(""), policy_file("[mounts]\nmode = \"listed\"")]).unwrap();
+    assert_eq!(raised.mounts_mode, ListMode::Listed);
+
+    let defaults = merge(&[profile(""), policy_file("")]).unwrap();
+    assert_eq!(defaults.mounts_mode, ListMode::Host);
+    assert!(defaults.mounts_system);
+}
+
+// @kotowari[REQ-467, EX-904, TBL-152]
+#[test]
+fn a_system_turned_off_is_kept_whatever_an_upper_layer_writes() {
+    let policy = merge(&[
+        profile("[mounts]\nmode = \"listed\"\nsystem = false"),
+        policy_file("[mounts]\nsystem = true"),
+    ])
+    .unwrap();
+    assert!(!policy.mounts_system);
+
+    let upper_off = merge(&[
+        profile("[mounts]\nmode = \"listed\""),
+        policy_file("[mounts]\nsystem = false"),
+    ])
+    .unwrap();
+    assert!(!upper_off.mounts_system);
+}
+
+// @kotowari[REQ-467, EX-946]
+#[test]
+fn a_system_turned_off_without_a_listed_mount_mode_is_a_policy_diagnostic() {
+    for layers in [
+        vec![profile("[mounts]\nsystem = false"), policy_file("")],
+        vec![
+            profile("[mounts]\nmode = \"host\"\nsystem = false"),
+            policy_file("[mounts]\nmode = \"host\""),
+        ],
+    ] {
+        let error = merge(&layers).unwrap_err();
+        assert_eq!(error.kind(), Kind::Policy);
+    }
+}
+
+// @kotowari[REQ-474, EX-920, TBL-152]
+#[test]
+fn a_listed_command_mode_is_kept_and_the_allowed_programs_add_up() {
+    let policy = merge(&[
+        profile("[commands]\nmode = \"listed\"\nallow = [\"/usr/bin/git\"]"),
+        policy_file("[commands]\nmode = \"host\"\nallow = [\"/usr/bin/cat\"]"),
+    ])
+    .unwrap();
+
+    assert_eq!(policy.commands_mode, ListMode::Listed);
+    assert_eq!(
+        policy.commands_allow,
+        [absolute("/usr/bin/git"), absolute("/usr/bin/cat")]
+    );
+
+    let defaults = merge(&[profile(""), policy_file("")]).unwrap();
+    assert_eq!(defaults.commands_mode, ListMode::Host);
+    assert!(defaults.commands_allow.is_empty());
+}
+
+// @kotowari[REQ-474, EX-921]
+#[test]
+fn allowed_programs_without_a_listed_command_mode_are_a_policy_diagnostic() {
+    for layers in [
+        vec![
+            profile("[commands]\nallow = [\"/usr/bin/git\"]"),
+            policy_file(""),
+        ],
+        vec![
+            profile("[commands]\nmode = \"host\""),
+            policy_file("[commands]\nallow = [\"/usr/bin/git\"]"),
+        ],
+    ] {
+        let error = merge(&layers).unwrap_err();
+        assert_eq!(error.kind(), Kind::Policy);
+    }
+}
+
+// @kotowari[REQ-474]
+#[test]
+fn the_command_mode_is_independent_of_the_mount_mode() {
+    let policy = merge(&[profile(
+        "[commands]\nmode = \"listed\"\nallow = [\"/usr/bin/git\"]",
+    )])
+    .unwrap();
+
+    assert_eq!(policy.mounts_mode, ListMode::Host);
+    assert_eq!(policy.commands_mode, ListMode::Listed);
 }
