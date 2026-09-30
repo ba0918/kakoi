@@ -304,6 +304,13 @@ fn check_protected_paths(
         writable,
         facts,
     )?;
+    check_nothing_writable_inside(
+        &protected.config_dir,
+        "the configuration directory",
+        "whose profiles and secret files the next start reads",
+        writable,
+        facts,
+    )?;
     // A secret file inside `rw` could be swapped for a link to any host file, whose
     // content the next start would bring into the isolation as a variable.
     for (name, path) in &protected.secrets {
@@ -319,15 +326,24 @@ fn check_protected_paths(
     }
     if let Some(place) = &protected.shared_files {
         check_prefixes(place, "the shared file place", writable, facts)?;
-        check_nothing_writable_inside(place, writable, facts)?;
+        check_nothing_writable_inside(
+            place,
+            "the shared file place",
+            "whose files every run binds read-only",
+            writable,
+            facts,
+        )?;
     }
     Ok(())
 }
 
-/// A writable item inside the shared file place could write the files every run binds
-/// read-only (specification REQ-462).
+/// A writable item inside `place` could change from inside the isolation what `holds`
+/// says a run takes from there: the shared file place (specification REQ-462) and the
+/// configuration directory (REQ-486).
 fn check_nothing_writable_inside(
     place: &Path,
+    role: &str,
+    holds: &str,
     writable: &[&ResolvedItem],
     facts: &MountFacts,
 ) -> Result<(), Diagnostic> {
@@ -338,8 +354,8 @@ fn check_nothing_writable_inside(
         .find(|item| item.real.starts_with(real) || item.real.starts_with(place))
     {
         Some(item) => Err(Diagnostic::path(format!(
-            "the `{}` item {} is inside the shared file place {}, whose files every run \
-             binds read-only, and could change them from inside the isolation",
+            "the `{}` item {} is inside {role} {}, {holds}, and could change them from \
+             inside the isolation",
             item.directive.name(),
             item.real.display(),
             place.display()

@@ -1981,3 +1981,58 @@ fn an_rw_copy_over_the_work_place_still_warns_that_no_rw_covers_it() {
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].to_string().contains(WORKTREE), "{warnings:?}");
 }
+
+/// The profile directory inside the configuration directory, which a start with the built-in
+/// default reads nothing from.
+const PROFILE_DIR: &str = "/home/u/.config/kakoi/profile";
+
+// @kotowari[REQ-486, EX-957]
+#[test]
+fn a_writable_item_inside_the_configuration_directory_is_rejected() {
+    let diagnostic = check(
+        &[command_line_layer(&[PROFILE_DIR], &[])],
+        &variables(),
+        Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .dir_with_ancestors(PROFILE_DIR),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[PROFILE_DIR, CONFIG_DIR]);
+}
+
+// @kotowari[REQ-486, EX-958]
+#[test]
+fn a_writable_link_that_lands_inside_the_configuration_directory_is_rejected() {
+    let diagnostic = check(
+        &[command_line_layer(&["/home/u/p"], &[])],
+        &variables(),
+        Facts::new()
+            .dir_with_ancestors(WORKTREE)
+            .dir_with_ancestors(PROFILE_DIR)
+            .link_to_dir("/home/u/p", PROFILE_DIR),
+        WORKTREE,
+    )
+    .unwrap_err();
+
+    assert_path_diagnostic(&diagnostic, &[PROFILE_DIR, CONFIG_DIR]);
+}
+
+// @kotowari[REQ-486, EX-959]
+#[test]
+fn an_rw_copy_inside_the_configuration_directory_is_accepted() {
+    let result = check(
+        &layers(
+            &format!("[mounts]\nrw-copy = [\"{PROFILE_DIR}\"]"),
+            None,
+            &[],
+            &[],
+        ),
+        &variables(),
+        host(),
+        WORKTREE,
+    );
+
+    assert!(result.is_ok(), "{result:?}");
+}
