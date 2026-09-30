@@ -534,6 +534,54 @@ fn a_command_given_by_a_path_in_a_hidden_place_is_not_found() {
     );
 }
 
+/// A home whose profile hides `hidden`, where `hidden/lnk` is a link to the visible
+/// directory `visible` holding the executable `name`; returns `hidden/lnk`.
+fn hidden_link_to_a_visible_tool(home: &TempDir, name: &str) -> PathBuf {
+    home.write_executable(
+        format!("visible/{name}"),
+        "#!/bin/sh\necho through the link\n",
+    );
+    let hidden = home.path().join("hidden");
+    std::fs::create_dir(&hidden).unwrap();
+    std::os::unix::fs::symlink(home.path().join("visible"), hidden.join("lnk")).unwrap();
+    profile(
+        home,
+        &format!("{RW_WORKSPACE}hide = [\"{}\"]\n", hidden.display()),
+    );
+    hidden.join("lnk")
+}
+
+// @kotowari[REQ-260, EX-960]
+#[test]
+fn a_candidate_through_a_link_in_a_hidden_place_is_passed_over() {
+    let (home, workspace) = home_with_workspace();
+    let link = hidden_link_to_a_visible_tool(&home, "kakoi-test-tool");
+    home.write_executable("later/kakoi-test-tool", "#!/bin/sh\necho later\n");
+    let path = std::env::join_paths(
+        [link, home.path().join("later")]
+            .into_iter()
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[OsStr::new("kakoi-test-tool")]);
+
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
+    assert_eq!(output.stdout, b"later\n", "{}", output_report(&output));
+}
+
+// @kotowari[REQ-260]
+#[test]
+fn a_command_given_by_a_path_through_a_link_in_a_hidden_place_is_not_found() {
+    let (home, workspace) = home_with_workspace();
+    let tool = hidden_link_to_a_visible_tool(&home, "tool").join("tool");
+    let path = std::env::var_os("PATH").unwrap();
+
+    let output = run_with_path(&home, &workspace, &path, &[tool.as_os_str()]);
+
+    assert_diagnostic(&output, 127, "command not found");
+}
+
 // @kotowari[REQ-264]
 #[test]
 fn a_command_on_path_inside_an_rw_item_is_started_without_a_placement_check() {

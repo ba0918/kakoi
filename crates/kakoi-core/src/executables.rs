@@ -26,10 +26,25 @@ pub fn named(candidates: &[PathBuf]) -> Vec<NameFact> {
             candidate: candidate.clone(),
             name: resolved_name(candidate),
             real: crate::mount_facts::real_path(candidate),
+            links: followed_links(candidate),
             executable: is_executable_file(candidate),
             file: file_id(candidate),
         })
         .collect()
+}
+
+/// The places of the links resolving `path` follows, taken against the current directory
+/// when relative.
+fn followed_links(path: &Path) -> Vec<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        match std::env::current_dir() {
+            Ok(directory) => directory.join(path),
+            Err(_) => return Vec::new(),
+        }
+    };
+    crate::mount_facts::traverse(&absolute).links
 }
 
 /// `path` with the links of its directory resolved and its own name kept.

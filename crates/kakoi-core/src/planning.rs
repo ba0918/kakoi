@@ -24,7 +24,7 @@ use crate::guard_placement::{
 };
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::listed::ListedRoot;
-use crate::mount_facts::{self, collect_generator_facts, collect_path_facts};
+use crate::mount_facts::{collect_generator_facts, collect_path_facts};
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
@@ -378,8 +378,7 @@ fn through_guard(
 
 /// The names of `names` a "listed" isolation has as they are written on `PATH`: where
 /// each is, what it resolves to, and every link on the way shown or made again
-/// (specification REQ-468 and REQ-484); all of them under "host". A relative name is not
-/// walked, so only where it is and what it resolves to are looked at.
+/// (specification REQ-468 and REQ-484); all of them under "host".
 fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFact> {
     let Some(root) = listed else {
         return names;
@@ -388,9 +387,10 @@ fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFac
         .into_iter()
         .filter(|fact| {
             fact.name.as_deref().is_some_and(|name| root.shows(name))
-                && fact.real.as_deref().is_some_and(|real| {
-                    root.shows_through(&mount_facts::traverse(&fact.candidate).links, real)
-                })
+                && fact
+                    .real
+                    .as_deref()
+                    .is_some_and(|real| root.shows_through(&fact.links, real))
         })
         .collect()
 }
