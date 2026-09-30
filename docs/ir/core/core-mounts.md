@@ -51,7 +51,7 @@
 
 ### REQ-170: 走査・マウント・秘密からの hide 生成
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A1, docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A2, docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A3
 - verification: unit
 
 ポリシーに書かれた項目に加えて、次の項目が生成の段に置かれる。
@@ -60,7 +60,7 @@
 
 "prune" に一致する名前のディレクトリは  中に入らない。シンボリックリンクのディレクトリには入らない。一致したエントリがシンボリックリンク  なら、第 6.2 節のとおり解決先を隠す。ただし、その解決先が、書かれた段に第 5.4 節の置き換えを適用した  後に残っている "ro" の項目の実体と同一かその中（子孫）なら、隠さない。
 
-その "ro" の解決が書き込める  項目の中を参照しない（隔離の中から差し替えられない）なら、隠さずに計画に理由付きで表示して起動を  続ける。参照する（差し替えられうる）なら、種類 "path" の診断で終わる。この判定の書き込める項目は、  走査の "root" の検査と同じく、書かれた段だけに第 5.4 節の置き換えを適用した集合で見る。
+その "ro" の解決が書き込める  項目の中を参照しない（隔離の中から差し替えられない）なら、隠さずに計画に理由付きで表示して起動を  続ける。参照する（差し替えられうる）なら、種類 "path" の診断で終わる。この判定の書き込める項目は、  走査の "root" の検査と同じく、書かれた段だけに第 5.4 節の置き換えを適用した集合で見る。リンクの先を書かれた "ro" の項目が複数囲むときは、そのうち一つでも差し替えられうるなら種類 "path" の診断で終わり、どれも差し替えられないときだけ隠さずに理由付きで表示する。診断には差し替えられうるもののうち実体のパスのバイト順で最初の "ro" の項目を、表示する理由には囲むもののうち実体のパスのバイト順で最初の "ro" の項目を名指す。
 
 該当する  リンクが複数あれば、リンクのパスのバイト順で最初のものを名指す（走査の探索順に依らない）。説明はそのリンクのパス、  "ro" の項目のパス、理由を含む。隔離の中で ".env" の名前のリンクを張って、読み取り専用にした自分の  設定や指示を次の起動で空にする経路（2026-09-06 に実測）と、"ro" のリンクを向け直して走査が隠すべき  ファイルの隠しを外す経路の両方を、診断で見える形で塞ぐためである。
 
@@ -232,6 +232,12 @@ Scenario: 自動で秘密を隠す
 ```
 
 ```gherkin
+@id=EX-963 @about=REQ-170 @source=docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A1,docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A3
+Scenario: 差し替えられない ro が重なるときは最も外側を理由に名指して残す
+  Given 走査で一致したリンクの先を、差し替えられない "ro" の項目 "/home/u" と "/home/u/.config/opencode" が囲む
+  When 生成を行う
+  Then リンクの先を隠さず、理由に "/home/u" の "ro" の項目を名指して表示する
+
 @id=EX-343 @about=REQ-170 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
 Scenario: 走査するリンク先
   Given 名前が一致するリンクの先がディレクトリ

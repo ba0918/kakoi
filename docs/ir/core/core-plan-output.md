@@ -62,10 +62,10 @@ JSONの項目の出所はprofile、built-in-default、policy-file、command-line
 
 ### REQ-403: 生成の段の検査
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12, docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A1
 - verification: unit
 
-REQ-294の3番目の生成の段では、生成に加えて次を検査し、どちらも種類pathの診断で終わる。走査で一致したシンボリックリンクの先が書かれたroの項目の中にあり、そのroの項目が隔離の中から差し替えられる（解決が書き込める項目を通る）とき。mounts.hide-mountsが書かれていて、マウント一覧を読めないとき。
+REQ-294の3番目の生成の段では、生成に加えて次を検査し、どちらも種類pathの診断で終わる。走査で一致したシンボリックリンクの先が書かれたroの項目の中にあり、そのroの項目（先を囲むroの項目が複数あれば、そのどれか一つ）が隔離の中から差し替えられる（解決が書き込める項目を通る）とき。mounts.hide-mountsが書かれていて、マウント一覧を読めないとき。
 
 ### REQ-404: rw-copyの読み込みの検査
 - kind: ubiquitous
@@ -144,6 +144,12 @@ Scenario: 差し替えられるroへの走査のリンク
   Given 走査で一致したリンクの先が、解決がrwの中を通るroの項目の中にある
   When 段階7の生成を行う
   Then リンクを隠さずpathの診断で止まる
+
+@id=EX-962 @about=REQ-403 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12,docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A1,docs/decision/brainstorm/2026-10-01-multiple-ro-around-scan-link.md#A2
+Scenario: 差し替えられない ro の中の差し替えられる ro への走査のリンク
+  Given 走査で一致したリンクの先を、差し替えられない "ro" の項目 "/home/u" と、解決がrwの中を通る "ro" の項目 "~/.claude/settings.json" が囲む
+  When 段階7の生成を行う
+  Then "~/.claude/settings.json" の "ro" の項目を名指すpathの診断で止まる
 
 @id=EX-760 @about=REQ-403 @source=docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A12
 Scenario: 読めないマウント一覧
