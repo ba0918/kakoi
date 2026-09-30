@@ -1078,7 +1078,13 @@ fn mount_facts_are_collected_from_the_file_system() {
     std::os::unix::fs::symlink(root.join("proj"), root.join("link")).unwrap();
 
     let facts = collect_mount_facts(&Candidates {
-        paths: vec![root.join("link"), env.clone(), root.join("missing")],
+        // The scan root and the `under` are among the paths, as `candidates` puts them.
+        paths: vec![
+            root.join("link"),
+            env.clone(),
+            root.join("missing"),
+            PathBuf::from("/"),
+        ],
         scans: vec![ScanRequest {
             root: root.join("link"),
             names: vec![".env".to_string()],
