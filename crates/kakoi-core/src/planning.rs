@@ -11,7 +11,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::command::{command_candidates, resolve_command};
-use crate::command_limits::{self, allowed_programs, CommandLimits};
+use crate::command_limits::{self, allowed_programs, relocated_programs, CommandLimits};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
@@ -160,6 +160,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
                 &home,
                 &facts.mounts,
                 isolation.listed.as_ref(),
+                &guards,
                 request,
             )
         })
@@ -199,6 +200,7 @@ fn command_limits(
     home: &crate::environment::HomeDirectory,
     facts: &crate::mounts::MountFacts,
     listed: Option<&ListedRoot>,
+    guards: &GuardPlan,
     request: &Request,
 ) -> Result<CommandLimits, Diagnostic> {
     // The first process is placed where the guards of the run around this one are
@@ -220,9 +222,15 @@ fn command_limits(
             )
         })?;
     let (allowed, skipped) = allowed_programs(policy, variables, home, facts, listed);
+    let reals: Vec<PathBuf> = allowed
+        .iter()
+        .filter_map(|path| facts.entry(path).path().map(Path::to_path_buf))
+        .collect();
+    let relocated = relocated_programs(&reals, &guards.overlaid);
     Ok(CommandLimits {
         allowed,
         skipped,
+        relocated,
         executable,
     })
 }

@@ -271,3 +271,42 @@ fn the_command_keeps_the_name_it_was_given() {
     assert_success(&output);
     assert_eq!(stdout(&output), "sh\n");
 }
+
+/// The JSON plan of `scene`, without a command.
+fn json_plan(scene: &Scene) -> serde_json::Value {
+    let output = scene.kakoi(&["--print-plan=json"]);
+    assert_success(&output);
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+// @kotowari[REQ-475]
+#[test]
+fn an_allowed_program_a_guard_overlays_starts_through_the_guard() {
+    let rule = "[[commands.guard]]\nprogram = \"git\"\nreason = \"no push\"\n\
+                deny = [[\"push\"]]\nguard-absolute-path = true\n";
+    let found = json_plan(&Scene::allowing(&["/bin/sh"], rule))["guards"][0]["found"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let directory = Path::new(&found)
+        .parent()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    for allowed in [found.as_str(), directory.as_str()] {
+        let scene = Scene::allowing(&[allowed], rule);
+
+        let version = scene.kakoi(&["--", &found, "--version"]);
+        let push = scene.kakoi(&["--", &found, "push"]);
+
+        assert_success(&version);
+        assert!(
+            stdout(&version).starts_with("git version"),
+            "{allowed}: {}",
+            output_report(&version)
+        );
+        assert_eq!(push.status.code(), Some(126), "{}", output_report(&push));
+        assert!(push.stdout.is_empty(), "{}", output_report(&push));
+    }
+}

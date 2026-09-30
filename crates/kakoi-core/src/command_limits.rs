@@ -32,6 +32,11 @@ pub struct CommandLimits {
     pub allowed: Vec<PathBuf>,
     /// The items skipped, with the reason.
     pub skipped: Vec<SkippedAllow>,
+    /// Where `guard-absolute-path` places again the real programs an allowed item covers:
+    /// a guard now holds the item's own path, and the first process allows these too
+    /// (specification REQ-475). Not items of `commands.allow`, so the plan does not
+    /// count them.
+    pub relocated: Vec<PathBuf>,
     /// The real path of kakoi's own executable, placed as the first process.
     pub executable: PathBuf,
 }
@@ -67,6 +72,24 @@ impl AllowedList {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         serde_json::from_slice(bytes).ok()
     }
+}
+
+/// Where each of `overlaid` (a real program and where a guard relocates it) is
+/// relocated when the real path of an allowed item is that program or a directory it is
+/// in: the program is the item's own real one, which the guard over it starts.
+pub fn relocated_programs(
+    allowed_reals: &[PathBuf],
+    overlaid: &[(PathBuf, PathBuf)],
+) -> Vec<PathBuf> {
+    overlaid
+        .iter()
+        .filter(|(real, _)| {
+            allowed_reals
+                .iter()
+                .any(|allowed| real.starts_with(allowed))
+        })
+        .map(|(_, relocated)| relocated.clone())
+        .collect()
 }
 
 /// The paths the items of `commands.allow` expand to, for the outer layer to look up.

@@ -653,10 +653,13 @@ fn guard_arguments(guards: &GuardPlan, commands: Option<&CommandLimits>) -> Vec<
     }
     if let Some(limits) = commands {
         arguments.extend(bind(&limits.executable, Path::new(FIRST_PROCESS)));
-        arguments.extend(data(
-            AllowedList::new(&limits.allowed).to_bytes(),
-            ALLOWED_LIST,
-        ));
+        let allowed: Vec<PathBuf> = limits
+            .allowed
+            .iter()
+            .chain(&limits.relocated)
+            .cloned()
+            .collect();
+        arguments.extend(data(AllowedList::new(&allowed).to_bytes(), ALLOWED_LIST));
     }
     arguments.extend([Argument::text("--remount-ro"), Argument::text(GUARD_ROOT)]);
     arguments

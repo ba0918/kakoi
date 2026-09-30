@@ -60,8 +60,8 @@ the machine; they fail rather than skip when any of them is missing. The tests o
 also need Landlock in the kernel with the scope on abstract UNIX sockets (ABI 6, Linux 6.12 or
 later), and fail rather than skip without it. Inside the isolation they start `/usr/bin/cat`,
 `/usr/bin/ls`, `/usr/bin/touch`, `/usr/bin/readlink`, `/usr/bin/ln`, `/usr/bin/id`, and
-`/usr/bin/true` by absolute path, and `git`, `id`, and small `/bin/sh` scripts by name through
-`PATH`. Their homes and workspaces are placed under the build's own temporary directory
+`/usr/bin/true` by absolute path, `git`, `id`, and small `/bin/sh` scripts by name through
+`PATH`, and the `git` found on `PATH` by its absolute path. Their homes and workspaces are placed under the build's own temporary directory
 (`CARGO_TARGET_TMPDIR`) rather than under `/tmp`, which the "listed" mount mode replaces; a
 workspace there is given a `.git` directory of its own so that the repository the build is in
 is not taken as its worktree. Inside the isolation they
