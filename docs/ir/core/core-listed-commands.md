@@ -41,10 +41,10 @@
 
 ### REQ-485: 外の見張り役を引き継ぐ入れ子とコマンドのモード
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A60
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A65, docs/decision/brainstorm/2026-09-30-allowlist.md#A66, docs/decision/brainstorm/2026-09-30-allowlist.md#A67
 - verification: unit
 
-"--nested=isolate" の起動が "/dev/kakoi-guard" を引き継ぐ（REQ-465）ときに、中の合成後のポリシーのコマンドのモードが "listed" なら、コマンドを実行せず種類 policy の診断で 125 とする。
+"--nested=isolate" の起動が "/dev/kakoi-guard" を引き継ぐ（REQ-465）ときも、中の合成後のポリシーのコマンドのモード "listed" を使える。このとき、外の見張り役の規則と実行ファイルは中の隔離でも外と同じに働き、中の Landlock は外の見張り役の実行ファイルを自動で許す。中の "commands.allow" で許したプログラムは、名前で起動しても絶対パスで起動しても外の見張り役を通って起動し、外の規則で禁止なら REQ-447 のとおり 126 で終わる。中で許していないプログラムは、外の見張り役があっても起動しない。外の見張り役が本物の場所に重なっているときは、中の "commands.allow" にその場所を書いた項目を本物の実体として扱う。中の合成後のポリシーにも見張り役の規則があるときは REQ-466 のとおり止める。
 
 ### REQ-479: 見せるものを選ぶ形の公開文書
 - kind: ubiquitous
@@ -147,15 +147,21 @@ Scenario: 土台の外の kakoi でも最初のプロセスが動く
   When 許したコマンドを起動する
   Then コマンドを実行する
 
-@id=EX-952 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A60
-Scenario: 外の見張り役を引き継ぐ入れ子ではコマンドを絞れない
-  Given 外のポリシーが見張り役の規則を持ち、中のポリシーがコマンドのモードを "listed" にしている
-  When 外の隔離の中で "--nested=isolate" を付けてコマンドを起動する
-  Then 種類 policy の診断で 125 となり、コマンドを実行しない
+@id=EX-952 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65
+Scenario: 外の見張り役の下で、中で許したプログラムは外の規則のもとで動く
+  Given 外のポリシーが git の見張り役の規則で "git push" を禁じ、中のポリシーがコマンドのモードを "listed" にして git と "/bin/sh" を許している
+  When 外の隔離の中で "--nested=isolate" を付け、中で "git --version" と "git push" を起動する
+  Then "git --version" は動き、"git push" は外の見張り役で 126 になる
 
-@id=EX-953 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A60,docs/decision/brainstorm/2026-09-30-allowlist.md#A30,docs/decision/brainstorm/2026-09-30-allowlist.md#A51
-Scenario: 外に見張り役が無ければ入れ子でもコマンドを絞れる
-  Given 外のポリシーがコマンドのモードを書かず見張り役の規則も持たず、中のポリシーがコマンドのモードを "listed" にして "/bin/sh" を許している
-  When 外の隔離の中で "--nested=isolate" を付けて sh を起動する
-  Then コマンドを実行する
+@id=EX-953 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65,docs/decision/brainstorm/2026-09-30-allowlist.md#A66
+Scenario: 外の見張り役の下でも、中で許していないプログラムは起動しない
+  Given 外のポリシーが git の見張り役の規則を持ち、中のポリシーがコマンドのモードを "listed" にして "/bin/sh" だけを許している
+  When 外の隔離の中で "--nested=isolate" を付け、中で git を起動する
+  Then git は起動しない
+
+@id=EX-954 @about=REQ-485 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A65
+Scenario: 本物の場所に重なる外の見張り役も中で効く
+  Given 外のポリシーが "guard-absolute-path = true" の git の見張り役の規則で "git push" を禁じ、中のポリシーがコマンドのモードを "listed" にして "/usr/bin/git" と "/bin/sh" を許している
+  When 外の隔離の中で "--nested=isolate" を付け、中で "/usr/bin/git --version" と "/usr/bin/git push" を起動する
+  Then "/usr/bin/git --version" は git の版を出し、"/usr/bin/git push" は外の見張り役で 126 になる
 ```
