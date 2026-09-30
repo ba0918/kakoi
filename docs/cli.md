@@ -256,9 +256,9 @@ diagnostic. The limits of all this are [known gap 8](security.md#known-gaps).
 Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
 isolation: Landlock, which restricts the programs there, forbids mounting, so the inner
 `bwrap` stops (even when `bwrap` is in `commands.allow`). The mount mode `listed` alone does
-not prevent it. A policy for an inner isolation that is given the outer guards cannot use the
-`listed` command mode either; that is a `policy` diagnostic. See
-[known gap 19](security.md#known-gaps).
+not prevent it. See [known gap 19](security.md#known-gaps). A policy for an inner isolation
+that is given the outer guards cannot use the `listed` command mode either; that is a `policy`
+diagnostic, and part of [known gap 8](security.md#known-gaps).
 
 ## Open files
 
