@@ -73,9 +73,7 @@ impl ListedRoot {
     /// Whether `path` is inside a place shown, is one of the places the isolation
     /// provides, or is what kakoi or bwrap puts in them.
     pub fn shows(&self, path: &Path) -> bool {
-        covered(path, self.places.iter().map(PathBuf::as_path))
-            || PROVIDED.iter().any(|provided| path == Path::new(provided))
-            || covered(path, PUT_INSIDE.iter().map(Path::new))
+        in_isolation(path, self.places.iter().map(PathBuf::as_path))
     }
 
     /// Whether a path is there as written when resolving it passes through `links` to
@@ -199,9 +197,8 @@ pub fn listed_root(
         .iter()
         .map(PathBuf::as_path)
         .chain(shown.iter().copied())
-        .chain(PROVIDED.iter().map(Path::new))
         .collect();
-    let resolver = resolver.filter(|real| !covered(real, places.iter().copied()));
+    let resolver = resolver.filter(|real| !in_isolation(real, places.iter().copied()));
     let filtered_resolver =
         (network_mode == NetworkMode::Filtered).then(|| filtered_resolver(system, facts));
     let places: Vec<&Path> = places
@@ -212,7 +209,7 @@ pub fn listed_root(
     let mut links: Vec<RebuiltLink> = Vec::new();
     for path in walked {
         for place in facts.traversed_links(path) {
-            if covered(place, places.iter().copied())
+            if in_isolation(place, places.iter().copied())
                 || links.iter().any(|link| &link.place == place)
             {
                 continue;
@@ -231,7 +228,7 @@ pub fn listed_root(
         .chain(links.iter().map(|link| link.place.as_path()))
         .flat_map(|place| place.ancestors().skip(1))
         .filter(|ancestor| {
-            *ancestor != Path::new("/") && !covered(ancestor, places.iter().copied())
+            *ancestor != Path::new("/") && !in_isolation(ancestor, places.iter().copied())
         })
         .map(Path::to_path_buf)
         .collect();
@@ -340,6 +337,15 @@ pub fn shown_generators(
         },
         skipped,
     )
+}
+
+/// Whether `path` is in the isolation without being made: inside one of `places` of the
+/// host's, one of the places the isolation provides, or what kakoi or bwrap puts in them.
+/// The host's content under a provided place is not there.
+fn in_isolation<'a>(path: &Path, places: impl Iterator<Item = &'a Path>) -> bool {
+    covered(path, places)
+        || PROVIDED.iter().any(|provided| path == Path::new(provided))
+        || covered(path, PUT_INSIDE.iter().map(Path::new))
 }
 
 /// Whether `path` is one of `places` or inside one.

@@ -298,6 +298,22 @@ fn ex_949_a_link_on_a_written_path_is_there_pointing_where_it_did_and_cannot_be_
     assert_eq!(stdout(&output), "through the link\nb\nb\n");
 }
 
+// @kotowari[REQ-468, REQ-470]
+#[test]
+fn a_link_written_under_tmp_is_made_again_over_the_isolations_own_tmp() {
+    let host_tmp = TempDir::under(Path::new("/tmp"));
+    let link = host_tmp.path().join("link");
+    let scene = Scene::new(&[link.to_str().unwrap()], "");
+    let target = scene.home.join("data");
+    fs::create_dir(&target).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    let output = scene.run(&format!("echo x > '{}/made'", link.display()));
+
+    assert_success(&output);
+    assert_eq!(fs::read_to_string(target.join("made")).unwrap(), "x\n");
+}
+
 /// The stage-seven resolution on the fixture host for a profile and a network mode.
 fn isolation(profile: &str, network_mode: &str, facts: Facts) -> Result<Isolation, Diagnostic> {
     let layers = layers(
@@ -462,6 +478,33 @@ fn the_resolver_target_is_not_shown_under_filtered_or_without_the_system() {
             "{arguments:?}"
         );
     }
+}
+
+// @kotowari[REQ-471]
+#[test]
+fn the_resolver_target_under_tmp_is_shown_over_the_isolations_own_tmp() {
+    let facts = base_facts()
+        .link_to_file("/etc/resolv.conf", "/tmp/resolve/resolv.conf")
+        .links_traversed("/etc/resolv.conf", &["/etc/resolv.conf"])
+        .link_target("/etc/resolv.conf", "/tmp/resolve/resolv.conf");
+    let listed = "[mounts]\nmode = \"listed\"\nrw = [\"${workspace}\"]\n";
+    let isolation = isolation(listed, "host", facts).unwrap();
+
+    let arguments = arguments(&isolation, NetworkMode::Host);
+
+    let position = |window: &[&str]| {
+        let window: Vec<OsString> = window.iter().map(OsString::from).collect();
+        arguments
+            .windows(window.len())
+            .position(|found| found == window)
+    };
+    let tmp = position(&["--tmpfs", "/tmp"]).expect("the isolation's own /tmp");
+    let shown = position(&[
+        "--ro-bind",
+        "/tmp/resolve/resolv.conf",
+        "/tmp/resolve/resolv.conf",
+    ]);
+    assert!(shown.is_some_and(|shown| shown > tmp), "{arguments:?}");
 }
 
 // @kotowari[EX-915]

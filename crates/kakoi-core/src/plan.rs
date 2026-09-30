@@ -505,12 +505,18 @@ pub fn bwrap_arguments(
 }
 
 /// The arguments that lay out the root of the "listed" mount mode before the mount items:
-/// the directories on the way to what is shown, made by kakoi rather than by bwrap, which
-/// would make them readable by their owner only; the base; the links on the written
-/// paths; the isolation's own `/tmp`, which a written item at `/tmp` covers; and the
-/// resolver configuration's target. The root is made read-only after everything else.
+/// the isolation's own `/tmp`, first so that what is made under it stays and a written
+/// item at `/tmp` covers it; the directories on the way to what is shown, made by kakoi
+/// rather than by bwrap, which would make them readable by their owner only; the base;
+/// the links on the written paths; and the resolver configuration's target. The root is
+/// made read-only after everything else.
 fn listed_arguments(root: &ListedRoot) -> Vec<Argument> {
-    let mut arguments = Vec::new();
+    let mut arguments = vec![
+        Argument::text("--perms"),
+        Argument::text("1777"),
+        Argument::text("--tmpfs"),
+        Argument::text("/tmp"),
+    ];
     for directory in &root.directories {
         arguments.extend([
             Argument::text("--perms"),
@@ -533,12 +539,6 @@ fn listed_arguments(root: &ListedRoot) -> Vec<Argument> {
             Argument::text(link.place.as_os_str()),
         ]);
     }
-    arguments.extend([
-        Argument::text("--perms"),
-        Argument::text("1777"),
-        Argument::text("--tmpfs"),
-        Argument::text("/tmp"),
-    ]);
     if let Some(resolver) = &root.resolver {
         arguments.extend([
             Argument::text("--ro-bind"),
