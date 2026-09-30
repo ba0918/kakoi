@@ -6,11 +6,13 @@
 use std::path::{Path, PathBuf};
 
 use crate::environment::RealEntry;
+use crate::guard_placement::GUARD_ROOT;
 use crate::layers::Directive;
 use crate::mounts::{
     byte_order, ExpandedPolicy, MountFacts, NotShown, ResolvedItem, ResolvedMounts, SkippedPath,
     SkippedRole,
 };
+use crate::plan::{NESTING_MARK, TUN_DEVICE};
 use crate::policy::NetworkMode;
 
 /// The base: the host's directories shown read-only as a whole while `mounts.system` is
@@ -22,8 +24,31 @@ pub const BASE: [&str; 6] = ["/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc"];
 pub const RESOLVER: &str = "/etc/resolv.conf";
 
 /// What the isolation has whatever the policy writes: bwrap's `/dev` and `/proc`, and the
-/// empty `/tmp` of its own.
+/// empty `/tmp` of its own. None of the host's content under them is there.
 const PROVIDED: [&str; 3] = ["/dev", "/proc", "/tmp"];
+
+/// What kakoi and bwrap put in the provided places: kakoi's own tmpfs of the command
+/// guards (handed on to a nested run too), the nesting mark, the tunnel device, and the
+/// nodes and links bwrap's `/dev` holds.
+const PUT_INSIDE: [&str; 17] = [
+    GUARD_ROOT,
+    NESTING_MARK,
+    TUN_DEVICE,
+    "/dev/null",
+    "/dev/zero",
+    "/dev/full",
+    "/dev/random",
+    "/dev/urandom",
+    "/dev/tty",
+    "/dev/shm",
+    "/dev/pts",
+    "/dev/ptmx",
+    "/dev/fd",
+    "/dev/stdin",
+    "/dev/stdout",
+    "/dev/stderr",
+    "/dev/core",
+];
 
 /// The root of a "listed" isolation besides the mount items: the directories made on the
 /// way to what is shown (parents first), the base directories by their real paths, the
@@ -39,18 +64,24 @@ pub struct ListedRoot {
     /// `/etc/resolv.conf` leads to, since bwrap follows a link at the destination as the
     /// host resolves it; none outside filtered.
     pub filtered_resolver: Option<PathBuf>,
+    /// The places shown of the host's: the base, the items, and the resolver
+    /// configuration's target.
     pub places: Vec<PathBuf>,
 }
 
 impl ListedRoot {
-    /// Whether `path` is inside a place shown.
+    /// Whether `path` is inside a place shown, is one of the places the isolation
+    /// provides, or is what kakoi or bwrap puts in them.
     pub fn shows(&self, path: &Path) -> bool {
         covered(path, self.places.iter().map(PathBuf::as_path))
+            || PROVIDED.iter().any(|provided| path == Path::new(provided))
+            || covered(path, PUT_INSIDE.iter().map(Path::new))
     }
 
-    /// Whether anything at or under `path` is shown.
+    /// Whether anything of the host's at or under `path` is shown.
     pub fn reaches(&self, path: &Path) -> bool {
-        self.shows(path) || self.places.iter().any(|place| place.starts_with(path))
+        covered(path, self.places.iter().map(PathBuf::as_path))
+            || self.places.iter().any(|place| place.starts_with(path))
     }
 }
 
@@ -197,7 +228,14 @@ pub fn listed_root(
         .collect();
     directories.sort_by(|a, b| byte_order(a, b));
     directories.dedup();
-    let places = places.into_iter().map(Path::to_path_buf).collect();
+    let places = base
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(shown)
+        .chain(resolver.as_deref())
+        .chain(filtered_resolver.as_deref())
+        .map(Path::to_path_buf)
+        .collect();
     (
         ListedRoot {
             directories,

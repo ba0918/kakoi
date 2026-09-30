@@ -596,6 +596,27 @@ fn ex_944_a_current_directory_that_is_not_shown_is_a_path_diagnostic() {
     assert!(!marker.exists());
 }
 
+// @kotowari[REQ-483]
+#[test]
+fn a_current_directory_in_the_hosts_tmp_is_not_shown_by_the_isolations_own_tmp() {
+    let scene = Scene::new(&[], "");
+    let host_tmp = TempDir::under(Path::new("/tmp"));
+    let marker = host_tmp.path().join("ran");
+
+    let run = scene.kakoi(
+        host_tmp.path(),
+        None,
+        &[
+            OsStr::new("--"),
+            OsStr::new("/usr/bin/touch"),
+            marker.as_os_str(),
+        ],
+    );
+
+    common::assert_diagnostic(&run, 125, "path");
+    assert!(!marker.exists());
+}
+
 // @kotowari[EX-945]
 #[test]
 fn ex_945_a_shown_workspace_as_the_current_directory_runs_the_command() {
