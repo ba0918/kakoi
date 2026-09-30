@@ -635,6 +635,27 @@ fn a_current_directory_in_the_hosts_tmp_is_not_shown_by_the_isolations_own_tmp()
     assert!(!marker.exists());
 }
 
+// @kotowari[REQ-483]
+#[test]
+fn a_current_directory_in_the_hosts_dev_shm_is_not_shown_by_the_isolations_own_dev() {
+    let scene = Scene::new(&[], "");
+    let host_shm = TempDir::under(Path::new("/dev/shm"));
+    let marker = host_shm.path().join("ran");
+
+    let run = scene.kakoi(
+        host_shm.path(),
+        None,
+        &[
+            OsStr::new("--"),
+            OsStr::new("/usr/bin/touch"),
+            marker.as_os_str(),
+        ],
+    );
+
+    common::assert_diagnostic(&run, 125, "path");
+    assert!(!marker.exists());
+}
+
 // @kotowari[EX-945]
 #[test]
 fn ex_945_a_shown_workspace_as_the_current_directory_runs_the_command() {
