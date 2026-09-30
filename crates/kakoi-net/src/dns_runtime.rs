@@ -71,6 +71,7 @@ pub struct DnsRuntime {
     // Questions handed to a worker, kept to ask again under new settings with
     // the same deadline and what is left of the same query count.
     inflight: HashMap<ResolutionId, (Vec<u8>, Instant, QueryAllowance)>,
+    adopting: HashMap<ResolutionId, (Vec<u8>, Instant, QueryAllowance)>,
     // Workers whose settings were replaced; their results are never used.
     retired: HashSet<ResolutionId>,
     scope: Arc<AddressContext>,
@@ -138,6 +139,7 @@ impl DnsRuntime {
             trust: config.trust,
             following,
             inflight: HashMap::new(),
+            adopting: HashMap::new(),
             retired: HashSet::new(),
             scope: Arc::new(config.scope),
             route: Arc::new(route),
@@ -188,6 +190,7 @@ impl DnsRuntime {
         );
         self.service.advance_generation();
         self.retired.extend(self.inflight.keys().copied());
+        self.retired.extend(self.adopting.keys().copied());
         self.workers.retire();
         Ok(())
     }
@@ -243,11 +246,19 @@ impl DnsRuntime {
     /// Answers the questions whose permissions were adopted, or failed.
     fn collect_adoptions(&mut self, now: Instant) -> io::Result<()> {
         for completed in self.adoption.poll()? {
+            let task = self.adopting.remove(&completed.id);
             let answer = match completed.answer {
                 Ok(wire) => Ok(wire),
                 Err(EnforcedDnsError::Query(error)) => Err(error),
                 Err(EnforcedDnsError::Enforcement(error)) => return Err(error),
             };
+            if self.retired.remove(&completed.id) && !self.stopping {
+                if let Some((wire, deadline, queries)) = task {
+                    self.service.rekey(completed.id);
+                    self.dispatch(completed.id, wire, deadline, queries, now)?;
+                    continue;
+                }
+            }
             if !self.stopping {
                 self.service.complete(completed.id, answer, now)?;
             }
@@ -265,9 +276,10 @@ impl DnsRuntime {
             let task = self.inflight.remove(&completed.id);
             if self.retired.remove(&completed.id) && !self.stopping {
                 // Asked under replaced settings: ask again, within the same deadline.
-                if let (Some((wire, deadline, queries)), false) =
-                    (task, matches!(completed.result, WorkResult::Panicked))
-                {
+                if let (Some((wire, deadline, queries)), false) = (
+                    task.clone(),
+                    matches!(completed.result, WorkResult::Panicked),
+                ) {
                     self.service.rekey(completed.id);
                     self.dispatch(completed.id, wire, deadline, queries, now)?;
                     continue;
@@ -285,7 +297,11 @@ impl DnsRuntime {
             }
             match answer {
                 Ok(candidate) => match self.adoption.submit(completed.id, candidate) {
-                    Ok(()) => {}
+                    Ok(()) => {
+                        if let Some(task) = task {
+                            self.adopting.insert(completed.id, task);
+                        }
+                    }
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                         self.fail_busy(completed.id, now)?
                     }

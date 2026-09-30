@@ -166,7 +166,7 @@ mod following {
     }
 
     fn runtime_with(file: &Path, limits: NetworkLimits) -> (Arc<NetworkNamespace>, DnsRuntime) {
-        start(file, limits, None)
+        start(file, limits, None, Path::new("/usr/sbin/nft"))
     }
 
     /// Reads `file` for the upstreams, then, when `change` is given, rewrites it
@@ -175,6 +175,7 @@ mod following {
         file: &Path,
         limits: NetworkLimits,
         change: Option<&str>,
+        nft_program: &Path,
     ) -> (Arc<NetworkNamespace>, DnsRuntime) {
         let read = std::fs::read_to_string(file).unwrap();
         if let Some(change) = change {
@@ -211,7 +212,7 @@ mod following {
                 }],
                 upstreams: fixture_parse(&read).unwrap(),
                 limits,
-                nft: "/usr/sbin/nft".into(),
+                nft: nft_program.into(),
                 trust: None,
                 scope: AddressContext::default(),
                 generation: 0,
@@ -323,6 +324,83 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         );
     }
 
+    #[test]
+    fn a_host_dns_change_retries_an_answer_waiting_for_adoption_collection() {
+        let temp = TempDir::new();
+        let (old, old_port) = upstream();
+        let (new, new_port) = upstream();
+        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+        let marker = temp.path().join("activation-started");
+        let release = temp.path().join("release-activation");
+        let wrapper = temp.path().join("nft");
+        crate::common::write_executable(
+            &wrapper,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" != -f ]; then exec /usr/sbin/nft \"$@\"; fi\nscript=$(cat)\ncase \"$script\" in\n  'flush chain'*) touch '{}'; while [ ! -e '{}' ]; do sleep 0.01; done ;;\nesac\nprintf '%s' \"$script\" | /usr/sbin/nft -f -\n",
+                marker.display(),
+                release.display(),
+            ),
+        );
+        let (ns, mut runtime) = start(
+            &file,
+            NetworkLimits {
+                dns_resolution_timeout_seconds: 30,
+                dns_server_timeout_seconds: 30,
+                ..NetworkLimits::default()
+            },
+            None,
+            &wrapper,
+        );
+        let app = client(&ns);
+        let (query, peer) = received(&old, &mut runtime);
+        old.send_to(&answer(&query, [2, 2, 2, 2]), peer).unwrap();
+        let until = Instant::now() + HANG;
+        while !marker.exists() {
+            runtime.poll(Instant::now()).unwrap();
+            assert!(Instant::now() < until, "old answer never reached adoption");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::fs::write(&release, "").unwrap();
+        loop {
+            let rules = String::from_utf8(
+                nft::inspect(
+                    &ns,
+                    Path::new("/usr/sbin/nft"),
+                    "kakoi_policy",
+                    Instant::now() + HANG,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            if rules.contains("2.2.2.2") {
+                break;
+            }
+            assert!(Instant::now() < until, "old permission was not installed");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+        std::fs::write(&file, format!("upstream {new_port}\n")).unwrap();
+        runtime
+            .poll(Instant::now() + Duration::from_secs(2))
+            .unwrap();
+        let (new_query, new_peer) = received(&new, &mut runtime);
+        new.send_to(&answer(&new_query, [1, 1, 1, 1]), new_peer)
+            .unwrap();
+        assert_eq!(finish(app, &mut runtime), "0 1.1.1.1\n");
+        let rules = String::from_utf8(
+            nft::inspect(
+                &ns,
+                Path::new("/usr/sbin/nft"),
+                "kakoi_policy",
+                Instant::now() + HANG,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(rules.contains("2.2.2.2"), "existing grant was revoked");
+        assert!(rules.contains("1.1.1.1"), "new grant was not installed");
+    }
+
     // The upstreams in force came from the content read at start-up; a change
     // made before the runtime started is a change to follow like any other.
     // @kotowari[REQ-107]
@@ -340,6 +418,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
                 ..NetworkLimits::default()
             },
             Some(&format!("upstream {new_port}\n")),
+            Path::new("/usr/sbin/nft"),
         );
         // Let the content be read again before the application asks.
         let noticed = Instant::now() + Duration::from_secs(2);
