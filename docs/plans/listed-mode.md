@@ -10,10 +10,10 @@ IR は `docs/ir/`。決定の記録は `docs/decision/brainstorm/2026-09-30-allo
 
 - 新しい要求
   - マウント: `docs/ir/core/core-listed-mounts.md#REQ-467`、`#REQ-468`、`#REQ-469`、`#REQ-470`、`#REQ-471`、`#REQ-472`、`#REQ-473`、`#REQ-483`、`#REQ-484`
-  - コマンド: `docs/ir/core/core-listed-commands.md#REQ-474`、`#REQ-475`、`#REQ-476`、`#REQ-477`、`#REQ-478`
+  - コマンド: `docs/ir/core/core-listed-commands.md#REQ-474`、`#REQ-475`、`#REQ-476`、`#REQ-477`、`#REQ-478`、`#REQ-485`
   - ガードレール: `docs/ir/core/core-command-guard-rules.md#REQ-480`
   - init: `docs/ir/core/core-init.md#REQ-482`
-- 新しい例: EX-902〜EX-934、EX-937〜EX-939、EX-942〜EX-951
+- 新しい例: EX-902〜EX-934、EX-937〜EX-939、EX-942〜EX-954
 - 今回文を改めた既存の要求と表（今あるテストは古い本文を確かめているので、新しい本文に合わせて見直す）: `docs/ir/core/core-mounts.md#REQ-167`、`docs/ir/core/core-policy.md#REQ-151`、`docs/ir/core/core-policy.md` の TBL-152、`docs/ir/core/core-command-guard-rules.md#REQ-438`、`#REQ-443`、`docs/ir/core/core-command-guard-runtime.md#REQ-447`、`docs/ir/core/core-init.md#REQ-256`、`#REQ-259`
 - レビューで確かめる要求と表: `docs/ir/core/core-listed-commands.md#REQ-479`、`docs/ir/core/core-bundled-profile.md#REQ-481`、`docs/ir/core/core-public-docs.md#REQ-359`、`docs/ir/core/core-public-docs.md` の TBL-160（行 18 と 19）。EX-935、EX-936、EX-940、EX-941、EX-658 はレビューの要求だけを指すので、テストではなくレビューで確かめる
 
@@ -68,7 +68,7 @@ Landlock を使えるかと scope を使えるかの確かめは、`/dev/net/tun
 | S2 | REQ-468（見え方、土台、飛ばす土台）、REQ-469、REQ-470、REQ-471、REQ-167 | EX-905、EX-906、EX-907、EX-908、EX-909、EX-910、EX-911、EX-912、EX-913、EX-914、EX-915 |
 | S3 | REQ-468（見せた場所の外、本物、リンク）、REQ-483、REQ-484 | EX-942、EX-943、EX-944、EX-945、EX-949、EX-950、EX-951 |
 | S4 | REQ-472 | EX-916、EX-917 |
-| S5 | REQ-475、REQ-476、REQ-477 | EX-922、EX-923、EX-924、EX-925、EX-926、EX-927、EX-928、EX-947、EX-948 |
+| S5 | REQ-475、REQ-476、REQ-477、REQ-485 | EX-922、EX-923、EX-924、EX-925、EX-926、EX-927、EX-928、EX-947、EX-948、EX-952、EX-953、EX-954 |
 | S6 | REQ-473、REQ-478 | EX-918、EX-919、EX-929、EX-930 |
 | S7 | REQ-438、REQ-443、REQ-480、REQ-447 | EX-931、EX-932、EX-933、EX-934 |
 | S8 | REQ-482、REQ-256、REQ-259、REQ-481（レビュー） | EX-937、EX-938、EX-939。EX-935 と EX-936 は計画の完了後の受け入れで人が確かめる |
@@ -159,11 +159,11 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 ### S5: コマンドの "listed" で、許していないプログラムの起動を止める
 
 - Purpose: コマンドのモードが "listed" のとき、bwrap に隔離の中の最初のプロセスとして kakoi 自身を起動させ、それが `commands.allow` と自動で許すもの（動的リンカの実体、kakoi 自身）だけに実行を許す Landlock を掛けてからコマンドを起動し、起動の失敗を 126 の診断にし、無い項目と見えない項目を飛ばし、Landlock が使えないホストでは止める
-- Specification: docs/ir/core/core-listed-commands.md#REQ-475, docs/ir/core/core-listed-commands.md#REQ-476, docs/ir/core/core-listed-commands.md#REQ-477
+- Specification: docs/ir/core/core-listed-commands.md#REQ-475, docs/ir/core/core-listed-commands.md#REQ-476, docs/ir/core/core-listed-commands.md#REQ-477, docs/ir/core/core-listed-commands.md#REQ-485
 - Prerequisites: S1, S4
 - May change: src/main.rs, src/startup.rs, src/plan_text.rs と src/plan_json.rs（飛ばした項目の理由を出す範囲だけ）, 最初のプロセスの新しいモジュール, crates/kakoi-core/src/plan.rs, crates/kakoi-core/src/planning.rs, crates/kakoi-core/src/launch.rs, crates/kakoi-core/src/mounts.rs, crates/kakoi-core/src/mount_facts.rs, crates/kakoi-core/src/guard_placement.rs, Landlock のモジュール, crates/kakoi-net/src/application.rs, crates/kakoi-net/src/supervisor.rs, crates/kakoi-net/src/init.rs, tests/launch.rs, tests/nested.rs, tests/plan.rs, tests/kakoi_net/, "listed" の新しいテストファイル
-- Done when: EX-922〜EX-928、EX-947、EX-948 がテストで通り、host、none、filtered のどのネットワークのモードでも許していないプログラムが起動できないことがテストで確かめられ、コマンドのモードが "host" のときの今の起動のテストがすべて変わらず通る
-- Shown by: test — EX-922、EX-923、EX-924、EX-925、EX-926、EX-927、EX-928、EX-947、EX-948 と、ネットワークのモードごとの起動のテスト
+- Done when: EX-922〜EX-928、EX-947、EX-948、EX-952〜EX-954 がテストで通り、host、none、filtered のどのネットワークのモードでも許していないプログラムが起動できないことがテストで確かめられ、コマンドのモードが "host" のときの今の起動のテストがすべて変わらず通る
+- Shown by: test — EX-922、EX-923、EX-924、EX-925、EX-926、EX-927、EX-928、EX-947、EX-948、EX-952、EX-953、EX-954 と、ネットワークのモードごとの起動のテスト
 - Left to the implementer: 最初のプロセスが規則を受け取る方法と、filtered で kakoi-net-init の下に最初のプロセスの役を挟む形
 - Stop and hand back if: 最初のプロセスを挟むと、既存の要求（REQ-262 の exec の失敗の扱い、REQ-263 の argv0、filtered の終了の扱い）と両立しない。動的リンカの実体を "/lib64/ld-linux-x86-64.so.2" から辿れないホストがテストの環境にある
 
