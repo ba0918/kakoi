@@ -50,6 +50,7 @@ pub(crate) fn filtered_plan(script: &str) -> (TempDir, PathBuf, Plan) {
         nested: false,
         applied: true,
         outer_guard: false,
+        outer_table: None,
         landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();

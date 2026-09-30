@@ -58,6 +58,8 @@ pub struct Request {
     /// Whether the command guards of the run around this nested one are handed on: they
     /// were there when it started (specification REQ-465).
     pub outer_guard: bool,
+    /// What the table of those guards holds; none when it cannot be read.
+    pub outer_table: Option<Vec<u8>>,
     /// The host's Landlock ABI version; none when it has no Landlock.
     pub landlock_abi: Option<u32>,
 }
@@ -241,12 +243,11 @@ fn command_limits(
         .iter()
         .filter_map(|path| facts.entry(path).path().map(Path::to_path_buf))
         .collect();
-    let outer_table = request
-        .outer_guard
-        .then(|| std::fs::read(GUARD_TABLE).ok())
-        .flatten()
-        .and_then(|bytes| GuardTable::from_bytes(&bytes))
-        .unwrap_or_default();
+    let outer_table = if request.outer_guard {
+        outer_guard_table(request.outer_table.as_deref())?
+    } else {
+        GuardTable::default()
+    };
     let overlaid = [guards.overlaid.clone(), outer_overlaid(&outer_table)].concat();
     let relocated = relocated_programs(&reals, &overlaid);
     Ok(CommandLimits {
@@ -255,6 +256,20 @@ fn command_limits(
         relocated,
         outer_guards: outer_guards(&outer_table),
         executable,
+    })
+}
+
+/// The table of the guards of the run around a nested one, from what it holds (`bytes`,
+/// none when it cannot be read). Without it the outer guards are denied inside and a
+/// shell would start the next program on `PATH`, the real one, past their rules, so the
+/// run stops (specification REQ-485).
+fn outer_guard_table(bytes: Option<&[u8]>) -> Result<GuardTable, Diagnostic> {
+    bytes.and_then(GuardTable::from_bytes).ok_or_else(|| {
+        Diagnostic::bwrap(format!(
+            "the table of the command guards of the isolation around this one, \
+             {GUARD_TABLE}, cannot be read or interpreted; the kakoi inside may be of \
+             another version than the one outside"
+        ))
     })
 }
 

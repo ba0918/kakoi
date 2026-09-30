@@ -75,6 +75,12 @@ impl Scene {
         command: &[&str],
         abi: Option<u32>,
     ) -> Result<kakoi_core::plan::Plan, Diagnostic> {
+        plan_for(&self.request(command, abi))
+    }
+
+    /// What a run from the workspace asks `plan_for` for `command`, with the Landlock ABI
+    /// version `abi` standing for the host's.
+    fn request(&self, command: &[&str], abi: Option<u32>) -> Request {
         let mut host = BTreeMap::new();
         host.insert(
             OsString::from("HOME"),
@@ -88,7 +94,7 @@ impl Scene {
             OsString::from("PATH"),
             std::env::var_os("PATH").unwrap_or_default(),
         );
-        plan_for(&Request {
+        Request {
             layers: LayerSelection {
                 profile: "default".into(),
                 policy_file: None,
@@ -103,8 +109,9 @@ impl Scene {
             nested: false,
             applied: true,
             outer_guard: false,
+            outer_table: None,
             landlock_abi: abi,
-        })
+        }
     }
 }
 
@@ -212,6 +219,43 @@ fn ex_927_a_host_without_landlock_does_not_start_a_listed_command_mode() {
     let scene = Scene::allowing(&["/bin/sh"], "");
 
     let error = scene.plan_with_landlock(&["/bin/true"], None).unwrap_err();
+
+    assert_eq!(error.kind(), Kind::Bwrap, "{error:?}");
+    assert_eq!(error.exit_code(), 125);
+}
+
+/// The plan of a nested run with `--nested=isolate` of the scene, which the guards of the
+/// run around it are handed on to with `table` as their table.
+fn nested_plan_under_an_outer_guard(
+    scene: &Scene,
+    table: Option<Vec<u8>>,
+) -> Result<kakoi_core::plan::Plan, Diagnostic> {
+    plan_for(&Request {
+        nested: true,
+        outer_guard: true,
+        outer_table: table,
+        ..scene.request(&["/bin/true"], Some(kakoi_core::landlock::SCOPE_ABI))
+    })
+}
+
+// @kotowari[REQ-485]
+#[test]
+fn req_485_an_outer_guard_table_that_cannot_be_read_stops_a_listed_command_mode() {
+    let scene = Scene::allowing(&["/bin/sh"], "");
+
+    let error = nested_plan_under_an_outer_guard(&scene, None).unwrap_err();
+
+    assert_eq!(error.kind(), Kind::Bwrap, "{error:?}");
+    assert_eq!(error.exit_code(), 125);
+}
+
+// @kotowari[REQ-485]
+#[test]
+fn req_485_an_outer_guard_table_that_cannot_be_interpreted_stops_a_listed_command_mode() {
+    let scene = Scene::allowing(&["/bin/sh"], "");
+
+    let error =
+        nested_plan_under_an_outer_guard(&scene, Some(b"not a table".to_vec())).unwrap_err();
 
     assert_eq!(error.kind(), Kind::Bwrap, "{error:?}");
     assert_eq!(error.exit_code(), 125);

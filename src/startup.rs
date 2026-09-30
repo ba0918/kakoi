@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::cli::{self, Example, Invocation, Nesting, Parsed};
 use kakoi_core::diagnostic::{Diagnostic, Warning};
 use kakoi_core::environment::{HostEnvironment, RealEntry};
-use kakoi_core::guard_placement::GUARD_ROOT;
+use kakoi_core::guard_placement::{GUARD_ROOT, GUARD_TABLE};
 use kakoi_core::plan::{Plan, NESTING_MARK};
 use kakoi_core::planning::{locate_command, plan_for, Request};
 use kakoi_core::workspace_facts::real_entry;
@@ -103,6 +103,9 @@ where
         ))
     })?;
     let invocation = invocation.anchored(&current_dir);
+    // Only kakoi makes `/dev`, so what is there was placed by the run around this one
+    // (specification REQ-465).
+    let outer_guard = nested && applied && Path::new(GUARD_ROOT).symlink_metadata().is_ok();
     let plan = plan_for(&Request {
         layers: invocation.layer_selection(),
         workspace: invocation.workspace.clone(),
@@ -112,9 +115,10 @@ where
         executable: std::env::current_exe().ok(),
         nested,
         applied,
-        // Only kakoi makes `/dev`, so what is there was placed by the run around this one
-        // (specification REQ-465).
-        outer_guard: nested && applied && Path::new(GUARD_ROOT).symlink_metadata().is_ok(),
+        outer_guard,
+        outer_table: outer_guard
+            .then(|| std::fs::read(GUARD_TABLE).ok())
+            .flatten(),
         landlock_abi: kakoi_core::landlock::abi_version(),
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {

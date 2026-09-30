@@ -87,6 +87,7 @@ print('isolated')
         nested: false,
         applied: true,
         outer_guard: false,
+        outer_table: None,
         landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();
@@ -226,6 +227,7 @@ print('managed-dns')
         nested: false,
         applied: true,
         outer_guard: false,
+        outer_table: None,
         landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();
@@ -303,6 +305,7 @@ fn filtered_run_with_landlock(
         nested: false,
         applied: true,
         outer_guard: false,
+        outer_table: None,
         landlock_abi: abi,
     })
     .unwrap();

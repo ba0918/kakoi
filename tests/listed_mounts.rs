@@ -936,6 +936,7 @@ impl Scene {
             nested: false,
             applied: true,
             outer_guard: false,
+            outer_table: None,
             landlock_abi: abi,
         })
     }
