@@ -262,7 +262,8 @@ allow = [
 
 A path is written as in a mount item. A directory allows everything under it, a file allows
 that file, and a link allows what it leads to (the rule lands on the file, whatever name starts
-it). An item the host does not have, or one the `listed` mount mode does not show, is skipped
+it). An item the host does not have, or one the isolation does not have as written (a `hide`
+covers it or a link on its way, or the `listed` mount mode does not show them), is skipped
 with the reason in the plan and allows nothing, so the same policy starts on a machine that lacks
 a tool. `commands.allow` without `mode = "listed"` does not load (`policy`), so remove or keep
 the two together; list the programs your agent starts, itself included.
