@@ -627,6 +627,10 @@ sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).re
     assert!(left.is_empty(), "left running after the drop: {left:?}");
 }
 
+// Each phase of a recovery may take up to one attempt, which the product cuts at 10
+// seconds; a tighter bound fails a slow host instead of a wrong recovery.
+const RECOVERY_PHASE_LIMIT: Duration = Duration::from_secs(15);
+
 // @kotowari[REQ-058, REQ-066, REQ-067, REQ-143, EX-123, REQ-431]
 #[test]
 fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
@@ -644,7 +648,7 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
         ),
     );
     assert_eq!(unsafe { libc::kill(original[1].0, libc::SIGKILL) }, 0);
-    let deadline = Instant::now() + Duration::from_secs(4);
+    let deadline = Instant::now() + RECOVERY_PHASE_LIMIT;
     loop {
         let result = session.poll();
         let records = std::fs::read_to_string(directory.path().join("processes")).unwrap();
@@ -670,6 +674,7 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     }
     // Still blocked while waiting for the next attempt.
     assert_transit(original[0].1, false);
+    let deadline = Instant::now() + RECOVERY_PHASE_LIMIT;
     while session.state() != SessionState::Running {
         session.poll().unwrap();
         assert!(Instant::now() < deadline);
@@ -687,6 +692,7 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
     session
         .close_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
+    let deadline = Instant::now() + RECOVERY_PHASE_LIMIT;
     while !session.is_drained() {
         session.poll().unwrap();
         assert!(Instant::now() < deadline);
