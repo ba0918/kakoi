@@ -627,6 +627,19 @@ it starts: another isolation that can write where the real program lies can swap
 between the two, and it shows at the relocated place (the same kind of gap as item 14 of
 [Known gaps](security.md#known-gaps)).
 
+The guard is laid over the real program only when the file is named as one of the programs
+pointing at it. When
+`gh` found on `PATH` is a link to a file of another name, such as `mise`, which starts many
+programs by the name it is called by, a guard over that file would apply `gh`'s rules to all of
+them; the file is left as it is, the guard on `PATH` still stands, and the plan says why ("not
+relocated"). A plain link to a file with a version or another implementation in its name
+(`python3` to `python3.12`, `vi` to `vim.basic`) is left the same way, so a start of such a
+program by its absolute path is not guarded. Inside a sandbox that makes `/dev` anew (the sandbox of an agent's CLI, for one) a
+guard laid over a program's own path cannot find its table or the real program: it stops with
+`guard` (exit code 126) rather than run as `kakoi`, as long as the sandbox keeps the `KAKOI=1`
+the isolation sets. Turn that sandbox off, or leave
+`guard-absolute-path` out ([known gap 19](security.md#known-gaps)).
+
 **`git.instead-of` and `GIT_CONFIG_*`.** `git.instead-of` works by putting `GIT_CONFIG_*`
 variables in the environment, so a rule that denies `GIT_CONFIG_*` with `deny-env` stops every
 `git` command. The two cannot be used together; the example in the bundled profile denies the

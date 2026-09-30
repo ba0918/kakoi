@@ -142,7 +142,7 @@ meaning while `format_version` is the same; keys may be added.
 | `commands_allowed` | Under the `listed` command mode, the `commands.allow` items allowed, as paths inside the isolation; empty under `host`. The items skipped are not in it. |
 | `skipped_command_allow` | The `commands.allow` items skipped: `written`, `reason`. |
 | `not_copied` | Entries an `rw-copy` item could not take from the host: `item` (the item's real path), `path`, `reason`. |
-| `guards` | The programs with a command guard: `program`, `location` (the guards' directory, first on `PATH`), `found` (the real program on `PATH`), `relocated` (where the real program is placed again under `guard-absolute-path`, or `null`), `sources` (the `origin` of each rule applied). |
+| `guards` | The programs with a command guard: `program`, `location` (the guards' directory, first on `PATH`), `found` (the real program on `PATH`), `relocated` (where the real program is placed again under `guard-absolute-path`, or `null`), `not_relocated` (why the real program was not placed again although a rule asks for it, or `null`), `sources` (the `origin` of each rule applied). |
 | `skipped_guards` | The programs with a rule and no guard: `program`, `reason`. |
 | `environment` | The final environment; a secret's value is `null`. |
 | `environment_changes` | `mode`, `kept`, `unset`, `set`, `secrets`, as in the summary. |

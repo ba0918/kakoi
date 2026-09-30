@@ -90,6 +90,14 @@ the real command never runs, on the paths that go straight to it either. The con
 One condition needs the real command: that the flag put in front reaches it, which for codex is
 a start-up header saying something other than `sandbox: read-only`.
 
+The flag is not always the last word. With codex 0.159.2 the commands the model ran were still
+put in codex's own sandbox when its configuration file set `sandbox_mode`, although
+`--dangerously-bypass-approvals-and-sandbox` was given: the commands run in codex's resident
+`app-server` process, which read the file. Set `sandbox_mode = "danger-full-access"` in that file
+for the runs `kakoi` wraps. A sandbox of the command's own makes `/dev` anew, which also stops
+the command guards that `guard-absolute-path` lays over a program's own path
+([known gap 19](security.md#known-gaps)).
+
 **Yours to check about your copy**: that for every name in its allow list, no model runs while
 that subcommand executes.
 
