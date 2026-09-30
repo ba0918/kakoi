@@ -2,7 +2,7 @@ use kakoi_net::namespace::NetworkNamespace;
 
 // @kotowari[REQ-060, REQ-150]
 #[test]
-fn transit_controller_can_enter_a_nested_application_network() {
+fn transit_controller_can_enter_the_application_network_but_not_the_reverse() {
     let transit = NetworkNamespace::create().unwrap();
     let app = NetworkNamespace::create_within(&transit).unwrap();
     let pid = app.keeper_pid();
@@ -42,18 +42,21 @@ print(os.readlink('/proc/self/ns/net'))
         .args([
             "-c",
             r#"
-import ctypes, errno, os, sys
+import ctypes, os, sys
 libc = ctypes.CDLL(None, use_errno=True)
+before = {kind: os.readlink('/proc/self/ns/' + kind) for kind in ('user', 'net')}
 for kind, flag in [('user', 0x10000000), ('net', 0x40000000)]:
+    target = os.readlink('/proc/' + sys.argv[1] + '/ns/' + kind)
+    assert target != before[kind], kind
     try:
         fd = os.open('/proc/' + sys.argv[1] + '/ns/' + kind, os.O_RDONLY)
     except PermissionError:
         continue
     try:
-        assert libc.setns(fd, flag) == -1
-        assert ctypes.get_errno() == errno.EPERM
+        assert libc.setns(fd, flag) == -1, (kind, os.readlink('/proc/self/ns/' + kind))
     finally:
         os.close(fd)
+    assert {kind: os.readlink('/proc/self/ns/' + kind) for kind in before} == before
 "#,
             &transit.keeper_pid().to_string(),
         ])
