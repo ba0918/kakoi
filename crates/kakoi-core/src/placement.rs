@@ -33,19 +33,29 @@ impl ProtectedPaths {
     /// Every protected path, in the order section 13 reports them: what the outer layer
     /// looks up for them is what the check reads.
     pub fn paths(&self) -> Vec<&Path> {
-        self.policy_files
+        // Taken apart without `..`, so that a protected path added to the struct does not
+        // compile until it is looked up too.
+        let ProtectedPaths {
+            policy_files,
+            config_dir,
+            secrets,
+            path_prepend,
+            shared_files,
+        } = self;
+        policy_files
             .iter()
-            .chain(std::iter::once(&self.config_dir))
-            .chain(self.secrets.iter().map(|(_, path)| path))
-            .chain(&self.path_prepend)
-            .chain(&self.shared_files)
+            .chain(std::iter::once(config_dir))
+            .chain(secrets.iter().map(|(_, path)| path))
+            .chain(path_prepend)
+            .chain(shared_files)
             .map(PathBuf::as_path)
             .collect()
     }
 }
 
 /// The protected paths of specification section 5.6 for `expanded` read from `layers`,
-/// without the shared file place, which the caller adds when the launch uses it.
+/// with `shared_files` left empty: the facts are collected for the shared file place
+/// whenever there is one, and the check reads it only when the launch uses it.
 pub fn protected_paths(
     expanded: &ExpandedPolicy,
     layers: &[Layer],
@@ -306,7 +316,8 @@ pub fn check_placement(
 }
 
 /// Specification section 5.6, in the order section 13 reports: the policy files, the
-/// configuration directory, the secret files, the `path-prepend` entries.
+/// configuration directory, the secret files, the `path-prepend` entries, the shared file
+/// place.
 fn check_protected_paths(
     protected: &ProtectedPaths,
     writable: &[&ResolvedItem],
