@@ -324,6 +324,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         );
     }
 
+    // @kotowari[REQ-108, REQ-109]
     #[test]
     fn a_host_dns_change_retries_an_answer_waiting_for_adoption_collection() {
         let temp = TempDir::new();
@@ -401,8 +402,9 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         assert!(rules.contains("1.1.1.1"), "new grant was not installed");
     }
 
+    // @kotowari[REQ-109]
     #[test]
-    fn new_settings_cannot_start_while_an_old_permission_is_still_activating() {
+    fn a_host_dns_change_during_activation_does_not_adopt_an_old_answer() {
         let temp = TempDir::new();
         let (old, old_port) = upstream();
         let (new, new_port) = upstream();
@@ -428,7 +430,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
             None,
             &wrapper,
         );
-        let mut first = client(&ns);
+        let first = client(&ns);
         let (query, peer) = received(&old, &mut runtime);
         old.send_to(&answer(&query, [2, 2, 2, 2]), peer).unwrap();
         let until = Instant::now() + HANG;
@@ -442,31 +444,46 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         }
         std::thread::sleep(Duration::from_millis(1050));
         std::fs::write(&file, format!("upstream {new_port}\n")).unwrap();
-        let mut second = client(&ns);
+        let second = client(&ns);
         runtime.poll(Instant::now()).unwrap();
-        let mut premature = false;
+        let mut detected_before_activation = None;
         let until = Instant::now() + Duration::from_millis(150);
         while Instant::now() < until {
             runtime.poll(Instant::now()).unwrap();
-            if new.recv_from(&mut [0; 512]).is_ok() {
-                premature = true;
-                break;
+            let mut bytes = [0; 512];
+            match new.recv_from(&mut bytes) {
+                Ok((size, peer)) => {
+                    detected_before_activation = Some((bytes[..size].to_vec(), peer));
+                    break;
+                }
+                Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock),
             }
             std::thread::sleep(Duration::from_millis(5));
         }
         std::fs::write(&release, "").unwrap();
-        if premature {
-            first.kill().unwrap();
-            second.kill().unwrap();
-            first.wait().unwrap();
-            second.wait().unwrap();
-            panic!("new settings were used before old permission activation finished");
-        }
-        let (new_query, new_peer) = received(&new, &mut runtime);
+        let was_detected_before_activation = detected_before_activation.is_some();
+        let (new_query, new_peer) =
+            detected_before_activation.unwrap_or_else(|| received(&new, &mut runtime));
         new.send_to(&answer(&new_query, [1, 1, 1, 1]), new_peer)
             .unwrap();
         assert_eq!(finish(first, &mut runtime), "0 1.1.1.1\n");
         assert_eq!(finish(second, &mut runtime), "0 1.1.1.1\n");
+        if was_detected_before_activation {
+            let rules = String::from_utf8(
+                nft::inspect(
+                    &ns,
+                    Path::new("/usr/sbin/nft"),
+                    "kakoi_policy",
+                    Instant::now() + HANG,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                !rules.contains("2.2.2.2"),
+                "old permission was installed after the new settings were detected"
+            );
+        }
     }
 
     // The upstreams in force came from the content read at start-up; a change

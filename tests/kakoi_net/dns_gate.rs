@@ -829,6 +829,7 @@ fn a_question_under_new_settings_joins_the_resolution_re_keyed_for_them() {
     assert_eq!(replies.len(), 2);
 }
 
+// @kotowari[REQ-127]
 #[test]
 fn a_running_new_settings_resolution_remains_joinable_after_an_older_retry_fails() {
     use kakoi_net::dns::{AcceptedRequest, DnsRequests};

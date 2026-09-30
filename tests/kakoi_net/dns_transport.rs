@@ -30,6 +30,7 @@ fn signed_query() -> Vec<u8> {
     wire
 }
 
+// @kotowari[REQ-020]
 #[test]
 fn a_message_signed_dns_exchange_preserves_the_signed_transaction_id() {
     let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
