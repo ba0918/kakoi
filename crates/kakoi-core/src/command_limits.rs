@@ -44,9 +44,9 @@ pub struct CommandLimits {
     /// (specification REQ-475). Not items of `commands.allow`, so the plan does not
     /// count them.
     pub relocated: Vec<PathBuf>,
-    /// The guards of the run around a nested one, handed on with its table: the first
-    /// process allows them by itself (specification REQ-485). Not items of
-    /// `commands.allow` either.
+    /// The guards of the run around a nested one, handed on with its table, in the guard
+    /// location or overlaying a real program: the first process allows them by itself
+    /// (specification REQ-485). Not items of `commands.allow` either.
     pub outer_guards: Vec<PathBuf>,
     /// The real path of kakoi's own executable, placed as the first process.
     pub executable: PathBuf,
@@ -103,13 +103,13 @@ pub fn relocated_programs(
         .collect()
 }
 
-/// The guards of the run around a nested one that `table` lists in the guard location.
+/// Every guard of the run around a nested one that `table` lists: those in the guard
+/// location and those overlaying a real program alike (specification REQ-485).
 pub fn outer_guards(table: &GuardTable) -> Vec<PathBuf> {
     table
         .entries
         .iter()
         .map(|entry| PathBuf::from(OsStr::from_bytes(&entry.location)))
-        .filter(|location| location.parent() == Some(Path::new(GUARD_LOCATION)))
         .collect()
 }
 
