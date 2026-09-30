@@ -28,12 +28,15 @@ pub const RESOLVER: &str = "/etc/resolv.conf";
 /// empty `/tmp` of its own. None of the host's content under them is there.
 const PROVIDED: [&str; 3] = ["/dev", "/proc", "/tmp"];
 
-/// What kakoi and bwrap put in the provided places: kakoi's own tmpfs of the command
-/// guards (handed on to a nested run too) and of the first process, the nesting mark, the tunnel device, and the
-/// nodes and links bwrap's `/dev` holds.
-const PUT_INSIDE: [&str; 18] = [
-    GUARD_ROOT,
-    FIRST_ROOT,
+/// What kakoi and bwrap put in the provided places with content of their own under it:
+/// kakoi's own tmpfs of the command guards (handed on to a nested run too) and of the
+/// first process, and bwrap's link to the isolation's own descriptors.
+const PUT_INSIDE_WITH_CONTENT: [&str; 3] = [GUARD_ROOT, FIRST_ROOT, "/dev/fd"];
+
+/// What kakoi and bwrap put in the provided places as it is: the nesting mark, the tunnel
+/// device, and the nodes, links and directories bwrap's `/dev` holds. The host's content
+/// under `/dev/shm` and `/dev/pts` is not there: bwrap makes them anew.
+const PUT_INSIDE: [&str; 15] = [
     NESTING_MARK,
     TUN_DEVICE,
     "/dev/null",
@@ -45,7 +48,6 @@ const PUT_INSIDE: [&str; 18] = [
     "/dev/shm",
     "/dev/pts",
     "/dev/ptmx",
-    "/dev/fd",
     "/dev/stdin",
     "/dev/stdout",
     "/dev/stderr",
@@ -346,8 +348,11 @@ pub fn shown_generators(
 /// The host's content under a provided place is not there.
 fn in_isolation<'a>(path: &Path, places: impl Iterator<Item = &'a Path>) -> bool {
     covered(path, places)
-        || PROVIDED.iter().any(|provided| path == Path::new(provided))
-        || covered(path, PUT_INSIDE.iter().map(Path::new))
+        || PROVIDED
+            .iter()
+            .chain(&PUT_INSIDE)
+            .any(|made| path == Path::new(made))
+        || covered(path, PUT_INSIDE_WITH_CONTENT.iter().map(Path::new))
 }
 
 /// Whether `path` is one of `places` or inside one.

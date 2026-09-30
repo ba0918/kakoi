@@ -106,6 +106,19 @@ pub fn resolve(path: &Path) -> Option<PathBuf> {
     walk(path).1
 }
 
+/// The real path behind `path`, taken against the current directory when relative: what
+/// `fs::canonicalize` answers, but with the limit of [`resolve`]. Not `fs::canonicalize`:
+/// the C library's `realpath` has its own link limit (musl stops one link sooner than
+/// glibc), while the kernel follows 40 links and specification section 5.6 fixes the
+/// limit at 40.
+pub fn real_path(path: &Path) -> Option<PathBuf> {
+    if path.is_absolute() {
+        resolve(path)
+    } else {
+        resolve(&std::env::current_dir().ok()?.join(path))
+    }
+}
+
 fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
     let mut traversal = Traversal::default();
     if !path.is_absolute() {
