@@ -220,7 +220,10 @@ The directories on the way to what is shown are made by `kakoi` and hold only wh
 they and the root are read-only, so `ls ~` lists only what you listed and nothing new can be
 put there. A symbolic link on the path of an item (`~/.claude/hooks` pointing into your
 dotfiles) is made again inside with the same target, read-only, so a tool finds the item at
-its usual path; the place it points at is shown only when you list it too. The writable places
+its usual path; what the written path leads to is the item itself and is shown without being
+listed again. A link that merely sits inside a shown directory, on the path of no item, is
+there as the host has it, but the place it points at is shown only when you list that place
+too. The writable places
 are the `rw`, `rw-file`, and `rw-copy` items, a directory hidden inside a shown place, `/tmp`,
 and what `/dev` provides.
 
