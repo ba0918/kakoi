@@ -205,6 +205,8 @@ import os, pty, signal, sys, time
 # Only guards against a hang: the test then fails on the missing report.
 signal.alarm(120)
 trigger, delay = sys.argv[1].encode(), float(sys.argv[2])
+# A terminal's Ctrl+C, unlike one ignored by a shell's background job.
+signal.signal(signal.SIGINT, signal.SIG_DFL)
 pid, fd = pty.fork()
 if pid == 0:
     os.execv(sys.argv[3], sys.argv[3:])
