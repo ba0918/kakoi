@@ -12,6 +12,58 @@ fn query() -> Vec<u8> {
     wire
 }
 
+fn signed_query() -> Vec<u8> {
+    let mut wire = query();
+    wire[11] = 1;
+    wire.extend(b"\x03key\x07example\0");
+    wire.extend(250u16.to_be_bytes());
+    wire.extend(255u16.to_be_bytes());
+    wire.extend(0u32.to_be_bytes());
+    let mut data = b"\x0bhmac-sha256\0".to_vec();
+    data.extend([0, 0, 0x68, 0, 0, 0]);
+    data.extend(300u16.to_be_bytes());
+    data.extend(32u16.to_be_bytes());
+    data.extend([0xab; 32]);
+    data.extend([0x12, 0x34, 0, 0, 0, 0]);
+    wire.extend((data.len() as u16).to_be_bytes());
+    wire.extend(data);
+    wire
+}
+
+#[test]
+fn a_message_signed_dns_exchange_preserves_the_signed_transaction_id() {
+    let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
+    upstream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let peer = upstream.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut observed = Vec::new();
+        for _ in 0..3 {
+            let mut data = [0; 512];
+            let (size, client) = upstream.recv_from(&mut data).unwrap();
+            observed.push([data[0], data[1]]);
+            data[2] |= 0x80;
+            upstream.send_to(&data[..size], client).unwrap();
+        }
+        observed
+    });
+    let signed = signed_query();
+    let mut expected = signed.clone();
+    expected[2] |= 0x80;
+    for _ in 0..3 {
+        let answer = exchange_plain(
+            &signed,
+            peer,
+            PlainTransport::Udp,
+            Instant::now() + Duration::from_secs(2),
+        )
+        .unwrap();
+        assert_eq!(answer.wire(), expected);
+    }
+    assert_eq!(server.join().unwrap(), [[0x12, 0x34]; 3]);
+}
+
 // @kotowari[REQ-131]
 #[test]
 fn udp_ignores_other_sources_and_mismatched_answers_before_accepting_the_peer() {

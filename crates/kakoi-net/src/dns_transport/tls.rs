@@ -1,4 +1,4 @@
-use super::{invalid_dns, random_id, ExchangeDeadline, ReceivedResponse};
+use super::{invalid_dns, restore_client_id, upstream_request, ExchangeDeadline, ReceivedResponse};
 use crate::dns::Question;
 use rustls::{
     pki_types::{CertificateDer, ServerName},
@@ -75,8 +75,7 @@ impl TlsClient {
     ) -> io::Result<ReceivedResponse> {
         let original = Question::parse(wire).map_err(invalid_dns)?;
         let name = ServerName::try_from(name.to_owned()).map_err(io::Error::other)?;
-        let mut request = wire.to_vec();
-        random_id(&mut request[..2], deadline)?;
+        let request = upstream_request(wire, &original, deadline)?;
         let question = Question::parse(&request).map_err(invalid_dns)?;
         let socket = deadline.connect(peer)?;
         let connection =
@@ -94,7 +93,7 @@ impl TlsClient {
         let received_at = Instant::now();
         deadline.remaining()?;
         question.validate_response(&answer).map_err(invalid_dns)?;
-        answer[..2].copy_from_slice(&wire[..2]);
+        restore_client_id(&mut answer, wire, &original);
         Ok(ReceivedResponse {
             response: original.validate_response(&answer).map_err(invalid_dns)?,
             received_at,
