@@ -1040,6 +1040,51 @@ fn ex_899_the_outer_guard_still_denies_inside_a_nested_isolation() {
     );
 }
 
+/// Runs `git push` by name in a nested isolation whose own policy is `inner`, under an
+/// outer policy that denies it.
+fn outer_guard_denies_push_under(inner: &str) {
+    let (home, workspace) = home_with_workspace();
+    let bin = home.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    std::os::unix::fs::symlink("/usr/bin/git", bin.join("git")).unwrap();
+    let inner = inner.replace("BIN", bin.to_str().unwrap());
+
+    let output = nested_under_policies(
+        &home,
+        &workspace,
+        GIT_PUSH,
+        &inner,
+        "-- /bin/sh -c 'git push origin main'",
+    );
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "kakoi: guard: git push: push は人が行う\n",
+        "{report}"
+    );
+}
+
+// @kotowari[REQ-465]
+#[test]
+fn req_465_the_outer_guard_goes_first_on_a_path_the_inner_policy_starts_afresh() {
+    outer_guard_denies_push_under("[env]\nmode = \"clear\"\nset = { PATH = \"/usr/bin:/bin\" }\n");
+}
+
+// @kotowari[REQ-465]
+#[test]
+fn req_465_the_outer_guard_goes_first_on_a_path_the_inner_policy_sets() {
+    outer_guard_denies_push_under("[env]\nset = { PATH = \"/usr/bin:/bin\" }\n");
+}
+
+// @kotowari[REQ-465]
+#[test]
+fn req_465_the_outer_guard_goes_before_what_the_inner_policy_prepends() {
+    outer_guard_denies_push_under("[env]\npath-prepend = [\"BIN\"]\n");
+}
+
 // @kotowari[EX-900]
 #[test]
 fn ex_900_a_guard_over_the_real_program_still_starts_it_inside_a_nested_isolation() {
