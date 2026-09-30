@@ -33,6 +33,13 @@
 
 存在しない成分、読めない成分、先を読めないリンクに至ったら解決をそこで打ち切り、そこまでに参照したもの（先を読めないリンクはその置き場）を検査する。複数の参照が同時に当たるとき、どれを診断に名指すかは第 20 節で委譲する。
 
+### REQ-486: 設定ディレクトリの中の書き込める項目
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-30-hotspot-review.md#A1, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
+- verification: unit
+
+合成後の "rw" または "rw-file" の項目の実体が、設定ディレクトリの実体と同じか、その子孫にあれば、種類 "path" の診断で終わる。リンクを経由して設定ディレクトリの中に着く項目も含む。"rw-copy" と "ro" の項目は対象にしない。この検査は計画表示でも行う。診断の説明は、その項目の指令とパス、設定ディレクトリのパス、隔離の中から次の起動が読むプロファイルを書き換えられるという理由を含む。
+
 ### REQ-159: 根への着地と隠し先・起点のリンク
 - kind: ubiquitous
 - source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
@@ -250,4 +257,24 @@ Scenario: 隠し先の再露出
   Given 書き込み内のリンクから ro を hide の中へ置く
   When 露出する組を検査する
   Then path の診断で終了する
+```
+
+```gherkin
+@id=EX-957 @about=REQ-486 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A1,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
+Scenario: 設定ディレクトリの中を書き込める項目にすると止まる
+  Given 設定ディレクトリの中に "profile" ディレクトリがあり、コマンドラインで "--rw" にそのディレクトリを与える
+  When コマンドを起動する
+  Then コマンドを実行せず種類 path の診断で 125 になる
+
+@id=EX-958 @about=REQ-486 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A1,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3,docs/decision/brainstorm/2026-09-30-hotspot-review.md#A4
+Scenario: リンクを通して設定ディレクトリの中に着く項目も止まる
+  Given ホームのリンクが設定ディレクトリの中の "profile" ディレクトリを指し、ポリシーがそのリンクを "rw" にしている
+  When 計画を表示する
+  Then 種類 path の診断で 125 になる
+
+@id=EX-959 @about=REQ-486 @source=docs/decision/brainstorm/2026-09-30-hotspot-review.md#A3
+Scenario: 設定ディレクトリの中を複製にするのは止めない
+  Given ポリシーが設定ディレクトリの中の "profile" ディレクトリを "rw-copy" にしている
+  When 計画を表示する
+  Then この規則を理由としては止めない
 ```
