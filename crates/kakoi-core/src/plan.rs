@@ -665,6 +665,7 @@ fn first_process_tmpfs(limits: &CommandLimits) -> Vec<Argument> {
         .allowed
         .iter()
         .chain(&limits.relocated)
+        .chain(&limits.outer_guards)
         .cloned()
         .collect();
     arguments.extend(read_only_data(

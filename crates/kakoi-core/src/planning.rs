@@ -11,13 +11,16 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::command::{command_candidates, resolve_command};
-use crate::command_limits::{self, allowed_programs, relocated_programs, CommandLimits};
+use crate::command_limits::{
+    self, allowed_programs, outer_guards, outer_overlaid, relocated_programs, CommandLimits,
+};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::{file_id, first_executable, named};
 use crate::guard_placement::{
-    place_guards, real_program, GuardPlan, NameFact, PlacedGuard, GUARD_LOCATION,
+    place_guards, real_program, GuardPlan, GuardTable, NameFact, PlacedGuard, GUARD_LOCATION,
+    GUARD_TABLE,
 };
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::listed::ListedRoot;
@@ -198,7 +201,10 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
 }
 
 /// The programs the "listed" command mode lets start, and kakoi's own executable, which
-/// the isolation's first process is (specification REQ-475 and REQ-476).
+/// the isolation's first process is (specification REQ-475 and REQ-476). Under the guards
+/// of the run around a nested one, those guards are allowed too, and an allowed item a
+/// guard of theirs overlays stands for the real program they relocated (specification
+/// REQ-485).
 fn command_limits(
     policy: &Policy,
     variables: &crate::variables::Variables,
@@ -208,14 +214,6 @@ fn command_limits(
     guards: &GuardPlan,
     request: &Request,
 ) -> Result<CommandLimits, Diagnostic> {
-    // The first process is placed where the guards of the run around this one are
-    // handed on read-only.
-    if request.outer_guard {
-        return Err(Diagnostic::policy(
-            "the command guards of the isolation around this one are handed on, so the \
-             policy of a nested isolation cannot use the \"listed\" command mode",
-        ));
-    }
     let executable = request
         .executable
         .as_deref()
@@ -238,11 +236,19 @@ fn command_limits(
         .iter()
         .filter_map(|path| facts.entry(path).path().map(Path::to_path_buf))
         .collect();
-    let relocated = relocated_programs(&reals, &guards.overlaid);
+    let outer_table = request
+        .outer_guard
+        .then(|| std::fs::read(GUARD_TABLE).ok())
+        .flatten()
+        .and_then(|bytes| GuardTable::from_bytes(&bytes))
+        .unwrap_or_default();
+    let overlaid = [guards.overlaid.clone(), outer_overlaid(&outer_table)].concat();
+    let relocated = relocated_programs(&reals, &overlaid);
     Ok(CommandLimits {
         allowed,
         skipped,
         relocated,
+        outer_guards: outer_guards(&outer_table),
         executable,
     })
 }

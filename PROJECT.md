@@ -68,7 +68,8 @@ is not taken as its worktree. Inside the isolation they
 start `/usr/bin/python3`, `/usr/bin/git`, `/bin/sh`, and `/bin/true` by absolute path, and
 `stat`, `cat`, `test`, `rm`, `mv`, and `mkdir` through the shell. A nested run is tested for real:
 a shell inside an isolation of the built `kakoi` starts the built `kakoi` again by its absolute
-path, through `/usr/bin/env` when it gives the nested run another `PATH`, `HOME`, or
+path (or a copy of it placed in a temporary directory, so that the nested run is a different file
+from the outer run's guards), through `/usr/bin/env` when it gives the nested run another `PATH`, `HOME`, or
 `XDG_CONFIG_HOME`, and the nested run starts `/usr/bin/env`, `/usr/bin/tr`, `/bin/sh`,
 `/bin/echo`, `/bin/cat`, and `/usr/bin/git`. The host without `/dev/net/tun` that a nested run
 meets is made the same way, inside an outer isolation that does not show the device; the tests
