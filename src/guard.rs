@@ -19,7 +19,29 @@ use kakoi_core::guard_placement::{GuardTable, GUARD_TABLE};
 /// returns the exit code; `None` otherwise, and kakoi goes on as itself.
 pub fn run_if_guard() -> Option<ExitCode> {
     let started_from = std::fs::read_link("/proc/self/exe").ok()?;
-    let table = GuardTable::from_bytes(&std::fs::read(GUARD_TABLE).ok()?)?;
+    let table = std::fs::read(GUARD_TABLE)
+        .ok()
+        .and_then(|bytes| GuardTable::from_bytes(&bytes));
+    let Some(table) = table else {
+        // A guard is started from the place of the program it stands for, so under
+        // another name, and inside an isolation, which sets `KAKOI`; kakoi itself is
+        // started as `kakoi`, or anywhere outside. Going on as kakoi would answer
+        // `git --version` with kakoi's version (specification REQ-453).
+        if started_from.file_name() == Some(OsStr::new("kakoi"))
+            || std::env::var_os("KAKOI").as_deref() != Some(OsStr::new("1"))
+        {
+            return None;
+        }
+        return Some(report(Diagnostic::new(
+            Kind::Guard,
+            format!(
+                "{}: the table of the command guards at {GUARD_TABLE} cannot be read, so \
+                 this guard cannot tell what to run; a sandbox that makes /dev anew inside \
+                 the isolation hides it",
+                started_from.display()
+            ),
+        )));
+    };
     let entry = table.entry(&started_from)?;
     let mut arguments = std::env::args_os();
     let name = arguments.next().unwrap_or_default();
