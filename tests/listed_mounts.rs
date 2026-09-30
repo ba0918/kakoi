@@ -688,6 +688,51 @@ fn ex_950_an_unshown_program_first_on_path_is_passed_over_for_a_shown_one() {
     assert_eq!(stdout(&output), format!("{}\n", unsafe { libc::getuid() }));
 }
 
+/// A directory `linkdir` beside the home and the workspace, not shown, that is a link to
+/// `bin` in the workspace, which holds an executable script `name`.
+fn link_to_shown_bin(scene: &Scene, name: &str) -> PathBuf {
+    let bin = scene.workspace.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    common::write_executable(&bin.join(name), format!("#!/bin/sh\necho linked {name}\n"));
+    let linkdir = scene.home.parent().unwrap().join("linkdir");
+    std::os::unix::fs::symlink(&bin, &linkdir).unwrap();
+    linkdir
+}
+
+// @kotowari[REQ-484]
+#[test]
+fn a_program_reached_through_an_unshown_link_on_path_is_passed_over() {
+    let scene = Scene::new(&[], "");
+    let linkdir = link_to_shown_bin(&scene, "id");
+    let path = format!("{}:/usr/bin:/bin", linkdir.display());
+
+    let output = scene.kakoi(
+        &scene.workspace,
+        Some(&path),
+        &[OsStr::new("--"), OsStr::new("id"), OsStr::new("-u")],
+    );
+
+    assert_success(&output);
+    assert_eq!(stdout(&output), format!("{}\n", unsafe { libc::getuid() }));
+}
+
+// @kotowari[REQ-468]
+#[test]
+fn a_guard_passes_over_a_real_program_reached_through_an_unshown_link() {
+    let scene = Scene::new(
+        &[],
+        "[[commands.guard]]\nprogram = \"git\"\nreason = \"no push\"\ndeny = [[\"push\"]]\n",
+    );
+    let linkdir = link_to_shown_bin(&scene, "git");
+    let path = format!("{}:/usr/bin:/bin", linkdir.display());
+
+    let plan = scene.json_plan_on(Some(&path));
+
+    let guards = plan["guards"].as_array().unwrap();
+    assert_eq!(guards.len(), 1, "{plan}");
+    assert_eq!(guards[0]["found"], "/usr/bin/git", "{plan}");
+}
+
 // @kotowari[EX-951]
 #[test]
 fn ex_951_a_program_only_in_an_unshown_place_is_not_found() {
