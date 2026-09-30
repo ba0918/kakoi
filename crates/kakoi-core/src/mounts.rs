@@ -203,20 +203,6 @@ impl Candidates {
             ..self
         }
     }
-
-    /// These candidates and those of one more protected path: its prefixes, and its
-    /// resolution.
-    pub fn with_protected(mut self, path: Option<&Path>) -> Self {
-        if let Some(path) = path {
-            self.paths.extend(path.ancestors().map(Path::to_path_buf));
-            self.traversals.push(path.to_path_buf());
-            self.paths.sort();
-            self.paths.dedup();
-            self.traversals.sort();
-            self.traversals.dedup();
-        }
-        self
-    }
 }
 
 impl Candidates {
@@ -233,16 +219,14 @@ impl Candidates {
 }
 
 /// The candidate paths of `expanded`: every expanded path, plus every prefix (each
-/// ancestor and the path itself) of the paths specification section 5.6 protects — the
-/// policy files read, the configuration directory, the secret files, and the
-/// `path-prepend` entries — and the configuration directory's `secrets/`. The traversals
-/// are those protected paths, the written mount items, the scan roots, the `hide-mounts`
-/// `under`s, and `workspace`, the `--workspace` path as given.
+/// ancestor and the path itself) of `protected`, the paths specification section 5.6
+/// protects, and the configuration directory's `secrets/`. The traversals are those
+/// protected paths, the written mount items, the scan roots, the `hide-mounts` `under`s,
+/// and `workspace`, the `--workspace` path as given.
 pub fn candidates(
     expanded: &ExpandedPolicy,
-    layers: &[Layer],
+    protected: &[&Path],
     variables: &Variables,
-    config_dir: &Path,
     workspace: Option<&Path>,
 ) -> Candidates {
     let mut paths = Vec::new();
@@ -258,22 +242,7 @@ pub fn candidates(
             .filter_map(Expansion::path)
             .map(Path::to_path_buf),
     );
-    let mut traversals: Vec<PathBuf> = layers
-        .iter()
-        .filter_map(|layer| match &layer.origin {
-            LayerOrigin::Profile(path) | LayerOrigin::PolicyFile(path) => Some(path.as_path()),
-            LayerOrigin::BuiltInDefault | LayerOrigin::CommandLine => None,
-        })
-        .chain(std::iter::once(config_dir))
-        .chain(expanded.secrets.values().filter_map(Expansion::path))
-        .chain(
-            expanded
-                .path_prepend
-                .iter()
-                .filter_map(|entry| entry.path.path()),
-        )
-        .map(Path::to_path_buf)
-        .collect();
+    let mut traversals: Vec<PathBuf> = protected.iter().map(|path| path.to_path_buf()).collect();
     for path in &traversals {
         paths.extend(path.ancestors().map(Path::to_path_buf));
     }

@@ -17,6 +17,7 @@ use kakoi_core::mounts::{
     candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
     MountFacts, ResolvedMounts, ScanHit, ScanRequest,
 };
+use kakoi_core::placement::protected_paths;
 use kakoi_core::scan::scan;
 use kakoi_core::variables::Variables;
 use kakoi_core::wildcard::matches;
@@ -945,11 +946,11 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
     );
     let expanded = expand_policy(&merged(&layers), &variables(), &home());
 
+    let protected = protected_paths(&expanded, &layers, Path::new(CONFIG_DIR));
     let candidates = candidates(
         &expanded,
-        &layers,
+        &protected.paths(),
         &variables(),
-        Path::new(CONFIG_DIR),
         Some(Path::new("/home/u/given/ws")),
     );
 

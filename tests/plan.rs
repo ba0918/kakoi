@@ -19,6 +19,7 @@ use kakoi_core::layers::{Directive, LayerOrigin};
 use kakoi_core::mounts::{
     candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole,
 };
+use kakoi_core::placement::protected_paths;
 use kakoi_core::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts, Provisions,
     ResolvedCommand,
@@ -463,7 +464,8 @@ fn a_scan_root_or_hide_mounts_under_with_a_valueless_variable_is_skipped_and_rep
     let layers = layers(profile, Some(""), &[], &[]);
     let expanded = expand_policy(&merged(&layers), &variables, &home());
 
-    let wanted = candidates(&expanded, &layers, &variables, Path::new(CONFIG_DIR), None);
+    let protected = protected_paths(&expanded, &layers, Path::new(CONFIG_DIR));
+    let wanted = candidates(&expanded, &protected.paths(), &variables, None);
     assert!(wanted.scans.is_empty(), "{:?}", wanted.scans);
     assert!(
         wanted.hide_mounts_under.is_empty(),

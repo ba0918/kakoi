@@ -29,6 +29,23 @@ pub struct ProtectedPaths {
     pub shared_files: Option<PathBuf>,
 }
 
+impl ProtectedPaths {
+    /// Every protected path, in the order section 13 reports them: what the outer layer
+    /// looks up for them is what the check reads.
+    pub fn paths(&self) -> Vec<&Path> {
+        self.policy_files
+            .iter()
+            .chain(std::iter::once(&self.config_dir))
+            .chain(self.secrets.iter().map(|(_, path)| path))
+            .chain(&self.path_prepend)
+            .chain(&self.shared_files)
+            .map(PathBuf::as_path)
+            .collect()
+    }
+}
+
+/// The protected paths of specification section 5.6 for `expanded` read from `layers`,
+/// without the shared file place, which the caller adds when the launch uses it.
 pub fn protected_paths(
     expanded: &ExpandedPolicy,
     layers: &[Layer],

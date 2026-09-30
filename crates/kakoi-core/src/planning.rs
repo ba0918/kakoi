@@ -26,6 +26,7 @@ use crate::layers::{load_layers, merge, LayerSelection, Policy};
 use crate::listed::ListedRoot;
 use crate::mount_facts::{collect_generator_facts, collect_path_facts};
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
+use crate::placement::{protected_paths, ProtectedPaths};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
 };
@@ -91,14 +92,16 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
     let expanded = expand_policy(&policy, &variables, &home);
     let shared_files = shared_files::place(&request.host, request.nested);
+    let protected = ProtectedPaths {
+        shared_files: shared_files.clone(),
+        ..protected_paths(&expanded, &layers, protected_config_dir)
+    };
     let wanted = candidates(
         &expanded,
-        &layers,
+        &protected.paths(),
         &variables,
-        protected_config_dir,
         request.workspace.as_deref(),
     )
-    .with_protected(shared_files.as_deref())
     .with_walked(&listed_lookups(&policy))
     .with_walked(&command_limits::lookups(&policy, &variables, &home));
     let inputs = Inputs {
