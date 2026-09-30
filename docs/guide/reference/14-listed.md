@@ -169,6 +169,7 @@ Landlock は、`commands.allow` の項目と、kakoi が自動で許すものだ
 - 項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。
 - 項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。
 - シンボリックリンクの項目は、辿った先の実体に許す。リンクだけを許しても、リンクを辿った先の実体のパスで起動できる。
+- 直接起動するスクリプト（`#!` で始まるもの。フック、`./gradlew`、`node_modules/.bin` の下のもの）は、インタプリタとスクリプト自体の両方に実行の許可が要る。インタプリタのほかに、スクリプトのファイルかそれを含むディレクトリを書く。エージェントが起動するフックやステータス行のスクリプト（`~/.claude/hooks`、`~/.codex/hooks`）もこれにあたる。インタプリタに渡して起動する（`sh ./script.sh`）ならインタプリタだけでよい。
 - kakoi が自動で許すのは、動的リンカ `/lib64/ld-linux-x86-64.so.2` の実体と、kakoi 自身の実行ファイル（見張り役と `隔離の中の最初のプロセス` に使うもの）だけである。どちらも無いと何も起動しないためである。
 
 `/bin/sh` と `/usr/bin/ls` を許せば、隔離の中の sh から ls を起動できる。
@@ -223,7 +224,7 @@ command mode: listed (2 allowed from commands.allow)
 見本は今の同梱プロファイルと同じ前提（WSL2、mise で入れた claude と codex）で動く最小の形である。
 
 - `mounts.mode` を `"listed"` にし、作業場所（`${workspace}`、`${worktree}`、`${git_common_dir}`）、`/tmp/kakoi`、`~/.local/share/mise/installs` の下の claude と codex、`~/.claude`、`~/.claude.json`、`~/.codex`、今の同梱プロファイルにあるパッケージのキャッシュを見せる。
-- `commands.mode = "listed"` と、claude と codex 自身とそれらが起動時に呼ぶプログラム（git、sh、uname）を並べた `commands.allow` は、コメントとして一緒に置いて効かせない。効かせると cargo や npm のようなプロジェクトごとの道具がすべて止まるためである。外すときは両方を外す。
+- `commands.mode = "listed"` と、claude と codex 自身とそれらが起動時に呼ぶプログラム（git、sh、uname）、フックの置き場（`~/.claude/hooks`、`~/.codex/hooks`）を並べた `commands.allow` は、コメントとして一緒に置いて効かせない。効かせると cargo や npm のようなプロジェクトごとの道具がすべて止まるためである。外すときは両方を外す。
 - 名前で起動した `ld.so` のすべての起動を止めるガードレールの規則を効かせる。規則は、どの語にも当たらない正規表現を 1 つ持つ `only` で書く。
 - PATH のシム（Safe Chain、mise）とホームの外を指すリンクを使う利用者は、その置き場を足す。見本のコメントがそれを求める。
 

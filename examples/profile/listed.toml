@@ -102,8 +102,10 @@ unset = [
 # you use it. `mode` and `allow` go together: remove or keep both, because `allow`
 # without `mode = "listed"` does not load. claude and codex themselves must be listed,
 # and what they start at their own start (git, sh, uname, and the programs your hooks
-# and status line run). This is a guardrail, not a boundary: a program allowed here
-# (sh, python3) can still do what an unlisted one would (see docs/security.md).
+# and status line run). A script started directly (#!), such as a hook, needs the file
+# itself, or a directory it is in, listed besides its interpreter. This is a guardrail,
+# not a boundary: a program allowed here (sh, python3) can still do what an unlisted one
+# would (see docs/security.md).
 #
 # [commands]
 # mode = "listed"
@@ -117,6 +119,8 @@ unset = [
 #     "/usr/bin/uname",
 #     "/usr/bin/lsb_release",
 #     "/usr/bin/getconf",
+#     "~/.claude/hooks",
+#     "~/.codex/hooks",
 # ]
 
 # The dynamic linker started by name runs any file as a program, which the command mode

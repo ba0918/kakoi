@@ -267,6 +267,12 @@ with the reason in the plan and allows nothing, so the same policy starts on a m
 a tool. `commands.allow` without `mode = "listed"` does not load (`policy`), so remove or keep
 the two together; list the programs your agent starts, itself included.
 
+A script started directly (one that begins with `#!`: a hook, `./gradlew`, a program under
+`node_modules/.bin`) needs its interpreter and the script itself allowed, so list the script, or
+a directory it is in, besides the interpreter. The hooks and the status line your agent runs
+are such scripts (`~/.claude/hooks`, `~/.codex/hooks`). A script handed to its interpreter
+(`sh ./script.sh`) needs only the interpreter.
+
 `kakoi` does this with Landlock, which forbids mounting once it restricts files, so it cannot be
 done before `bwrap` has made the isolation: `bwrap` starts `kakoi` itself as the isolation's
 first process, from a read-only place of its own, and that process restricts execution and then
