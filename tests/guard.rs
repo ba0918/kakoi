@@ -1378,3 +1378,97 @@ fn a_run_not_denied_under_guard_absolute_path_reaches_the_relocated_real_program
     assert_passed(&by_path, "real --version\n");
     assert_passed(&absolute, "real --version\n");
 }
+
+// @kotowari[EX-934]
+#[test]
+fn ex_934_a_rule_with_only_and_nothing_else_to_deny_loads() {
+    let output = print_plan(
+        "[[commands.guard]]\nprogram = \"git\"\nreason = \"r\"\nonly = [[\"status\"]]\n",
+    );
+
+    assert_loads(&output);
+}
+
+// @kotowari[REQ-438]
+#[test]
+fn an_empty_only_or_an_empty_sequence_in_it_is_a_policy_diagnostic() {
+    for only in ["[]", "[[]]", "[[[]]]"] {
+        let output = print_plan(&format!(
+            "[[commands.guard]]\nprogram = \"git\"\nreason = \"r\"\nonly = {only}\n"
+        ));
+        assert_diagnostic(&output, 125, "policy");
+    }
+}
+
+// @kotowari[EX-931, REQ-443]
+#[test]
+fn ex_931_only_lets_through_only_what_it_lists_after_the_deny_forms() {
+    let rule =
+        rule("program = \"git\"\nonly = [[\"status\"], [\"commit\"]]\ndeny-flags = [\"--amend\"]");
+
+    assert!(!denies(&rule, "git status"));
+    assert!(!denies(&rule, "git commit -m x"));
+    assert!(denies(&rule, "git push"));
+    assert!(denies(&rule, "git commit --amend"));
+}
+
+// @kotowari[EX-932]
+#[test]
+fn ex_932_an_upper_layer_only_does_not_loosen_a_lower_layer_only() {
+    let lower = rule("program = \"git\"\nonly = [[\"status\"]]");
+    let upper = rule("program = \"git\"\nonly = [[\"commit\"]]");
+    let rules = [lower, upper];
+
+    assert!(denies_with(&rules, "git status", &[]));
+    assert!(denies_with(&rules, "git commit -m x", &[]));
+}
+
+// @kotowari[EX-933]
+#[test]
+fn ex_933_only_applies_to_a_run_that_matches_for() {
+    let rule = rule("program = \"git\"\nfor = [[\"remote\"]]\nonly = [[\"remote\", \"-v\"]]");
+
+    assert!(!denies(&rule, "git status"));
+    assert!(denies(&rule, "git remote add x y"));
+    assert!(!denies(&rule, "git remote -v"));
+}
+
+// @kotowari[REQ-447, REQ-480]
+#[test]
+fn a_run_only_denies_is_shown_by_its_first_word_after_the_skipping_or_the_program() {
+    let rule = rule("program = \"git\"\noptions-with-value = [\"-C\"]\nonly = [[\"status\"]]");
+    let matched = |command: &str| {
+        evaluate(std::slice::from_ref(&rule), &arguments(command), &[]).map(|denial| denial.matched)
+    };
+
+    assert_eq!(matched("git -C dir push origin").as_deref(), Some("push"));
+    assert_eq!(matched("git -C dir").as_deref(), Some("git"));
+}
+
+// @kotowari[REQ-480, REQ-444]
+#[test]
+fn the_examples_of_a_rule_with_only_are_checked() {
+    let rule = "[[commands.guard]]\nprogram = \"git\"\nreason = \"r\"\nonly = [[\"status\"]]\n";
+
+    assert_loads(&print_plan(&format!(
+        "{rule}examples.deny = [\"git push\"]\nexamples.allow = [\"git status\"]\n"
+    )));
+    assert_diagnostic(
+        &print_plan(&format!("{rule}examples.allow = [\"git push\"]\n")),
+        125,
+        "policy",
+    );
+}
+
+// @kotowari[REQ-447]
+#[test]
+fn a_run_only_denies_ends_with_the_one_line_naming_the_first_word() {
+    let scene = Scene::new(&["git"]);
+    let policy = scene.policy(
+        "[[commands.guard]]\nprogram = \"git\"\nonly = [[\"status\"]]\nreason = \"only status\"\n",
+    );
+
+    let output = run_script(&scene, &policy, "git push origin");
+
+    assert_denied(&output, "kakoi: guard: git push: only status");
+}
