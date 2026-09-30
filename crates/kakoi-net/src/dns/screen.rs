@@ -86,13 +86,23 @@ impl ValidatedResponse {
                 && record.name.eq_ignore_root(&terminal)
                 && retained.contains(&ip)
         };
-        let filter = !signed && !self.message.answers.iter().all(screened);
+        let permitted_address = |record: &Record| match &record.data {
+            RData::A(address) => retained.contains(&IpAddr::V4(address.0)),
+            RData::AAAA(address) => retained.contains(&IpAddr::V6(address.0).to_canonical()),
+            _ => true,
+        };
+        let filter = !signed
+            && (!self.message.answers.iter().all(screened)
+                || !self.message.authorities.iter().all(permitted_address)
+                || !self.message.additionals.iter().all(permitted_address));
         let wire = if !align && !filter {
             self.wire.clone()
         } else {
             let mut message = self.message.clone();
             if filter {
                 message.answers.retain(screened);
+                message.authorities.retain(permitted_address);
+                message.additionals.retain(permitted_address);
                 // After rewriting unsigned data, do not claim the original upstream's
                 // authenticated-data status for the modified answer.
                 message.metadata.authentic_data = false;
