@@ -257,10 +257,14 @@ Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot ma
 isolation: Landlock, which restricts the programs there, forbids mounting, so the inner
 `bwrap` stops (even when `bwrap` is in `commands.allow`). The mount mode `listed` alone does
 not prevent it. See [known gap 19](security.md#known-gaps). The other way round works: an inner
-isolation given the outer guards can use the `listed` command mode. The outer guards are
-allowed there without being listed, a program the inner `commands.allow` allows still starts
-through them under the outer rules (by name, and by its absolute path when a guard with
-`guard-absolute-path` covers it), and a program it does not allow does not start.
+isolation given the outer guards can use the `listed` command mode. The outer guards, those in
+their directory and those over real programs alike, are allowed there without being listed, a
+program the inner `commands.allow` allows still starts through them under the outer rules (by
+name, and by its absolute path when a guard with `guard-absolute-path` covers it), and a program
+it does not allow does not start. When the table of the outer guards cannot be read or
+interpreted, as when the inner `kakoi` is of another version than the outer one, the nested run
+stops with `bwrap` and 125 without running its command, since the outer guards would be denied
+and a shell would start the real program behind them instead.
 
 ## Open files
 

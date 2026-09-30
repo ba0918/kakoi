@@ -285,10 +285,14 @@ first process, from a read-only place of its own, and that process restricts exe
 starts the command under the name it was given. When a [command guard](#command-guards) with
 `guard-absolute-path` places an allowed program again, the program placed again is allowed as
 that item, so the guarded program still starts. Inside an isolation made with `--nested=isolate`
-under the command guards of the outer run, those guards are allowed without being listed: a
-program allowed inside still starts through them and their rules still apply, a program not
-allowed inside does not start even through them, and an item written at the path an outer guard
-with `guard-absolute-path` covers allows the real program that guard starts. A program that is not allowed fails to start
+under the command guards of the outer run, all those guards are allowed without being listed,
+those over real programs included: a program allowed inside still starts through them and their
+rules still apply when it is started by name, or by its absolute path where a guard with
+`guard-absolute-path` covers it; a program not allowed inside does not start even through them;
+and an item written at the path an outer guard with `guard-absolute-path` covers allows the real
+program that guard starts. When the table of the outer guards cannot be read or interpreted (the
+inner `kakoi` is of another version than the outer one), the launch stops with `bwrap`, since
+a shell would otherwise start the real program past the outer rules. A program that is not allowed fails to start
 (`Permission denied`); the command itself that is not allowed ends the run with
 `command not executable` and 126. A host without Landlock stops the launch with `bwrap`,
 `--print-plan` included.
