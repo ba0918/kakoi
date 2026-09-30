@@ -366,6 +366,42 @@ fn mixed_answers_filter_unsigned_data_preserve_signatures_and_refuse_all_denied(
     }
 }
 
+// @kotowari[REQ-020]
+#[test]
+fn unsigned_address_answers_do_not_pass_forbidden_ips_in_other_sections() {
+    let question = Question::parse(&query(1)).unwrap();
+    let start = Instant::now();
+    let mut wire = response(1, 0x80);
+    answer(&mut wire, "api.example.com", 1, 30, &[1, 1, 1, 1]);
+    answer(&mut wire, "other.example.com", 1, 30, &[10, 0, 0, 1]);
+    wire[7] -= 1;
+    wire[9] += 1;
+    answer(&mut wire, "other.example.com", 1, 30, &[10, 0, 0, 2]);
+    wire[7] -= 1;
+    wire[11] += 1;
+    let response = question.validate_response(&wire).unwrap();
+    let AddressProgress::Complete(candidates) = question
+        .address_chain(16)
+        .unwrap()
+        .consume(&response, start, Duration::from_secs(1))
+        .unwrap()
+    else {
+        panic!("no addresses")
+    };
+    let screened = response
+        .screen_addresses(&candidates, |ip| {
+            if ip.to_string() == "1.1.1.1" {
+                DnsAdmission::Dynamic
+            } else {
+                DnsAdmission::Denied
+            }
+        })
+        .unwrap();
+    assert_eq!(screened.wire[7], 1);
+    assert_eq!(screened.wire[9], 0);
+    assert_eq!(screened.wire[11], 0);
+}
+
 // @kotowari[REQ-019, REQ-022, REQ-116, REQ-122]
 #[test]
 fn resolution_follows_cname_with_one_budget_and_ages_the_assembled_answer() {
