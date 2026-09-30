@@ -230,10 +230,14 @@ fn tls_checks_the_certificate_name_and_chain_without_plaintext_fallback() {
     };
     let temp = crate::common::TempDir::new();
     let path = temp.path();
+    // The certificates start long before now: one starting now can be ahead
+    // of the clock rustls reads by a second and be refused as not yet valid.
+    // `openssl ca` is used because the tested OpenSSL 3.0 has no way to set
+    // the start date in `req` or `x509`.
     let commands: &[&[&str]] = &[
         &[
             "req",
-            "-x509",
+            "-new",
             "-newkey",
             "ec",
             "-pkeyopt",
@@ -242,14 +246,33 @@ fn tls_checks_the_certificate_name_and_chain_without_plaintext_fallback() {
             "-keyout",
             "ca.key",
             "-out",
-            "ca.pem",
-            "-days",
-            "1",
+            "ca.csr",
             "-subj",
             "/CN=kakoi test CA",
         ],
         &[
+            "ca",
+            "-batch",
+            "-notext",
+            "-config",
+            "ca.cnf",
+            "-selfsign",
+            "-keyfile",
+            "ca.key",
+            "-in",
+            "ca.csr",
+            "-out",
+            "ca.pem",
+            "-extfile",
+            "ca.ext",
+            "-startdate",
+            "20000101000000Z",
+            "-enddate",
+            "20991231000000Z",
+        ],
+        &[
             "req",
+            "-new",
             "-newkey",
             "ec",
             "-pkeyopt",
@@ -263,25 +286,40 @@ fn tls_checks_the_certificate_name_and_chain_without_plaintext_fallback() {
             "/CN=dns.example.com",
         ],
         &[
-            "x509",
-            "-req",
+            "ca",
+            "-batch",
+            "-notext",
+            "-config",
+            "ca.cnf",
+            "-cert",
+            "ca.pem",
+            "-keyfile",
+            "ca.key",
             "-in",
             "server.csr",
-            "-CA",
-            "ca.pem",
-            "-CAkey",
-            "ca.key",
-            "-set_serial",
-            "1",
             "-out",
             "server.pem",
-            "-days",
-            "1",
             "-extfile",
             "server.ext",
+            "-startdate",
+            "20000101000000Z",
+            "-enddate",
+            "20991231000000Z",
         ],
         &["x509", "-in", "ca.pem", "-outform", "DER", "-out", "ca.der"],
     ];
+    fs::write(
+        path.join("ca.cnf"),
+        "[ca]\ndefault_ca = test\n[test]\ndatabase = index.txt\nnew_certs_dir = .\nserial = serial\ndefault_md = sha256\npolicy = supplied\nunique_subject = no\n[supplied]\ncommonName = supplied\n",
+    )
+    .unwrap();
+    fs::write(path.join("index.txt"), "").unwrap();
+    fs::write(path.join("serial"), "01\n").unwrap();
+    fs::write(
+        path.join("ca.ext"),
+        "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\n",
+    )
+    .unwrap();
     fs::write(path.join("server.ext"), "subjectAltName=DNS:dns.example.com\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\n").unwrap();
     for args in commands {
         let output = Command::new("/usr/bin/openssl")
@@ -364,7 +402,12 @@ except socket.timeout:
             Some(client),
             &mut budget,
         );
-        assert_eq!(result.is_ok(), success, "TLS outcome differs for {name}");
+        assert_eq!(
+            result.is_ok(),
+            success,
+            "TLS outcome differs for {name}: {:?}",
+            result.as_ref().err()
+        );
         assert!(server.wait().unwrap().success());
     }
 }
