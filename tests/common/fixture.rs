@@ -82,6 +82,7 @@ pub struct Facts {
     pub paths: BTreeMap<PathBuf, RealEntry>,
     pub links: BTreeMap<PathBuf, Vec<PathBuf>>,
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
+    pub link_targets: BTreeMap<PathBuf, PathBuf>,
     pub mounts: Vec<Mount>,
     pub scan_hits: Vec<ScanHit>,
     pub mount_list_unreadable: bool,
@@ -98,6 +99,7 @@ impl Facts {
             paths: self.paths,
             links: self.links,
             directories: self.directories,
+            link_targets: self.link_targets,
             mounts: self.mounts,
             scan_hits: self.scan_hits,
             mount_list_unreadable: self.mount_list_unreadable,
@@ -172,6 +174,13 @@ impl Facts {
             PathBuf::from(path),
             links.iter().map(PathBuf::from).collect(),
         );
+        self
+    }
+
+    /// The symbolic link at the place `link` holds the target `target`, as written.
+    pub fn link_target(mut self, link: &str, target: &str) -> Self {
+        self.link_targets
+            .insert(PathBuf::from(link), PathBuf::from(target));
         self
     }
 

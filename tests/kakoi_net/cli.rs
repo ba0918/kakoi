@@ -1023,3 +1023,22 @@ fn the_command_guard_denies_in_filtered_mode_too() {
         "{stderr}"
     );
 }
+
+// @kotowari[REQ-475]
+#[test]
+fn a_program_not_allowed_does_not_start_under_the_filtered_network() {
+    let filtered = Filtered::new("\n[commands]\nmode = 'listed'\nallow = ['/bin/sh']\n");
+
+    let output = filtered
+        .with_pasta(&[
+            "/bin/sh",
+            "-c",
+            "/usr/bin/id -u >/dev/null 2>&1 && echo ran || echo failed; exit 7",
+        ])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(7), "{stderr}");
+    assert_eq!(output.stdout, b"failed\n", "{stderr}");
+}

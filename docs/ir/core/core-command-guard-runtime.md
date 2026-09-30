@@ -23,10 +23,10 @@ kakoiは、起動された実行ファイルの場所が、自分が置いた見
 ### REQ-447: 禁止に当たったとき
 
 - kind: event_driven
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A10, docs/decision/brainstorm/2026-09-25-command-policy.md#A12, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A39
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A10, docs/decision/brainstorm/2026-09-25-command-policy.md#A12, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A39, docs/decision/brainstorm/2026-09-30-allowlist.md#A46
 - verification: unit
 
-見張り役は、受け取った引数と環境が規則で禁止になるとき、本物を起動せずに、標準エラーに "kakoi: guard: <プログラム名> <当たった語>: <reason>" の1行を出して終了コード126で終わり、標準出力には何も出さない。<プログラム名>は当たった規則の "program" とする。当たった語は引数の側の語で、先頭一致なら当たった語の並び、フラグならそのフラグ、オプションの値ならオプションと値、環境変数ならその名前とし、REQ-289のとおり制御文字を見える表記に逃がす。隔離の外への通知は出さない。
+見張り役は、受け取った引数と環境が規則で禁止になるとき、本物を起動せずに、標準エラーに "kakoi: guard: <プログラム名> <当たった語>: <reason>" の1行を出して終了コード126で終わり、標準出力には何も出さない。<プログラム名>は当たった規則の "program" とする。当たった語は引数の側の語で、先頭一致なら当たった語の並び、フラグならそのフラグ、オプションの値ならオプションと値、環境変数ならその名前、"only" のどの項目にも当たらないなら読み飛ばしの後の先頭の語（語が無ければプログラム名）とし、REQ-289のとおり制御文字を見える表記に逃がす。隔離の外への通知は出さない。
 
 ### REQ-448: 禁止に当たらないとき
 

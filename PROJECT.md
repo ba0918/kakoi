@@ -56,11 +56,20 @@ user 1000 in a user namespace of its own (`unshare --map-user`), as on a real ho
 `passt 0.0~git20260728.f8df3f1-1~bpo13+1`, which CI fetches and checks by digest.
 
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on
-the machine; they fail rather than skip when any of them is missing. Inside the isolation they
+the machine; they fail rather than skip when any of them is missing. The tests of the "listed" modes
+also need Landlock in the kernel with the scope on abstract UNIX sockets (ABI 6, Linux 6.12 or
+later), and fail rather than skip without it. Inside the isolation they start `/usr/bin/cat`,
+`/usr/bin/ls`, `/usr/bin/touch`, `/usr/bin/readlink`, `/usr/bin/ln`, `/usr/bin/id`, and
+`/usr/bin/true` by absolute path, `git`, `id`, and small `/bin/sh` scripts by name through
+`PATH`, and the `git` found on `PATH` by its absolute path. Their homes and workspaces are placed under the build's own temporary directory
+(`CARGO_TARGET_TMPDIR`) rather than under `/tmp`, which the "listed" mount mode replaces; a
+workspace there is given a `.git` directory of its own so that the repository the build is in
+is not taken as its worktree. Inside the isolation they
 start `/usr/bin/python3`, `/usr/bin/git`, `/bin/sh`, and `/bin/true` by absolute path, and
 `stat`, `cat`, `test`, `rm`, `mv`, and `mkdir` through the shell. A nested run is tested for real:
 a shell inside an isolation of the built `kakoi` starts the built `kakoi` again by its absolute
-path, through `/usr/bin/env` when it gives the nested run another `PATH`, `HOME`, or
+path (or a copy of it placed in a temporary directory, so that the nested run is a different file
+from the outer run's guards), through `/usr/bin/env` when it gives the nested run another `PATH`, `HOME`, or
 `XDG_CONFIG_HOME`, and the nested run starts `/usr/bin/env`, `/usr/bin/tr`, `/bin/sh`,
 `/bin/echo`, `/bin/cat`, and `/usr/bin/git`. The host without `/dev/net/tun` that a nested run
 meets is made the same way, inside an outer isolation that does not show the device; the tests

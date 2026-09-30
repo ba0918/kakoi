@@ -11,6 +11,7 @@
 compile_error!("kakoi supports only x86_64 (specification section 3)");
 
 pub mod command;
+pub mod command_limits;
 pub mod copies;
 pub mod copy_facts;
 pub mod diagnostic;
@@ -19,8 +20,10 @@ pub mod executables;
 pub mod guard;
 pub mod guard_placement;
 pub mod isolated_env;
+pub mod landlock;
 pub mod launch;
 pub mod layers;
+pub mod listed;
 pub mod mount_facts;
 pub mod mount_list;
 pub mod mounts;

@@ -14,11 +14,11 @@
 
 ### REQ-359: 既知の隙間の公開
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56
 - verification: review
-- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、17件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
+- how_to_verify: "docs/security.md"の既知の隙間の節を表 TBL-160 と突き合わせ、19件がどれも欠けずに意味を変えずに載っていること、READMEからその節へ直接のリンクがあることを人か LLM が確かめる
 
-表 TBL-160 の既知の隙間17件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。17件のどれも省かない。
+表 TBL-160 の既知の隙間19件を"docs/security.md"に記載し、READMEからその節へ直接リンクする。19件のどれも省かない。
 
 ### REQ-360: 配置保護の説明
 - kind: ubiquitous
@@ -63,7 +63,7 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 ## Decision tables
 
 ### TBL-160: 既知の隙間
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1, docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A15, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A25, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A27, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A45, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A52, docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A51, docs/decision/brainstorm/2026-09-30-allowlist.md#A56
 
 | 番号 | 既知の隙間 |
 |---|---|
@@ -84,6 +84,8 @@ IRが「READMEに書く」「READMEに載せる」とする事項は、READMEか
 | 15 | "rw" の中にある "ro" と "hide" の項目の守りは完全ではない。リンクで書いた "ro" が守るのは、リンク先の実体だけである。隔離の中でリンクを消して同じ名前の通常ファイルを置けば、同じ起動の中で、読む側のパスの内容を変えられる（一時ファイルと rename で保存するエディタも、リンクを置き換える）。リンク先が書き込める項目の外なら、そこは元から読み取り専用であり、"ro" の項目は何も足していない。次の起動では、リンクの差し替えで別の場所が読み取り専用になるか、削除で読み取り専用が外れる。新しく見えるものは、ポリシーを保護する配置の露出する組の検査が止める。リンクで書いた "hide" は、根の項目の検査が 1 回目の起動から止める。リンクでなくても、祖先ディレクトリの改名と、同じパスへの別のファイルの配置で、次の起動が読む内容を変えられる（core-policy-placement.md）。"ro" で守れるのは、エージェントが読む実体の内容が意図せず書き換わらないことまでで、エージェントが別の内容を読むように仕向ける迂回は止められない |
 | 16 | シムの雛形は、包む対象のどのオプションが値を取るかを知らないので、写す対象のオプションと同じ名前の語を、別のオプションの値でも位置引数でも、どこにあってもそのオプションとして読む。そのため "--workspace" や "--rw" が、その語に続く語まで広がりうる。例: "codex -m --cd /etc exec" は kakoi に "--workspace /etc" を渡す（core-shim.md）。この誤読は受け入れる |
 | 17 | "network.allow-nested-filtered" を true にした host の隔離の中からは、ホストのネットワーク名前空間にある、所有者を設定していないか利用者と同じ uid を所有者とする永続の tun と tap の装置を読み書きできる（core-nested-isolation.md） |
+| 18 | コマンドのモード "listed" は Landlock で許していないプログラムの起動を止めるガードレールで、境界ではない。動的リンカを絶対パスで起動して読めるプログラムを読み込ませる形、許したインタプリタ（python、node）が読めるファイルを実行できるメモリとして読み込む形、memfd に写した実行ファイルを起動する形は止まらない（core-listed-commands.md） |
+| 19 | コマンドのモード "listed" の隔離の中では、Landlock がマウントを禁じるので、"--nested=isolate" で中に隔離を作れない（core-listed-commands.md） |
 
 ## Examples
 
@@ -98,11 +100,11 @@ Scenario: 公開文書の導線・反例
   Given READMEだけから初回起動を進める
   When 契約への適合を確認する
   Then 起動前に必ずプロファイル設置が必要だと読めることは契約違反である
-@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54
+@id=EX-658 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A2,docs/decision/brainstorm/2026-09-29-nested-isolation.md#A54,docs/decision/brainstorm/2026-09-30-allowlist.md#A13,docs/decision/brainstorm/2026-09-30-allowlist.md#A51,docs/decision/brainstorm/2026-09-30-allowlist.md#A56
 Scenario: 既知の隙間の公開・成功
   Given READMEから保証範囲を調べる
   When 契約への適合を確認する
-  Then 一回のリンクで17件の具体的な限界を読める
+  Then 一回のリンクで19件の具体的な限界を読める
 @id=EX-659 @about=REQ-359 @source=docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1,docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A1
 Scenario: 既知の隙間の公開・反例
   Given READMEから保証範囲を調べる

@@ -187,9 +187,9 @@ bwrap arguments:
 読む側は、知らないキーを無視すれば同じ版の間は読み続けられる。
 
 ## JSON のキー
-<!-- @kotowari[REQ-299:f57f72a0, EX-535:239c4e1a] -->
+<!-- @kotowari[REQ-299:b88351e8, EX-535:239c4e1a] -->
 
-トップレベルのキーは次の 19 個である。
+トップレベルのキーは次の 22 個である。
 
 | キー | 値 |
 |---|---|
@@ -199,11 +199,14 @@ bwrap arguments:
 | `policy_sources` | 使ったポリシーの情報 |
 | `variables` | 4 つの変数。値を持たない変数は `null` |
 | `home` | ホームディレクトリ |
-| `policy` | 合成後のポリシー |
+| `policy` | 合成後のポリシー。マウントのモード `mounts_mode`、`mounts.system` の値 `mounts_system`、コマンドのモード `commands_mode` を含む（[見せるものを選ぶモード](14-listed.md#計画表示)） |
 | `mounts` | 適用する項目。それぞれ実体のパス、種類、書かれた値、出所を持つ |
 | `skipped_mounts` | 飛ばしたマウント項目 |
 | `left_visible` | 走査の後も見えるままにした対象 |
+| `not_shown` | マウントのモードが `"listed"` のとき、`見せた場所` の外に向いたために重ねなかった `hide` |
 | `skipped_paths` | 飛ばしたパス |
+| `commands_allowed` | コマンドのモードが `"listed"` のとき、許すプログラムの項目。飛ばした項目を含まない |
+| `skipped_command_allow` | 飛ばした `commands.allow` の項目 |
 | `not_copied` | `rw-copy` で複製できなかったもの（[JSON の秘密とファイル記述子](#json-の秘密とファイル記述子)） |
 | `guards` | 見張り役を置いたプログラム（[コマンドのガードレール](13-command-guard.md#計画表示)） |
 | `skipped_guards` | 規則があって見張り役を置かなかったプログラムと理由 |
@@ -260,7 +263,10 @@ bwrap arguments:
     }
   ],
   "left_visible": [],
+  "not_shown": [],
   "skipped_paths": [],
+  "commands_allowed": [],
+  "skipped_command_allow": [],
   "not_copied": [],
   "guards": [],
   "skipped_guards": [],

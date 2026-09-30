@@ -3,7 +3,7 @@
 ```
 kakoi [OPTIONS] -- COMMAND [ARGS]...
 kakoi [OPTIONS] --print-plan[=FORM] [-- COMMAND [ARGS]...]
-kakoi init [NAME]
+kakoi init [NAME] [--example default|listed]
 kakoi --version
 kakoi --help
 ```
@@ -20,7 +20,7 @@ kakoi --help
 | `--print-plan[=FORM]` | Print the plan and exit without running the command. `FORM` is `summary` (the default), `full`, or `json`; see [The plan](#the-plan). The value is written with `=` only. |
 | `--nested=MODE` | What to do when started inside an isolation: `exec` (the default) runs the command under the outer isolation as it is, `isolate` makes an isolation of this policy inside it; see [Nesting](#nesting). The value is written with `=` only. Outside an isolation both isolate. |
 | `--version`, `--help` | Print the version or the usage. Each is used alone. |
-| `init [NAME]` | Write the built-in default to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. Used alone; see [Getting started](getting-started.md#write-the-boundary-out-and-edit-it). |
+| `init [NAME] [--example VALUE]` | Write a bundled example to `profile/NAME.toml` (`default` when `NAME` is left out), print its path, and exit. `--example` chooses the example: `default` (the built-in default, also when `--example` is left out) or `listed` ([`examples/profile/listed.toml`](../examples/profile/listed.toml), which shows only what it lists; see [Showing only what is listed](policy.md#showing-only-what-is-listed-mountsmode)). It takes `--example VALUE` or `--example=VALUE`, once; any other value, a missing value, or a second `--example` is a usage error, and nothing is written. `init` takes nothing but `NAME` and `--example`, and `--example` is accepted only with `init`. See [Getting started](getting-started.md#write-the-boundary-out-and-edit-it). |
 
 Everything after `--` is the command and its arguments, passed through unchanged. `kakoi`
 never rewrites them, and the command sees the name it was given as its `argv[0]` (`sh`, not
@@ -58,6 +58,8 @@ variables:
   git_common_dir = /home/you/work/project/.git
   config_dir = /home/you/.config/kakoi
 network: host
+mount mode: host (system: true)
+command mode: host
 mounts (~ is /home/you):
   hide    ~/.ssh
   rw-copy ~/.gitconfig
@@ -83,13 +85,19 @@ It shows:
   upstream, as `allow tcp api.example.com ports 443`,
   `planned publication: tcp ipv4 host:18000 -> sandbox:8000`, and
   `DNS upstream: 192.0.2.53 port 853 TLS name=resolver.example.com`;
+- the mount mode and whether the base is shown (`mount mode: listed (system: false)`), and the
+  command mode with, under `listed`, the number of programs allowed from `commands.allow`
+  (`command mode: listed (2 allowed from commands.allow)`); see
+  [Showing only what is listed](policy.md#showing-only-what-is-listed-mountsmode) and
+  [Allowing only listed programs](policy.md#allowing-only-listed-programs-commandsmode);
 - every mount item, applied or skipped with the reason, in the order they are applied. The
   home directory is shortened to `~`, and an item is annotated with where it came from only
   when that is not the profile: `(--policy-file)`, `(command line)`, `(scan)`,
   `(hide-mounts)`, `(secrets/ of the configuration directory)`, or the secret it hides;
 - every scan hit left visible, every scan root, `hide-mounts` `under`, or `path-prepend`
-  entry skipped, and every entry an `rw-copy` item could not take from the host, each with the
-  reason. A line explaining `rw-copy` follows the mount list whenever one is in use, since the
+  entry skipped, every `hide` the `listed` mount mode does not lay and every base directory it
+  skips, every `commands.allow` item skipped, and every entry an `rw-copy` item could not take
+  from the host, each with the reason. A line explaining `rw-copy` follows the mount list whenever one is in use, since the
   name alone does not say that its writing stops at the boundary;
 - how the environment differs from the host's: the variables unset, the variables set with
   their values (a `PATH` that only grew in front shows the part added), and the names of the
@@ -125,11 +133,14 @@ meaning while `format_version` is the same; keys may be added.
 | `policy_sources` | The policy files read, each `{"kind": "file", "path": ...}` or `{"kind": "built-in-default"}`. |
 | `variables` | `workspace`, `worktree`, `git_common_dir`, `config_dir`; `null` where a variable has no value. |
 | `home` | The home directory. |
-| `policy` | The merged policy: `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `allow_nested_filtered`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`, `guards` (each rule as written, with `origin`). |
+| `policy` | The merged policy: `mounts_mode` (`host` or `listed`), `mounts_system`, `commands_mode` (`host` or `listed`), `mounts` (each with `directive`, `path` as written, `origin`), `scan`, `hide_mounts`, `network_mode`, `allow_nested_filtered`, `network_allow`, `network_publish`, `network_limits`, `dns_upstream`, `shutdown_grace_seconds`, `env_mode`, `env_pass`, `env_set`, `env_unset`, `path_prepend`, `secrets`, `instead_of`, `guards` (each rule as written, with `origin`). |
 | `mounts` | The items applied, in order: `directive`, `path` (real), `kind` (`directory` or `not-directory`), `written`, `origin`. |
 | `skipped_mounts` | Written items skipped: `directive`, `written`, `origin`, `reason`. |
 | `left_visible` | Scan hits left visible: `link`, `reason`. |
-| `skipped_paths` | Skipped scan roots, `hide-mounts` `under`s, and `path-prepend` entries: `role` (`scan-root`, `hide-mounts-under`, `path-prepend`), `written`, `reason`. |
+| `not_shown` | The `hide` items the `listed` mount mode does not lay, because they name nothing it shows: `path` (real), `written`, `origin`, `reason`. |
+| `skipped_paths` | Skipped scan roots, `hide-mounts` `under`s, `path-prepend` entries, base directories, and the target of `/etc/resolv.conf`: `role` (`scan-root`, `hide-mounts-under`, `path-prepend`, `base`, `resolver-target`), `written`, `reason`. |
+| `commands_allowed` | Under the `listed` command mode, the `commands.allow` items allowed, as paths inside the isolation; empty under `host`. The items skipped are not in it. |
+| `skipped_command_allow` | The `commands.allow` items skipped: `written`, `reason`. |
 | `not_copied` | Entries an `rw-copy` item could not take from the host: `item` (the item's real path), `path`, `reason`. |
 | `guards` | The programs with a command guard: `program`, `location` (the guards' directory, first on `PATH`), `found` (the real program on `PATH`), `relocated` (where the real program is placed again under `guard-absolute-path`, or `null`), `sources` (the `origin` of each rule applied). |
 | `skipped_guards` | The programs with a rule and no guard: `program`, `reason`. |
@@ -161,7 +172,10 @@ kernel cannot run) exits 126, and so does a run a [command guard](policy.md#comm
 denies, with the line `kakoi: guard: <program> <the words that matched>: <reason>` from inside
 the isolation, where `<program>` is the `program` of the rule that matched. A run the guard lets
 through whose real program cannot be executed exits 126 with `command not executable` too, from
-the guard.
+the guard. Under the `listed` [command mode](policy.md#allowing-only-listed-programs-commandsmode),
+a command that cannot be started (one not allowed, or one that fails to `exec` for any other
+reason) exits 126 with `command not executable`, naming the command and the reason, from the
+isolation's first process.
 
 The kinds are `usage`, `policy`, `path`, `secret`, `env`, `bwrap`, `command not found`,
 `command not executable`, and `guard`. Warnings are one line each starting with `kakoi: warning: ` and
@@ -171,8 +185,9 @@ When the command runs, its exit code is returned as it is; a command killed by s
 128 + `s`. `kakoi` executes `bwrap` in place rather than waiting for it as a child, so a
 failure of `bwrap` itself (a mount that cannot be made, an `exec` that fails) shows as `bwrap`'s
 own output and exit code. Only where `kakoi` executes the command itself, in a nested run with
-`--nested=exec` or as a command guard executing the real program, does a failed `exec` become the
-`command not executable` diagnostic above. The failure a
+`--nested=exec`, as a command guard executing the real program, or as the first process of the
+`listed` command mode, does a failed `exec` become the `command not executable` diagnostic
+above. The failure a
 fresh machine meets first is a user namespace the kernel will not let `bwrap` create; see
 [Allowing the user namespace](getting-started.md#allowing-the-user-namespace-on-ubuntu-2404-and-later).
 
@@ -237,6 +252,19 @@ it is put first on the inner `PATH` when there is one. An inner environment with
 guards found through `PATH` do not watch there. A
 policy for the inner isolation cannot place guards of its own while it does; that is a `policy`
 diagnostic. The limits of all this are [known gap 8](security.md#known-gaps).
+
+Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
+isolation: Landlock, which restricts the programs there, forbids mounting, so the inner
+`bwrap` stops (even when `bwrap` is in `commands.allow`). The mount mode `listed` alone does
+not prevent it. See [known gap 19](security.md#known-gaps). The other way round works: an inner
+isolation given the outer guards can use the `listed` command mode. The outer guards, those in
+their directory and those over real programs alike, are allowed there without being listed, a
+program the inner `commands.allow` allows still starts through them under the outer rules (by
+name, and by its absolute path when a guard with `guard-absolute-path` covers it), and a program
+it does not allow does not start. When the table of the outer guards cannot be read or
+interpreted, as when the inner `kakoi` is of another version than the outer one, the nested run
+stops with `bwrap` and 125 without running its command, since the outer guards would be denied
+and a shell would start the real program behind them instead.
 
 ## Open files
 

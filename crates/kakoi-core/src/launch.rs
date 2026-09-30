@@ -16,6 +16,7 @@ use std::process::Command;
 
 use crate::diagnostic::Diagnostic;
 use crate::plan::{Argument, Plan};
+use crate::policy::{ListMode, NetworkMode};
 use crate::seccomp::filter_bytes;
 use crate::shared_files;
 
@@ -107,6 +108,15 @@ fn assemble_with_prefix(plan: &Plan, prefix: &[OsString]) -> Result<BwrapCommand
             }
             Ok(())
         });
+    }
+    if plan.policy.mounts_mode == ListMode::Listed && plan.policy.network_mode == NetworkMode::Host
+    {
+        // Before bwrap rather than inside: Landlock's scopes do not forbid mounting, and
+        // what bwrap starts inherits them (specification REQ-472).
+        // SAFETY: only system calls run between fork and exec.
+        unsafe {
+            command.pre_exec(crate::landlock::scope_abstract_unix_sockets);
+        }
     }
     Ok(BwrapCommand {
         command,

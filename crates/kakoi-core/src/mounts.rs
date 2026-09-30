@@ -176,6 +176,34 @@ pub struct Candidates {
 }
 
 impl Candidates {
+    /// These candidates with the scans to walk and the `hide-mounts` `under`s of
+    /// `expanded` in place of their own.
+    pub fn for_generators(self, expanded: &ExpandedPolicy) -> Self {
+        let scans = expanded
+            .scans
+            .iter()
+            .filter_map(|scan| match &scan.root {
+                Expansion::Path(root) => Some(ScanRequest {
+                    root: root.clone(),
+                    names: scan.names.clone(),
+                    exclude: scan.exclude.clone(),
+                    prune: scan.prune.clone(),
+                }),
+                Expansion::Valueless(_) => None,
+            })
+            .collect();
+        let hide_mounts_under = expanded
+            .hide_mounts
+            .iter()
+            .filter_map(|hide| hide.under.path().map(Path::to_path_buf))
+            .collect();
+        Self {
+            scans,
+            hide_mounts_under,
+            ..self
+        }
+    }
+
     /// These candidates and those of one more protected path: its prefixes, and its
     /// resolution.
     pub fn with_protected(mut self, path: Option<&Path>) -> Self {
@@ -187,6 +215,19 @@ impl Candidates {
             self.traversals.sort();
             self.traversals.dedup();
         }
+        self
+    }
+}
+
+impl Candidates {
+    /// These candidates and `paths`, looked up and walked.
+    pub fn with_walked(mut self, paths: &[PathBuf]) -> Self {
+        self.paths.extend(paths.iter().cloned());
+        self.traversals.extend(paths.iter().cloned());
+        self.paths.sort();
+        self.paths.dedup();
+        self.traversals.sort();
+        self.traversals.dedup();
         self
     }
 }
@@ -261,25 +302,9 @@ pub fn candidates(
     Candidates {
         paths,
         traversals,
-        scans: expanded
-            .scans
-            .iter()
-            .filter_map(|scan| match &scan.root {
-                Expansion::Path(root) => Some(ScanRequest {
-                    root: root.clone(),
-                    names: scan.names.clone(),
-                    exclude: scan.exclude.clone(),
-                    prune: scan.prune.clone(),
-                }),
-                Expansion::Valueless(_) => None,
-            })
-            .collect(),
-        hide_mounts_under: expanded
-            .hide_mounts
-            .iter()
-            .filter_map(|hide| hide.under.path().map(Path::to_path_buf))
-            .collect(),
+        ..Candidates::default()
     }
+    .for_generators(expanded)
 }
 
 /// One entry the scan found by name: where it was found, what is behind it, and whether
@@ -311,6 +336,9 @@ pub struct MountFacts {
     /// resolving each path specification section 5.6 protects, keyed by the given path:
     /// the ones a link target enters and leaves again through `..` included.
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
+    /// The target, as written, of each symbolic link a walked resolution passed through,
+    /// keyed by the link's own place.
+    pub link_targets: BTreeMap<PathBuf, PathBuf>,
     pub scan_hits: Vec<ScanHit>,
     pub mounts: Vec<Mount>,
     /// Whether the mount list was asked for and could not be read (specification
@@ -386,12 +414,15 @@ pub struct LeftVisible {
 }
 
 /// Which path-taking value a skipped path came from: a scan `root`, a `hide-mounts`
-/// `under`, or an `env.path-prepend` entry.
+/// `under`, an `env.path-prepend` entry, a base directory of the "listed" mount mode, or
+/// the file the host's resolver configuration points at outside the base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkippedRole {
     ScanRoot,
     HideMountsUnder,
     PathPrepend,
+    Base,
+    ResolverTarget,
 }
 
 /// A path-taking value that is not a mount item and was skipped, with the reason
@@ -450,6 +481,15 @@ pub struct ResolvedMounts {
     pub items: Vec<ResolvedItem>,
     pub skipped: Vec<SkippedItem>,
     pub left_visible: Vec<LeftVisible>,
+    /// The `hide` items the "listed" mount mode does not lay, with the reason.
+    pub not_shown: Vec<NotShown>,
+}
+
+/// A `hide` item, written or generated, that names nothing the "listed" mount mode shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotShown {
+    pub item: ResolvedItem,
+    pub reason: String,
 }
 
 /// The written mount items resolved to real paths, before the generated items of

@@ -5,11 +5,16 @@ profile, [`examples/profile/default.toml`](../examples/profile/default.toml), is
 default: it uses `mounts` (`rw`, `rw-file`, `ro`, `hide`, `scan`, `hide-mounts`),
 `network.mode`, and `env.mode` and `env.unset`, with `secrets` present only as a comment, and
 it does not use `rw-copy`, `env.pass`, `env.set`, `env.path-prepend`, or `git.instead-of`, and
-carries a command guard for `git` only as a comment. The fixed keys are the ones below and the
-keys of a [command guard](#command-guards); any other key is a `policy` error.
+carries a command guard for `git` only as a comment. A second example,
+[`examples/profile/listed.toml`](../examples/profile/listed.toml), which `kakoi init NAME
+--example listed` writes out, uses the `listed` [mount mode](#showing-only-what-is-listed-mountsmode).
+The fixed keys are the ones below and the keys of a [command guard](#command-guards); any other
+key is a `policy` error.
 
 ```toml
 [mounts]
+mode    = "host"   # "host" | "listed"; default "host"; see "Showing only what is listed"
+system  = true     # under "listed", whether the base is shown; default true
 rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/kakoi", "~/.cache"]
 rw-file = ["~/.claude.json"]
 rw-copy = ["~/.gitconfig"]
@@ -43,6 +48,10 @@ GH_TOKEN = "${config_dir}/secrets/gh-token"
 [git.instead-of]
 "git@github.com:" = "https://github.com/"
 
+[commands]
+mode  = "host"   # "host" | "listed"; default "host"; see "Allowing only listed programs"
+allow = []       # only with mode = "listed"
+
 [[commands.guard]]
 program = "git"
 reason  = "pushing is left to the person; ask them to push"
@@ -74,8 +83,11 @@ skipped in the plan. Nothing is mounted on a path that does not exist.
 | `ro` | a directory or a file | read-only |
 | `hide` | a directory or a file | a directory becomes an empty directory whose contents vanish at exit; a file reads as empty |
 
-Everything not named by the policy is visible read-only. `/dev` and `/proc` are the isolation's
-own. A host UNIX socket that is visible read-only can be connected to; use `hide` to stop that.
+Under the `host` mount mode, the default, everything not named by the policy is visible
+read-only; under `listed` it is not there at all (see
+[Showing only what is listed](#showing-only-what-is-listed-mountsmode)). `/dev` and `/proc` are
+the isolation's own either way. A host UNIX socket that is visible read-only can be connected
+to; use `hide` to stop that.
 
 All directives apply to the real path after resolving symbolic links, and items are mounted
 ancestors first, so the narrower item wins: `hide = ["/tmp"]` with `rw = ["/tmp/kakoi"]`
@@ -151,7 +163,11 @@ command line (`--rw`, `--hide`).
 
 - Lists concatenate (`env.path-prepend` puts the upper layer first). `commands.guard` is a list:
   an upper layer adds rules and cannot remove a lower layer's.
-- Scalars (`network.mode`, `env.mode`) take the upper layer.
+- `commands.allow` is a list too: an upper layer adds programs.
+- `mounts.mode`, `commands.mode`, and `mounts.system` keep the stricter value: once a layer
+  writes `listed` (or `system = false`), an upper layer cannot go back, so a job's policy that
+  is wrong never loosens the isolation.
+- Other scalars (`network.mode`, `env.mode`) take the upper layer.
 - Tables (`env.set`, `secrets`, `git.instead-of`) merge by key, with the upper layer winning.
 
 There is no way to remove a lower layer's item; make another profile instead. If the same path
@@ -176,6 +192,118 @@ visible and the plan says why. If that `ro` item could itself be re-pointed from
 path passes through a writable item), the launch stops with `path` instead. With a
 `hide-mounts` written, the mount list must be readable, or the launch stops with `path` rather
 than miss a mount.
+
+## Showing only what is listed: `mounts.mode`
+
+With `mounts.mode = "listed"`, the isolation shows only what is listed, and every other path is
+not there at all. That keeps out what a list of `hide` items cannot name ahead of time: the
+sockets under `/run` (`docker.sock`), those a new tool makes somewhere else, and your home's
+other directories with their keys and tokens. Inside, there is:
+
+- the base, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, and `/etc`, read-only, while
+  `mounts.system` is `true` (the default). It holds no socket or credential as a rule, and
+  without it nothing starts. A base directory the host does not have is skipped and shown in
+  the plan. `mounts.system = false` leaves the base out too, so list what the programs need
+  with `ro`; `system = false` without `mode = "listed"` does not load (`policy`);
+- the `rw`, `rw-file`, `rw-copy`, and `ro` items, which look as they do under `host`. A `hide`
+  item and the scan hide what is inside those places as before;
+- an empty, writable `/tmp` of the isolation's own; the host's `/tmp` (its X11 and ssh-agent
+  sockets) is not shown. A place under it written `rw` (`/tmp/kakoi`) is shared with the host
+  on top of that, and an item written for `/tmp` itself wins;
+- when `/etc/resolv.conf` is a link to a file outside the base (WSL2's `/mnt/wsl/resolv.conf`,
+  systemd's stub under `/run`), that one file, read-only, and nothing else of its directory. In
+  `filtered` mode `kakoi` puts its own `/etc/resolv.conf` instead, with or without the base;
+- `/dev` and `/proc`, the isolation's own as under `host`, and what `kakoi` places itself (the
+  command guards, the nesting mark).
+
+The directories on the way to what is shown are made by `kakoi` and hold only what is shown;
+they and the root are read-only, so `ls ~` lists only what you listed and nothing new can be
+put there. A symbolic link on the path of an item (`~/.claude/hooks` pointing into your
+dotfiles) is made again inside with the same target, read-only, so a tool finds the item at
+its usual path; what the written path leads to is the item itself and is shown without being
+listed again. A link that merely sits inside a shown directory, on the path of no item, is
+there as the host has it, but the place it points at is shown only when you list that place
+too. The writable places
+are the `rw`, `rw-file`, and `rw-copy` items, a directory hidden inside a shown place, `/tmp`,
+and what `/dev` provides.
+
+What is not shown is not hidden either: a `hide` written or generated (a secret file, the
+configuration directory's `secrets/`, a scan hit) for a place that is not shown is skipped with
+the reason in the plan, and so is a scan root or a `hide-mounts` `under` under which nothing is
+shown. A scan whose root holds a shown place still runs: with `root = "~"` and only the
+workspace shown, what it finds in the workspace (an `.env` it matches) is hidden, and what it
+finds elsewhere is skipped. A command guard wraps, and a command given by name is found as, only a program whose
+place and file are shown: a shim first on `PATH` that is not shown is passed over for the next
+one that is, and a name found nowhere shown is `command not found` (127). The current directory
+has to be inside a shown place, or the run stops with `path`, `--print-plan` included.
+
+With the `host` network, abstract UNIX sockets (which live outside the file system, such as a
+desktop's D-Bus) are cut too: `kakoi` restricts the isolation with Landlock's scope so that a
+socket made outside cannot be reached, while the processes inside can still reach each other's.
+A host whose Landlock lacks that scope (ABI 6, Linux 6.12) stops the launch with `bwrap`,
+`--print-plan` included. `none` and `filtered` have a network of their own and need no scope.
+
+Adjusting the bundled example to your machine is the usual start: show the directory of the
+shims on your `PATH` (mise's `~/.local/share/mise/shims`, Safe Chain) or the programs behind
+them are started directly, and show the places links in your configuration point at.
+
+## Allowing only listed programs: `commands.mode`
+
+With `commands.mode = "listed"`, only the programs `commands.allow` lists can be started inside
+the isolation, besides the dynamic linker (`/lib64/ld-linux-x86-64.so.2`) and `kakoi` itself,
+which `kakoi` allows on its own because nothing starts without them. The mode works with either
+mount mode.
+
+```toml
+[commands]
+mode  = "listed"
+allow = [
+    "~/.local/share/mise/installs/claude",   # a directory allows everything under it
+    "/usr/bin/git",
+    "/usr/lib/git-core",
+    "/usr/bin/sh",                           # a link allows the file it leads to
+]
+```
+
+A path is written as in a mount item. A directory allows everything under it, a file allows
+that file, and a link allows what it leads to (the rule lands on the file, whatever name starts
+it). An item the host does not have, or one the isolation does not have as written (a `hide`
+covers it or a link on its way, or the `listed` mount mode does not show them), is skipped
+with the reason in the plan and allows nothing, so the same policy starts on a machine that lacks
+a tool. `commands.allow` without `mode = "listed"` does not load (`policy`), so remove or keep
+the two together; list the programs your agent starts, itself included.
+
+A script started directly (one that begins with `#!`: a hook, `./gradlew`, a program under
+`node_modules/.bin`) needs its interpreter and the script itself allowed, so list the script, or
+a directory it is in, besides the interpreter. The hooks and the status line your agent runs
+are such scripts (`~/.claude/hooks`, `~/.codex/hooks`). A script handed to its interpreter
+(`sh ./script.sh`) needs only the interpreter.
+
+`kakoi` does this with Landlock, which forbids mounting once it restricts files, so it cannot be
+done before `bwrap` has made the isolation: `bwrap` starts `kakoi` itself as the isolation's
+first process, from a read-only place of its own, and that process restricts execution and then
+starts the command under the name it was given. When a [command guard](#command-guards) with
+`guard-absolute-path` places an allowed program again, the program placed again is allowed as
+that item, so the guarded program still starts. Inside an isolation made with `--nested=isolate`
+under the command guards of the outer run, all those guards are allowed without being listed,
+those over real programs included: a program allowed inside still starts through them and their
+rules still apply when it is started by name, or by its absolute path where a guard with
+`guard-absolute-path` covers it; a program not allowed inside does not start even through them;
+and an item written at the path an outer guard with `guard-absolute-path` covers allows the real
+program that guard starts. When the table of the outer guards cannot be read or interpreted (the
+inner `kakoi` is of another version than the outer one), the launch stops with `bwrap`, since
+a shell would otherwise start the real program past the outer rules. A program that is not allowed fails to start
+(`Permission denied`); the command itself that is not allowed ends the run with
+`command not executable` and 126. A host without Landlock stops the launch with `bwrap`,
+`--print-plan` included.
+
+It is a guardrail, not a boundary: the dynamic linker started by its absolute path runs any
+readable file as a program, and an allowed interpreter (`python3`, `node`) can load and run code
+it reads. Keeping those out of `allow` is what makes the list mean something (see
+[known gap 18](security.md#known-gaps)). Inside such an isolation `--nested=isolate` cannot make
+another one ([known gap 19](security.md#known-gaps)). The bundled `listed` example keeps the
+mode as a comment for this reason, and stops the dynamic linker started by name with a
+[command guard](#command-guards) instead.
 
 ## Network
 
@@ -403,9 +531,23 @@ examples.deny      = ["git commit --no-verify -m x", "git commit -nm x", "HUSKY=
 examples.allow     = ["git commit -m x", "git log -n 3", "HUSKY=0 git status"]
 ```
 
-A rule needs at least one of `deny`, `deny-flags`, `deny-option-values`, and `deny-env`. A list
-or a word sequence written empty, an unknown key, and a `program` that is empty, contains `/`, or
-is `kakoi` are `policy` errors.
+A rule needs at least one of `deny`, `deny-flags`, `deny-option-values`, `deny-env`, and
+`only`. A list or a word sequence written empty, an unknown key, and a `program` that is empty,
+contains `/`, or is `kakoi` are `policy` errors.
+
+`only` turns a rule around: it lists the ways of using the program that may pass, and any other
+run is denied, an unknown subcommand included.
+
+```toml
+[[commands.guard]]
+program            = "git"
+reason             = "only reading and committing are left to the agent"
+options-with-value = ["-C", "-c"]
+only               = [["status"], ["diff"], ["log"], ["commit"]]
+deny-flags         = ["--amend"]
+examples.deny      = ["git push", "git commit --amend -m x"]
+examples.allow     = ["git -C repo status", "git commit -m x"]
+```
 
 How a run is matched, given the words after the program name:
 
@@ -426,11 +568,17 @@ How a run is matched, given the words after the program name:
   follows the first `=` of `name=value`, matched against the option's list.
 - **`deny-env`.** A variable whose name matches one of the patterns (`*` and `?` as in
   `env.unset`) is set in the environment the guard is started with.
-- **`for`.** When present, `deny-flags`, `deny-option-values`, and `deny-env` apply only to a run
-  whose leading words (after the skipping) match one of its sequences; `deny` always applies.
+- **`only`.** Written and matched as `deny` is, words and skipping alike: the run is denied when
+  the words left after the skipping start with none of the `only` sequences.
+- **`for`.** When present, `deny-flags`, `deny-option-values`, `deny-env`, and `only` apply only
+  to a run whose leading words (after the skipping) match one of its sequences; `deny` always
+  applies.
 
 Within a rule the order is `deny-env`, `deny`, `deny-flags`, `deny-option-values`, and the first
-match denies. A run no rule denies is not denied.
+match denies. A run none of those deny in any rule is then held against the `only` of each rule
+that has one, each rule on its own: a rule in an upper layer cannot widen the `only` of one
+below, and a run passes only when it matches the `only` of every rule that applies to it. A run
+no rule denies is not denied.
 
 **Examples are checked when the policy is read.** Each example is split into words as a shell
 would split it; leading `NAME=value` words are the example's whole environment (the host's is not
@@ -451,7 +599,8 @@ on. An entry of `PATH` that is not an absolute path (an empty entry, or `.`) is 
 names a different place for every directory a program is started from. The guard is `kakoi`'s own executable, placed read-only in
 a tmpfs of its own together with the rules; it is laid over every mount item. When a run is
 denied, the guard prints `kakoi: guard: <program> <the words that matched>: <reason>` on
-standard error and exits 126 without starting the program; `<program>` is the `program` of the
+standard error and exits 126 without starting the program (for `only`, the words shown are the
+first word after the skipping, or the program's name when there is none); `<program>` is the `program` of the
 rule that matched, which tells which rule it was when two names reach the same real program.
 Otherwise it executes the real program in its own place, with the same `argv[0]`, arguments,
 environment, and working directory; when that `exec` fails, it exits 126 with the

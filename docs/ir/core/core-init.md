@@ -13,10 +13,10 @@
 
 ### REQ-256: initの作成内容
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-30-allowlist.md#A25
 - verification: unit
 
-initは設定ディレクトリのprofile/NAME.tomlへ同梱examples/profile/default.tomlと同一バイト列を書き、欠けている設定ディレクトリの祖先、自身、profile/、secrets/を作る。
+initは設定ディレクトリのprofile/NAME.tomlへ、"--example" で選んだ同梱の見本（書かなければexamples/profile/default.toml、"listed" ならexamples/profile/listed.toml）と同一バイト列を書き、欠けている設定ディレクトリの祖先、自身、profile/、secrets/を作る。
 
 ### REQ-257: initのリンクとモード
 - kind: ubiquitous
@@ -34,10 +34,17 @@ init成功時は実体化しない構築済み出力パス1行だけを標準出
 
 ### REQ-259: initの独立した検査
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-30-allowlist.md#A25, docs/decision/brainstorm/2026-09-30-allowlist.md#A32
 - verification: unit
 
-initは文法、HOMEの検査、書き込みの順に実行する。XDG_CONFIG_HOMEがあってもHOME検査を行う。ポリシー読込、workspace導出、マウント解決、bwrap所在確認、入れ子検出を行わない。NAME以外の引数はusage。
+initは文法、HOMEの検査、書き込みの順に実行する。XDG_CONFIG_HOMEがあってもHOME検査を行う。ポリシー読込、workspace導出、マウント解決、bwrap所在確認、入れ子検出を行わない。NAMEと"--example"以外の引数はusage。
+
+### REQ-482: initの見本の選択
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A25, docs/decision/brainstorm/2026-09-30-allowlist.md#A32, docs/decision/brainstorm/2026-09-30-allowlist.md#A53
+- verification: unit
+
+initは "--example" を "--example=VALUE" と "--example VALUE" の形で受け付け、VALUE は "default" と "listed" だけとする。ほかの値、値の無い "--example"、2回以上の "--example" は usage で 125 とする。"--example" を書かなければ "default" とする。"--example" は init の形でだけ受け付け、実行、計画表示、単独の--version、単独の--help に付けると usage で 125 とする。
 
 ## Examples
 
@@ -72,4 +79,22 @@ Scenario: initの独立した検査
   When bwrapがPATHにない状態でinitする
   Then 書き込み条件を満たせば入れ子警告なしで成功する
 
+
+@id=EX-937 @about=REQ-482,REQ-256 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A25
+Scenario: 見本を選んで書き出す
+  Given 設定ディレクトリが存在しない
+  When "kakoi init work --example listed" を実行する
+  Then profile/work.toml が同梱の listed.toml と同一バイト列になる
+
+@id=EX-938 @about=REQ-482 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A32,docs/decision/brainstorm/2026-09-30-allowlist.md#A53
+Scenario: 知らない見本の名前は受け付けない
+  Given 設定ディレクトリが存在しない
+  When "kakoi init work --example strict" を実行する
+  Then usage で 125 となり、何も書かない
+
+@id=EX-939 @about=REQ-482 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A32
+Scenario: 実行の形には見本を付けられない
+  Given 実行の形で起動する
+  When "--example listed" を付ける
+  Then usage で 125 となる
 ```

@@ -35,6 +35,7 @@ kakoi を使う人が、何を指定すると何が起き、何がエラーに�
 | [シム](reference/11-shim.md) | コマンドを kakoi に通す薄いスクリプト |
 | [セットアップスキル](reference/12-setup-skill.md) | 導入を手伝うスキルと承認の境界 |
 | [コマンドのガードレール](reference/13-command-guard.md) | 隔離の中で起動されるプログラムの使い方を止める規則と見張り役 |
+| [見せるものを選ぶモード](reference/14-listed.md) | `mounts.mode` と `commands.mode` の `"listed"`、同梱の見本 |
 
 ### ネットワーク
 

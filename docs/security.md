@@ -34,7 +34,10 @@ allows.
 
 When the launch is not refused:
 
-- the process sees the file system the policy describes, and nothing the policy hides;
+- the process sees the file system the policy describes, and nothing the policy hides; under
+  the `listed` [mount mode](policy.md#showing-only-what-is-listed-mountsmode), nothing but the
+  base and the places the policy lists is there at all, and with the `host` network no abstract
+  UNIX socket made outside can be reached;
 - `rw` and `rw-file` items are the only places whose writes reach the host; an `rw-copy` item is
   writable from inside, and everything written there lives in the isolation's own tmpfs and goes
   with it;
@@ -58,7 +61,7 @@ When the launch is not refused:
   `.git/config`, build scripts) is read by whatever you later run on the host.
 - Complete protection of `ro` and `hide` items placed inside an `rw` area; see known gap 15.
 - That a command guard stops what it names: a guard is a guardrail, not part of the boundary
-  (see below).
+  (see below). The same holds for the `listed` command mode.
 
 ## The `filtered` network
 
@@ -129,6 +132,19 @@ narrower permissions or limit its traffic with the `filtered` network's allow ru
 program from being used at all, `hide` it; when what needs protecting is a resource (the docker
 socket, say), `hide` the resource, since the program is not the only way to reach it.
 
+## Allowing only listed programs is not a boundary either
+
+The `listed` [command mode](policy.md#allowing-only-listed-programs-commandsmode) stops every
+program `commands.allow` does not list from starting, with Landlock, so unlike a command guard it
+also stops a program nobody thought of. It is still a guardrail: a program that is allowed can do
+what an unlisted one would without starting it. The dynamic linker, which `kakoi` has to allow
+for anything to start, runs any readable file as a program when it is started by its absolute
+path; an allowed interpreter (`python3`, `node`) can read a file and run it as code from memory;
+and an executable copied into a `memfd` starts. Allowing an interpreter opens that way, so a list
+that should mean something leaves them out. What keeps sockets and credentials out of reach is
+the `listed` mount mode and the `filtered` network, not the list of programs. See known gaps 18
+and 19.
+
 ## Known gaps
 
 1. A command inside a hidden directory is still found by the `PATH` search, which runs on the
@@ -158,7 +174,7 @@ socket, say), `hide` the resource, since the program is not the only way to reac
    the outer and the inner policy place command guards, the inner isolation is not made either.
    A `kakoi` inside that did not take itself to be nested can make a shared file place in a
    writable place of the outer isolation, and the outer agent can then put content into the
-   files that launch hides. And when the outer and the inner policy make the same file
+   files that launch hides. When the outer and the inner policy make the same file
    `rw-copy`, the inner isolation cannot be made.
 9. `kakoi` trusts the environment it starts in: `HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`,
    `PATH`, and the current directory. That includes the current directory: `cd` into a
@@ -203,6 +219,13 @@ socket, say), `hide` the resource, since the program is not the only way to reac
 17. From inside a `host` isolation whose policy sets `network.allow-nested-filtered = true`,
     persistent tun and tap devices in the host's network namespace that have no owner set, or
     are owned by your user, can be read and written.
+18. The `listed` command mode stops unlisted programs from starting with Landlock, as a
+    guardrail and not a boundary. It does not stop the dynamic linker started by its absolute
+    path from running a readable file as a program, an allowed interpreter (`python3`, `node`)
+    from loading a readable file into executable memory, or an executable copied into a
+    `memfd` from starting.
+19. Inside an isolation whose command mode is `listed`, `--nested=isolate` cannot make an
+    isolation: Landlock forbids mounting there.
 
 ## Not supported yet
 
@@ -215,8 +238,8 @@ socket, say), `hide` the resource, since the program is not the only way to reac
 - `bwrap --new-session`
 - aarch64, 32-bit, and x32 binaries
 - protection of `.git/hooks` and `.git/config`
-- stopping programs written or downloaded into a writable place from running (command guards
-  watch how a program on `PATH` is used; `hide` keeps a given program from being used)
+- stopping every way of running a program written or downloaded into a writable place (the
+  `listed` command mode stops starting it directly, but not the ways of known gap 18)
 - tool-section values for any command other than codex (fill in your own in a copy of
   [`examples/shim/codex`](../examples/shim/codex))
 - `init --force` (remove the file first)

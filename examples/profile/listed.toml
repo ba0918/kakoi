@@ -1,0 +1,134 @@
+# A profile that shows only what it lists, written for WSL2 with claude and codex
+# installed by mise. `kakoi init NAME --example listed` writes this file out as
+# $XDG_CONFIG_HOME/kakoi/profile/NAME.toml (or ~/.config/kakoi/profile/NAME.toml) and
+# prints the path; start it with `kakoi --profile NAME -- claude`.
+#
+# With `mounts.mode = "listed"`, a path this file does not list is not there inside the
+# isolation at all: /run (docker.sock and the other sockets), /mnt, and the rest of your
+# home (~/.ssh, the credentials under ~/.config) do not exist. Only the base (/usr, /bin,
+# /sbin, /lib, /lib64, /etc, read-only), the places below, an empty /tmp of the
+# isolation's own, and the file /etc/resolv.conf points at are shown.
+#
+# Adjust it to your machine:
+# - If PATH starts with shims (mise's ~/.local/share/mise/shims, Safe Chain, your own),
+#   show their directory under `ro`. A shim that is not shown is passed over, and the
+#   program behind it is started directly, without whatever the shim checks.
+# - If something you show is a symbolic link to a place outside it (hooks or settings
+#   kept in dotfiles), show that place too; the link itself is made again inside, but
+#   what it points at is not shown unless you list it.
+# - claude and codex below are where mise installs them; change the paths if yours are
+#   elsewhere.
+#
+# Paths are absolute, start with `~` (the real path of HOME), or start with one of the
+# four variables: ${workspace}, ${worktree}, ${git_common_dir}, ${config_dir}. An item
+# whose path does not exist is skipped and shown as skipped in `--print-plan`.
+
+[mounts]
+mode = "listed"
+
+# The work place: the workspace, the worktree it is in, and the shared .git of a linked
+# worktree or a submodule (skipped when the worktree is not under git). /tmp/kakoi is
+# the one directory under /tmp shared with the host, created by you or by your shim.
+rw = [
+    "${workspace}",
+    "${worktree}",
+    "${git_common_dir}",
+    "/tmp/kakoi",
+    # package caches
+    "~/.cache",
+    "~/.cargo/registry",
+    "~/.cargo/git",
+    "~/.npm",
+    "~/.bun/install/cache",
+    # the agents' own state
+    "~/.codex",
+    "~/.claude",
+]
+
+# Lives directly under HOME, which is not shown. Claude Code writes it in place.
+rw-file = ["~/.claude.json"]
+
+ro = [
+    # the agents themselves, as mise installs them
+    "~/.local/share/mise/installs/claude",
+    "~/.local/share/mise/installs/codex",
+    # the instructions and settings the agents run under are read-only; their runtime
+    # state above is rw
+    "~/.codex/AGENTS.md",
+    "~/.codex/hooks.json",
+    "~/.codex/hooks",
+    "~/.codex/skills",
+    "~/.codex/prompts",
+    "~/.claude/CLAUDE.md",
+    "~/.claude/settings.json",
+    "~/.claude/hooks",
+    "~/.claude/rules",
+    "~/.claude/output-styles",
+    "~/.claude/agents",
+    "~/.claude/commands",
+    "~/.claude/skills",
+]
+
+# Environment files anywhere in the worktree read as empty inside the isolation.
+[[mounts.scan]]
+root    = "${worktree}"
+names   = [".env", ".env.*"]
+exclude = ["*.example", "*.sample", "*.dist", "*.template"]
+prune   = [".git", "node_modules"]
+
+[network]
+mode = "host"
+
+[env]
+mode = "inherit"
+# The sockets these variables name are not shown; credentials in the host environment
+# are dropped by name.
+unset = [
+    "SSH_AUTH_SOCK",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "*_TOKEN",
+    "*_API_KEY",
+    "*_SECRET*",
+    "*_PASSWORD",
+    "AWS_*",
+    "GH_*",
+    "GITHUB_*",
+]
+
+# Which programs may start. Left as a comment: with it, every program not listed
+# (cargo, npm, the tools of each project) stops, so list what your work needs before
+# you use it. `mode` and `allow` go together: remove or keep both, because `allow`
+# without `mode = "listed"` does not load. claude and codex themselves must be listed,
+# and what they start at their own start (git, sh, uname, and the programs your hooks
+# and status line run). A script started directly (#!), such as a hook, needs the file
+# itself, or a directory it is in, listed besides its interpreter. This is a guardrail,
+# not a boundary: a program allowed here (sh, python3) can still do what an unlisted one
+# would (see docs/security.md).
+#
+# [commands]
+# mode = "listed"
+# allow = [
+#     "~/.local/share/mise/installs/claude",
+#     "~/.local/share/mise/installs/codex",
+#     "/usr/bin/git",
+#     "/usr/lib/git-core",
+#     "/usr/bin/sh",
+#     "/usr/bin/bash",
+#     "/usr/bin/uname",
+#     "/usr/bin/lsb_release",
+#     "/usr/bin/getconf",
+#     "~/.claude/hooks",
+#     "~/.codex/hooks",
+# ]
+
+# The dynamic linker started by name runs any file as a program, which the command mode
+# above cannot stop (the dynamic linker has to be allowed for anything to start), so it
+# is stopped here whatever it is given. The one pattern of `only` matches no word at all.
+# Started by its absolute path it is not watched (see docs/security.md).
+[[commands.guard]]
+program = "ld.so"
+reason = "starting programs through the dynamic linker is not allowed"
+only = [["/[^\\s\\S]/"]]
+examples.deny = ["ld.so", "ld.so /usr/bin/git", "ld.so --list /usr/bin/git"]

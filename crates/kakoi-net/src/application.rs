@@ -15,7 +15,11 @@ pub fn prepare(plan: &Plan, namespace: &NetworkNamespace) -> Result<BwrapCommand
     let uid = unsafe { libc::getuid() };
     let gid = unsafe { libc::getgid() };
     let mut effective = plan.clone();
-    if plan.policy.network_mode == kakoi_core::policy::NetworkMode::Filtered {
+    // The "listed" mount mode plans the destination from the facts it collected, and
+    // makes the directories on the way to it.
+    if plan.policy.network_mode == kakoi_core::policy::NetworkMode::Filtered
+        && plan.policy.mounts_mode == kakoi_core::policy::ListMode::Host
+    {
         // bwrap 0.9 cannot mount data directly over an absolute symlink. Resolve
         // the host path in the executor, while keeping core planning pure.
         let target = std::fs::canonicalize("/etc/resolv.conf").map_err(|error| {

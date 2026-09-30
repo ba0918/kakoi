@@ -21,17 +21,34 @@ const LINK_LIMIT: usize = 40;
 /// asked for, walks every scan from its real root, and, when a `hide-mounts` asks for it,
 /// reads the mount list and looks up each mount target under its `under`.
 pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
+    let mut facts = collect_path_facts(candidates);
+    collect_generator_facts(candidates, &mut facts);
+    facts
+}
+
+/// Looks up every candidate path and walks the resolution of every path whose traversal
+/// is asked for: the facts the resolution needs before it knows which scans and
+/// `hide-mounts` apply.
+pub fn collect_path_facts(candidates: &Candidates) -> MountFacts {
     let mut facts = MountFacts::default();
     for path in &candidates.paths {
         facts.paths.insert(path.clone(), real_entry(path));
     }
     for path in &candidates.traversals {
         let traversal = traverse(path);
+        facts.link_targets.extend(traversal.targets);
         facts.links.insert(path.clone(), traversal.links);
         facts
             .directories
             .insert(path.clone(), traversal.directories);
     }
+    facts
+}
+
+/// Adds to `facts`, which hold the real paths of the scan roots and the `under`s, what
+/// every scan of `candidates` finds from its real root and, when a `hide-mounts` asks for
+/// it, the mount list and each mount target under its `under`.
+pub fn collect_generator_facts(candidates: &Candidates, facts: &mut MountFacts) {
     for request in &candidates.scans {
         if let Some(root) = facts.entry(&request.root).path() {
             facts
@@ -57,7 +74,6 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
             }
         }
     }
-    facts
 }
 
 /// What resolving one path passed through: the symbolic links, each by its own place (its
@@ -67,6 +83,8 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
 pub struct Traversal {
     pub links: Vec<PathBuf>,
     pub directories: Vec<PathBuf>,
+    /// The target, as written, of each link in `links` that could be read.
+    pub targets: Vec<(PathBuf, PathBuf)>,
 }
 
 /// Walks the resolution of the absolute `path` as the kernel does: component by
@@ -129,11 +147,12 @@ fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
             break;
         }
         let target = fs::read_link(&candidate);
-        traversal.links.push(candidate);
+        traversal.links.push(candidate.clone());
         let Ok(target) = target else {
             complete = false;
             break;
         };
+        traversal.targets.push((candidate, target.clone()));
         if target.is_absolute() {
             resolved = PathBuf::from("/");
         }

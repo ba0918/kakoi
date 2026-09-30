@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::command_limits::{AllowedList, CommandLimits, ALLOWED_LIST, FIRST_PROCESS, FIRST_ROOT};
 use crate::copies::{CopiedEntry, CopySource, CopySources, FileContent, NotCopied};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
@@ -14,6 +15,7 @@ use crate::isolated_env::{
     assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
 };
 use crate::layers::{Directive, Layer, Policy, PolicySource};
+use crate::listed::{listed_root, set_aside_unshown, shown_generators, ListedRoot};
 use crate::mounts::{
     generate, policy_sources, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
     MountFacts, ResolvedItem, ResolvedMounts, SkippedPath,
@@ -22,7 +24,7 @@ use crate::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
     ProtectedPaths,
 };
-use crate::policy::NetworkMode;
+use crate::policy::{ListMode, NetworkMode};
 use crate::shared_files::SharedFile;
 use crate::variables::Variables;
 
@@ -74,6 +76,8 @@ pub struct Isolation {
     pub environment: Environment,
     pub warnings: Vec<Warning>,
     pub policy_sources: Vec<PolicySource>,
+    /// The root of the "listed" mount mode; none under "host".
+    pub listed: Option<ListedRoot>,
 }
 
 /// Stage 7 of specification section 13, in its order: the identity of the written mount
@@ -98,14 +102,29 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     );
-    let mounts = generate(
+    let (generating, skipped_generators) = generating_policy(inputs, &facts.mounts)?;
+    let mut mounts = generate(
         before_generation,
-        inputs.expanded,
+        &generating,
         inputs.layers,
         inputs.variables,
         &facts.mounts,
         &swappable_ro,
     )?;
+    let mut skipped = skipped_paths(inputs.expanded, &facts.mounts);
+    let listed = (inputs.policy.mounts_mode == ListMode::Listed).then(|| {
+        let (root, skipped_base) = listed_root(
+            inputs.policy.mounts_system,
+            inputs.policy.network_mode,
+            &mounts.items,
+            inputs.expanded,
+            &facts.mounts,
+        );
+        skipped.extend(skipped_base);
+        skipped.extend(skipped_generators);
+        set_aside_unshown(&mut mounts, &root);
+        root
+    });
     let protected = ProtectedPaths {
         shared_files: inputs
             .shared_files
@@ -122,6 +141,9 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     )?;
+    if let Some(root) = &listed {
+        check_current_dir_shown(inputs.current_dir, root)?;
+    }
     // A `path-prepend` entry enters `PATH` as its real path; one that names nothing is
     // skipped like a mount item would be, and reported (specification section 5.2).
     let path_prepend: Vec<PathBuf> = inputs
@@ -136,11 +158,47 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     warnings.extend(assembled.warnings);
     Ok(Isolation {
         mounts,
-        skipped_paths: skipped_paths(inputs.expanded, &facts.mounts),
+        skipped_paths: skipped,
         environment: assembled.environment,
         warnings,
         policy_sources: policy_sources(inputs.layers, &facts.mounts),
+        listed,
     })
+}
+
+/// The policy whose scans and `hide-mounts` generate `hide` items: under the "listed"
+/// mount mode, those rooted where nothing is shown are set aside, with the reason, by the
+/// places the written items show, before anything is walked or the mount list is read
+/// for them (specification REQ-468); otherwise the policy as it is. The outer layer
+/// collects the facts of the scans and the `hide-mounts` of this policy only.
+pub fn generating_policy(
+    inputs: &Inputs,
+    facts: &MountFacts,
+) -> Result<(ExpandedPolicy, Vec<SkippedPath>), Diagnostic> {
+    if inputs.policy.mounts_mode != ListMode::Listed {
+        return Ok((inputs.expanded.clone(), Vec::new()));
+    }
+    let written = resolve_written(inputs.expanded, facts)?;
+    let (root, _) = listed_root(
+        inputs.policy.mounts_system,
+        inputs.policy.network_mode,
+        &written.items,
+        inputs.expanded,
+        facts,
+    );
+    Ok(shown_generators(inputs.expanded, facts, &root))
+}
+
+/// The current directory of a "listed" isolation is one of the places it shows
+/// (specification REQ-483): any other is not there, and bwrap would fail to enter it.
+fn check_current_dir_shown(current_dir: &Path, root: &ListedRoot) -> Result<(), Diagnostic> {
+    if root.shows(current_dir) {
+        return Ok(());
+    }
+    Err(Diagnostic::path(format!(
+        "the current directory {} is not among the places the \"listed\" mount mode shows",
+        current_dir.display()
+    )))
 }
 
 /// Whether a run puts anything from the shared file place: the empty file of a `hide` of a
@@ -182,6 +240,8 @@ pub struct Plan {
     pub command: Option<ResolvedCommand>,
     /// The command guards placed and skipped.
     pub guards: GuardPlan,
+    /// The programs the "listed" command mode lets start; none under "host".
+    pub commands: Option<CommandLimits>,
     pub arguments: Vec<Argument>,
 }
 
@@ -195,11 +255,14 @@ pub fn plan(
     bwrap: PathBuf,
     command: Option<ResolvedCommand>,
     guards: GuardPlan,
+    commands: Option<CommandLimits>,
 ) -> Plan {
     let provisions = Provisions {
         shared_files: inputs.shared_files.map(Path::to_path_buf),
         tun: inputs.policy.allow_nested_filtered,
         outer_guard: inputs.outer_guard,
+        listed: isolation.listed.clone(),
+        commands: commands.clone(),
     };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
@@ -235,6 +298,7 @@ pub fn plan(
         bwrap,
         command,
         guards,
+        commands,
         arguments,
     }
 }
@@ -287,6 +351,12 @@ pub struct Provisions {
     /// Whether the command guards of the run around a nested one are shown inside as
     /// they are (specification REQ-465).
     pub outer_guard: bool,
+    /// The root of the "listed" mount mode; none under "host", where the host's root is
+    /// shown read-only.
+    pub listed: Option<ListedRoot>,
+    /// The programs the "listed" command mode lets start: the isolation's first process
+    /// is kakoi, which restricts execution to them and then starts the command.
+    pub commands: Option<CommandLimits>,
 }
 
 impl Provisions {
@@ -333,16 +403,21 @@ pub fn bwrap_arguments(
     provisions: &Provisions,
     command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
-    let mut arguments = vec![
-        Argument::text("--ro-bind"),
-        Argument::text("/"),
-        Argument::text("/"),
+    let mut arguments = match provisions.listed {
+        Some(_) => vec![Argument::text("--tmpfs"), Argument::text("/")],
+        None => vec![
+            Argument::text("--ro-bind"),
+            Argument::text("/"),
+            Argument::text("/"),
+        ],
+    };
+    arguments.extend([
         Argument::text("--dev"),
         Argument::text("/dev"),
         Argument::text("--ro-bind-data"),
         Argument::EmptyFile,
         Argument::text(NESTING_MARK),
-    ];
+    ]);
     if provisions.tun {
         arguments.extend([
             Argument::text("--dev-bind"),
@@ -381,6 +456,9 @@ pub fn bwrap_arguments(
             Argument::text(command.command.as_os_str()),
         ]);
     }
+    if let Some(root) = &provisions.listed {
+        arguments.extend(listed_arguments(root));
+    }
     for item in items {
         let real = Argument::text(item.real.as_os_str());
         match (item.directive, item.kind) {
@@ -404,13 +482,69 @@ pub fn bwrap_arguments(
     if network_mode == NetworkMode::Filtered {
         // Apply after user mounts so a copied/hidden host resolver file cannot
         // silently redirect the application's ordinary DNS lookups.
-        arguments.extend(provisions.put(SharedFile::Resolver, "/etc/resolv.conf"));
+        let destination = provisions
+            .listed
+            .as_ref()
+            .and_then(|root| root.filtered_resolver.as_deref())
+            .unwrap_or(Path::new("/etc/resolv.conf"));
+        arguments.extend(provisions.put(SharedFile::Resolver, destination.as_os_str()));
     }
-    arguments.extend(guard_arguments(guards));
+    arguments.extend(guard_arguments(guards, provisions.commands.as_ref()));
+    if provisions.listed.is_some() {
+        arguments.extend([Argument::text("--remount-ro"), Argument::text("/")]);
+    }
     if let Some(command) = command {
         arguments.push(Argument::text("--"));
+        if provisions.commands.is_some() {
+            arguments.push(Argument::text(FIRST_PROCESS));
+        }
         arguments.push(Argument::text(command.path.as_os_str()));
         arguments.extend(command.arguments.iter().map(Argument::text));
+    }
+    arguments
+}
+
+/// The arguments that lay out the root of the "listed" mount mode before the mount items:
+/// the isolation's own `/tmp`, first so that what is made under it stays and a written
+/// item at `/tmp` covers it; the directories on the way to what is shown, made by kakoi
+/// rather than by bwrap, which would make them readable by their owner only; the base;
+/// the links on the written paths; and the resolver configuration's target. The root is
+/// made read-only after everything else.
+fn listed_arguments(root: &ListedRoot) -> Vec<Argument> {
+    let mut arguments = vec![
+        Argument::text("--perms"),
+        Argument::text("1777"),
+        Argument::text("--tmpfs"),
+        Argument::text("/tmp"),
+    ];
+    for directory in &root.directories {
+        arguments.extend([
+            Argument::text("--perms"),
+            Argument::text("0755"),
+            Argument::text("--dir"),
+            Argument::text(directory.as_os_str()),
+        ]);
+    }
+    for directory in &root.base {
+        arguments.extend([
+            Argument::text("--ro-bind"),
+            Argument::text(directory.as_os_str()),
+            Argument::text(directory.as_os_str()),
+        ]);
+    }
+    for link in &root.links {
+        arguments.extend([
+            Argument::text("--symlink"),
+            Argument::text(link.target.as_os_str()),
+            Argument::text(link.place.as_os_str()),
+        ]);
+    }
+    if let Some(resolver) = &root.resolver {
+        arguments.extend([
+            Argument::text("--ro-bind"),
+            Argument::text(resolver.as_os_str()),
+            Argument::text(resolver.as_os_str()),
+        ]);
     }
     arguments
 }
@@ -477,44 +611,34 @@ fn copy_arguments(item: &ResolvedItem, source: Option<&CopySource>) -> Vec<Argum
     }
 }
 
-/// The arguments that place the command guards, after the user's mounts so that none of
-/// them covers a guard: a tmpfs of kakoi's own under bwrap's `/dev`, a bind of kakoi's
-/// executable for each guard (each its own, so that the guard tells where it was started
-/// from), each program of `guard-absolute-path` bound again inside the tmpfs and a guard
-/// bound over its own path, the table, and the tmpfs made read-only. Nothing when no
-/// guard is placed. No argument is a bare `--`.
-fn guard_arguments(guards: &GuardPlan) -> Vec<Argument> {
-    let Some(kakoi) = guards
+/// The arguments that place the command guards and the first process of the "listed"
+/// command mode, after the user's mounts so that none of them covers what kakoi places:
+/// each in a tmpfs of kakoi's own under bwrap's `/dev`, made read-only once filled.
+/// Nothing when there is neither. No argument is a bare `--`.
+fn guard_arguments(guards: &GuardPlan, commands: Option<&CommandLimits>) -> Vec<Argument> {
+    let mut arguments = Vec::new();
+    if let Some(kakoi) = guards
         .executable
         .as_deref()
         .filter(|_| !guards.placed.is_empty())
-    else {
-        return Vec::new();
-    };
-    let bind = |from: &Path, to: &Path| {
-        [
-            Argument::text("--ro-bind"),
-            Argument::text(from.as_os_str()),
-            Argument::text(to.as_os_str()),
-        ]
-    };
-    let directory = |path: &Path| {
-        [
-            Argument::text("--perms"),
-            Argument::text("0755"),
-            Argument::text("--dir"),
-            Argument::text(path.as_os_str()),
-        ]
-    };
-    let mut arguments = vec![
-        Argument::text("--perms"),
-        Argument::text("0755"),
-        Argument::text("--tmpfs"),
-        Argument::text(GUARD_ROOT),
-    ];
+    {
+        arguments.extend(guard_tmpfs(kakoi, guards));
+    }
+    if let Some(limits) = commands {
+        arguments.extend(first_process_tmpfs(limits));
+    }
+    arguments
+}
+
+/// The tmpfs of the command guards: a bind of kakoi's executable for each guard (each
+/// its own, so that the guard tells where it was started from), each program of
+/// `guard-absolute-path` bound again inside the tmpfs and a guard bound over its own
+/// path, and the table.
+fn guard_tmpfs(kakoi: &Path, guards: &GuardPlan) -> Vec<Argument> {
+    let mut arguments = Vec::from(tmpfs(GUARD_ROOT));
     arguments.extend(directory(Path::new(GUARD_LOCATION)));
     for guard in &guards.placed {
-        arguments.extend(bind(kakoi, &guard.guard()));
+        arguments.extend(read_only_bind(kakoi, &guard.guard()));
     }
     for (real, relocated) in &guards.overlaid {
         // bwrap would make the missing directories itself, readable by their owner only.
@@ -524,19 +648,72 @@ fn guard_arguments(guards: &GuardPlan) -> Vec<Argument> {
         for directory_path in [parent.parent(), Some(parent)].into_iter().flatten() {
             arguments.extend(directory(directory_path));
         }
-        arguments.extend(bind(real, relocated));
-        arguments.extend(bind(kakoi, real));
+        arguments.extend(read_only_bind(real, relocated));
+        arguments.extend(read_only_bind(kakoi, real));
     }
-    arguments.extend([
+    arguments.extend(read_only_data(guards.table.to_bytes(), GUARD_TABLE));
+    arguments.extend(remount_read_only(GUARD_ROOT));
+    arguments
+}
+
+/// The tmpfs of the first process: kakoi's executable and the list of the programs it
+/// allows.
+fn first_process_tmpfs(limits: &CommandLimits) -> Vec<Argument> {
+    let mut arguments = Vec::from(tmpfs(FIRST_ROOT));
+    arguments.extend(read_only_bind(&limits.executable, Path::new(FIRST_PROCESS)));
+    let allowed: Vec<PathBuf> = limits
+        .allowed
+        .iter()
+        .chain(&limits.relocated)
+        .chain(&limits.outer_guards)
+        .cloned()
+        .collect();
+    arguments.extend(read_only_data(
+        AllowedList::new(&allowed).to_bytes(),
+        ALLOWED_LIST,
+    ));
+    arguments.extend(remount_read_only(FIRST_ROOT));
+    arguments
+}
+
+fn tmpfs(path: &str) -> [Argument; 4] {
+    [
+        Argument::text("--perms"),
+        Argument::text("0755"),
+        Argument::text("--tmpfs"),
+        Argument::text(path),
+    ]
+}
+
+fn directory(path: &Path) -> [Argument; 4] {
+    [
+        Argument::text("--perms"),
+        Argument::text("0755"),
+        Argument::text("--dir"),
+        Argument::text(path.as_os_str()),
+    ]
+}
+
+fn read_only_bind(from: &Path, to: &Path) -> [Argument; 3] {
+    [
+        Argument::text("--ro-bind"),
+        Argument::text(from.as_os_str()),
+        Argument::text(to.as_os_str()),
+    ]
+}
+
+fn read_only_data(content: Vec<u8>, to: &str) -> [Argument; 5] {
+    [
         Argument::text("--perms"),
         Argument::text("0444"),
         Argument::text("--ro-bind-data"),
-        Argument::CopiedFile(FileContent::new(guards.table.to_bytes())),
-        Argument::text(GUARD_TABLE),
-        Argument::text("--remount-ro"),
-        Argument::text(GUARD_ROOT),
-    ]);
-    arguments
+        Argument::CopiedFile(FileContent::new(content)),
+        Argument::text(to),
+    ]
+}
+
+fn remount_read_only(path: &str) -> [Argument; 2] {
+    [Argument::text("--remount-ro"), Argument::text(path)]
 }
 
 /// A mode as bwrap's `--perms` takes it.

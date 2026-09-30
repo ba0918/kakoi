@@ -23,6 +23,10 @@ fn main() -> ExitCode {
     if let Some(code) = kakoi::guard::run_if_guard() {
         return code;
     }
+    // So is the isolation's first process of the "listed" command mode.
+    if let Some(code) = kakoi::first_process::run_if_first_process() {
+        return code;
+    }
     // The isolation's process 1 of a filtered run is this executable (kakoi-net).
     kakoi_net::init::run_if_requested();
     match startup::prepare(std::env::args_os().skip(1)) {

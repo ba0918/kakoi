@@ -6,7 +6,7 @@
 その条件は [ポリシーを保護する配置](06-policy-placement.md) が定める。
 
 ## キーの一覧
-<!-- @kotowari[REQ-151:5e504e1b] -->
+<!-- @kotowari[REQ-151:c00a108a] -->
 
 ポリシーファイルに書けるキーは次の表のとおりである。
 表にない固定キーを書くと、ポリシーの読み込みに失敗する（種類 `policy` の診断、終了コード 125）。
@@ -17,6 +17,8 @@
 
 | セクション | キー | 型 | 既定値 | 意味 | 詳細 |
 |---|---|---|---|---|---|
+| `mounts` | `mode` | 文字列 `"host"` `"listed"` | `"host"` | 書いていない場所をホストのまま見せるか、土台と書いた場所だけを見せるか | [見せるものを選ぶモード](14-listed.md) |
+| `mounts` | `system` | 真偽値 | `true` | `"listed"` のときに土台を見せるか | [見せるものを選ぶモード](14-listed.md) |
 | `mounts` | `rw` | パスの配列 | 空 | 読み書きできるようにする場所 | [マウント](07-mounts.md) |
 | `mounts` | `rw-file` | パスの配列 | 空 | 読み書きできるようにする単独のファイル | [マウント](07-mounts.md) |
 | `mounts` | `rw-copy` | パスの配列 | 空 | 複製を置き、書き込みをホストへ戻さない場所 | [マウント](07-mounts.md) |
@@ -50,6 +52,8 @@
 | `network` | `dns-zero-ttl-grace-milliseconds` | 整数（100〜10000） | 1000 | TTL が 0 の応答で得た IP へ新しく接続できる猶予 | [DNS](network/04-dns.md) |
 | `network` | `udp-idle-timeout-seconds` | 整数（1〜86400） | 120 | UDP の無通信期限 | [DNS](network/04-dns.md) |
 | `process` | `shutdown-grace-seconds` | 整数（1〜300） | 5 | filtered で終了を待つ猶予 | [プロセス監督](network/07-lifecycle.md) |
+| `commands` | `mode` | 文字列 `"host"` `"listed"` | `"host"` | 起動できるプログラムを `allow` に書いたものに絞るか | [見せるものを選ぶモード](14-listed.md) |
+| `commands` | `allow` | パスの配列 | 空 | `mode = "listed"` のときに起動を許すプログラム | [見せるものを選ぶモード](14-listed.md) |
 | `commands` | `guard` | テーブルの配列 | 空 | 隔離の中で起動されるプログラムの使い方を止める規則 | [コマンドのガードレール](13-command-guard.md) |
 
 `network.allow`、`network.publish`、`network.dns-upstream` の各項目の中のキーと、`network` と `process` のキーを書いたときに `network.mode` の明示が要る条件は、それぞれの詳細の章が定める。
@@ -59,13 +63,15 @@
 同梱プロファイルは両方を明示している（`env.mode = "inherit"`、`network.mode = "host"`）。
 
 ## ファイルの形式
-<!-- @kotowari[REQ-151:5e504e1b, EX-350:b2bc402d, EX-351:620df7f9] -->
+<!-- @kotowari[REQ-151:c00a108a, EX-350:b2bc402d, EX-351:620df7f9] -->
 
 ポリシーファイルは TOML で書く。
 次の例は形を示すためのもので、値は例である。
 
 ```toml
 [mounts]
+mode    = "host"
+system  = true
 rw      = ["${workspace}", "${worktree}", "${git_common_dir}", "/tmp/kakoi", "~/.cache"]
 rw-file = ["~/.claude.json"]
 rw-copy = ["~/.gitconfig"]
@@ -97,6 +103,10 @@ GH_TOKEN = "${config_dir}/secrets/gh-token"
 
 [git.instead-of]
 "git@github.com:" = "https://github.com/"
+
+[commands]
+mode  = "host"
+allow = []
 ```
 
 空のファイルも有効なポリシーファイルで、そのまま受け入れられる。
@@ -261,15 +271,19 @@ kakoi: policy: ...                     # 終了コード 125
 その `--policy-file` に `${config_dir}` で始まる `ro` の項目があれば、値を持たない変数を含む項目として飛ばされ、理由付きで計画に出る。
 
 ## 段の合成規則
-<!-- @kotowari[TBL-152:593c05c6, REQ-154:a401a486, REQ-155:c0592024] -->
+<!-- @kotowari[TBL-152:3f117d1e, REQ-154:a401a486, REQ-155:c0592024] -->
 
 段を重ねる規則は、値の種類で決まる。
 
 | 種類 | 対象 | 規則 |
 |---|---|---|
-| リスト | `mounts.rw` `rw-file` `rw-copy` `ro` `hide` `scan` `hide-mounts`、`env.pass` `unset` `path-prepend`、`commands.guard` | 連結する。上の段が下の段に足す |
+| リスト | `mounts.rw` `rw-file` `rw-copy` `ro` `hide` `scan` `hide-mounts`、`env.pass` `unset` `path-prepend`、`commands.guard` `allow` | 連結する。上の段が下の段に足す |
+| 厳しい側が残るスカラー | `mounts.mode`、`commands.mode`、`mounts.system` | どれかの段が `"listed"`（`mounts.system` は `false`）なら、上の段の値によらずそれになる |
 | スカラー | `network.mode`、`env.mode` | 上の段が上書きする |
 | テーブル | `env.set`、`secrets`、`git.instead-of` | キー単位でまとめる。同じキーは上の段が勝つ |
+
+厳しい側が残る 3 つのキーは、ジョブごとのポリシーが誤っていても隔離がゆるまないように、上の段で元に戻せない。
+`env.mode` や `network.mode` の「上の段が上書きする」とは規則が違う。
 
 `env.path-prepend` の連結では、上の段の項目が先頭側に来る。
 `PATH` に足したとき、上の段の項目ほど前に置かれる。
@@ -371,6 +385,8 @@ publish = []
 |---|---|
 | `env.set` と `secrets` に同じキーがある | 1 つの変数に 2 つの値を入れようとしている |
 | `env.mode` が `inherit` なのに `env.pass` が空でない | `pass` は `clear` のときだけ意味を持ち、書いても効かない |
+
+マウントとコマンドのモードに関する合成後の検査は [見せるものを選ぶモード](14-listed.md) にある。
 
 検査するのは合成後の値である。
 下の段が `mode = "inherit"` で、上の段が `mode = "clear"` と `pass` を両方書く形は通る。

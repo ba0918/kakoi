@@ -11,17 +11,25 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::command::{command_candidates, resolve_command};
+use crate::command_limits::{
+    self, allowed_programs, outer_guards, outer_overlaid, relocated_programs, CommandLimits,
+};
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
 use crate::environment::{HostEnvironment, RealEntry};
 use crate::executables::{file_id, first_executable, named};
-use crate::guard_placement::{place_guards, real_program, GuardPlan, PlacedGuard, GUARD_LOCATION};
+use crate::guard_placement::{
+    name_hidden, place_guards, real_program, GuardPlan, GuardTable, NameFact, PlacedGuard,
+    GUARD_LOCATION, GUARD_TABLE,
+};
 use crate::layers::{load_layers, merge, LayerSelection, Policy};
-use crate::mount_facts::collect_mount_facts;
+use crate::listed::ListedRoot;
+use crate::mount_facts::{self, collect_generator_facts, collect_path_facts};
 use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
 };
+use crate::policy::{ListMode, NetworkMode};
 use crate::secret_facts::read_secret_files;
 use crate::shared_files;
 use crate::variables::derive_variables;
@@ -50,6 +58,10 @@ pub struct Request {
     /// Whether the command guards of the run around this nested one are handed on: they
     /// were there when it started (specification REQ-465).
     pub outer_guard: bool,
+    /// What the table of those guards holds; none when it cannot be read.
+    pub outer_table: Option<Vec<u8>>,
+    /// The host's Landlock ABI version; none when it has no Landlock.
+    pub landlock_abi: Option<u32>,
 }
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
@@ -86,11 +98,9 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         protected_config_dir,
         request.workspace.as_deref(),
     )
-    .with_protected(shared_files.as_deref());
-    let facts = IsolationFacts {
-        mounts: collect_mount_facts(&wanted),
-        secrets: read_secret_files(&expanded.secrets),
-    };
+    .with_protected(shared_files.as_deref())
+    .with_walked(&listed_lookups(&policy))
+    .with_walked(&command_limits::lookups(&policy, &variables, &home));
     let inputs = Inputs {
         layers: &layers,
         policy: &policy,
@@ -105,6 +115,15 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         applied: request.applied,
         shared_files: shared_files.as_deref(),
         outer_guard: request.outer_guard,
+    };
+    // What the scans find and the mount list are gathered only for the scans and the
+    // `hide-mounts` that apply (specification REQ-468).
+    let mut mounts = collect_path_facts(&wanted);
+    let (generating, _) = plan::generating_policy(&inputs, &mounts)?;
+    collect_generator_facts(&wanted.for_generators(&generating), &mut mounts);
+    let facts = IsolationFacts {
+        mounts,
+        secrets: read_secret_files(&expanded.secrets),
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(
@@ -123,6 +142,39 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             "network.allow-nested-filtered shows {TUN_DEVICE} inside, but the host has none"
         )));
     }
+    // With `bwrap`, since the scope is a fact of the host as bwrap is (specification
+    // REQ-472).
+    if policy.mounts_mode == ListMode::Listed
+        && policy.network_mode == NetworkMode::Host
+        && !request
+            .landlock_abi
+            .is_some_and(|abi| abi >= crate::landlock::SCOPE_ABI)
+    {
+        return Err(Diagnostic::bwrap(format!(
+            "the \"listed\" mount mode with the host network needs the Landlock scope on \
+             abstract UNIX sockets (ABI {}), which the host does not have",
+            crate::landlock::SCOPE_ABI
+        )));
+    }
+    // With `bwrap`, as the scope above (specification REQ-477).
+    if policy.commands_mode == ListMode::Listed && request.landlock_abi.is_none() {
+        return Err(Diagnostic::bwrap(
+            "the \"listed\" command mode needs Landlock, which the host does not have",
+        ));
+    }
+    let commands = (policy.commands_mode == ListMode::Listed)
+        .then(|| {
+            command_limits(
+                &policy,
+                &variables,
+                &home,
+                &facts.mounts,
+                &isolation,
+                &guards,
+                request,
+            )
+        })
+        .transpose()?;
     // A plan that is only shown, that of a nested run without `--nested=isolate`,
     // resolves on the host's `PATH` as that run would (specification REQ-261).
     let search_in = if request.applied {
@@ -137,16 +189,96 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             arguments: arguments.to_vec(),
             path: through_guard(
                 command,
-                locate_command(command, search_in)?,
+                locate_shown_command(
+                    command,
+                    search_in,
+                    &isolation.mounts.items,
+                    isolation.listed.as_ref(),
+                )?,
                 path_of(search_in),
                 &isolation.mounts.items,
+                isolation.listed.as_ref(),
                 &guards,
             ),
         }),
     };
     Ok(plan::plan(
-        &inputs, isolation, copies, bwrap, command, guards,
+        &inputs, isolation, copies, bwrap, command, guards, commands,
     ))
+}
+
+/// The programs the "listed" command mode lets start, and kakoi's own executable, which
+/// the isolation's first process is (specification REQ-475 and REQ-476). Under the guards
+/// of the run around a nested one, those guards are allowed too, and an allowed item a
+/// guard of theirs overlays stands for the real program they relocated (specification
+/// REQ-485).
+fn command_limits(
+    policy: &Policy,
+    variables: &crate::variables::Variables,
+    home: &crate::environment::HomeDirectory,
+    facts: &crate::mounts::MountFacts,
+    isolation: &plan::Isolation,
+    guards: &GuardPlan,
+    request: &Request,
+) -> Result<CommandLimits, Diagnostic> {
+    let executable = request
+        .executable
+        .as_deref()
+        .and_then(|path| std::fs::canonicalize(path).ok())
+        .ok_or_else(|| {
+            Diagnostic::bwrap(
+                "the executable of kakoi itself, which the isolation's first process is, \
+                 cannot be located",
+            )
+        })?;
+    let (allowed, skipped) = allowed_programs(
+        policy,
+        variables,
+        home,
+        facts,
+        &isolation.mounts.items,
+        isolation.listed.as_ref(),
+    );
+    let reals: Vec<PathBuf> = allowed
+        .iter()
+        .filter_map(|path| facts.entry(path).path().map(Path::to_path_buf))
+        .collect();
+    let outer_table = if request.outer_guard {
+        outer_guard_table(request.outer_table.as_deref())?
+    } else {
+        GuardTable::default()
+    };
+    let overlaid = [guards.overlaid.clone(), outer_overlaid(&outer_table)].concat();
+    let relocated = relocated_programs(&reals, &overlaid);
+    Ok(CommandLimits {
+        allowed,
+        skipped,
+        relocated,
+        outer_guards: outer_guards(&outer_table),
+        executable,
+    })
+}
+
+/// The table of the guards of the run around a nested one, from what it holds (`bytes`,
+/// none when it cannot be read). Without it the outer guards are denied inside and a
+/// shell would start the next program on `PATH`, the real one, past their rules, so the
+/// run stops (specification REQ-485).
+fn outer_guard_table(bytes: Option<&[u8]>) -> Result<GuardTable, Diagnostic> {
+    bytes.and_then(GuardTable::from_bytes).ok_or_else(|| {
+        Diagnostic::bwrap(format!(
+            "the table of the command guards of the isolation around this one, \
+             {GUARD_TABLE}, cannot be read or interpreted; the kakoi inside may be of \
+             another version than the one outside"
+        ))
+    })
+}
+
+/// The paths the "listed" mount mode looks up besides the policy's own.
+fn listed_lookups(policy: &Policy) -> Vec<PathBuf> {
+    if policy.mounts_mode != ListMode::Listed {
+        return Vec::new();
+    }
+    crate::listed::lookups(policy.mounts_system)
 }
 
 /// The guards of the merged rules, found on the isolation's `PATH` after the mounts are
@@ -166,7 +298,10 @@ fn plan_guards(
         .iter()
         .map(|entry| {
             let program = &entry.rule.program;
-            let names = named(&real_candidates(OsStr::new(program), path));
+            let names = shown_names(
+                named(&real_candidates(OsStr::new(program), path)),
+                isolation.listed.as_ref(),
+            );
             (program.clone(), names)
         })
         .collect();
@@ -220,12 +355,13 @@ fn through_guard(
     found: PathBuf,
     path: Option<&OsStr>,
     mounts: &[ResolvedItem],
+    listed: Option<&ListedRoot>,
     guards: &GuardPlan,
 ) -> PathBuf {
     if command.as_bytes().contains(&b'/') {
         return found;
     }
-    let names = named(&real_candidates(command, path));
+    let names = shown_names(named(&real_candidates(command, path)), listed);
     let Some(real) = real_program(&names, mounts) else {
         return found;
     };
@@ -234,6 +370,47 @@ fn through_guard(
         .iter()
         .find(|guard| guard.found == real.candidate)
         .map_or(found, PlacedGuard::guard)
+}
+
+/// The names of `names` a "listed" isolation has as they are written on `PATH`: where
+/// each is, what it resolves to, and every link on the way shown or made again
+/// (specification REQ-468 and REQ-484); all of them under "host". A relative name is not
+/// walked, so only where it is and what it resolves to are looked at.
+fn shown_names(names: Vec<NameFact>, listed: Option<&ListedRoot>) -> Vec<NameFact> {
+    let Some(root) = listed else {
+        return names;
+    };
+    names
+        .into_iter()
+        .filter(|fact| {
+            fact.name.as_deref().is_some_and(|name| root.shows(name))
+                && fact.real.as_deref().is_some_and(|real| {
+                    root.shows_through(&mount_facts::traverse(&fact.candidate).links, real)
+                })
+        })
+        .collect()
+}
+
+/// Stage 9 as the isolation sees it: a name on `PATH` a "listed" isolation does not show,
+/// or whose place or real file `mounts` hides, is passed over (specification REQ-484).
+fn locate_shown_command(
+    command: &OsStr,
+    environment: &BTreeMap<OsString, OsString>,
+    mounts: &[ResolvedItem],
+    listed: Option<&ListedRoot>,
+) -> Result<PathBuf, Diagnostic> {
+    if listed.is_none() || command.as_bytes().contains(&b'/') {
+        return locate_command(command, environment);
+    }
+    let candidates: Vec<PathBuf> = shown_names(
+        named(&command_candidates(command, path_of(environment))),
+        listed,
+    )
+    .into_iter()
+    .filter(|fact| !name_hidden(fact, mounts))
+    .map(|fact| fact.candidate)
+    .collect();
+    resolve_command(command, first_executable(&candidates))
 }
 
 /// Stage 8: `bwrap` on the host's `PATH` (specification section 14).

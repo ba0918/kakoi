@@ -87,6 +87,8 @@ print('isolated')
         nested: false,
         applied: true,
         outer_guard: false,
+        outer_table: None,
+        landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
@@ -225,6 +227,8 @@ print('managed-dns')
         nested: false,
         applied: true,
         outer_guard: false,
+        outer_table: None,
+        landlock_abi: kakoi_core::landlock::abi_version(),
     })
     .unwrap();
     let mut launch = application::prepare(&plan, &ns).unwrap();
@@ -258,4 +262,123 @@ print('managed-dns')
         std::thread::sleep(Duration::from_millis(1));
     }
     server.join().unwrap();
+}
+
+/// Runs `script` with `/usr/bin/python3` in a filtered isolation whose `[mounts]` has the
+/// workspace `rw` and `mounts`, over a network namespace of its own, and returns the
+/// plan's bwrap arguments and the output.
+fn filtered_run(mounts: &str, script: &str) -> (Vec<String>, std::process::Output) {
+    filtered_run_with_landlock(mounts, script, kakoi_core::landlock::abi_version())
+}
+
+/// `filtered_run` with the Landlock ABI version `abi` standing for the host's.
+fn filtered_run_with_landlock(
+    mounts: &str,
+    script: &str,
+    abi: Option<u32>,
+) -> (Vec<String>, std::process::Output) {
+    let (home, workspace) = home_with_workspace();
+    home.write(
+        ".config/kakoi/profile/default.toml",
+        format!("{RW_WORKSPACE}{mounts}\n[network]\nmode='filtered'\n"),
+    );
+    let namespace = NetworkNamespace::create().unwrap();
+    let mut host = BTreeMap::new();
+    host.insert("HOME".into(), home.path().as_os_str().to_owned());
+    host.insert(
+        "XDG_CONFIG_HOME".into(),
+        home.path().join(".config").into_os_string(),
+    );
+    host.insert("PATH".into(), "/usr/bin:/bin:/usr/sbin".into());
+    let plan = plan_for(&Request {
+        layers: LayerSelection {
+            profile: "default".into(),
+            policy_file: None,
+            rw: vec![],
+            hide: vec![],
+        },
+        workspace: Some(workspace.clone()),
+        command: vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
+        current_dir: workspace.clone(),
+        host,
+        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
+        nested: false,
+        applied: true,
+        outer_guard: false,
+        outer_table: None,
+        landlock_abi: abi,
+    })
+    .unwrap();
+    let arguments = plan
+        .arguments
+        .iter()
+        .filter_map(|argument| match argument {
+            kakoi_core::plan::Argument::Literal(text) => Some(text.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    let mut launch = application::prepare(&plan, &namespace).unwrap();
+    (arguments, launch.command.output().unwrap())
+}
+
+/// Whether `arguments` make the directory `path` read-only before anything is put in it.
+fn makes_directory(arguments: &[String], path: &std::path::Path) -> bool {
+    arguments
+        .windows(2)
+        .any(|pair| pair[0] == "--dir" && pair[1] == path.to_str().unwrap())
+}
+
+const READ_RESOLVER: &str = "print(repr(open('/etc/resolv.conf').read()))";
+
+// @kotowari[REQ-468, REQ-060]
+#[test]
+fn a_listed_filtered_isolation_reads_its_own_resolver_configuration_with_the_base() {
+    let (arguments, output) = filtered_run("mode = 'listed'\n", READ_RESOLVER);
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"'nameserver 127.0.0.53\\n'\n");
+    let destination = std::fs::canonicalize("/etc/resolv.conf").unwrap();
+    if !destination.starts_with("/etc") {
+        assert!(
+            makes_directory(&arguments, destination.parent().unwrap()),
+            "{arguments:?}"
+        );
+    }
+}
+
+// @kotowari[REQ-468, REQ-060]
+#[test]
+fn a_listed_filtered_isolation_reads_its_own_resolver_configuration_without_the_base() {
+    let (arguments, output) = filtered_run(
+        "mode = 'listed'\nsystem = false\nro = ['/usr', '/lib', '/lib64']\n",
+        READ_RESOLVER,
+    );
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"'nameserver 127.0.0.53\\n'\n");
+    assert!(
+        makes_directory(&arguments, std::path::Path::new("/etc")),
+        "{arguments:?}"
+    );
+}
+
+// @kotowari[REQ-472]
+#[test]
+fn listed_with_the_filtered_network_needs_no_abstract_socket_scope() {
+    let (_, output) = filtered_run_with_landlock("mode = 'listed'\n", "print('ran')", None);
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"ran\n");
 }

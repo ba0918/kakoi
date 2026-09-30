@@ -39,7 +39,10 @@ struct PlanDocument<'a> {
     mounts: Vec<MountItem>,
     skipped_mounts: Vec<SkippedMount>,
     left_visible: Vec<LeftVisible>,
+    not_shown: Vec<NotShown>,
     skipped_paths: Vec<SkippedPath>,
+    commands_allowed: Vec<String>,
+    skipped_command_allow: Vec<SkippedCommandAllow>,
     not_copied: Vec<NotCopied>,
     guards: Vec<Guard>,
     skipped_guards: Vec<SkippedGuard>,
@@ -67,6 +70,9 @@ struct Variables {
 
 #[derive(Serialize)]
 struct MergedPolicy<'a> {
+    mounts_mode: &'static str,
+    mounts_system: bool,
+    commands_mode: &'static str,
     mounts: Vec<PolicyMount>,
     scan: Vec<Scan>,
     hide_mounts: Vec<HideMounts>,
@@ -161,6 +167,22 @@ struct MountItem {
 #[derive(Serialize)]
 struct SkippedMount {
     directive: &'static str,
+    written: String,
+    origin: Origin,
+    reason: String,
+}
+
+/// An item of `commands.allow` the "listed" command mode does not allow, as written.
+#[derive(Serialize)]
+struct SkippedCommandAllow {
+    written: String,
+    reason: String,
+}
+
+/// A `hide` item the "listed" mount mode does not lay: it names nothing shown.
+#[derive(Serialize)]
+struct NotShown {
+    path: String,
     written: String,
     origin: Origin,
     reason: String,
@@ -269,6 +291,17 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                     reason: left.reason.clone(),
                 })
                 .collect(),
+            not_shown: plan
+                .mounts
+                .not_shown
+                .iter()
+                .map(|not_shown| NotShown {
+                    path: text(&not_shown.item.real),
+                    written: not_shown.item.written.clone(),
+                    origin: item_origin(&not_shown.item.origin),
+                    reason: not_shown.reason.clone(),
+                })
+                .collect(),
             skipped_paths: plan
                 .skipped_paths
                 .iter()
@@ -277,7 +310,24 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                         SkippedRole::ScanRoot => "scan-root",
                         SkippedRole::HideMountsUnder => "hide-mounts-under",
                         SkippedRole::PathPrepend => "path-prepend",
+                        SkippedRole::Base => "base",
+                        SkippedRole::ResolverTarget => "resolver-target",
                     },
+                    written: skipped.written.clone(),
+                    reason: skipped.reason.clone(),
+                })
+                .collect(),
+            commands_allowed: plan
+                .commands
+                .iter()
+                .flat_map(|limits| &limits.allowed)
+                .map(text)
+                .collect(),
+            skipped_command_allow: plan
+                .commands
+                .iter()
+                .flat_map(|limits| &limits.skipped)
+                .map(|skipped| SkippedCommandAllow {
                     written: skipped.written.clone(),
                     reason: skipped.reason.clone(),
                 })
@@ -360,6 +410,9 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
 
 fn merged_policy(policy: &Policy) -> MergedPolicy<'_> {
     MergedPolicy {
+        mounts_mode: policy.mounts_mode.name(),
+        mounts_system: policy.mounts_system,
+        commands_mode: policy.commands_mode.name(),
         mounts: policy
             .mounts
             .iter()

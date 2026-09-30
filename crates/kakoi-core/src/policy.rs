@@ -120,6 +120,25 @@ impl EnvMode {
     }
 }
 
+/// The mode of `mounts.mode` and `commands.mode`: what is written is shown or started on
+/// top of the host's (`host`), or only what is written and the base (`listed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ListMode {
+    Host,
+    Listed,
+}
+
+impl ListMode {
+    /// The word a policy writes the mode with.
+    pub fn name(self) -> &'static str {
+        match self {
+            ListMode::Host => "host",
+            ListMode::Listed => "listed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct PolicyFile {
@@ -153,6 +172,9 @@ impl Process {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Mounts {
+    pub mode: Option<ListMode>,
+    /// Whether the base directories are shown under the `listed` mode.
+    pub system: Option<bool>,
     pub rw: Vec<PolicyPath>,
     pub rw_file: Vec<PolicyPath>,
     pub rw_copy: Vec<PolicyPath>,

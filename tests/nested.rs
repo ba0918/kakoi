@@ -1122,6 +1122,121 @@ fn ex_901_guards_outside_and_inside_stop_the_nested_isolation() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+/// The command mode "listed", allowing only `/bin/sh`.
+const LISTED_SH: &str = "[commands]\nmode = \"listed\"\nallow = [\"/bin/sh\"]\n";
+
+/// The command mode "listed", allowing `/usr/bin/git` and `/bin/sh`.
+const LISTED_GIT: &str = "[commands]\nmode = \"listed\"\nallow = [\"/usr/bin/git\", \"/bin/sh\"]\n";
+
+/// What `/usr/bin/git --version` prints on the host.
+fn git_version() -> Vec<u8> {
+    std::process::Command::new("/usr/bin/git")
+        .arg("--version")
+        .output()
+        .unwrap()
+        .stdout
+}
+
+/// As [`nested_under_policies`], with the nested isolation made by a copy of the built
+/// kakoi: a different file from the one the outer run's guards are.
+fn nested_by_a_copy_under_policies(
+    home: &TempDir,
+    workspace: &std::path::Path,
+    outer: &str,
+    inner: &str,
+    arguments: &str,
+) -> Output {
+    let copy = home.write_executable("copy/kakoi", std::fs::read(KAKOI).unwrap());
+    let outer = policy_file(home, "outer.toml", outer);
+    let inner = policy_file(home, "inner.toml", inner);
+    run_with_policy(
+        home,
+        workspace,
+        &outer,
+        &format!(
+            "exec {} --nested=isolate --workspace {} --policy-file {} {arguments}",
+            copy.display(),
+            workspace.display(),
+            inner.display()
+        ),
+    )
+}
+
+/// The command ran `git --version` and was then denied `git push` by the outer guard.
+fn assert_version_then_denied_push(output: &Output) {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert_eq!(output.stdout, git_version(), "{report}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "kakoi: guard: git push: push は人が行う\n",
+        "{report}"
+    );
+}
+
+// @kotowari[EX-952, REQ-485]
+#[test]
+fn ex_952_a_program_allowed_inside_runs_under_the_outer_guard() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_by_a_copy_under_policies(
+        &home,
+        &workspace,
+        GIT_PUSH,
+        LISTED_GIT,
+        "-- /bin/sh -c 'git --version && git push origin main'",
+    );
+
+    assert_version_then_denied_push(&output);
+}
+
+// @kotowari[EX-953, REQ-485]
+#[test]
+fn ex_953_a_program_not_allowed_inside_does_not_start_under_the_outer_guard() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_by_a_copy_under_policies(
+        &home,
+        &workspace,
+        GIT_PUSH,
+        LISTED_SH,
+        "-- /bin/sh -c 'echo ran; git --version'",
+    );
+
+    let report = output_report(&output);
+    assert_ne!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"ran\n", "{report}");
+}
+
+// @kotowari[EX-954, REQ-485]
+#[test]
+fn ex_954_a_guard_over_the_real_program_works_inside_a_listed_nested_isolation() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_by_a_copy_under_policies(
+        &home,
+        &workspace,
+        &format!("{GIT_PUSH}guard-absolute-path = true\n"),
+        LISTED_GIT,
+        "-- /bin/sh -c '/usr/bin/git --version && /usr/bin/git push origin main'",
+    );
+
+    assert_version_then_denied_push(&output);
+}
+
+// @kotowari[REQ-475]
+#[test]
+fn req_475_the_listed_command_mode_starts_the_command_in_a_nested_isolation() {
+    let (home, workspace) = home_with_workspace();
+
+    let output =
+        nested_under_policies(&home, &workspace, "", LISTED_SH, "-- /bin/sh -c 'echo ran'");
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"ran\n", "{report}");
+}
+
 /// The `value`s of the literal arguments of the JSON plan in `output`.
 fn literal_arguments(output: &Output) -> Vec<String> {
     let report = output_report(output);

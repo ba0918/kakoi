@@ -17,6 +17,9 @@ const KAKOI: &str = "kakoi";
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Commands {
+    pub mode: Option<crate::policy::ListMode>,
+    /// The programs a `listed` command mode lets start.
+    pub allow: Vec<crate::policy::PolicyPath>,
     pub guard: Vec<GuardRule>,
 }
 
@@ -40,6 +43,10 @@ pub struct GuardRule {
     pub deny_option_values: Option<BTreeMap<String, Vec<String>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deny_env: Option<Vec<String>>,
+    /// The only ways of starting the program a run may take: a run whose words after the
+    /// skipping match none of them is denied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub only: Option<Vec<Sequence>>,
     #[serde(default)]
     pub guard_absolute_path: bool,
     #[serde(default, skip_serializing_if = "Examples::is_empty")]
@@ -104,9 +111,10 @@ impl GuardRule {
             && self.deny_flags.is_none()
             && self.deny_option_values.is_none()
             && self.deny_env.is_none()
+            && self.only.is_none()
         {
             return Err(format!(
-                "`commands.guard` for `{program}` needs one of `deny`, `deny-flags`, `deny-option-values`, `deny-env`"
+                "`commands.guard` for `{program}` needs one of `deny`, `deny-flags`, `deny-option-values`, `deny-env`, `only`"
             ));
         }
         let empty = |key: &str| {
@@ -114,7 +122,11 @@ impl GuardRule {
                 "`commands.guard` for `{program}` has an empty `{key}`"
             ))
         };
-        for (key, sequences) in [("for", &self.for_), ("deny", &self.deny)] {
+        for (key, sequences) in [
+            ("for", &self.for_),
+            ("deny", &self.deny),
+            ("only", &self.only),
+        ] {
             if let Some(sequences) = sequences {
                 if sequences.is_empty()
                     || sequences.iter().any(|sequence| {
@@ -146,9 +158,16 @@ impl GuardRule {
         self.check_examples()
     }
 
-    /// Every regular expression in `for`, `deny`, and `deny-option-values` compiles.
+    /// Every regular expression in `for`, `deny`, `only`, and `deny-option-values`
+    /// compiles.
     fn check_patterns(&self) -> Result<(), String> {
-        let sequences = self.for_.iter().chain(&self.deny).flatten().flatten();
+        let sequences = self
+            .for_
+            .iter()
+            .chain(&self.deny)
+            .chain(&self.only)
+            .flatten()
+            .flatten();
         let words = sequences.flat_map(Position::words);
         let values = self
             .deny_option_values
@@ -237,24 +256,61 @@ pub struct Denial {
 /// Whether `rules` deny a run of their program with `arguments` (the words after the
 /// program name) while the variables named `environment` are set. Each rule is tried in
 /// order, and within a rule `deny-env`, `deny`, `deny-flags`, then `deny-option-values`;
-/// the first match is the denial.
+/// the first match is the denial. A run none of those deny is then tried against the
+/// `only` of each rule in order, and the first rule whose `only` it misses denies it.
 pub fn evaluate<'a>(
     rules: impl IntoIterator<Item = &'a GuardRule>,
     arguments: &[OsString],
     environment: &[OsString],
 ) -> Option<Denial> {
+    let rules: Vec<&GuardRule> = rules.into_iter().collect();
     let words: Vec<Option<&str>> = arguments.iter().map(|word| word.to_str()).collect();
-    rules.into_iter().find_map(|rule| {
-        rule.denial(arguments, &words, environment)
-            .map(|matched| Denial {
-                program: rule.program.clone(),
-                matched,
-                reason: rule.reason.clone(),
+    let denial = |rule: &GuardRule, matched: String| Denial {
+        program: rule.program.clone(),
+        matched,
+        reason: rule.reason.clone(),
+    };
+    rules
+        .iter()
+        .find_map(|rule| {
+            rule.denial(arguments, &words, environment)
+                .map(|matched| denial(rule, matched))
+        })
+        .or_else(|| {
+            rules.iter().find_map(|rule| {
+                rule.outside_only(arguments, &words)
+                    .map(|matched| denial(rule, matched))
             })
-    })
+        })
 }
 
 impl GuardRule {
+    /// Whether a run matches `for`, or the rule has none: the runs `deny-flags`,
+    /// `deny-option-values`, `deny-env`, and `only` apply to.
+    fn applies(&self, rest: &[Option<&str>]) -> bool {
+        self.for_.as_ref().is_none_or(|sequences| {
+            sequences
+                .iter()
+                .any(|sequence| prefix(sequence, rest).is_some())
+        })
+    }
+
+    /// The word a run that `only` denies is shown by: its first word after the skipping,
+    /// or the program's name when there is none. None when the rule has no `only`, the
+    /// run is not one it applies to, or the run matches an item of it.
+    fn outside_only(&self, arguments: &[OsString], words: &[Option<&str>]) -> Option<String> {
+        let only = self.only.as_ref()?;
+        let skipped = self.skipped(arguments);
+        let rest = &words[skipped..];
+        if !self.applies(rest) || only.iter().any(|sequence| prefix(sequence, rest).is_some()) {
+            return None;
+        }
+        Some(arguments.get(skipped).map_or_else(
+            || self.program.clone(),
+            |word| word.to_string_lossy().into_owned(),
+        ))
+    }
+
     fn denial(
         &self,
         arguments: &[OsString],
@@ -262,11 +318,7 @@ impl GuardRule {
         environment: &[OsString],
     ) -> Option<String> {
         let rest = &words[self.skipped(arguments)..];
-        let applies = self.for_.as_ref().is_none_or(|sequences| {
-            sequences
-                .iter()
-                .any(|sequence| prefix(sequence, rest).is_some())
-        });
+        let applies = self.applies(rest);
         let before_separator = &words[..arguments
             .iter()
             .position(|word| word == "--")

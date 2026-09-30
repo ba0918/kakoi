@@ -11,13 +11,12 @@ use std::path::{Path, PathBuf};
 use crate::startup::InitRequest;
 use kakoi_core::diagnostic::Diagnostic;
 use kakoi_core::environment::PathState;
-use kakoi_core::layers::BUILT_IN_DEFAULT;
 use kakoi_core::workspace_facts::entry_state;
 
 /// The mode `secrets/` is made with (specification section 4.1): its owner alone reads it.
 const SECRETS_MODE: u32 = 0o700;
 
-/// Writes the built-in default under the configuration directory, making the directories
+/// Writes the example chosen under the configuration directory, making the directories
 /// that are not there, and returns the path as assembled: the line the run prints, with the
 /// symbolic links left unresolved (specification section 4.1).
 pub fn write_built_in_default(request: &InitRequest) -> Result<PathBuf, Diagnostic> {
@@ -30,7 +29,7 @@ pub fn write_built_in_default(request: &InitRequest) -> Result<PathBuf, Diagnost
     make_directory(&profiles, None)?;
     make_directory(&request.config_dir.join("secrets"), Some(SECRETS_MODE))?;
     let path = profiles.join(format!("{}.toml", request.name));
-    write_file(&path, BUILT_IN_DEFAULT)?;
+    write_file(&path, request.example.text())?;
     Ok(path)
 }
 

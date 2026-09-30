@@ -1,6 +1,7 @@
 //! Interpretation of the command line (specification section 4.1).
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser, ValueEnum};
@@ -48,10 +49,30 @@ pub enum PlanForm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Parsed {
     Invocation(Invocation),
-    /// `init [NAME]`: write the built-in default out as the profile `NAME`.
-    Init(String),
+    /// `init [NAME] [--example VALUE]`: write the example chosen out as the profile
+    /// `NAME`.
+    Init(String, Example),
     Help(String),
     Version(String),
+}
+
+/// The bundled example `init` writes out (specification REQ-482).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Example {
+    /// The built-in default.
+    Default,
+    /// The example that shows only what it lists.
+    Listed,
+}
+
+impl Example {
+    /// The bytes of the example.
+    pub fn text(self) -> &'static str {
+        match self {
+            Example::Default => kakoi_core::layers::BUILT_IN_DEFAULT,
+            Example::Listed => kakoi_core::layers::LISTED_EXAMPLE,
+        }
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -61,7 +82,7 @@ pub enum Parsed {
     about = "Run a command inside a bubblewrap mount namespace shaped by a layered policy.",
     override_usage = "kakoi [OPTIONS] -- COMMAND [ARGS]...\n       \
                       kakoi [OPTIONS] --print-plan[=full|json] [-- COMMAND [ARGS]...]\n       \
-                      kakoi init [NAME]\n       \
+                      kakoi init [NAME] [--example default|listed]\n       \
                       kakoi --version\n       \
                       kakoi --help",
     color = clap::ColorChoice::Never,
@@ -153,7 +174,8 @@ where
 {
     let arguments: Vec<OsString> = arguments.into_iter().collect();
     if arguments.first().is_some_and(|word| word == "init") {
-        return Ok(Parsed::Init(init_name(&arguments[1..])?));
+        let (name, example) = init_arguments(&arguments[1..])?;
+        return Ok(Parsed::Init(name, example));
     }
     check_option_values(&arguments)?;
     // `--help` and `--version` are plain flags, so that the whole command line is checked
@@ -215,17 +237,48 @@ where
 }
 
 /// The `NAME` of the `init` form, `default` when it is left out (specification
-/// section 4.1). Read from the words as written, because the parser takes everything after
-/// `--` as the command; `init` is exclusive, so any further word is an error. A word
-/// starting with `-` is an option, which `init` does not combine with.
-fn init_name(rest: &[OsString]) -> Result<String, Diagnostic> {
+/// section 4.1), and the example `--example` chooses, `default` when it is left out
+/// (REQ-482). Read from the words as written, because the parser takes everything after
+/// `--` as the command; `init` takes nothing else, so any further word is an error. A
+/// word starting with `-` other than `--example` is an option, which `init` does not
+/// combine with.
+fn init_arguments(rest: &[OsString]) -> Result<(String, Example), Diagnostic> {
+    let mut names = Vec::new();
+    let mut examples: Vec<&OsStr> = Vec::new();
+    let mut words = rest.iter();
+    while let Some(word) = words.next() {
+        if word == "--example" {
+            let value = words.next().ok_or_else(|| {
+                Diagnostic::usage("--example needs a value: `default` or `listed`")
+            })?;
+            examples.push(value);
+        } else if let Some(value) = word.as_encoded_bytes().strip_prefix(b"--example=") {
+            examples.push(OsStr::from_bytes(value));
+        } else {
+            names.push(word);
+        }
+    }
+    let example = match examples.as_slice() {
+        [] => Example::Default,
+        [value] if *value == "default" => Example::Default,
+        [value] if *value == "listed" => Example::Listed,
+        [_] => return Err(Diagnostic::usage("--example takes `default` or `listed`")),
+        _ => return Err(Diagnostic::usage("--example is given more than once")),
+    };
+    Ok((init_name(&names)?, example))
+}
+
+/// The `NAME` of the `init` form, among the words that are not `--example`.
+fn init_name(rest: &[&OsString]) -> Result<String, Diagnostic> {
     let name = match rest {
         [] => return Ok(DEFAULT_PROFILE.to_string()),
         [name] => name,
         _ => return Err(Diagnostic::usage("init takes nothing but a profile name")),
     };
     if name.as_encoded_bytes().starts_with(b"-") {
-        return Err(Diagnostic::usage("init cannot be combined with any option"));
+        return Err(Diagnostic::usage(
+            "init cannot be combined with any option but --example",
+        ));
     }
     let name = name
         .to_str()

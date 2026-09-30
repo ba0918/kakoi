@@ -7,10 +7,10 @@
 ### REQ-438: 規則の形
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A16, docs/decision/brainstorm/2026-09-25-command-policy.md#A33, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A2, docs/decision/brainstorm/2026-09-25-command-policy.md#A24, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A37
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A16, docs/decision/brainstorm/2026-09-25-command-policy.md#A33, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A2, docs/decision/brainstorm/2026-09-25-command-policy.md#A24, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-30-allowlist.md#A31
 - verification: unit
 
-ガードレールの規則はポリシーの "[[commands.guard]]" に書く。各規則は "program"（PATHで探す名前で、空でなく "/" を含まず "kakoi" でないもの）と "reason"（空でない文字列）を必ず持ち、"options-with-value"、"for"、"deny"、"deny-flags"、"deny-option-values"、"deny-env"、"guard-absolute-path"、"examples.deny"、"examples.allow" を任意で持つ。"deny"、"deny-flags"、"deny-option-values"、"deny-env" のどれも空でない形で持たない規則、空の一覧や空の語の並びを持つ規則、条件に合わない "program" を持つ規則、知らないキーを持つ規則は形の誤りとする。
+ガードレールの規則はポリシーの "[[commands.guard]]" に書く。各規則は "program"（PATHで探す名前で、空でなく "/" を含まず "kakoi" でないもの）と "reason"（空でない文字列）を必ず持ち、"options-with-value"、"for"、"deny"、"deny-flags"、"deny-option-values"、"deny-env"、"only"、"guard-absolute-path"、"examples.deny"、"examples.allow" を任意で持つ。"deny"、"deny-flags"、"deny-option-values"、"deny-env"、"only" のどれも空でない形で持たない規則、空の一覧や空の語の並びを持つ規則、条件に合わない "program" を持つ規則、知らないキーを持つ規則は形の誤りとする。
 
 ### REQ-439: 語の照合
 
@@ -47,10 +47,18 @@
 ### REQ-443: 照合の順と合成
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A9, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A4
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A9, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A4, docs/decision/brainstorm/2026-09-30-allowlist.md#A31
 - verification: unit
 
-"commands.guard" の規則は段をまたいで連結し、上の段で下の段の規則を消すことはできない。見張り役は、その起動に当てる規則ごとに "deny-env"、"deny"、"deny-flags"、"deny-option-values" の順で照合し、最初に当たったもので禁止とする。どの規則にも当たらなければ禁止にしない。
+"commands.guard" の規則は段をまたいで連結し、上の段で下の段の規則を消すことはできない。見張り役は、その起動に当てる規則ごとに "deny-env"、"deny"、"deny-flags"、"deny-option-values" の順で照合し、最初に当たったもので禁止とする。これらのどれにも当たらなかった起動は、"only" を持つ規則ごとに REQ-480 で照合し、どれか1つの規則で禁止になれば禁止とする。どれでも禁止にならなければ禁止にしない。
+
+### REQ-480: これだけを許す使い方
+
+- kind: ubiquitous
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A31, docs/decision/brainstorm/2026-09-30-allowlist.md#A33, docs/decision/brainstorm/2026-09-30-allowlist.md#A46
+- verification: unit
+
+"only" の各項目は "deny" と同じ語の並びで、REQ-439 の語の照合と REQ-440 の読み飛ばしを同じに当てる。"only" を持つ規則は、読み飛ばしの後の先頭の語の並びが "only" のどの項目にも当たらない起動を禁止とする。規則が "for" を持つときは、"for" に当たる起動にだけ "only" を当てる。同じプログラムに "only" を持つ規則が段をまたいで複数あるときは、規則ごとに別々に当て、その起動に当てるすべての規則の "only" に当たる起動だけが禁止にならない。
 
 ### REQ-444: 例の検証
 
@@ -194,4 +202,28 @@ Scenario: 壊れた正規表現で起動しない
   Given "deny" が [["/pu(sh/"]] の規則がある
   When "--print-plan" で起動する
   Then 種類 "policy" の診断で終わる
+
+@id=EX-931 @about=REQ-480,REQ-443 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A31
+Scenario: only に書いた使い方だけを通す
+  Given git の規則が "only" に "status" と "commit" を、"deny-flags" に "--amend" を持つ
+  When "git status"、"git commit -m x"、"git push"、"git commit --amend" をそれぞれ見張り役で起動する
+  Then "git status" と "git commit -m x" は通り、"git push" と "git commit --amend" は禁止になる
+
+@id=EX-932 @about=REQ-480 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A31
+Scenario: 上の段の only で下の段の only をゆるめられない
+  Given プロファイルの git の規則が "only" に "status" を、"--policy-file" の git の規則が "only" に "commit" を持つ
+  When "git status" と "git commit -m x" を見張り役で起動する
+  Then どちらも禁止になる
+
+@id=EX-933 @about=REQ-480 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A33
+Scenario: for に当たらない起動には only を当てない
+  Given git の規則が "for" に "remote" を、"only" に "remote -v" を持つ
+  When "git status" と "git remote add x y" を見張り役で起動する
+  Then "git status" は通り、"git remote add x y" は禁止になる
+
+@id=EX-934 @about=REQ-438 @source=docs/decision/brainstorm/2026-09-30-allowlist.md#A31
+Scenario: only だけを持つ規則は形として正しい
+  Given 規則が "program" と "reason" と "only" だけを持つ
+  When ポリシーを読み込む
+  Then 形の誤りにならない
 ```
