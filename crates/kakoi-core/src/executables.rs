@@ -22,13 +22,19 @@ pub fn named(candidates: &[PathBuf]) -> Vec<NameFact> {
     candidates
         .iter()
         .filter(|candidate| std::fs::symlink_metadata(candidate).is_ok())
-        .map(|candidate| NameFact {
-            candidate: candidate.clone(),
-            name: resolved_name(candidate),
-            real: crate::mount_facts::real_path(candidate),
-            links: followed_links(candidate),
-            executable: is_executable_file(candidate),
-            file: file_id(candidate),
+        .map(|candidate| {
+            let real = crate::mount_facts::real_path(candidate);
+            // Looked at through `real` rather than `candidate`, so that the answer agrees
+            // with the real path found: asking the kernel to walk the chain again gave
+            // "not a program" now and then for a chain of exactly 40 links (seen on CI).
+            NameFact {
+                candidate: candidate.clone(),
+                name: resolved_name(candidate),
+                links: followed_links(candidate),
+                executable: real.as_deref().is_some_and(is_executable_file),
+                file: real.as_deref().and_then(file_id),
+                real,
+            }
         })
         .collect()
 }
