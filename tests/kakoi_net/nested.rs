@@ -113,6 +113,27 @@ print('outer exit', finish(process))
     assert_eq!(output, "inner exit 125\nouter exit 0\n", "{output}");
 }
 
+/// The outer application's first step: the name the nested run does not permit,
+/// reached by name, which the outer run permits.
+const OUTER_REACHES_OTHER: &str = r#"
+address = socket.getaddrinfo('other.example', 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+print('outer permitted', address, exchange(address, 8080, 'tcp', PERMITTED))
+"#;
+
+/// The nested application: the permitted name, then the name it does not
+/// permit, and the address the outer run reached under that name.
+const INNER_APP_BY_NAME: &str = r#"
+address = socket.getaddrinfo('app.example', 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+print('permitted', address, exchange(address, 8080, 'tcp', PERMITTED))
+try:
+    other = socket.getaddrinfo('other.example', 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    reached = exchange(other, 8080, 'tcp', REFUSED) == 'other'
+except socket.gaierror:
+    reached = False
+print('not permitted reached', reached)
+print('not permitted address', exchange('11.0.0.6', 8080, 'tcp', REFUSED))
+"#;
+
 // @kotowari[EX-891, REQ-459, REQ-460]
 #[test]
 fn ex_891_filtered_inside_filtered_resolves_through_the_outer_resolver() {
@@ -121,7 +142,10 @@ fn ex_891_filtered_inside_filtered_resolves_through_the_outer_resolver() {
         &["11.0.0.5/32", "11.0.0.6/32"],
     );
     inner_profile(&host, ALLOW_APP);
-    let app = outer_app(&["--profile", "inner"], INNER_APP);
+    let app = format!(
+        "{OUTER_REACHES_OTHER}{}",
+        outer_app(&["--profile", "inner"], INNER_APP_BY_NAME)
+    );
 
     let output = host.run(&format!(
         r#"{SERVE_BOTH}
@@ -137,8 +161,10 @@ print('place used', os.path.isfile(os.environ['HOME_DIR'] + '/run/kakoi/resolv.c
 
     assert_eq!(
         output,
-        "permitted 11.0.0.5 app\n\
-         not permitted failed TimeoutError\n\
+        "outer permitted 11.0.0.6 other\n\
+         permitted 11.0.0.5 app\n\
+         not permitted reached False\n\
+         not permitted address failed TimeoutError\n\
          inner exit 0\n\
          outer exit 0\n\
          place used True\n",
