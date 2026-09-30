@@ -194,6 +194,8 @@ fn render_left_visible_and_skipped_paths(text: &mut String, plan: &Plan) {
             SkippedRole::ScanRoot => "mounts.scan root",
             SkippedRole::HideMountsUnder => "mounts.hide-mounts under",
             SkippedRole::PathPrepend => "env.path-prepend entry",
+            SkippedRole::Base => "base directory",
+            SkippedRole::ResolverTarget => "resolver configuration",
         };
         let _ = writeln!(
             text,

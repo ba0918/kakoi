@@ -14,6 +14,7 @@ use crate::isolated_env::{
     assemble_environment, environment_changes, Environment, EnvironmentChanges, SecretFile,
 };
 use crate::layers::{Directive, Layer, Policy, PolicySource};
+use crate::listed::{listed_root, ListedRoot};
 use crate::mounts::{
     generate, policy_sources, resolve_written, skipped_paths, EntryKind, ExpandedPolicy,
     MountFacts, ResolvedItem, ResolvedMounts, SkippedPath,
@@ -22,7 +23,7 @@ use crate::placement::{
     check_origins, check_placement, protected_paths, swappable_ro_items, written_paths,
     ProtectedPaths,
 };
-use crate::policy::NetworkMode;
+use crate::policy::{ListMode, NetworkMode};
 use crate::shared_files::SharedFile;
 use crate::variables::Variables;
 
@@ -74,6 +75,8 @@ pub struct Isolation {
     pub environment: Environment,
     pub warnings: Vec<Warning>,
     pub policy_sources: Vec<PolicySource>,
+    /// The root of the "listed" mount mode; none under "host".
+    pub listed: Option<ListedRoot>,
 }
 
 /// Stage 7 of specification section 13, in its order: the identity of the written mount
@@ -134,12 +137,25 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     let assembled =
         assemble_environment(inputs.policy, inputs.host, &facts.secrets, &path_prepend)?;
     warnings.extend(assembled.warnings);
+    let mut skipped = skipped_paths(inputs.expanded, &facts.mounts);
+    let listed = (inputs.policy.mounts_mode == ListMode::Listed).then(|| {
+        let (root, skipped_base) = listed_root(
+            inputs.policy.mounts_system,
+            inputs.policy.network_mode,
+            &mounts.items,
+            inputs.expanded,
+            &facts.mounts,
+        );
+        skipped.extend(skipped_base);
+        root
+    });
     Ok(Isolation {
         mounts,
-        skipped_paths: skipped_paths(inputs.expanded, &facts.mounts),
+        skipped_paths: skipped,
         environment: assembled.environment,
         warnings,
         policy_sources: policy_sources(inputs.layers, &facts.mounts),
+        listed,
     })
 }
 
@@ -200,6 +216,7 @@ pub fn plan(
         shared_files: inputs.shared_files.map(Path::to_path_buf),
         tun: inputs.policy.allow_nested_filtered,
         outer_guard: inputs.outer_guard,
+        listed: isolation.listed.clone(),
     };
     let arguments = bwrap_arguments(
         inputs.policy.network_mode,
@@ -287,6 +304,9 @@ pub struct Provisions {
     /// Whether the command guards of the run around a nested one are shown inside as
     /// they are (specification REQ-465).
     pub outer_guard: bool,
+    /// The root of the "listed" mount mode; none under "host", where the host's root is
+    /// shown read-only.
+    pub listed: Option<ListedRoot>,
 }
 
 impl Provisions {
@@ -333,16 +353,21 @@ pub fn bwrap_arguments(
     provisions: &Provisions,
     command: Option<&ResolvedCommand>,
 ) -> Vec<Argument> {
-    let mut arguments = vec![
-        Argument::text("--ro-bind"),
-        Argument::text("/"),
-        Argument::text("/"),
+    let mut arguments = match provisions.listed {
+        Some(_) => vec![Argument::text("--tmpfs"), Argument::text("/")],
+        None => vec![
+            Argument::text("--ro-bind"),
+            Argument::text("/"),
+            Argument::text("/"),
+        ],
+    };
+    arguments.extend([
         Argument::text("--dev"),
         Argument::text("/dev"),
         Argument::text("--ro-bind-data"),
         Argument::EmptyFile,
         Argument::text(NESTING_MARK),
-    ];
+    ]);
     if provisions.tun {
         arguments.extend([
             Argument::text("--dev-bind"),
@@ -381,6 +406,9 @@ pub fn bwrap_arguments(
             Argument::text(command.command.as_os_str()),
         ]);
     }
+    if let Some(root) = &provisions.listed {
+        arguments.extend(listed_arguments(root));
+    }
     for item in items {
         let real = Argument::text(item.real.as_os_str());
         match (item.directive, item.kind) {
@@ -407,10 +435,58 @@ pub fn bwrap_arguments(
         arguments.extend(provisions.put(SharedFile::Resolver, "/etc/resolv.conf"));
     }
     arguments.extend(guard_arguments(guards));
+    if provisions.listed.is_some() {
+        arguments.extend([Argument::text("--remount-ro"), Argument::text("/")]);
+    }
     if let Some(command) = command {
         arguments.push(Argument::text("--"));
         arguments.push(Argument::text(command.path.as_os_str()));
         arguments.extend(command.arguments.iter().map(Argument::text));
+    }
+    arguments
+}
+
+/// The arguments that lay out the root of the "listed" mount mode before the mount items:
+/// the directories on the way to what is shown, made by kakoi rather than by bwrap, which
+/// would make them readable by their owner only; the base; the links on the written
+/// paths; the isolation's own `/tmp`, which a written item at `/tmp` covers; and the
+/// resolver configuration's target. The root is made read-only after everything else.
+fn listed_arguments(root: &ListedRoot) -> Vec<Argument> {
+    let mut arguments = Vec::new();
+    for directory in &root.directories {
+        arguments.extend([
+            Argument::text("--perms"),
+            Argument::text("0755"),
+            Argument::text("--dir"),
+            Argument::text(directory.as_os_str()),
+        ]);
+    }
+    for directory in &root.base {
+        arguments.extend([
+            Argument::text("--ro-bind"),
+            Argument::text(directory.as_os_str()),
+            Argument::text(directory.as_os_str()),
+        ]);
+    }
+    for link in &root.links {
+        arguments.extend([
+            Argument::text("--symlink"),
+            Argument::text(link.target.as_os_str()),
+            Argument::text(link.place.as_os_str()),
+        ]);
+    }
+    arguments.extend([
+        Argument::text("--perms"),
+        Argument::text("1777"),
+        Argument::text("--tmpfs"),
+        Argument::text("/tmp"),
+    ]);
+    if let Some(resolver) = &root.resolver {
+        arguments.extend([
+            Argument::text("--ro-bind"),
+            Argument::text(resolver.as_os_str()),
+            Argument::text(resolver.as_os_str()),
+        ]);
     }
     arguments
 }

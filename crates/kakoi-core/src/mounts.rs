@@ -191,6 +191,19 @@ impl Candidates {
     }
 }
 
+impl Candidates {
+    /// These candidates and `paths`, looked up and walked.
+    pub fn with_walked(mut self, paths: &[PathBuf]) -> Self {
+        self.paths.extend(paths.iter().cloned());
+        self.traversals.extend(paths.iter().cloned());
+        self.paths.sort();
+        self.paths.dedup();
+        self.traversals.sort();
+        self.traversals.dedup();
+        self
+    }
+}
+
 /// The candidate paths of `expanded`: every expanded path, plus every prefix (each
 /// ancestor and the path itself) of the paths specification section 5.6 protects — the
 /// policy files read, the configuration directory, the secret files, and the
@@ -311,6 +324,9 @@ pub struct MountFacts {
     /// resolving each path specification section 5.6 protects, keyed by the given path:
     /// the ones a link target enters and leaves again through `..` included.
     pub directories: BTreeMap<PathBuf, Vec<PathBuf>>,
+    /// The target, as written, of each symbolic link a walked resolution passed through,
+    /// keyed by the link's own place.
+    pub link_targets: BTreeMap<PathBuf, PathBuf>,
     pub scan_hits: Vec<ScanHit>,
     pub mounts: Vec<Mount>,
     /// Whether the mount list was asked for and could not be read (specification
@@ -386,12 +402,15 @@ pub struct LeftVisible {
 }
 
 /// Which path-taking value a skipped path came from: a scan `root`, a `hide-mounts`
-/// `under`, or an `env.path-prepend` entry.
+/// `under`, an `env.path-prepend` entry, a base directory of the "listed" mount mode, or
+/// the file the host's resolver configuration points at outside the base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkippedRole {
     ScanRoot,
     HideMountsUnder,
     PathPrepend,
+    Base,
+    ResolverTarget,
 }
 
 /// A path-taking value that is not a mount item and was skipped, with the reason

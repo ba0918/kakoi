@@ -22,6 +22,7 @@ use crate::mounts::{candidates, expand_policy, ResolvedItem};
 use crate::plan::{
     self, resolve_isolation, Inputs, IsolationFacts, Plan, ResolvedCommand, TUN_DEVICE,
 };
+use crate::policy::ListMode;
 use crate::secret_facts::read_secret_files;
 use crate::shared_files;
 use crate::variables::derive_variables;
@@ -86,7 +87,8 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         protected_config_dir,
         request.workspace.as_deref(),
     )
-    .with_protected(shared_files.as_deref());
+    .with_protected(shared_files.as_deref())
+    .with_walked(&listed_lookups(&policy));
     let facts = IsolationFacts {
         mounts: collect_mount_facts(&wanted),
         secrets: read_secret_files(&expanded.secrets),
@@ -147,6 +149,14 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     Ok(plan::plan(
         &inputs, isolation, copies, bwrap, command, guards,
     ))
+}
+
+/// The paths the "listed" mount mode looks up besides the policy's own.
+fn listed_lookups(policy: &Policy) -> Vec<PathBuf> {
+    if policy.mounts_mode != ListMode::Listed {
+        return Vec::new();
+    }
+    crate::listed::lookups(policy.mounts_system, policy.network_mode)
 }
 
 /// The guards of the merged rules, found on the isolation's `PATH` after the mounts are

@@ -277,6 +277,8 @@ impl<'a> From<&'a Plan> for PlanDocument<'a> {
                         SkippedRole::ScanRoot => "scan-root",
                         SkippedRole::HideMountsUnder => "hide-mounts-under",
                         SkippedRole::PathPrepend => "path-prepend",
+                        SkippedRole::Base => "base",
+                        SkippedRole::ResolverTarget => "resolver-target",
                     },
                     written: skipped.written.clone(),
                     reason: skipped.reason.clone(),

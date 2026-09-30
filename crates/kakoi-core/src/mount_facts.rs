@@ -27,6 +27,7 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
     }
     for path in &candidates.traversals {
         let traversal = traverse(path);
+        facts.link_targets.extend(traversal.targets);
         facts.links.insert(path.clone(), traversal.links);
         facts
             .directories
@@ -67,6 +68,8 @@ pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
 pub struct Traversal {
     pub links: Vec<PathBuf>,
     pub directories: Vec<PathBuf>,
+    /// The target, as written, of each link in `links` that could be read.
+    pub targets: Vec<(PathBuf, PathBuf)>,
 }
 
 /// Walks the resolution of the absolute `path` as the kernel does: component by
@@ -129,11 +132,12 @@ fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
             break;
         }
         let target = fs::read_link(&candidate);
-        traversal.links.push(candidate);
+        traversal.links.push(candidate.clone());
         let Ok(target) = target else {
             complete = false;
             break;
         };
+        traversal.targets.push((candidate, target.clone()));
         if target.is_absolute() {
             resolved = PathBuf::from("/");
         }

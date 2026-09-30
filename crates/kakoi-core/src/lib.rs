@@ -21,6 +21,7 @@ pub mod guard_placement;
 pub mod isolated_env;
 pub mod launch;
 pub mod layers;
+pub mod listed;
 pub mod mount_facts;
 pub mod mount_list;
 pub mod mounts;
