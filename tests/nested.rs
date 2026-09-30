@@ -1122,6 +1122,38 @@ fn ex_901_guards_outside_and_inside_stop_the_nested_isolation() {
     assert_diagnostic(&output, 125, "policy");
 }
 
+/// The command mode "listed", allowing only `/bin/sh`.
+const LISTED_SH: &str = "[commands]\nmode = \"listed\"\nallow = [\"/bin/sh\"]\n";
+
+// @kotowari[EX-952, REQ-485]
+#[test]
+fn ex_952_the_listed_command_mode_stops_a_nested_isolation_under_an_outer_guard() {
+    let (home, workspace) = home_with_workspace();
+
+    let output = nested_under_policies(
+        &home,
+        &workspace,
+        GIT_PUSH,
+        LISTED_SH,
+        "-- /bin/sh -c 'echo ran'",
+    );
+
+    assert_diagnostic(&output, 125, "policy");
+}
+
+// @kotowari[EX-953, REQ-485]
+#[test]
+fn ex_953_the_listed_command_mode_runs_in_a_nested_isolation_without_an_outer_guard() {
+    let (home, workspace) = home_with_workspace();
+
+    let output =
+        nested_under_policies(&home, &workspace, "", LISTED_SH, "-- /bin/sh -c 'echo ran'");
+
+    let report = output_report(&output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    assert_eq!(output.stdout, b"ran\n", "{report}");
+}
+
 /// The `value`s of the literal arguments of the JSON plan in `output`.
 fn literal_arguments(output: &Output) -> Vec<String> {
     let report = output_report(output);
