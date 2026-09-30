@@ -1649,26 +1649,18 @@ fn req_460_files_of_the_place_are_bound_read_only_and_fall_back_to_data() {
     let planned = arguments(&with_place);
     let from_data = arguments(&Provisions::default());
 
-    assert_eq!(
-        over(&planned, "/home/u/proj/.env"),
-        [
-            literal("--ro-bind"),
-            Argument::SharedFile {
-                file: SharedFile::Empty,
-                path: place.join("empty"),
+    let bound_from_the_place =
+        |destination: &str, expected: SharedFile| match &over(&planned, destination)[..] {
+            [bind, Argument::SharedFile { file, path }] => {
+                assert_eq!(*bind, literal("--ro-bind"), "{destination}");
+                assert_eq!(*file, expected, "{destination}");
+                assert_eq!(path.parent(), Some(place.as_path()), "{destination}");
             }
-        ]
-    );
-    assert_eq!(
-        over(&planned, "/etc/resolv.conf"),
-        [
-            literal("--ro-bind"),
-            Argument::SharedFile {
-                file: SharedFile::Resolver,
-                path: place.join("resolv.conf"),
-            }
-        ]
-    );
+            other => panic!("{destination}: {other:?}"),
+        };
+
+    bound_from_the_place("/home/u/proj/.env", SharedFile::Empty);
+    bound_from_the_place("/etc/resolv.conf", SharedFile::Resolver);
     assert_eq!(
         over(&from_data, "/home/u/proj/.env"),
         [literal("--ro-bind-data"), Argument::EmptyFile]

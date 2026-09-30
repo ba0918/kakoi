@@ -62,6 +62,16 @@ fn outer_host_profile(host: &FakeHost, allow_nested_filtered: bool) {
     );
 }
 
+/// Whether the shared file place `place` holds a file with the resolver
+/// configuration's content, which a launch that used it for filtered binds.
+const RESOLVER_IN_PLACE: &str = r#"
+def resolver_in_place(place):
+    if not os.path.isdir(place):
+        return False
+    return any(open(os.path.join(place, name)).read() == 'nameserver 127.0.0.53\n'
+               for name in os.listdir(place))
+"#;
+
 const SERVE_BOTH: &str = r#"
 dns({('app.example', 1): [('11.0.0.5', 300)], ('other.example', 1): [('11.0.0.6', 300)]})
 serve('11.0.0.5', 8080, 'tcp', 'app')
@@ -148,14 +158,14 @@ fn ex_891_filtered_inside_filtered_resolves_through_the_outer_resolver() {
     );
 
     let output = host.run(&format!(
-        r#"{SERVE_BOTH}
+        r#"{SERVE_BOTH}{RESOLVER_IN_PLACE}
 resolv('nameserver 127.0.0.1\n')
 os.makedirs(os.environ['HOME_DIR'] + '/run')
 process = kakoi({app:?}, environment={{'XDG_RUNTIME_DIR': os.environ['HOME_DIR'] + '/run'}},
                unprivileged=True)
 print(process.stdout.read().decode(), end='')
 print('outer exit', finish(process))
-print('place used', os.path.isfile(os.environ['HOME_DIR'] + '/run/kakoi/resolv.conf'))
+print('place used', resolver_in_place(os.environ['HOME_DIR'] + '/run/kakoi'))
 "#
     ));
 
@@ -191,12 +201,12 @@ print('resolv.conf', oct(stat.S_IMODE(resolver.st_mode)), stat.S_ISREG(resolver.
 "#;
 
     let output = host.run(&format!(
-        r#"
+        r#"{RESOLVER_IN_PLACE}
 os.makedirs(os.environ['HOME_DIR'] + '/run')
 process = kakoi({app:?}, environment={{'XDG_RUNTIME_DIR': os.environ['HOME_DIR'] + '/run'}})
 print(process.stdout.read().decode(), end='')
 print('exit', finish(process))
-print('place used', os.path.isfile(os.environ['HOME_DIR'] + '/run/kakoi/resolv.conf'))
+print('place used', resolver_in_place(os.environ['HOME_DIR'] + '/run/kakoi'))
 "#
     ));
 

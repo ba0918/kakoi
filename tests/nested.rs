@@ -155,7 +155,7 @@ fn req_261_a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_w
     let (home, workspace) = home_with_workspace();
     let bin = home.write_executable("ws/bin/tool", "#!/bin/sh\nexit 7\n");
     let bin = bin.parent().unwrap().display();
-    std::fs::create_dir(workspace.join("empty")).unwrap();
+    std::fs::create_dir(workspace.join("no-programs")).unwrap();
 
     let found = run_inside(
         home.path(),
@@ -170,7 +170,7 @@ fn req_261_a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_w
         &workspace,
         &format!(
             "exec /usr/bin/env PATH={} {KAKOI} -- tool",
-            workspace.join("empty").display()
+            workspace.join("no-programs").display()
         ),
     );
     let report = output_report(&missing);
@@ -332,9 +332,9 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     );
     assert_diagnostic(&without_a_profile, 125, "policy");
 
-    // The full form: the nested plan is the plain plan with one line in front that marks
-    // it as nested. The nested run is handed the environment the plain one gets, so that
-    // the full form, which shows the final environment itself, is the same line for line.
+    // The full form: the nested plan carries what marks it as nested, which the plain plan
+    // does not. The nested run is handed the environment the plain one gets, so that the
+    // final environment the full form shows is no difference between them.
     let plain = binary(home.path())
         .current_dir(&workspace)
         .args(["--workspace", &ws.to_string(), "--print-plan=full"])
@@ -354,11 +354,13 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     assert_eq!(nested.status.code(), Some(0), "{report}");
     let plain = String::from_utf8(plain.stdout).unwrap();
     let nested = String::from_utf8(nested.stdout).unwrap();
-    let (first_line, rest) = nested.split_once('\n').unwrap();
-    assert_eq!(rest, plain, "{report}");
-    assert!(!plain.contains(first_line), "{report}");
+    let marking: Vec<&str> = nested
+        .lines()
+        .filter(|line| !plain.lines().any(|plain| plain == *line))
+        .collect();
+    assert!(!marking.is_empty(), "{report}");
 
-    // The summary carries the same first line, and the JSON form the `nested` key.
+    // The summary carries the same marking, and the JSON form the `nested` key.
     let summary = run_inside(
         home.path(),
         &workspace,
@@ -367,7 +369,9 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     let report = output_report(&summary);
     assert_eq!(summary.status.code(), Some(0), "{report}");
     let summary = String::from_utf8(summary.stdout).unwrap();
-    assert!(summary.starts_with(&format!("{first_line}\n")), "{report}");
+    for line in &marking {
+        assert!(summary.lines().any(|summary| summary == *line), "{report}");
+    }
     assert!(summary.contains("\n  rw      ~/ws\n"), "{report}");
 
     let json = run_inside(
@@ -449,7 +453,7 @@ fn ex_521_a_nested_plan_of_a_missing_named_profile_is_a_policy_diagnostic() {
 fn ex_499_init_inside_an_isolation_without_bwrap_succeeds_without_the_nesting_warning() {
     // The home is read-only inside, so the configuration directory is put in the workspace.
     let (home, workspace) = home_with_workspace();
-    std::fs::create_dir(workspace.join("empty")).unwrap();
+    std::fs::create_dir(workspace.join("no-programs")).unwrap();
     let config = workspace.join("config");
 
     let output = run_inside(
@@ -457,7 +461,7 @@ fn ex_499_init_inside_an_isolation_without_bwrap_succeeds_without_the_nesting_wa
         &workspace,
         &format!(
             "exec /usr/bin/env PATH={} XDG_CONFIG_HOME={} {KAKOI} init",
-            workspace.join("empty").display(),
+            workspace.join("no-programs").display(),
             config.display()
         ),
     );

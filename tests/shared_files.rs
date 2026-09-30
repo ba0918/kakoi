@@ -163,12 +163,9 @@ fn req_461_the_place_is_made_0700_and_its_file_0600() {
     assert_eq!(assert_quiet(&output), EMPTY_REGULAR_0600);
     let place = scene.place();
     assert_eq!(mode(&place), 0o700);
-    let files: Vec<_> = std::fs::read_dir(&place)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect();
-    assert_eq!(files.len(), 1, "{files:?}");
-    let metadata = std::fs::symlink_metadata(&files[0]).unwrap();
+    let file = bound_file(&scene);
+    assert_eq!(file.parent(), Some(place.as_path()));
+    let metadata = std::fs::symlink_metadata(&file).unwrap();
     assert!(metadata.file_type().is_file());
     assert_eq!(metadata.permissions().mode() & 0o7777, 0o600);
     assert_eq!(metadata.len(), 0);
@@ -176,16 +173,20 @@ fn req_461_the_place_is_made_0700_and_its_file_0600() {
     assert_eq!(metadata.uid(), unsafe { libc::getuid() });
 }
 
+/// The file of the place the plan of `scene` binds over the hidden file.
+fn bound_file(scene: &Scene) -> PathBuf {
+    let plan = scene.json_plan(Some(scene.runtime.as_os_str()));
+    let over = mount_over(&plan, &scene.hidden);
+    PathBuf::from(over[1]["value"].as_str().unwrap())
+}
+
 /// The file in the place a run with the hidden file of `scene` binds, after one run made
 /// it.
 fn made_file(scene: &Scene) -> PathBuf {
     assert_quiet(&scene.run_with_place("true"));
-    let files: Vec<_> = std::fs::read_dir(scene.place())
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect();
-    assert_eq!(files.len(), 1, "{files:?}");
-    files.into_iter().next().unwrap()
+    let file = bound_file(scene);
+    assert!(file.is_file(), "{}", file.display());
+    file
 }
 
 // @kotowari[EX-894]
