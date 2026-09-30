@@ -230,7 +230,9 @@ and what `/dev` provides.
 What is not shown is not hidden either: a `hide` written or generated (a secret file, the
 configuration directory's `secrets/`, a scan hit) for a place that is not shown is skipped with
 the reason in the plan, and so is a scan root or a `hide-mounts` `under` under which nothing is
-shown. A command guard wraps, and a command given by name is found as, only a program whose
+shown. A scan whose root holds a shown place still runs: with `root = "~"` and only the
+workspace shown, what it finds in the workspace (an `.env` it matches) is hidden, and what it
+finds elsewhere is skipped. A command guard wraps, and a command given by name is found as, only a program whose
 place and file are shown: a shim first on `PATH` that is not shown is passed over for the next
 one that is, and a name found nowhere shown is `command not found` (127). The current directory
 has to be inside a shown place, or the run stops with `path`, `--print-plan` included.
@@ -280,7 +282,9 @@ are such scripts (`~/.claude/hooks`, `~/.codex/hooks`). A script handed to its i
 `kakoi` does this with Landlock, which forbids mounting once it restricts files, so it cannot be
 done before `bwrap` has made the isolation: `bwrap` starts `kakoi` itself as the isolation's
 first process, from a read-only place of its own, and that process restricts execution and then
-starts the command under the name it was given. A program that is not allowed fails to start
+starts the command under the name it was given. When a [command guard](#command-guards) with
+`guard-absolute-path` places an allowed program again, the program placed again is allowed as
+that item, so the guarded program still starts. A program that is not allowed fails to start
 (`Permission denied`); the command itself that is not allowed ends the run with
 `command not executable` and 126. A host without Landlock stops the launch with `bwrap`,
 `--print-plan` included.
