@@ -1,8 +1,7 @@
 # ライブラリの責務と実証条件
 
 この章は、ライブラリの責務と、filteredの実装・提供に必要な実証条件を説明する。
-以下のクレート分割は公開Rust APIの設計草案であり、現在のkakoi-coreとkakoi-netからの移行は未実装である。
-新APIの利用方法と型は、[設計契約](../../decision/brainstorm/2026-10-03-public-library-api-contract.md)の承認対象である。
+現在のクレート分割と、[公開APIの利用手順](library-api.md)を案内する。
 後半のfilteredの実証条件は、このクレート分割によって省略しない。
 
 ## 計画を作る処理と通信を動かす処理

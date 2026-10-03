@@ -24,8 +24,11 @@ tests to guide chapters.
 The project is implemented in Rust 2021 with a minimum supported Rust version of 1.88. The
 workspace manifest and locked dependency graph are in `Cargo.toml` and `Cargo.lock`; the
 implementation is in `src/` (the `kakoi` binary: the command line, the start-up, and the
-plan's text forms) and `crates/kakoi-core/src/` (the library `kakoi-core`: everything else,
-usable from Rust without the command line), with behavior coverage in `tests/`.
+plan's text forms) and the responsibility-specific crates under `crates/`: pure `kakoi-policy`
+and `kakoi-plan`, OS operations in `kakoi-linux`, networking in `kakoi-net`, and orchestration
+and the public embedding API in `kakoi-runtime`. Behavior coverage is in `tests/` and runtime
+unit tests. The public entrypoints are runtime and policy; see
+[`docs/guide/maintainer/library-api.md`](docs/guide/maintainer/library-api.md).
 
 Run the locally reproducible checks with the repository's locked dependencies:
 
@@ -34,7 +37,23 @@ cargo build --workspace --locked
 cargo test --workspace --all-targets --locked
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --doc --locked
 ```
+
+The three standalone consumers are `examples/library-policy`, `examples/library-sync`, and
+`examples/library-async`. Each has its own workspace and lockfile. For each example, run:
+
+```text
+cargo build --manifest-path examples/<example>/Cargo.toml --locked
+cargo test --manifest-path examples/<example>/Cargo.toml --all-targets --locked
+cargo fmt --manifest-path examples/<example>/Cargo.toml --all --check
+cargo clippy --manifest-path examples/<example>/Cargo.toml --all-targets --locked -- -D warnings
+cargo run --manifest-path examples/<example>/Cargo.toml --locked -- --self-test
+```
+
+CI runs the workspace, documentation, and consumers on GNU and musl, and builds all four
+workspaces with Rust 1.88. The API integration tests compile independent consumers in separate
+target directories under this checkout to avoid reentering Cargo's outer build lock.
 
 The network tests additionally need `nftables` (tested with 1.0.9) at `/usr/sbin/nft`
 and `iproute2` at `/usr/sbin/ip`. The latter constructs private veth test fixtures;
@@ -116,8 +135,8 @@ when, is in the routing table of `AGENTS.md`.
   The project keeps no ADRs: kotowari has no way to leave `decisions.adr` unset, so
   `.kotowari/config.yaml` points it at the decision records directory rather than at an empty
   directory git does not keep, which would stop `kotowari check` in a fresh clone.
-- The tests kotowari reads are set in `.kotowari/config.yaml` (currently `tests/*.rs` and
-  `tests/**/*.rs`). If a change moves tests elsewhere, update that file too.
+- The tests kotowari reads are set in `.kotowari/config.yaml` (root integration tests and
+  runtime source unit tests). If a change moves tests elsewhere, update that file too.
 - Mark a test only with the requirements it actually verifies.
 
 ## Project constraints

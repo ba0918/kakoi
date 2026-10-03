@@ -8,7 +8,7 @@ Ctrl+C や SIGTERM を受けたときの動き、終了猶予のキー、kakoi �
 実装の前に、方式が実際に成り立つことを確かめる実証の条件（[library.md](../../maintainer/library.md)）を満たす必要がある。
 
 この章のexec形態、シグナル、数値の終了コード、標準エラーへの通知はCLIの契約を説明する。
-組み込みAPIは設計草案で未実装であり、host、none、filteredのすべてを監督し、実行ハンドルと構造化された結果、状態イベントを返す（[設計契約](../../../decision/brainstorm/2026-10-03-public-library-api-contract.md)）。
+組み込みAPIはhost、none、filteredのすべてを監督し、実行ハンドルと構造化された結果、状態イベントを返す（[公開APIガイド](../../maintainer/library-api.md)）。
 
 ## filtered で監督を残す
 <!-- @kotowari[REQ-148:d561cde4, EX-328:8555ae9b, EX-329:36cd2287] -->
@@ -298,7 +298,7 @@ SIGTERM による終了処理の途中でこの故障が起きても 125 にな�
 
 標準エラーへの通知はCLIの契約である。
 組み込みAPIの設計草案は構造化した状態イベントを提供し、ライブラリ自身は呼び出し元の標準エラーへ状態通知を書かない。
-この状態イベントは未実装である（[設計契約](../../../decision/brainstorm/2026-10-03-public-library-api-contract.md)）。
+受信と履歴欠落の扱いは[公開APIガイド](../../maintainer/library-api.md)を参照する。
 
 ## 出力が詰まったとき
 <!-- @kotowari[REQ-069:df90cbdf, REQ-144:82c58659, EX-131:e8e87560, EX-132:87fef332, EX-320:233a7ebe, EX-321:be054220] -->

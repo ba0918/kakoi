@@ -60,6 +60,7 @@ kakoi を変更する人が守る契約の部。
 | [版とリリース](maintainer/release.md) | 版の置き場所と配布物 |
 | [公開文書に載せる事項](maintainer/public-docs.md) | 英語の公開文書が説明する内容 |
 | [ライブラリの責務と実証条件](maintainer/library.md) | 計画と実行の分離、filtered の提供前の確認 |
+| [Rustから隔離を起動する](maintainer/library-api.md) | path依存、同期main、準備と寿命、非同期I/O、独立した利用例 |
 
 ## 付録
 

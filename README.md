@@ -106,6 +106,26 @@ sockets under `/run` and the rest of your home do not exist. `commands.mode = "l
 the programs that can start as well; see
 [Showing only what is listed](docs/policy.md#showing-only-what-is-listed-mountsmode).
 
+## Rust embedding API
+
+External Rust packages can use `kakoi-runtime` through a path dependency. It reexports the
+policy input types and provides preparation, spawn, stop handles, finite events, and synchronous
+or runtime-independent asynchronous waits. Policy-only consumers can depend on `kakoi-policy`.
+The API is experimental; these packages are not distributed through crates.io.
+
+Call `dispatch_helper()` at the beginning of a synchronous `main`, before application or async
+runtime initialization. Helpers reexecute the consumer binary, including its pre-main
+initializers. Embedded runs require a readable executable and bwrap's `--bind-fd` and
+`--ro-bind-fd` features; they do not change the CLI's existing requirements. Helper copies cost
+memory proportional to binary size and placement count, and dynamically linked helpers need
+their dependencies visible under the policy. They are not automatically exposed.
+
+See the [API guide](docs/guide/maintainer/library-api.md) and the standalone
+[policy](examples/library-policy/README.md), [sync](examples/library-sync/README.md), and
+[async](examples/library-async/README.md) packages. `Running` owns the isolation: dropping it
+starts shutdown without waiting; `wait()` returns the retained result after cleanup. A
+`StopHandle`, event receiver, or pipe does not keep the isolation alive.
+
 ## How it works
 
 Up to three written layers are merged, lowest first, and the upper layer wins:

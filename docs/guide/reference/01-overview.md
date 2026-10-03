@@ -36,7 +36,7 @@ argv[0] を `/usr/bin/sh` に変えることや、同じ入力でマウントの
 kakoi が動く環境は次のとおりである。
 
 bwrapの版の条件はCLIの契約である。
-組み込みAPIは設計草案で未実装であり、版名だけでなく必要なbwrapの機能を確認し、不足時は起動エラーにする（[設計契約](../../decision/brainstorm/2026-10-03-public-library-api-contract.md)）。
+組み込みAPIは版名だけでなく必要なbwrapの機能を確認し、不足時は起動エラーにする（[公開APIガイド](../maintainer/library-api.md)）。
 
 | 条件 | 対応範囲 |
 |---|---|

@@ -79,7 +79,7 @@ ports = ["443"]
 加えたキーをどれかの段が書いていれば、この既定値は使わず、上の表のとおり種類 `policy` の診断で終わる。
 
 この省略時の既定値は既存TOMLの契約である。
-新しいRust構築APIはマウント、ネットワーク、環境の各モードを明示させる設計草案で、未実装である（[設計契約](../../../decision/brainstorm/2026-10-03-public-library-api-contract.md)）。
+Rust構築APIはマウント、ネットワーク、環境の各モードを明示させる（[公開APIガイド](../../maintainer/library-api.md)）。
 
 ## host と none に残った許可と公開
 <!-- @kotowari[REQ-083:1cd4d747, REQ-084:a384542a, REQ-395:e8bab658, EX-168:af9c1123, EX-170:671ffe61, EX-172:5292db4d, EX-730:b265936a] -->
