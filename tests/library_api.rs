@@ -6,6 +6,203 @@ mod common;
 mod retained_mounts;
 use common::{output_report, TempDir};
 
+// @kotowari[REQ-library-410, EX-library-417]
+#[test]
+fn consumer_itself_is_subject_to_its_requested_guard() {
+    run_fixture("--self-test-own-guard");
+}
+
+// @kotowari[REQ-library-408, REQ-library-409, REQ-475, EX-library-412, EX-library-416]
+#[test]
+fn listed_allows_each_copied_guard_but_not_the_original_consumer() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("workspace/secret", "private");
+    dir.write("runtime/sentinel", "keep");
+    dir.write_executable("workspace/tools/tool", "#!/bin/sh\nexit 7\n");
+    dir.write_executable("workspace/tools/tool2", "#!/bin/sh\nexit 8\n");
+    let output = Command::new(consumer())
+        .arg("--self-test-listed-copies")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .env("XDG_RUNTIME_DIR", dir.path().join("runtime"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+    let files: Vec<_> = std::fs::read_dir(dir.path().join("runtime/kakoi"))
+        .unwrap()
+        .map(|f| f.unwrap().file_name())
+        .collect();
+    assert_eq!(files, [std::ffi::OsString::from("empty")]);
+    assert_eq!(
+        std::fs::read(dir.path().join("runtime/kakoi/empty")).unwrap(),
+        b""
+    );
+}
+
+// @kotowari[REQ-library-106, REQ-library-408]
+#[test]
+fn changed_generated_guard_table_fails_before_releasing_the_target() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write_executable(
+        "workspace/tools/tool",
+        "#!/bin/sh\nprintf ran > target-ran\n",
+    );
+    let real = Command::new("/bin/sh")
+        .args(["-c", "command -v bwrap"])
+        .output()
+        .unwrap();
+    let real = String::from_utf8(real.stdout).unwrap();
+    dir.write_executable("wrapper/bwrap", format!("#!/usr/bin/python3\nimport os,sys,json\na=sys.argv[1:]\nfor i,v in enumerate(a):\n if v=='/dev/kakoi-guard/table' and a[i-2]=='--ro-bind-data':\n  t=json.loads(os.read(int(a[i-1]),1000000)); [e.update(rules=[]) for e in t['entries']]; f=os.memfd_create('replacement',0); os.write(f,json.dumps(t).encode()); os.lseek(f,0,0); a[i-1]=str(f)\nos.execv({:?},[{:?}]+a)\n",real.trim(),real.trim()));
+    let output = Command::new(consumer())
+        .arg("--self-test-changed-table")
+        .env_clear()
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                dir.path().join("wrapper").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-library-408, REQ-453, EX-library-413]
+#[test]
+fn role_and_per_copy_identity_reject_missing_tables_and_match_deleted_suffixes() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    for (name, exit) in [
+        ("tool", 7),
+        ("tool2", 8),
+        ("tool (deleted)", 9),
+        ("tool (deleted) (deleted)", 10),
+    ] {
+        dir.write_executable(
+            format!("workspace/tools/{name}"),
+            format!("#!/bin/sh\nexit {exit}\n"),
+        );
+    }
+    dir.write(
+        "workspace/dispatch.py",
+        include_str!("fixtures/library-api/guard_dispatch.py"),
+    );
+    let output = Command::new(consumer())
+        .arg("--self-test-dispatch-failures")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-library-408, REQ-475]
+#[test]
+fn probe_initializers_descendants_are_reaped_before_target_release() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    for name in ["tool", "tool2"] {
+        dir.write_executable(format!("workspace/tools/{name}"), "#!/bin/sh\nexit 0\n");
+    }
+    let output = Command::new(consumer())
+        .arg("--self-test-probe-descendants")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-library-406, EX-library-408, EX-library-409]
+#[test]
+fn dynamically_linked_helper_dependencies_are_not_implicitly_published() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/library-sync-dynamic");
+    let build = Command::new(env!("CARGO"))
+        .args([
+            "build",
+            "--manifest-path",
+            "examples/library-sync/Cargo.toml",
+            "--locked",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--target-dir",
+        ])
+        .arg(&target)
+        .output()
+        .unwrap();
+    assert!(build.status.success(), "{}", output_report(&build));
+    let executable = target.join("x86_64-unknown-linux-gnu/debug/kakoi-library-sync-example");
+    let dependencies = Command::new("ldd").arg(&executable).output().unwrap();
+    assert!(
+        dependencies.status.success(),
+        "{}",
+        output_report(&dependencies)
+    );
+    assert!(String::from_utf8_lossy(&dependencies.stdout).contains("libc.so"));
+    let output = Command::new(executable)
+        .arg("--self-test-missing-dynamic")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-library-408, EX-library-414]
+#[test]
+fn guard_execution_denial_fails_before_target_release_without_disk_fallback() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write_executable(
+        "workspace/tools/tool",
+        "#!/bin/sh\nprintf ran > target-ran\n",
+    );
+    let real = Command::new("/bin/sh")
+        .args(["-c", "command -v bwrap"])
+        .output()
+        .unwrap();
+    let real = String::from_utf8(real.stdout).unwrap();
+    dir.write_executable("wrapper/bwrap",format!("#!/usr/bin/python3\nimport os,sys\na=sys.argv[1:]\nfor i,v in enumerate(a):\n if v=='/dev/kakoi-guard/bin/tool' and a[i-2]=='--ro-bind-data':\n  assert a[i-4]=='--perms'; a[i-3]='0444'\nos.execv({:?},[{:?}]+a)\n",real.trim(),real.trim()));
+    let output = Command::new(consumer())
+        .arg("--self-test-denied-guard")
+        .env_clear()
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                dir.path().join("wrapper").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-301, REQ-library-303, EX-library-303]
 #[test]
 fn host_and_none_launch_report_exit_and_pipe_output_and_reap_descendants() {
@@ -326,7 +523,7 @@ fn command_names_use_the_effective_path_while_bwrap_uses_the_host_path() {
     assert!(output.status.success(), "{}", output_report(&output));
 }
 
-// @kotowari[REQ-446]
+// @kotowari[REQ-446, REQ-library-104, EX-library-112, EX-library-404]
 #[test]
 fn named_command_follows_the_guard_placed_on_the_isolated_path() {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
@@ -334,6 +531,21 @@ fn named_command_follows_the_guard_placed_on_the_isolated_path() {
     dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write_executable("workspace/requested-tools/tool", "#!/bin/sh\nexit 0\n");
     dir.write_executable("workspace/policy-tools/tool", "#!/bin/sh\nexit 1\n");
+    dir.write_executable("workspace/prepended-tools/tool", "#!/bin/sh\nexit 2\n");
+    dir.write_executable("workspace/policy-tools/bwrap", "#!/bin/sh\nexit 99\n");
+    let real = Command::new("/bin/sh")
+        .args(["-c", "command -v bwrap"])
+        .output()
+        .unwrap();
+    assert!(real.status.success());
+    dir.write_executable(
+        "workspace/requested-tools/bwrap",
+        format!(
+            "#!/bin/sh\nprintf used > {:?}\nexec {} \"$@\"\n",
+            dir.path().join("workspace/bwrap-used"),
+            String::from_utf8(real.stdout).unwrap().trim()
+        ),
+    );
     let output = Command::new(consumer())
         .arg("--self-test-command-guard-path")
         .env_clear()
@@ -343,6 +555,10 @@ fn named_command_follows_the_guard_placed_on_the_isolated_path() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
+    assert_eq!(
+        std::fs::read(dir.path().join("workspace/bwrap-used")).unwrap(),
+        b"used"
+    );
 }
 
 fn consumer() -> std::path::PathBuf {

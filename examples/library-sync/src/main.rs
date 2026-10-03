@@ -8,6 +8,7 @@ use kakoi_runtime::{
     NetworkMode, Policy, RunRequest, StdioSpec,
 };
 
+mod helper_checks;
 mod mount_checks;
 #[path = "../../../tests/fixtures/library-api/signal_state.rs"]
 mod signal_state;
@@ -28,8 +29,35 @@ extern "C" fn prepare_fault() {
         fn pause() -> i32;
         fn open(path: *const std::ffi::c_char, flags: i32, mode: u32) -> i32;
         fn strlen(value: *const std::ffi::c_char) -> usize;
+        fn pipe(fds: *mut i32) -> i32;
+        fn fork() -> i32;
+        fn read(fd: i32, data: *mut u8, length: usize) -> isize;
+        fn prctl(option: i32, ...) -> i32;
     }
     unsafe {
+        if !getenv(c"KAKOI_RUNTIME_PROBE_FD".as_ptr()).is_null()
+            && !getenv(c"KAKOI_TEST_PROBE_CHILD".as_ptr()).is_null()
+        {
+            let mut fds = [-1; 2];
+            if pipe(fds.as_mut_ptr()) == 0 {
+                let pid = fork();
+                if pid == 0 {
+                    close(fds[0]);
+                    prctl(15, c"probe-child".as_ptr(), 0usize, 0usize, 0usize);
+                    write(fds[1], b"x".as_ptr(), 1);
+                    close(fds[1]);
+                    loop {
+                        pause();
+                    }
+                }
+                close(fds[1]);
+                let mut ready = 0;
+                if read(fds[0], &mut ready, 1) == 1 {
+                    write(1, b"probe-created\n".as_ptr(), 14);
+                }
+                close(fds[0]);
+            }
+        }
         let worker = getenv(c"KAKOI_RUNTIME_WORKER_FD".as_ptr());
         let fault = getenv(c"KAKOI_TEST_PREPARE_FAULT".as_ptr());
         let record = getenv(c"KAKOI_TEST_CONTROL_RECORD".as_ptr());
@@ -115,6 +143,21 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-live-device" => self_test_live_device(),
         Some(value) if value == "--self-test-raw-mounts" => self_test_raw_mounts(),
         Some(value) if value == "--self-test-final-mounts" => mount_checks::final_mounts(),
+        Some(value) if value == "--self-test-own-guard" => helper_checks::own_guard(),
+        Some(value) if value == "--self-test-listed-copies" => helper_checks::listed_copies(),
+        Some(value) if value == "--self-test-changed-table" => {
+            helper_checks::changed_generated_table()
+        }
+        Some(value) if value == "--self-test-dispatch-failures" => {
+            helper_checks::dispatch_failures()
+        }
+        Some(value) if value == "--self-test-probe-descendants" => {
+            helper_checks::probe_descendants()
+        }
+        Some(value) if value == "--self-test-missing-dynamic" => {
+            helper_checks::missing_dynamic_dependencies()
+        }
+        Some(value) if value == "--self-test-denied-guard" => helper_checks::denied_guard(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
@@ -1188,7 +1231,8 @@ fn self_test_command_guard_path() {
     env.insert("PATH".into(), path);
     let context = HostContext::new(before.cwd().into(), env).unwrap();
     let policy = Policy::from_toml(&format!(
-        "[network]\nmode='none'\n[env]\nmode='clear'\n[env.set]\nPATH={:?}\n[[commands.guard]]\nprogram='tool'\ndeny=[['blocked']]\nreason='guarded'\n",
+        "[network]\nmode='none'\n[env]\nmode='clear'\npath-prepend=[{:?}]\n[env.set]\nPATH={:?}\n[[commands.guard]]\nprogram='tool'\ndeny=[['blocked']]\nreason='guarded'\n",
+        before.cwd().join("prepended-tools").to_str().unwrap(),
         before.cwd().join("policy-tools").to_str().unwrap(),
     )).unwrap();
     let prepared = prepare(RunRequest::new(
@@ -1207,6 +1251,28 @@ fn self_test_command_guard_path() {
         prepared.description().program,
         PathBuf::from("/dev/kakoi-guard/bin/tool")
     );
+    assert_eq!(
+        prepared.spawn().unwrap().wait().main,
+        kakoi_runtime::MainOutcome::Exited(2)
+    );
+    let policy = Policy::from_toml(&format!(
+        "[network]\nmode='none'\n[env.set]\nPATH={:?}\n[[commands.guard]]\nprogram='tool'\ndeny=[['blocked']]\nreason='guarded'\n",
+        before.cwd().join("policy-tools").to_str().unwrap(),
+    )).unwrap();
+    let run = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("tool".into()).arg("blocked".into()),
+        before,
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    assert_eq!(run.wait().main, kakoi_runtime::MainOutcome::Exited(126));
 }
 
 fn self_test_prepare_fault() {

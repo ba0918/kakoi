@@ -17,6 +17,7 @@ pub mod config;
 mod input;
 pub use input::{HostContext, InputError};
 mod execution;
+mod helper_image;
 mod ipc;
 mod preparation;
 mod request;

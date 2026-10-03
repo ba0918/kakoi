@@ -1,7 +1,7 @@
 //! Descriptor-mounted init and the worker's per-isolation supervision.
 
 use std::ffi::OsString;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::net::UnixStream;
@@ -25,7 +25,6 @@ use serde::{Deserialize, Serialize};
 
 const INIT: &str = "/dev/kakoi-runtime/init";
 const INIT_FD: &str = "KAKOI_RUNTIME_INIT_FD";
-const ROLE: &[u8] = b"\0KAKOI-ROLE-V1:INIT\0";
 
 #[derive(Serialize, Deserialize)]
 struct Check {
@@ -35,9 +34,81 @@ struct Check {
     kind: u32,
     rdev: u64,
 }
+#[derive(Serialize, Deserialize)]
+struct DataCheck {
+    path: Vec<u8>,
+    readonly: bool,
+}
 pub(crate) struct SourceCheck {
     path: PathBuf,
     identity: Identity,
+}
+pub(crate) fn place_helper_images(plan: &mut Plan) -> io::Result<()> {
+    if plan.commands.is_some() {
+        let root = kakoi_plan::command_limits::FIRST_ROOT;
+        let start = plan
+            .arguments
+            .windows(2)
+            .position(|args| {
+                matches!(args, [Argument::Literal(option), Argument::Literal(path)]
+                if option == "--tmpfs" && path == root)
+            })
+            .and_then(|index| index.checked_sub(2))
+            .ok_or_else(|| io::Error::other("missing first-process placement"))?;
+        let end = plan
+            .arguments
+            .windows(2)
+            .position(|args| {
+                matches!(args, [Argument::Literal(option), Argument::Literal(path)]
+                if option == "--remount-ro" && path == root)
+            })
+            .ok_or_else(|| io::Error::other("missing first-process boundary"))?
+            + 2;
+        plan.arguments.drain(start..end);
+        shift_layout(&mut plan.launch_layout, end, -((end - start) as isize));
+    }
+    if plan.guards.table.entries.is_empty() {
+        return Ok(());
+    }
+    let guard_image =
+        FileContent::new(crate::helper_image::copy(crate::helper_image::Role::Guard)?);
+    for entry in &plan.guards.table.entries {
+        let index = plan
+            .arguments
+            .windows(3)
+            .position(|args| {
+                matches!(args, [Argument::Literal(option), _, Argument::Literal(path)]
+                if option == "--ro-bind" && path.as_bytes() == entry.location)
+            })
+            .ok_or_else(|| io::Error::other("missing guard placement"))?;
+        plan.arguments[index] = Argument::Literal("--ro-bind-data".into());
+        plan.arguments[index + 1] = Argument::CopiedFile(guard_image.clone());
+        plan.arguments.splice(
+            index..index,
+            [
+                Argument::Literal("--perms".into()),
+                Argument::Literal("0555".into()),
+            ],
+        );
+        shift_layout(&mut plan.launch_layout, index, 2);
+    }
+    Ok(())
+}
+fn shift_layout(layout: &mut kakoi_plan::plan::LaunchLayout, from: usize, delta: isize) {
+    for position in [
+        &mut layout.argv0,
+        &mut layout.command_separator,
+        &mut layout.resolver_destination,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if *position >= from {
+            *position = position
+                .checked_add_signed(delta)
+                .expect("layout shift stays in bounds");
+        }
+    }
 }
 pub(crate) fn source_checks(
     plan: &Plan,
@@ -75,6 +146,9 @@ struct InitRequest {
     arguments: Vec<Vec<u8>>,
     checks: Vec<Check>,
     grace_ms: u64,
+    guards: Vec<Vec<u8>>,
+    allowed: Option<Vec<Vec<u8>>>,
+    data: Vec<DataCheck>,
 }
 #[derive(Serialize, Deserialize)]
 enum InitReply {
@@ -109,17 +183,16 @@ fn prepare_failure(cause: io::Error) -> PrepareError {
 }
 
 pub(crate) fn dispatch_image() -> Result<Option<Dispatch>, PrepareError> {
-    let mut image = std::fs::File::open("/proc/self/exe").map_err(prepare_failure)?;
-    let length = image.metadata().map_err(prepare_failure)?.len();
-    if length < ROLE.len() as u64 {
-        return Ok(None);
+    let role = match crate::helper_image::role() {
+        Ok(role) => role,
+        Err(_) => return Ok(Some(Dispatch::Completed(ExitCode::from(126)))),
+    };
+    if role == Some(crate::helper_image::Role::Guard) {
+        return Ok(Some(Dispatch::Completed(
+            crate::helper_image::dispatch_guard(),
+        )));
     }
-    image
-        .seek(SeekFrom::End(-(ROLE.len() as i64)))
-        .map_err(prepare_failure)?;
-    let mut role = vec![0; ROLE.len()];
-    image.read_exact(&mut role).map_err(prepare_failure)?;
-    if role != ROLE {
+    if role.is_none() {
         if std::env::var_os(INIT_FD).is_some() {
             return Err(prepare_failure(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -181,34 +254,11 @@ fn checks(plan: &Plan, mounts: &[RetainedMount]) -> io::Result<Vec<Check>> {
     let mut result = Vec::new();
     for mount in mounts {
         // A later mount of an ancestor intentionally covers an earlier publication.
-        let covered = plan.arguments[..separator]
-            .windows(3)
-            .enumerate()
-            .any(|(index, args)| {
-                if index <= mount.argument_index() {
-                    return false;
-                }
-                let [Argument::Literal(option), _, Argument::Literal(dest)] = args else {
-                    return false;
-                };
-                matches!(
-                    option.to_str(),
-                    Some("--bind" | "--ro-bind" | "--dev-bind" | "--ro-bind-data" | "--bind-data")
-                ) && mount.destination.starts_with(Path::new(dest))
-            })
-            || plan.arguments[..separator]
-                .windows(2)
-                .enumerate()
-                .any(|(index, args)| {
-                    if index <= mount.argument_index() {
-                        return false;
-                    }
-                    let [Argument::Literal(option), Argument::Literal(dest)] = args else {
-                        return false;
-                    };
-                    matches!(option.to_str(), Some("--tmpfs" | "--proc" | "--dev"))
-                        && mount.destination.starts_with(Path::new(dest))
-                });
+        let covered = data_covered(
+            &plan.arguments[..separator],
+            mount.argument_index(),
+            &mount.destination,
+        );
         if covered {
             continue;
         }
@@ -222,6 +272,64 @@ fn checks(plan: &Plan, mounts: &[RetainedMount]) -> io::Result<Vec<Check>> {
         });
     }
     Ok(result)
+}
+
+fn data_covered(arguments: &[Argument], index: usize, path: &Path) -> bool {
+    arguments.windows(3).enumerate().any(|(later,args)| {
+        later > index && matches!(args, [Argument::Literal(option), _, Argument::Literal(dest)]
+            if matches!(option.to_str(),Some("--bind" | "--ro-bind" | "--dev-bind" | "--ro-bind-data" | "--bind-data")) && path.starts_with(Path::new(dest)))
+    }) || arguments.windows(2).enumerate().any(|(later,args)| {
+        later > index && matches!(args,[Argument::Literal(option), Argument::Literal(dest)]
+            if matches!(option.to_str(),Some("--tmpfs" | "--proc" | "--dev")) && path.starts_with(Path::new(dest)))
+    })
+}
+
+fn verify_data(check: &DataCheck, expected: OwnedFd) -> io::Result<()> {
+    use std::io::Read;
+    let path = PathBuf::from(OsString::from_vec(check.path.clone()));
+    let mut actual = std::fs::File::open(&path)?;
+    let identity = Identity::of_fd(&actual.try_clone()?.into())?;
+    if identity.kind != libc::S_IFREG || Identity::of_path(&path)? != identity {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "generated file identity mismatch",
+        ));
+    }
+    if check.readonly {
+        let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+        if unsafe { libc::fstatvfs(actual.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if unsafe { stat.assume_init() }.f_flag & libc::ST_RDONLY == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "generated file is not read-only",
+            ));
+        }
+    }
+    let mut expected = std::fs::File::from(expected);
+    if actual.metadata()?.len() != expected.metadata()?.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "generated file content changed",
+        ));
+    }
+    let mut left = [0; 8192];
+    let mut right = [0; 8192];
+    loop {
+        let size = expected.read(&mut right)?;
+        if size == 0 {
+            break;
+        }
+        actual.read_exact(&mut left[..size])?;
+        if left[..size] != right[..size] {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "generated file content changed",
+            ));
+        }
+    }
+    Ok(())
 }
 
 struct ChildGuard(std::process::Child);
@@ -251,15 +359,12 @@ pub(crate) fn run_worker(
         owner,
         result,
     } = channels;
-    if plan.policy.network_mode == crate::NetworkMode::Filtered
-        || plan.commands.is_some()
-        || !plan.guards.placed.is_empty()
-    {
+    if plan.policy.network_mode == crate::NetworkMode::Filtered {
         let mut error = failure(
             ErrorKind::UnsupportedEnvironment,
             io::Error::new(
                 io::ErrorKind::Unsupported,
-                "guarded, listed and filtered supervision not yet connected",
+                "filtered supervision not yet connected",
             ),
             MainOutcome::NotStarted,
         );
@@ -282,7 +387,7 @@ pub(crate) fn run_worker(
         plan.arguments = kakoi_linux::retained_mounts::settle_shared(&plan.arguments, &mut mounts)?;
         let checks = checks(&plan, &mounts)?;
         let command = plan.command.as_ref().unwrap();
-        let request = InitRequest {
+        let mut request = InitRequest {
             program: command.path.as_os_str().as_bytes().to_vec(),
             argv0: command.command.as_bytes().to_vec(),
             arguments: command
@@ -292,9 +397,25 @@ pub(crate) fn run_worker(
                 .collect(),
             checks,
             grace_ms: u64::from(plan.policy.shutdown_grace_seconds) * 1000,
+            guards: plan
+                .guards
+                .table
+                .entries
+                .iter()
+                .map(|entry| entry.location.clone())
+                .collect(),
+            allowed: plan.commands.as_ref().map(|limits| {
+                limits
+                    .allowed
+                    .iter()
+                    .chain(&limits.relocated)
+                    .chain(&limits.outer_guards)
+                    .map(|path| path.as_os_str().as_bytes().to_vec())
+                    .collect()
+            }),
+            data: Vec::new(),
         };
-        let mut image = std::fs::read("/proc/self/exe")?;
-        image.extend_from_slice(ROLE);
+        let image = crate::helper_image::copy(crate::helper_image::Role::Init)?;
         let separator = plan.launch_layout.command_separator.unwrap();
         plan.arguments.truncate(separator);
         if let Some(index) = plan.launch_layout.argv0 {
@@ -312,6 +433,28 @@ pub(crate) fn run_worker(
             Argument::Literal("--".into()),
             Argument::Literal(INIT.into()),
         ]);
+        let mut expected_data = Vec::new();
+        for (index, args) in plan.arguments.windows(3).enumerate() {
+            let [Argument::Literal(option), content, Argument::Literal(path)] = args else {
+                continue;
+            };
+            if !matches!(option.to_str(), Some("--ro-bind-data" | "--bind-data")) {
+                continue;
+            }
+            if data_covered(&plan.arguments, index, Path::new(path)) {
+                continue;
+            }
+            let bytes = match content {
+                Argument::CopiedFile(content) => content.bytes(),
+                Argument::EmptyFile => &[],
+                _ => continue,
+            };
+            request.data.push(DataCheck {
+                path: path.as_bytes().to_vec(),
+                readonly: option == "--ro-bind-data",
+            });
+            expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", bytes)?);
+        }
         let mut bwrap = kakoi_linux::launch::assemble_retained(&plan, &mounts)?;
         crate::preparation::remove_helper_environment(&mut bwrap.command);
         let (init_control, child_control) = UnixStream::pair()?;
@@ -360,9 +503,9 @@ pub(crate) fn run_worker(
         }
         let child = bwrap.command.spawn()?;
         drop(child_control);
-        Ok((child, init_control, request, pipes, slots))
+        Ok((child, init_control, request, expected_data, pipes, slots))
     })();
-    let (child, init_control, request, pipes, slots) = match prepared {
+    let (child, init_control, request, expected_data, pipes, slots) = match prepared {
         Ok(prepared) => prepared,
         Err(cause) => {
             let kind = if cause.kind() == io::ErrorKind::InvalidData {
@@ -381,6 +524,9 @@ pub(crate) fn run_worker(
     let mut child = ChildGuard(child);
     let startup = (|| -> io::Result<InitReply> {
         ipc::send(&init_control, &request, &[])?;
+        for batch in expected_data.chunks(16) {
+            ipc::send(&init_control, &(), batch)?;
+        }
         while !poll(&init_control, 20)? {
             if poll(owner, 0)? || poll(control, 0)? {
                 return Err(io::Error::new(
@@ -534,6 +680,20 @@ fn init(control: &UnixStream) -> io::Result<()> {
     // ELF initializers can create descendants before dispatch. None survive release.
     reap_before_release()?;
     let validation = (|| -> io::Result<()> {
+        let mut data = Vec::new();
+        while data.len() < request.data.len() {
+            let (_, batch): ((), _) = ipc::recv(control)?;
+            if batch.is_empty() || batch.len() > request.data.len() - data.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid generated data descriptors",
+                ));
+            }
+            data.extend(batch);
+        }
+        for (check, expected) in request.data.iter().zip(data) {
+            verify_data(check, expected)?;
+        }
         for check in &request.checks {
             let path = PathBuf::from(OsString::from_vec(check.path.clone()));
             let expected = Identity {
@@ -556,6 +716,43 @@ fn init(control: &UnixStream) -> io::Result<()> {
             control,
             &InitReply::Failed(failure(
                 ErrorKind::PlanChanged,
+                cause,
+                MainOutcome::NotStarted,
+            )),
+            &[],
+        );
+    }
+    let readiness = (|| -> io::Result<()> {
+        if let Some(paths) = &request.allowed {
+            let mut allowed = Vec::new();
+            for bytes in paths.iter().chain(&request.guards) {
+                let path = PathBuf::from(OsString::from_vec(bytes.clone()));
+                if let Ok(fd) = kakoi_linux::landlock::open_path(&path) {
+                    allowed.push(fd);
+                }
+            }
+            allowed.push(kakoi_linux::landlock::open_path(Path::new(INIT))?);
+            allowed.extend(
+                kakoi_linux::landlock::open_path(Path::new(
+                    kakoi_plan::command_limits::DYNAMIC_LINKER,
+                ))
+                .ok(),
+            );
+            kakoi_linux::landlock::restrict_execution(&allowed)?;
+        }
+        for bytes in &request.guards {
+            let path = PathBuf::from(OsString::from_vec(bytes.clone()));
+            let confirmed = crate::helper_image::probe(&path);
+            reap_before_release()?;
+            confirmed?;
+        }
+        Ok(())
+    })();
+    if let Err(cause) = readiness {
+        return ipc::send(
+            control,
+            &InitReply::Failed(failure(
+                ErrorKind::HelperFailure,
                 cause,
                 MainOutcome::NotStarted,
             )),

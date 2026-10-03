@@ -22,7 +22,13 @@ const RESULT: &str = "KAKOI_RUNTIME_RESULT_FD";
 const VERSION: u32 = 1;
 
 pub(crate) fn remove_helper_environment(command: &mut Command) {
-    for key in [WORKER, OWNER, RESULT, "KAKOI_RUNTIME_INIT_FD"] {
+    for key in [
+        WORKER,
+        OWNER,
+        RESULT,
+        "KAKOI_RUNTIME_INIT_FD",
+        crate::helper_image::PROBE,
+    ] {
         command.env_remove(key);
     }
 }
@@ -816,7 +822,7 @@ fn prepare_worker(
         },
         landlock_abi: kakoi_linux::landlock::abi_version(),
     };
-    let plan =
+    let mut plan =
         crate::planning::plan_with_policy(&request, policy.source_layers(), policy.as_merged())
             .map_err(|cause| {
                 let kind = if cause.kind() == crate::diagnostic::Kind::Bwrap {
@@ -826,6 +832,8 @@ fn prepare_worker(
                 };
                 error(Phase::Planning, kind, cause.to_string())
             })?;
+    crate::execution::place_helper_images(&mut plan)
+        .map_err(|cause| io_error(Phase::Retention, cause))?;
     let separator = plan.launch_layout.command_separator.ok_or_else(|| {
         error(
             Phase::Retention,

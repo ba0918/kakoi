@@ -73,7 +73,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let config_dir = env.config_dir(&home);
     let layers = load_layers(&request.layers, &config_dir)?;
     let policy = merge(&layers)?;
-    plan_with_context(request, &layers, &policy, home, config_dir)
+    plan_with_context(request, &layers, &policy, home, config_dir, true)
 }
 
 pub(crate) fn plan_with_policy(
@@ -84,7 +84,7 @@ pub(crate) fn plan_with_policy(
     let env = HostEnvironment::from_variables(&request.host);
     let home = env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
     let config_dir = env.config_dir(&home);
-    plan_with_context(request, layers, policy, home, config_dir)
+    plan_with_context(request, layers, policy, home, config_dir, false)
 }
 
 fn plan_with_context(
@@ -93,6 +93,7 @@ fn plan_with_context(
     policy: &Policy,
     home: crate::environment::HomeDirectory,
     config_dir: PathBuf,
+    exclude_self: bool,
 ) -> Result<Plan, Diagnostic> {
     // The guards of both runs cannot be laid one over the other (specification REQ-466).
     if request.outer_guard && !policy.guards.is_empty() {
@@ -156,6 +157,7 @@ fn plan_with_context(
         &mut isolation,
         request.executable.as_deref(),
         request.outer_guard,
+        exclude_self,
     )?;
     // The last of stage 7: what each `rw-copy` item that applies starts the isolation
     // with, read only for the items that survived the resolution and the checks.
@@ -335,6 +337,7 @@ fn plan_guards(
     isolation: &mut plan::Isolation,
     executable: Option<&Path>,
     outer_guard: bool,
+    exclude_self: bool,
 ) -> Result<GuardPlan, Diagnostic> {
     let path = path_of(isolation.environment.values());
     let facts = policy
@@ -355,9 +358,11 @@ fn plan_guards(
         path.is_some(),
         &facts,
         &isolation.mounts.items,
-        kakoi.as_deref(),
-        kakoi.as_deref().and_then(file_id),
+        kakoi.as_deref().filter(|_| exclude_self),
+        kakoi.as_deref().filter(|_| exclude_self).and_then(file_id),
     );
+    let mut guards = guards;
+    guards.executable = kakoi.clone();
     if !guards.placed.is_empty() && kakoi.is_none() {
         return Err(Diagnostic::bwrap(
             "the executable of kakoi itself, which each command guard is, cannot be located",
