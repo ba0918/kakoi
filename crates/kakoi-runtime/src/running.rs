@@ -79,11 +79,17 @@ impl std::error::Error for ControlError {}
 pub(crate) enum Control {
     Start,
     Stop,
+    MainRetained,
 }
 #[derive(Serialize, Deserialize)]
 pub(crate) enum Started {
     Ready,
     Failed(StartError),
+}
+#[derive(Serialize, Deserialize)]
+pub(crate) enum ResultUpdate {
+    Main(MainOutcome),
+    Finished(RunOutcome),
 }
 pub(crate) struct State {
     pub status: RunStatus,

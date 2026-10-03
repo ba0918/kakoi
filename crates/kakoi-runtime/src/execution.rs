@@ -80,6 +80,7 @@ struct InitRequest {
 enum InitReply {
     Ready,
     Failed(StartError),
+    Main(MainOutcome),
     Finished(RunOutcome),
 }
 
@@ -430,9 +431,24 @@ pub(crate) fn run_worker(
     drop(pipes);
     let mut reason = ExitReason::Completed;
     let mut stopping = false;
+    let mut main = MainOutcome::Unknown;
     let outcome = loop {
         if poll(&init_control, 20).map_err(prepare_failure)? {
             match ipc::recv::<InitReply>(&init_control) {
+                Ok((InitReply::Main(observed), fds)) if fds.is_empty() => {
+                    main = observed;
+                    ipc::send(result, &crate::running::ResultUpdate::Main(main), &[])
+                        .map_err(prepare_failure)?;
+                    let (_, fds): ((), _) = ipc::recv(result).map_err(prepare_failure)?;
+                    if !fds.is_empty() {
+                        return Err(prepare_failure(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "unexpected result acknowledgement descriptors",
+                        )));
+                    }
+                    ipc::send(&init_control, &Control::MainRetained, &[])
+                        .map_err(prepare_failure)?;
+                }
                 Ok((InitReply::Finished(mut outcome), fds)) if fds.is_empty() => {
                     if reason != ExitReason::Completed {
                         outcome.reason = reason;
@@ -441,7 +457,7 @@ pub(crate) fn run_worker(
                 }
                 _ => {
                     break RunOutcome {
-                        main: MainOutcome::Unknown,
+                        main,
                         reason: ExitReason::InfrastructureFailure,
                         network: NetworkCleanup::NotApplicable,
                         processes: ProcessCleanup::Unconfirmed,
@@ -473,7 +489,12 @@ pub(crate) fn run_worker(
         outcome.processes = ProcessCleanup::Unconfirmed;
         outcome.reason = ExitReason::InfrastructureFailure;
     }
-    ipc::send(result, &outcome, &[]).map_err(prepare_failure)
+    ipc::send(
+        result,
+        &crate::running::ResultUpdate::Finished(outcome),
+        &[],
+    )
+    .map_err(prepare_failure)
 }
 
 fn init(control: &UnixStream) -> io::Result<()> {
@@ -548,6 +569,9 @@ fn init(control: &UnixStream) -> io::Result<()> {
         .map(main_status)
         .unwrap_or(MainOutcome::Unknown);
     let mut reason = ExitReason::Completed;
+    if early_status.is_some() && retain_main(control, main)? {
+        reason = ExitReason::StopRequested;
+    }
     let mut stopping: Option<Instant> = early_status.map(|_| Instant::now());
     if stopping.is_some() {
         unsafe {
@@ -561,6 +585,9 @@ fn init(control: &UnixStream) -> io::Result<()> {
             let pid = unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) };
             if pid == main_pid {
                 main = main_status(status);
+                if retain_main(control, main)? {
+                    reason = ExitReason::StopRequested;
+                }
                 if stopping.is_none() {
                     stopping = Some(Instant::now());
                     unsafe {
@@ -609,6 +636,32 @@ fn init(control: &UnixStream) -> io::Result<()> {
                 killed = true;
             }
             std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+}
+
+fn retain_main(control: &UnixStream, main: MainOutcome) -> io::Result<bool> {
+    // Acknowledgement comes only after the caller's independent reaper retained the fact.
+    // Descendant shutdown may fail after this point without erasing a known main result.
+    ipc::send(control, &InitReply::Main(main), &[])?;
+    let mut stopped = false;
+    loop {
+        let (reply, fds): (Control, _) = ipc::recv(control)?;
+        if !fds.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unexpected main acknowledgement descriptors",
+            ));
+        }
+        match reply {
+            Control::MainRetained => return Ok(stopped),
+            Control::Stop => stopped = true,
+            Control::Start => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "unexpected start during execution",
+                ))
+            }
         }
     }
 }

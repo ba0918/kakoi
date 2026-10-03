@@ -99,6 +99,12 @@ fn worker_death_does_not_claim_confirmed_cleanup() {
     run_fixture("--self-test-worker-death");
 }
 
+// @kotowari[REQ-library-301, EX-library-302]
+#[test]
+fn worker_death_after_main_exit_preserves_success_without_claiming_cleanup() {
+    run_fixture("--self-test-main-retention");
+}
+
 // @kotowari[REQ-library-301]
 #[test]
 fn command_death_before_exec_does_not_turn_error_pipe_eof_into_start_success() {

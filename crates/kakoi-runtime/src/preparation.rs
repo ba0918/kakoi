@@ -548,8 +548,29 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     if let Err(cause) = std::thread::Builder::new()
         .name("kakoi-reaper".into())
         .spawn(move || {
-            let received: io::Result<(crate::RunOutcome, Vec<OwnedFd>)> =
-                ipc::recv(&result_channel);
+            let mut main = crate::MainOutcome::Unknown;
+            let received = loop {
+                match ipc::recv::<crate::running::ResultUpdate>(&result_channel) {
+                    Ok((crate::running::ResultUpdate::Main(observed), fds)) if fds.is_empty() => {
+                        main = observed;
+                        if let Err(cause) = ipc::send(&result_channel, &(), &[]) {
+                            break Err(cause);
+                        }
+                    }
+                    Ok((crate::running::ResultUpdate::Finished(outcome), fds))
+                        if fds.is_empty() =>
+                    {
+                        break Ok(outcome);
+                    }
+                    Ok(_) => {
+                        break Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "unexpected result descriptors",
+                        ))
+                    }
+                    Err(cause) => break Err(cause),
+                }
+            };
             drop(result_channel);
             result_state
                 .control
@@ -560,9 +581,9 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
             let waited = owner.0.as_mut().map(Child::wait);
             owner.0 = None;
             let mut outcome = match received {
-                Ok((outcome, fds)) if fds.is_empty() => outcome,
+                Ok(outcome) => outcome,
                 _ => crate::RunOutcome {
-                    main: crate::MainOutcome::Unknown,
+                    main,
                     reason: crate::ExitReason::InfrastructureFailure,
                     network,
                     processes: crate::ProcessCleanup::Unconfirmed,

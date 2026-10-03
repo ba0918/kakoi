@@ -58,6 +58,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-parallel" => self_test_parallel(),
         Some(value) if value == "--self-test-inherit" => self_test_inherit(),
         Some(value) if value == "--self-test-worker-death" => self_test_worker_death(),
+        Some(value) if value == "--self-test-main-retention" => self_test_main_retention(),
         Some(value) if value == "--self-test-owner" => self_test_owner(),
         Some(value) if value == "--self-test-preexec-death" => self_test_preexec_death(),
         Some(value) if value == "--self-test-context-run" => self_test_context_run(),
@@ -548,6 +549,38 @@ fn self_test_worker_death() {
     );
     assert_eq!(result.main, kakoi_runtime::MainOutcome::Unknown);
     assert_eq!(output.read(&mut ready).unwrap(), 0);
+    assert!(children().is_empty());
+}
+
+fn self_test_main_retention() {
+    use std::io::{BufRead, BufReader};
+    unsafe extern "C" {
+        fn kill(pid: i32, signal: i32) -> i32;
+    }
+    let mut running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n[process]\nshutdown-grace-seconds=30\n").unwrap(),
+        CommandSpec::new("/usr/bin/python3".into()).arg("-c".into()).arg(
+            "import os,signal\nr,w=os.pipe()\nif os.fork()==0:\n def stopped(s,f):\n  os.write(1,b'cleanup-ready\\n'); signal.signal(signal.SIGTERM,signal.SIG_IGN)\n signal.signal(signal.SIGTERM,stopped)\n os.write(w,b'R')\n while True: signal.pause()\nos.read(r,1)\nos._exit(0)".into(),
+        ),
+        HostContext::capture().unwrap(),
+        StdioSpec { stdin: Io::Null, stdout: Io::Pipe, stderr: Io::Null },
+    )).unwrap().spawn().unwrap();
+    let mut output = BufReader::new(running.take_stdout().unwrap());
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(line, "cleanup-ready\n");
+    let worker: i32 = children().parse().unwrap();
+    assert_eq!(unsafe { kill(worker, 9) }, 0);
+    let outcome = running.wait();
+    assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(0));
+    assert_eq!(
+        outcome.reason,
+        kakoi_runtime::ExitReason::InfrastructureFailure
+    );
+    assert_eq!(
+        outcome.processes,
+        kakoi_runtime::ProcessCleanup::Unconfirmed
+    );
     assert!(children().is_empty());
 }
 
