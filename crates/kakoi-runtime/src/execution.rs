@@ -240,7 +240,7 @@ pub(crate) struct Channels<'a> {
 
 pub(crate) fn run_worker(
     mut plan: Plan,
-    mounts: Vec<RetainedMount>,
+    mut mounts: Vec<RetainedMount>,
     sources: Vec<SourceCheck>,
     stdio: [IoInput; 3],
     descriptors: Vec<OwnedFd>,
@@ -279,6 +279,7 @@ pub(crate) fn run_worker(
                 ));
             }
         }
+        plan.arguments = kakoi_linux::retained_mounts::settle_shared(&plan.arguments, &mut mounts)?;
         let checks = checks(&plan, &mounts)?;
         let command = plan.command.as_ref().unwrap();
         let request = InitRequest {

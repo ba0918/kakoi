@@ -404,6 +404,7 @@ fn self_test_raw_mounts() {
 
 fn self_test_shared_files() {
     use std::io::Read;
+    use std::os::unix::fs::PermissionsExt;
     let before = HostContext::capture().unwrap();
     std::fs::write("hidden-source", b"must be hidden").unwrap();
     let runtime = before.cwd().join("runtime");
@@ -441,6 +442,60 @@ fn self_test_shared_files() {
         .unwrap()
         .is_empty());
     assert_eq!(HostContext::capture().unwrap(), before);
+    let real_bwrap = std::env::split_paths(
+        before
+            .environment()
+            .get(std::ffi::OsStr::new("PATH"))
+            .unwrap(),
+    )
+    .map(|path| path.join("bwrap"))
+    .find(|path| path.is_file())
+    .unwrap();
+    let tools = before.cwd().join("shared-race-tools");
+    std::fs::create_dir(&tools).unwrap();
+    let wrapper = tools.join("bwrap");
+    let quote =
+        |path: &std::path::Path| format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"));
+    std::fs::write(&wrapper, format!("#!/bin/sh\nif [ \"$1\" != --help ]; then /bin/mv {} {}; printf replaced > {}; fi\nexec {} \"$@\"\n", quote(&runtime.join("kakoi/empty")), quote(&runtime.join("kakoi/old-empty")), quote(&runtime.join("kakoi/empty")), quote(&real_bwrap))).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut env = before.environment().clone();
+    env.insert("XDG_RUNTIME_DIR".into(), runtime.clone().into());
+    let mut path = tools.into_os_string();
+    path.push(":");
+    path.push(env.get(std::ffi::OsStr::new("PATH")).unwrap());
+    env.insert("PATH".into(), path);
+    let mut running = prepare(RunRequest::new(
+        Policy::from_toml(&format!(
+            "[mounts]\nhide=[{:?}]\n[network]\nmode='none'\n[env]\nmode='inherit'\n",
+            before.cwd().join("hidden-source").to_str().unwrap()
+        ))
+        .unwrap(),
+        CommandSpec::new("/bin/cat".into()).arg("hidden-source".into()),
+        HostContext::new(before.cwd().into(), env).unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    let mut bytes = Vec::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_end(&mut bytes)
+        .unwrap();
+    assert!(
+        bytes.is_empty(),
+        "substituted helper content was published: {bytes:?}"
+    );
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    assert_eq!(
+        std::fs::read(runtime.join("kakoi/empty")).unwrap(),
+        b"replaced"
+    );
 }
 
 fn self_test_live_device() {

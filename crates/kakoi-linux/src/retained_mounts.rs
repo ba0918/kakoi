@@ -76,6 +76,26 @@ pub fn recheck(mounts: &[RetainedMount]) -> io::Result<()> {
     Ok(())
 }
 
+/// Shared files are created only for launch. Retain their selected inode before
+/// handing the source to bwrap, just like the sources retained during prepare.
+pub fn settle_shared(
+    arguments: &[Argument],
+    mounts: &mut Vec<RetainedMount>,
+) -> io::Result<Vec<Argument>> {
+    let settled = crate::shared_files::settle(arguments);
+    for (index, window) in arguments.windows(3).enumerate() {
+        if !matches!(window[1], Argument::SharedFile { .. }) {
+            continue;
+        }
+        for mut mount in retain(&settled[index..index + 3])? {
+            mount.argument_index = index;
+            mounts.push(mount);
+        }
+    }
+    mounts.sort_by_key(RetainedMount::argument_index);
+    Ok(settled)
+}
+
 /// Replace only the positions observed before the command boundary. A distinct
 /// CLOEXEC descriptor is owned by this launch until bwrap consumes the reference.
 pub(crate) fn descriptor_arguments(
