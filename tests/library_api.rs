@@ -111,10 +111,16 @@ fn worker_death_after_main_exit_preserves_success_without_claiming_cleanup() {
     run_fixture("--self-test-main-retention");
 }
 
-// @kotowari[REQ-library-301]
+// @kotowari[REQ-library-301, REQ-library-202, EX-library-204]
 #[test]
 fn later_control_failure_takes_priority_over_an_already_started_stop() {
     run_fixture("--self-test-stopping-failure");
+}
+
+// @kotowari[REQ-library-201, EX-library-201]
+#[test]
+fn supervision_and_reaping_continue_while_the_caller_runs_unrelated_children() {
+    run_fixture("--self-test-independent-supervision");
 }
 
 // @kotowari[REQ-library-301]

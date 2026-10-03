@@ -87,6 +87,9 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-main-retention" => self_test_main_retention(),
         Some(value) if value == "--self-test-external-reap" => self_test_external_reap(),
         Some(value) if value == "--self-test-stopping-failure" => self_test_stopping_failure(),
+        Some(value) if value == "--self-test-independent-supervision" => {
+            self_test_independent_supervision()
+        }
         Some(value) if value == "--self-test-owner" => self_test_owner(),
         Some(value) if value == "--self-test-startup-owner" => {
             let request = RunRequest::new(
@@ -811,6 +814,8 @@ fn self_test_stopping_failure() {
         line.clear();
         output.read_line(&mut line).unwrap();
         assert_eq!(line, "stopping\n");
+        assert_eq!(running.status(), kakoi_runtime::RunStatus::Stopping);
+        assert!(running.outcome().is_none());
         let worker: i32 = children().parse().unwrap();
         let channels = std::fs::read_to_string(record)
             .unwrap()
@@ -847,6 +852,26 @@ fn self_test_stopping_failure() {
         );
         drop(running);
     }
+}
+
+fn self_test_independent_supervision() {
+    use std::time::{Duration, Instant};
+    let running = prepare(null_request()).unwrap().spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while running.outcome().is_none() || !children().is_empty() {
+        let other = std::process::Command::new("/bin/true").status().unwrap();
+        assert!(other.success());
+        assert!(
+            Instant::now() < deadline,
+            "supervision depended on a runtime wait"
+        );
+    }
+    let outcome = running.outcome().unwrap();
+    assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(0));
+    assert_eq!(
+        outcome.processes,
+        kakoi_runtime::ProcessCleanup::ConfirmedReaped
+    );
 }
 
 fn self_test_owner() {
