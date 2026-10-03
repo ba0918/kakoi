@@ -51,6 +51,19 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-repeat" => self_test_repeat(),
         Some(value) if value == "--self-test-command-path" => self_test_command_path(),
         Some(value) if value == "--self-test-command-guard-path" => self_test_command_guard_path(),
+        Some(value) if value == "--self-test-spawn" => self_test_spawn(),
+        Some(value) if value == "--self-test-lifetime" => self_test_lifetime(),
+        Some(value) if value == "--self-test-exec-error" => self_test_exec_error(),
+        Some(value) if value == "--self-test-mount-identity" => self_test_mount_identity(),
+        Some(value) if value == "--self-test-parallel" => self_test_parallel(),
+        Some(value) if value == "--self-test-inherit" => self_test_inherit(),
+        Some(value) if value == "--self-test-worker-death" => self_test_worker_death(),
+        Some(value) if value == "--self-test-owner" => self_test_owner(),
+        Some(value) if value == "--self-test-preexec-death" => self_test_preexec_death(),
+        Some(value) if value == "--self-test-context-run" => self_test_context_run(),
+        Some(value) if value == "--self-test-missing-features" => self_test_missing_features(),
+        Some(value) if value == "--self-test-shared-files" => self_test_shared_files(),
+        Some(value) if value == "--self-test-live-device" => self_test_live_device(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
@@ -92,6 +105,512 @@ fn self_test_prepare() {
     drop(prepared);
     assert!(!before.cwd().join("command-ran").exists());
     println!("worker preparation succeeded");
+}
+
+fn self_test_spawn() {
+    use kakoi_runtime::{MainOutcome, ProcessCleanup};
+    use std::io::Read;
+    for mode in ["host", "none"] {
+        let prepared = prepare(RunRequest::new(
+            Policy::from_toml(&format!("[network]\nmode='{mode}'\n")).unwrap(),
+            CommandSpec::new("/bin/sh".into())
+                .arg("-c".into())
+                .arg("printf 'pipe output'; sleep 1000 & exit 7".into()),
+            HostContext::capture().unwrap(),
+            StdioSpec {
+                stdin: Io::Null,
+                stdout: Io::Pipe,
+                stderr: Io::Pipe,
+            },
+        ))
+        .unwrap();
+        let mut running = prepared.spawn().unwrap();
+        let mut text = String::new();
+        running
+            .take_stdout()
+            .unwrap()
+            .read_to_string(&mut text)
+            .unwrap();
+        assert_eq!(text, "pipe output");
+        let result = running.wait();
+        assert_eq!(result.main, MainOutcome::Exited(7));
+        assert_eq!(result.network, kakoi_runtime::NetworkCleanup::NotApplicable);
+        assert_eq!(result.processes, ProcessCleanup::ConfirmedReaped);
+        assert!(std::sync::Arc::ptr_eq(&result, &running.wait()));
+        assert!(children().is_empty());
+    }
+}
+
+fn self_test_exec_error() {
+    let prepared = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("./bad-exec".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    let error = prepared.spawn().unwrap_err();
+    assert_eq!(error.main, kakoi_runtime::MainOutcome::NotStarted);
+    assert_eq!(error.kind, kakoi_runtime::ErrorKind::Io);
+    assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
+    assert_eq!(error.diagnostics[0].os_error, Some(2));
+    assert!(children().is_empty());
+}
+
+fn self_test_mount_identity() {
+    use std::os::unix::fs::symlink;
+    std::fs::write("source", "original").unwrap();
+    std::fs::write("replacement", "replacement").unwrap();
+    symlink("source", "mount-link").unwrap();
+    let context = HostContext::capture().unwrap();
+    let policy = Policy::from_toml(&format!(
+        "[mounts]\nrw-file=[{:?}]\n[network]\nmode='none'\n",
+        context.cwd().join("mount-link").to_str().unwrap(),
+    ))
+    .unwrap();
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("touch must-not-run".into()),
+        context,
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    std::fs::remove_file("mount-link").unwrap();
+    symlink("replacement", "mount-link").unwrap();
+    let error = prepared.spawn().unwrap_err();
+    assert_eq!(error.kind, kakoi_runtime::ErrorKind::PlanChanged);
+    assert_eq!(error.main, kakoi_runtime::MainOutcome::NotStarted);
+    assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
+    assert!(!std::path::Path::new("must-not-run").exists());
+}
+
+fn cat_request() -> RunRequest {
+    RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("printf ready; exec /bin/cat".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Pipe,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    )
+}
+
+fn self_test_context_run() {
+    use std::io::Read;
+    let before = HostContext::capture().unwrap();
+    let cwd = before.cwd().join("requested");
+    std::fs::create_dir(&cwd).unwrap();
+    let program = OsString::from_vec(b"tool-\xff".to_vec());
+    std::fs::copy("/bin/echo", cwd.join(&program)).unwrap();
+    let mut environment = before.environment().clone();
+    environment.insert("REQUEST_ONLY".into(), "specific-value".into());
+    let context = HostContext::new(cwd.clone(), environment).unwrap();
+    let mut relative = OsString::from("./");
+    relative.push(program);
+    let argument = OsString::from_vec(b"argument-\xfe".to_vec());
+    let prepared = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new(relative).arg(argument),
+        context.clone(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    assert_eq!(prepared.description().cwd, cwd);
+    let mut running = prepared.spawn().unwrap();
+    let mut output = Vec::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_end(&mut output)
+        .unwrap();
+    assert_eq!(output, b"argument-\xfe\n");
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    let mut running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("printf '%s\\n' \"$PWD\" \"$REQUEST_ONLY\"".into()),
+        context,
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    let mut output = String::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    assert_eq!(output, format!("{}\nspecific-value\n", cwd.display()));
+    running.wait();
+    assert_eq!(HostContext::capture().unwrap(), before);
+}
+
+fn self_test_missing_features() {
+    use std::os::unix::fs::PermissionsExt;
+    let before = HostContext::capture().unwrap();
+    let tools = before.cwd().join("feature-tools");
+    std::fs::create_dir(&tools).unwrap();
+    let bwrap = tools.join("bwrap");
+    std::fs::write(&bwrap, "#!/bin/sh\nif [ \"$1\" = --help ]; then printf 'bwrap 99.0'; exit 0; fi\ntouch helper-must-not-run\n").unwrap();
+    std::fs::set_permissions(&bwrap, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut env = before.environment().clone();
+    env.insert("PATH".into(), tools.into());
+    let prepared = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("touch must-not-run".into()),
+        HostContext::new(before.cwd().into(), env).unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    let error = prepared.spawn().unwrap_err();
+    assert_eq!(error.kind, kakoi_runtime::ErrorKind::UnsupportedEnvironment);
+    assert_eq!(error.main, kakoi_runtime::MainOutcome::NotStarted);
+    assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
+    assert!(!std::path::Path::new("must-not-run").exists());
+    assert!(!std::path::Path::new("helper-must-not-run").exists());
+}
+
+fn self_test_shared_files() {
+    use std::io::Read;
+    let before = HostContext::capture().unwrap();
+    std::fs::write("hidden-source", b"must be hidden").unwrap();
+    let runtime = before.cwd().join("runtime");
+    std::fs::create_dir(&runtime).unwrap();
+    let mut env = before.environment().clone();
+    env.insert("XDG_RUNTIME_DIR".into(), runtime.clone().into());
+    let policy = Policy::from_toml(&format!(
+        "[mounts]\nhide=[{:?}]\n[network]\nmode='none'\n",
+        before.cwd().join("hidden-source").to_str().unwrap()
+    ))
+    .unwrap();
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/bin/cat".into()).arg("hidden-source".into()),
+        HostContext::new(before.cwd().into(), env).unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    assert!(!runtime.join("kakoi").exists());
+    let mut running = prepared.spawn().unwrap();
+    let mut bytes = Vec::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_end(&mut bytes)
+        .unwrap();
+    assert!(bytes.is_empty());
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    assert_eq!(std::fs::read_dir(runtime.join("kakoi")).unwrap().count(), 1);
+    assert!(std::fs::read(runtime.join("kakoi/empty"))
+        .unwrap()
+        .is_empty());
+    assert_eq!(HostContext::capture().unwrap(), before);
+}
+
+fn self_test_live_device() {
+    use std::io::Read;
+    use std::os::unix::fs::PermissionsExt;
+    let context = HostContext::capture().unwrap();
+    std::fs::write("live-source", b"old").unwrap();
+    let policy = Policy::from_toml(&format!(
+        "[mounts]\nrw-file=[{:?}, {:?}]\n[network]\nmode='none'\n",
+        context.cwd().join("live-source").to_str().unwrap(),
+        context.cwd().join("device").to_str().unwrap()
+    ))
+    .unwrap();
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("test -c device && cat live-source >device && cat live-source".into()),
+        context.clone(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    std::fs::write("live-source", b"updated after prepare").unwrap();
+    let mut running = prepared.spawn().unwrap();
+    let mut output = Vec::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_end(&mut output)
+        .unwrap();
+    assert_eq!(output, b"updated after prepare");
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    // A private overmount after the worker's checks reproduces the dev-bind race.
+    // The real bwrap still performs every mount; init must reject its changed result.
+    let tools = context.cwd().join("racing-tools");
+    std::fs::create_dir(&tools).unwrap();
+    let wrapper = tools.join("bwrap");
+    let real = std::env::var("KAKOI_TEST_REAL_BWRAP")
+        .unwrap()
+        .replace('\'', "'\\''");
+    std::fs::write(&wrapper, format!("#!/bin/sh\nif [ \"$1\" != --help ]; then mount --bind /dev/zero device || exit 1; fi\nexec '{real}' \"$@\"\n")).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let mut env = context.environment().clone();
+    let mut path = tools.into_os_string();
+    path.push(":");
+    path.push(env.get(std::ffi::OsStr::new("PATH")).unwrap());
+    env.insert("PATH".into(), path);
+    let policy = Policy::from_toml(&format!(
+        "[mounts]\nrw-file=[{:?}]\n[network]\nmode='none'\n",
+        context.cwd().join("device").to_str().unwrap()
+    ))
+    .unwrap();
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("touch must-not-run".into()),
+        HostContext::new(context.cwd().into(), env).unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    let error = prepared.spawn().unwrap_err();
+    assert_eq!(error.kind, kakoi_runtime::ErrorKind::PlanChanged);
+    assert_eq!(error.main, kakoi_runtime::MainOutcome::NotStarted);
+    assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
+    assert!(!std::path::Path::new("must-not-run").exists());
+}
+
+fn self_test_parallel() {
+    use std::io::{Read, Write};
+    let mut first = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut second = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut first_out = first.take_stdout().unwrap();
+    let mut second_out = second.take_stdout().unwrap();
+    let mut ready = [0; 5];
+    first_out.read_exact(&mut ready).unwrap();
+    second_out.read_exact(&mut ready).unwrap();
+    first.request_stop().unwrap();
+    first.wait();
+    assert!(second.outcome().is_none());
+    let mut input = second.take_stdin().unwrap();
+    input.write_all(b"still running").unwrap();
+    let mut echoed = [0; 13];
+    second_out.read_exact(&mut echoed).unwrap();
+    assert_eq!(&echoed, b"still running");
+    drop(input);
+    assert_eq!(second.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+}
+
+fn self_test_inherit() {
+    use std::os::fd::{AsFd, AsRawFd};
+    unsafe extern "C" {
+        fn dup2(old: i32, new: i32) -> i32;
+    }
+    std::fs::write("input-original", b"original input").unwrap();
+    std::fs::write("input-replaced", b"wrong input").unwrap();
+    let original_input = std::fs::File::open("input-original").unwrap();
+    let replacement_input = std::fs::File::open("input-replaced").unwrap();
+    let original_output = std::fs::File::create("output-original").unwrap();
+    let replacement_output = std::fs::File::create("output-replaced").unwrap();
+    let saved_input = std::io::stdin().as_fd().try_clone_to_owned().unwrap();
+    let saved_output = std::io::stdout().as_fd().try_clone_to_owned().unwrap();
+    unsafe {
+        assert_eq!(dup2(original_input.as_raw_fd(), 0), 0);
+        assert_eq!(dup2(original_output.as_raw_fd(), 1), 1);
+    }
+    let prepared = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/cat".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Inherit,
+            stdout: Io::Inherit,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    unsafe {
+        assert_eq!(dup2(replacement_input.as_raw_fd(), 0), 0);
+        assert_eq!(dup2(replacement_output.as_raw_fd(), 1), 1);
+    }
+    let result = prepared.spawn().unwrap().wait();
+    unsafe {
+        assert_eq!(dup2(saved_input.as_raw_fd(), 0), 0);
+        assert_eq!(dup2(saved_output.as_raw_fd(), 1), 1);
+    }
+    assert_eq!(result.main, kakoi_runtime::MainOutcome::Exited(0));
+    assert_eq!(std::fs::read("output-original").unwrap(), b"original input");
+    assert!(std::fs::read("output-replaced").unwrap().is_empty());
+}
+
+fn self_test_worker_death() {
+    use std::io::Read;
+    unsafe extern "C" {
+        fn kill(pid: i32, signal: i32) -> i32;
+    }
+    let mut running = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut output = running.take_stdout().unwrap();
+    let mut ready = [0; 5];
+    output.read_exact(&mut ready).unwrap();
+    let worker: i32 = children().parse().unwrap();
+    assert_eq!(unsafe { kill(worker, 9) }, 0);
+    let result = running.wait();
+    assert_eq!(result.processes, kakoi_runtime::ProcessCleanup::Unconfirmed);
+    assert_eq!(result.network, kakoi_runtime::NetworkCleanup::NotApplicable);
+    assert_eq!(
+        result.reason,
+        kakoi_runtime::ExitReason::InfrastructureFailure
+    );
+    assert_eq!(result.main, kakoi_runtime::MainOutcome::Unknown);
+    assert_eq!(output.read(&mut ready).unwrap(), 0);
+    assert!(children().is_empty());
+}
+
+fn self_test_owner() {
+    use std::io::{Read, Write};
+    let mut running = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut ready = [0; 5];
+    running
+        .take_stdout()
+        .unwrap()
+        .read_exact(&mut ready)
+        .unwrap();
+    println!("owner-ready");
+    std::io::stdout().flush().unwrap();
+    // The caller's process is deliberately killed without any Rust destructor.
+    running.wait();
+}
+
+fn self_test_preexec_death() {
+    unsafe extern "C" {
+        fn ptrace(request: usize, pid: usize, address: usize, data: usize) -> isize;
+        fn raise(signal: i32) -> i32;
+    }
+    assert_eq!(unsafe { ptrace(0, 0, 0, 0) }, 0);
+    assert_eq!(unsafe { raise(19) }, 0);
+    let prepared = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("touch must-not-run".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    let error = prepared.spawn().unwrap_err();
+    assert_eq!(error.main, kakoi_runtime::MainOutcome::Unknown);
+    assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
+    assert!(!std::path::Path::new("must-not-run").exists());
+}
+
+fn self_test_lifetime() {
+    use kakoi_runtime::{ExitReason, ProcessCleanup, StopReceipt};
+    use std::io::Read;
+    use std::time::{Duration, Instant};
+    for mode in ["host", "none"] {
+        let policy = Policy::from_toml(&format!(
+            "[network]\nmode='{mode}'\n[process]\nshutdown-grace-seconds=1\n"
+        ))
+        .unwrap();
+        let mut running = prepare(RunRequest::new(
+            policy.clone(),
+            CommandSpec::new("/bin/sh".into())
+                .arg("-c".into())
+                .arg("printf ready; sleep 1000 & exec /usr/bin/yes".into()),
+            HostContext::capture().unwrap(),
+            StdioSpec {
+                stdin: Io::Null,
+                stdout: Io::Pipe,
+                stderr: Io::Null,
+            },
+        ))
+        .unwrap()
+        .spawn()
+        .unwrap();
+        let mut pipe = running.take_stdout().unwrap();
+        let mut ready = [0; 5];
+        pipe.read_exact(&mut ready).unwrap();
+        assert_eq!(&ready, b"ready");
+        let stop = running.stop_handle();
+        assert_eq!(stop.request_stop().unwrap(), StopReceipt::Queued);
+        let result = running.wait();
+        assert_eq!(result.reason, ExitReason::StopRequested);
+        assert_eq!(result.processes, ProcessCleanup::ConfirmedReaped);
+        assert_eq!(stop.request_stop().unwrap(), StopReceipt::AlreadyFinished);
+        drop(pipe);
+        drop(running);
+
+        let mut running = prepare(RunRequest::new(
+            policy,
+            CommandSpec::new("/bin/sh".into())
+                .arg("-c".into())
+                .arg("printf ready; exec /bin/cat".into()),
+            HostContext::capture().unwrap(),
+            StdioSpec {
+                stdin: Io::Pipe,
+                stdout: Io::Pipe,
+                stderr: Io::Null,
+            },
+        ))
+        .unwrap()
+        .spawn()
+        .unwrap();
+        let input = running.take_stdin().unwrap();
+        let mut output = running.take_stdout().unwrap();
+        output.read_exact(&mut ready).unwrap();
+        let stop = running.stop_handle();
+        drop(running);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !children().is_empty() {
+            assert!(
+                Instant::now() < deadline,
+                "Drop failed to stop and reap worker"
+            );
+            std::thread::yield_now();
+        }
+        assert_eq!(output.read(&mut ready).unwrap(), 0);
+        assert_eq!(stop.request_stop().unwrap(), StopReceipt::AlreadyFinished);
+        drop(input);
+    }
 }
 
 fn self_test_prepare_errors() {
@@ -187,7 +706,8 @@ fn self_test_fds() {
     );
     before_signals.assert_preserved();
     assert_eq!(HostContext::capture().unwrap(), context);
-    drop(prepared);
+    let outcome = prepared.spawn().unwrap().wait();
+    assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(0));
     let deadline = Instant::now() + Duration::from_secs(5);
     while !children().is_empty() {
         assert!(
@@ -256,7 +776,11 @@ fn self_test_command_path() {
                 "policy-tools/tool"
             })
         );
-        drop(prepared);
+        let outcome = prepared.spawn().unwrap().wait();
+        assert_eq!(
+            outcome.main,
+            kakoi_runtime::MainOutcome::Exited(if prepend { 2 } else { 1 })
+        );
         // Policy PATH cannot supply a host dependency missing from HostContext.
         let mut missing = context.environment().clone();
         missing.insert("PATH".into(), before.cwd().join("requested-tools").into());

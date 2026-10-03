@@ -18,6 +18,7 @@ use crate::{ipc, wire_policy, HostContext, Io, ListMode, NetworkMode, RunRequest
 
 const WORKER: &str = "KAKOI_RUNTIME_WORKER_FD";
 const OWNER: &str = "KAKOI_RUNTIME_OWNER_FD";
+const RESULT: &str = "KAKOI_RUNTIME_RESULT_FD";
 const VERSION: u32 = 1;
 
 #[derive(Debug)]
@@ -34,6 +35,9 @@ pub enum Phase {
     Worker,
     Planning,
     Retention,
+    Launch,
+    Execution,
+    Cleanup,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorKind {
@@ -121,11 +125,77 @@ pub struct PlanDescription {
 pub struct PreparedRun {
     description: PlanDescription,
     control: UnixStream,
-    owner: UnixStream,
+    owner: Option<UnixStream>,
+    shared: Arc<crate::running::Shared>,
 }
 impl PreparedRun {
     pub fn description(&self) -> &PlanDescription {
         &self.description
+    }
+    pub fn spawn(mut self) -> Result<crate::Running, crate::StartError> {
+        use crate::running::{Control, Started};
+        let failure = |cause: io::Error| crate::StartError {
+            phase: Phase::Launch,
+            kind: ErrorKind::Protocol,
+            diagnostics: vec![DiagnosticRecord {
+                detail: cause.to_string(),
+                os_error: cause.raw_os_error(),
+            }],
+            cleanup: Cleanup::Unconfirmed,
+            main: crate::MainOutcome::Unknown,
+        };
+        ipc::send(&self.control, &Control::Start, &[]).map_err(failure)?;
+        let (reply, mut fds): (Started, _) = ipc::recv(&self.control).map_err(failure)?;
+        match reply {
+            Started::Failed(mut error) => {
+                let _ = self
+                    .owner
+                    .as_ref()
+                    .unwrap()
+                    .shutdown(std::net::Shutdown::Both);
+                let _ = self.control.shutdown(std::net::Shutdown::Both);
+                let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+                while state.outcome.is_none() {
+                    state = self
+                        .shared
+                        .changed
+                        .wait(state)
+                        .unwrap_or_else(|e| e.into_inner());
+                }
+                if !state.worker_reaped {
+                    error.cleanup = Cleanup::Unconfirmed;
+                }
+                Err(error)
+            }
+            Started::Ready => {
+                // Pipe slots carry explicit indices, so unused slots never shift ownership.
+                let (slots, extra): ([Option<usize>; 3], _) =
+                    ipc::recv(&self.control).map_err(failure)?;
+                if !extra.is_empty() || slots.iter().flatten().copied().ne(0..fds.len()) {
+                    return Err(failure(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "invalid pipe slots",
+                    )));
+                }
+                let mut take =
+                    |slot: Option<usize>| slot.map(|_| std::fs::File::from(fds.remove(0)));
+                let stdin = take(slots[0]).map(crate::PipeWriter);
+                let stdout = take(slots[1]).map(crate::PipeReader);
+                let stderr = take(slots[2]).map(crate::PipeReader);
+                let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+                if state.status == crate::RunStatus::Starting {
+                    state.status = crate::RunStatus::Running;
+                }
+                drop(state);
+                Ok(crate::Running {
+                    shared: self.shared.clone(),
+                    owner: self.owner.take().unwrap(),
+                    stdin,
+                    stdout,
+                    stderr,
+                })
+            }
+        }
     }
 }
 impl fmt::Debug for PreparedRun {
@@ -138,13 +208,15 @@ impl fmt::Debug for PreparedRun {
 impl Drop for PreparedRun {
     fn drop(&mut self) {
         // Only this owner holds the parent's endpoint; the reaper never clones it.
-        let _ = self.owner.shutdown(std::net::Shutdown::Both);
-        let _ = self.control.shutdown(std::net::Shutdown::Both);
+        if let Some(owner) = &self.owner {
+            let _ = owner.shutdown(std::net::Shutdown::Both);
+            let _ = self.control.shutdown(std::net::Shutdown::Both);
+        }
     }
 }
 
 #[derive(Serialize, Deserialize)]
-enum IoInput {
+pub(crate) enum IoInput {
     Null,
     Pipe,
     Descriptor(usize),
@@ -399,19 +471,25 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
         UnixStream::pair().map_err(|cause| io_error(Phase::Worker, cause))?;
     let (owner, child_owner) =
         UnixStream::pair().map_err(|cause| io_error(Phase::Worker, cause))?;
+    let (result_channel, child_result) =
+        UnixStream::pair().map_err(|cause| io_error(Phase::Worker, cause))?;
     let control_fd = child_control.as_raw_fd();
     let owner_fd = child_owner.as_raw_fd();
+    let result_fd = child_result.as_raw_fd();
     let mut command = Command::new("/proc/self/exe");
     command
         .env(WORKER, control_fd.to_string())
-        .env(OWNER, owner_fd.to_string());
+        .env(OWNER, owner_fd.to_string())
+        .env(RESULT, result_fd.to_string());
     command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     // SAFETY: only async-signal-safe fcntl calls occur in the child before exec.
     unsafe {
-        command.pre_exec(move || kakoi_linux::launch::inherit_only(&[control_fd, owner_fd]));
+        command.pre_exec(move || {
+            kakoi_linux::launch::inherit_only(&[control_fd, owner_fd, result_fd])
+        });
     }
     let mut child = ChildOwner(Some(
         command
@@ -420,6 +498,7 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     ));
     drop(child_control);
     drop(child_owner);
+    drop(child_result);
     let result = (|| {
         let (hello, fds): (Hello, _) =
             ipc::recv(&control).map_err(|cause| io_error(Phase::Worker, cause))?;
@@ -454,15 +533,67 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
         }
     };
     let child = Arc::new(Mutex::new(child));
+    let shared = Arc::new(crate::running::Shared::new(
+        control
+            .try_clone()
+            .map_err(|cause| io_error(Phase::Worker, cause))?,
+    ));
+    let result_state = shared.clone();
+    let network = if description.network_mode == NetworkMode::Filtered {
+        crate::NetworkCleanup::Unconfirmed
+    } else {
+        crate::NetworkCleanup::NotApplicable
+    };
     let reaper = child.clone();
     if let Err(cause) = std::thread::Builder::new()
         .name("kakoi-reaper".into())
         .spawn(move || {
+            let received: io::Result<(crate::RunOutcome, Vec<OwnedFd>)> =
+                ipc::recv(&result_channel);
+            drop(result_channel);
+            result_state
+                .control
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
             let mut owner = reaper.lock().unwrap_or_else(|error| error.into_inner());
-            if let Some(child) = owner.0.as_mut() {
-                let _ = child.wait();
-            }
+            let waited = owner.0.as_mut().map(Child::wait);
             owner.0 = None;
+            let mut outcome = match received {
+                Ok((outcome, fds)) if fds.is_empty() => outcome,
+                _ => crate::RunOutcome {
+                    main: crate::MainOutcome::Unknown,
+                    reason: crate::ExitReason::InfrastructureFailure,
+                    network,
+                    processes: crate::ProcessCleanup::Unconfirmed,
+                    diagnostics: vec![DiagnosticRecord {
+                        detail: "worker result connection lost".into(),
+                        os_error: None,
+                    }],
+                },
+            };
+            if !matches!(&waited, Some(Ok(status)) if status.success()) {
+                outcome.processes = crate::ProcessCleanup::Unconfirmed;
+                outcome.reason = crate::ExitReason::InfrastructureFailure;
+                outcome.diagnostics.push(DiagnosticRecord {
+                    detail: match &waited {
+                        Some(Err(cause)) if cause.raw_os_error() == Some(libc::ECHILD) => {
+                            "worker was reaped externally".into()
+                        }
+                        _ => "worker wait failed or worker did not exit successfully".into(),
+                    },
+                    os_error: waited
+                        .as_ref()
+                        .and_then(|result| result.as_ref().err())
+                        .and_then(io::Error::raw_os_error),
+                });
+            }
+            result_state
+                .state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .worker_reaped = matches!(waited, Some(Ok(_)));
+            result_state.finish(outcome);
         })
     {
         let mut error = io_error(Phase::Worker, cause);
@@ -475,7 +606,8 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     Ok(PreparedRun {
         description,
         control,
-        owner,
+        owner: Some(owner),
+        shared,
     })
 }
 
@@ -493,7 +625,7 @@ fn descriptor_number(name: &str) -> Result<i32, PrepareError> {
         })
 }
 
-fn inherited_socket(fd: i32) -> Result<UnixStream, PrepareError> {
+pub(crate) fn inherited_socket(fd: i32) -> Result<UnixStream, PrepareError> {
     // Validate the inherited capability before owning it.
     let mut ty: libc::c_int = 0;
     let mut size = std::mem::size_of_val(&ty) as libc::socklen_t;
@@ -524,12 +656,19 @@ fn inherited_socket(fd: i32) -> Result<UnixStream, PrepareError> {
 }
 
 pub fn dispatch_helper() -> Result<Dispatch, DispatchError> {
-    if std::env::var_os(WORKER).is_none() && std::env::var_os(OWNER).is_none() {
+    if let Some(dispatch) = crate::execution::dispatch_image()? {
+        return Ok(dispatch);
+    }
+    if std::env::var_os(WORKER).is_none()
+        && std::env::var_os(OWNER).is_none()
+        && std::env::var_os(RESULT).is_none()
+    {
         return Ok(Dispatch::Application);
     }
     let control_fd = descriptor_number(WORKER)?;
     let owner_fd = descriptor_number(OWNER)?;
-    if control_fd == owner_fd {
+    let result_fd = descriptor_number(RESULT)?;
+    if control_fd == owner_fd || result_fd == control_fd || result_fd == owner_fd {
         return Err(error(
             Phase::Worker,
             ErrorKind::Protocol,
@@ -538,11 +677,13 @@ pub fn dispatch_helper() -> Result<Dispatch, DispatchError> {
     }
     let control = inherited_socket(control_fd)?;
     let owner = inherited_socket(owner_fd)?;
+    let result_channel = inherited_socket(result_fd)?;
     std::env::remove_var(WORKER);
     std::env::remove_var(OWNER);
+    std::env::remove_var(RESULT);
     ipc::send(&control, &Hello { version: VERSION }, &[])
         .map_err(|cause| io_error(Phase::Worker, cause))?;
-    let result = prepare_worker(&control, &owner);
+    let result = prepare_worker(&control, &owner, &result_channel);
     match result {
         Ok(()) => Ok(Dispatch::Completed(ExitCode::SUCCESS)),
         Err(error) => {
@@ -552,7 +693,11 @@ pub fn dispatch_helper() -> Result<Dispatch, DispatchError> {
     }
 }
 
-fn prepare_worker(control: &UnixStream, owner: &UnixStream) -> Result<(), PrepareError> {
+fn prepare_worker(
+    control: &UnixStream,
+    owner: &UnixStream,
+    result_channel: &UnixStream,
+) -> Result<(), PrepareError> {
     let (input, descriptors): (RequestInput, _) =
         ipc::recv(control).map_err(|cause| io_error(Phase::Worker, cause))?;
     if input.version != VERSION {
@@ -661,7 +806,9 @@ fn prepare_worker(control: &UnixStream, owner: &UnixStream) -> Result<(), Prepar
             "missing command boundary",
         )
     })?;
-    let _mounts = kakoi_linux::retained_mounts::retain(&plan.arguments[..separator])
+    let mounts = kakoi_linux::retained_mounts::retain(&plan.arguments[..separator])
+        .map_err(|cause| io_error(Phase::Retention, cause))?;
+    let sources = crate::execution::source_checks(&plan, &mounts, context.cwd())
         .map_err(|cause| io_error(Phase::Retention, cause))?;
     ipc::send(
         control,
@@ -693,8 +840,33 @@ fn prepare_worker(control: &UnixStream, owner: &UnixStream) -> Result<(), Prepar
             }
             return Err(io_error(Phase::Worker, cause));
         }
-        if poll.iter().any(|entry| entry.revents != 0) {
+        if poll[0].revents != 0 {
             return Ok(());
+        }
+        if poll[1].revents != 0 {
+            let (command, fds): (crate::running::Control, _) =
+                ipc::recv(control).map_err(|cause| io_error(Phase::Worker, cause))?;
+            if !fds.is_empty() {
+                return Err(error(
+                    Phase::Worker,
+                    ErrorKind::Protocol,
+                    "unexpected control descriptors",
+                ));
+            }
+            if matches!(command, crate::running::Control::Start) {
+                return crate::execution::run_worker(
+                    plan,
+                    mounts,
+                    sources,
+                    input.stdio,
+                    descriptors,
+                    crate::execution::Channels {
+                        control,
+                        owner,
+                        result: result_channel,
+                    },
+                );
+            }
         }
     }
 }

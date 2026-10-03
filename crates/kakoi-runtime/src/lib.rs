@@ -16,9 +16,15 @@ pub mod planning;
 pub mod config;
 mod input;
 pub use input::{HostContext, InputError};
+mod execution;
 mod ipc;
 mod preparation;
 mod request;
+mod running;
+pub use running::{
+    ControlError, ExitReason, MainOutcome, NetworkCleanup, PipeReader, PipeWriter, ProcessCleanup,
+    RunOutcome, RunStatus, Running, StartError, StopHandle, StopReceipt,
+};
 mod wire_policy;
 pub use kakoi_policy::{
     Allow, Commands, Destination, DnsPattern, DnsUpstream, EnvMode, EnvironmentPolicy, Examples,

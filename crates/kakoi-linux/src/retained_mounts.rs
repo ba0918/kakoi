@@ -17,6 +17,11 @@ pub struct RetainedMount {
     argument_index: usize,
     identity: Identity,
 }
+impl RetainedMount {
+    pub fn argument_index(&self) -> usize {
+        self.argument_index
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Identity {
@@ -79,9 +84,14 @@ pub(crate) fn descriptor_arguments(
 ) -> io::Result<(Vec<Argument>, Vec<OwnedFd>)> {
     let mut arguments = arguments.to_vec();
     let mut descriptors = Vec::new();
+    let mut remounts = Vec::new();
     for mount in mounts {
         if mount.device {
             // bind-fd uses nodev. Devices require dev-bind plus init's final check.
+            arguments[mount.argument_index] = Argument::Literal("--dev-bind".into());
+            if mount.read_only {
+                remounts.push((mount.argument_index + 3, mount.destination.clone()));
+            }
             continue;
         }
         let fd = mount.descriptor.try_clone()?;
@@ -93,6 +103,16 @@ pub(crate) fn descriptor_arguments(
         arguments[mount.argument_index] = Argument::Literal(option.into());
         arguments[mount.argument_index + 1] = Argument::Literal(fd.as_raw_fd().to_string().into());
         descriptors.push(fd);
+    }
+    // Insert backwards so the observed positions remain valid for every mount.
+    for (index, destination) in remounts.into_iter().rev() {
+        arguments.splice(
+            index..index,
+            [
+                Argument::Literal("--remount-ro".into()),
+                Argument::Literal(destination.into_os_string()),
+            ],
+        );
     }
     Ok((arguments, descriptors))
 }
@@ -120,7 +140,8 @@ pub fn retain(arguments: &[Argument]) -> io::Result<Vec<RetainedMount>> {
             destination: destination.into(),
             descriptor,
             read_only: option == "--ro-bind",
-            device: option == "--dev-bind",
+            device: option == "--dev-bind"
+                || matches!(identity.kind, libc::S_IFCHR | libc::S_IFBLK),
             argument_index,
             identity,
         });
