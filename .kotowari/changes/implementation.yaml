@@ -1,27 +1,69 @@
 version: 1
 entries:
-- id: dependabot-pr6-msrv-implementation
-  base: 04bde54d609936bab807c81554d5529c98edd906
+- id: library-device-nodev-implementation
+  base: 226bafa64ae0365865f5395273fb840b96955ef2
   role: implementer
   files:
-  - path: .github/workflows/ci.yml
-    before: sha256:d84d1df3cbca26e3715eee136158bf208feebf409b8ffb82d181bce239c5f3e1
-    after: sha256:edeae01c75fcdfd01591e35a3de0176d0624f6c938dbda68a2fd1c1c02cfd44b
+  - path: crates/kakoi-linux/src/retained_mounts.rs
+    before: sha256:bab5ddce157af9b029cf0c1a957f9d56b499b148cdde728b5ef6a22fb2fea903
+    after: sha256:d411ea55379fbef373c049b28d7e2993a5b01d977f75f3e9e56b84a1bee5aef2
+  - path: tests/library_api.rs
+    before: sha256:11600ab748b37abfba19370d67db7b21cf55a237476062dcc1aba362cb332f22
+    after: sha256:204af35155d69cc5f5d8699d9f34ceb1f15321611eb8dfa87a983da6724834b6
+  - path: examples/library-sync/src/main.rs
+    before: sha256:672d9b7a95780fc846c35e9aab83ea1dccd1ddce4f673f0720e78dc4bb635c0f
+    after: sha256:7839bb3b9535ddf095d65ce2253e7d2c80e7ca02ff7f681d8de4c10a8c61aceb
+  - path: examples/library-sync/src/basic.rs
+    before: null
+    after: sha256:cde8a7b7ab6d2e50e33655d61d72624fe51096301609a78a0123d4634f2e10eb
   ir:
-  - path: docs/ir/change-review.md
-    sha256: sha256:ff3b1a84ceb3b29dc4a42e389834819070340ee115afb52c1d18b8ab855a7d00
+  - path: docs/ir/library/library-integration.md
+    sha256: sha256:9b92d40aab61503d5f9cd334e8673f2772ebd938e697d3fee58583a8c77af6c8
+  - path: docs/ir/library/library-input.md
+    sha256: sha256:698dd2a9e05084025d1c20f0b5d93a40089df027529bea4e1f73e26dc7e4a44a
   conclusion: new
   reason: >-
-    利用者のPR確認・取り込み依頼に対し、呼出し側が委譲した1.88維持の技術的修正を行う。
-    公式masterの入力対応実装を完全SHAで固定し、with.toolchainを1.88.0とする方式は実装担当の選択であり、利用者の直接指定ではない。
-    Cargo.tomlとPROJECT.mdのMSRV、stable側、ビルド対象、ゲートと製品の動作要求は変更しない。
-    比較元はmainとのmerge-baseである指定完全IDとし、その比較に含まれる設定対象の全変更はこのworkflowのみである。
-    Git modeとblobおよび関連IRは通常indexを変えない代替indexのsnapshotから計算した。
-    REQ-1000に従い独立レビューは未完了とし、REQ-1001に従い別比較のmain CI記録を無効化した。
+    組み込みAPIはポリシーのro、rw、rw-fileが示す文字デバイスとブロックデバイスをdev-bindに置き換え、
+    roでも隔離内から書き込めた。CLIは同じ項目をnodevで配置し、見えるが開けない（実測）。
+    利用者が選んだA1に従い、dev-bindは計画自体がdev-bindとする項目だけに残し、ほかはbind-fdとro-bind-fdにした。
+    REQ-library-402のCLI挙動の維持に沿い、観測可能な例EX-library-419をIRに加えた。
+    単体試験でro-bindとbindのデバイスがfd版になることを、実行試験で隔離内から読込みでも書込みでも開けないことを確認した。
+    マウント後の同一性照合は全保持項目に残り、bwrap 0.9.0がbind-fdでも差し替えたパスをマウントする場合を検出する既存の試験は維持した。
+    examples/library-sync/src/main.rsとbasic.rsは、同じファイルに入った基本例の移動も含む。基本例の内容は変えていない。
   requirements:
-  - REQ-1000
-  - REQ-1001
+  - REQ-library-402
+  - REQ-library-106
   decisions:
-  - docs/decision/brainstorm/2026-10-03-dependabot-pr6-msrv.md#A1
+  - docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A1
+  handoff: null
+  gaps:
+  - category: premise_conflict
+    disposition: recorded
+    refs:
+    - docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A1
+- id: library-examples-readme-implementation
+  base: 226bafa64ae0365865f5395273fb840b96955ef2
+  role: implementer
+  files:
+  - path: examples/library-async/README.md
+    before: sha256:b8c41bc63c125aa0d6e5e887022d9ee345263f174c9adc200715269b35be338c
+    after: sha256:7b08d78f2011e157a33821d6ec47a6aea5251d1c55618eb10754f7e0722ae313
+  - path: examples/library-policy/README.md
+    before: sha256:2b4473908b358163eee4f39e6c19b4ffc763d79fa73ba324f95f9f4674508a44
+    after: sha256:c8830f485d15198e80ecf72af2576cc19a4eccb07d889a8c44b90c63de04cec8
+  - path: examples/library-sync/README.md
+    before: sha256:6b3b7c5a2a64693d69c8462abd68ab96e11db5f597fc2195cf69645f58d31269
+    after: sha256:5170c040747dcd751c5c58352a96f51a0eebf6976ff30c870c50483558f10965
+  ir:
+  - path: docs/ir/library/library-integration.md
+    sha256: sha256:9b92d40aab61503d5f9cd334e8673f2772ebd938e697d3fee58583a8c77af6c8
+  conclusion: existing
+  reason: >-
+    REQ-library-404が求める実例の説明を、英語のREADMEから直接案内する公開文書にそろえて英語へ訳した。
+    内容は訳出前と同じで、同期例だけは基本例の新しい場所src/basic.rsを案内する。
+    実行手順、必要な環境、ガイドへの導線は変えていない。
+  requirements:
+  - REQ-library-404
+  decisions: []
   handoff: null
   gaps: []
