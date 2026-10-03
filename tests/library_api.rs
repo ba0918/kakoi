@@ -132,6 +132,27 @@ fn command_death_before_exec_does_not_turn_error_pipe_eof_into_start_success() {
     assert!(output.status.success(), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-library-201, REQ-library-301]
+#[test]
+fn caller_waitpid_reaping_the_worker_is_reported_as_unconfirmed() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let output = Command::new("python3")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/library-api/external_reap.py"),
+        )
+        .arg(consumer())
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-203, EX-library-206]
 #[test]
 fn owner_process_death_terminates_the_private_isolation_without_drop() {

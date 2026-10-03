@@ -70,6 +70,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-helper-environment" => self_test_helper_environment(),
         Some(value) if value == "--self-test-worker-death" => self_test_worker_death(),
         Some(value) if value == "--self-test-main-retention" => self_test_main_retention(),
+        Some(value) if value == "--self-test-external-reap" => self_test_external_reap(),
         Some(value) if value == "--self-test-owner" => self_test_owner(),
         Some(value) if value == "--self-test-startup-owner" => {
             let request = RunRequest::new(
@@ -630,6 +631,46 @@ fn self_test_main_retention() {
     assert_eq!(
         outcome.processes,
         kakoi_runtime::ProcessCleanup::Unconfirmed
+    );
+    assert!(children().is_empty());
+}
+
+fn self_test_external_reap() {
+    use std::io::Read;
+    unsafe extern "C" {
+        fn ptrace(request: usize, pid: usize, address: usize, data: usize) -> isize;
+        fn raise(signal: i32) -> i32;
+        fn kill(pid: i32, signal: i32) -> i32;
+        fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+    }
+    assert_eq!(unsafe { ptrace(0, 0, 0, 0) }, 0);
+    assert_eq!(unsafe { raise(19) }, 0);
+    let mut running = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut ready = [0; 5];
+    running
+        .take_stdout()
+        .unwrap()
+        .read_exact(&mut ready)
+        .unwrap();
+    let worker: i32 = children().parse().unwrap();
+    assert_eq!(unsafe { kill(worker, 9) }, 0);
+    let mut status = 0;
+    assert_eq!(unsafe { waitpid(worker, &mut status, 0) }, worker);
+    let outcome = running.wait();
+    assert_eq!(
+        outcome.processes,
+        kakoi_runtime::ProcessCleanup::Unconfirmed
+    );
+    assert_eq!(
+        outcome.reason,
+        kakoi_runtime::ExitReason::InfrastructureFailure
+    );
+    assert!(
+        outcome
+            .diagnostics
+            .iter()
+            .any(|record| record.os_error == Some(10)),
+        "{outcome:?}"
     );
     assert!(children().is_empty());
 }
