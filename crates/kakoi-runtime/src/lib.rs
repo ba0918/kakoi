@@ -27,7 +27,7 @@ mod ipc;
 mod preparation;
 mod request;
 mod running;
-pub use events::{EventRead, Events, RunEvent, RunEventKind};
+pub use events::{EventRead, Events, NetworkEventState, RunEvent, RunEventKind};
 pub use running::{
     ControlError, ExitReason, MainOutcome, NetworkCleanup, PipeReader, PipeWriter, ProcessCleanup,
     RunOutcome, RunStatus, Running, StartError, StopHandle, StopReceipt,

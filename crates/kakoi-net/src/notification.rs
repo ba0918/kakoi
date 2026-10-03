@@ -25,12 +25,17 @@ impl NetworkState {
 
 #[derive(Default)]
 pub struct Notifications {
-    queue: VecDeque<Arc<str>>,
+    queue: VecDeque<Notification>,
     // Shares the last queued line; when the queue is empty only this copy remains.
     current: Option<Arc<str>>,
+    current_state: Option<NetworkState>,
     bytes: usize,
     omitted: u64,
     in_flight_bytes: usize,
+}
+pub struct Notification {
+    pub detail: Arc<str>,
+    pub state: Option<NetworkState>,
 }
 impl Notifications {
     pub fn update(&mut self, state: NetworkState, reason: &str) {
@@ -40,20 +45,32 @@ impl Notifications {
             return;
         }
         self.current = Some(Arc::clone(&line));
-        self.push(line);
+        self.current_state = Some(state);
+        self.push(Notification {
+            detail: line,
+            state: Some(state),
+        });
     }
 
     /// An event outside the network state, such as a cut grace. It does not
     /// replace the current state reported after omissions.
     pub fn notice(&mut self, text: &str) {
-        self.push(bounded_line("kakoi: ", text).into());
+        self.push(Notification {
+            detail: bounded_line("kakoi: ", text).into(),
+            state: None,
+        });
     }
 
-    fn push(&mut self, line: Arc<str>) {
-        self.bytes += line.len();
+    fn push(&mut self, line: Notification) {
+        self.bytes += line.detail.len();
         self.queue.push_back(line);
         while self.pending() > MAX_NOTICES || self.bytes + self.in_flight_bytes > MAX_BYTES {
-            self.bytes -= self.queue.pop_front().expect("nonempty overflow").len();
+            self.bytes -= self
+                .queue
+                .pop_front()
+                .expect("nonempty overflow")
+                .detail
+                .len();
             self.omitted = self.omitted.saturating_add(1);
         }
     }
@@ -95,6 +112,10 @@ impl Notifications {
         self.pop_with_loss().map(|(line, _)| line)
     }
     pub fn pop_with_loss(&mut self) -> Option<(Arc<str>, u64)> {
+        self.pop_record()
+            .map(|(record, lost)| (record.detail, lost))
+    }
+    pub fn pop_record(&mut self) -> Option<(Notification, u64)> {
         if self.omitted != 0 {
             // Summarize the backlog as well: showing old state changes after the
             // latest state would misleadingly appear to reverse the recovery.
@@ -115,10 +136,16 @@ impl Notifications {
             self.queue.clear();
             self.bytes = 0;
             self.omitted = 0;
-            return Some((summary.into(), lost));
+            return Some((
+                Notification {
+                    detail: summary.into(),
+                    state: self.current_state,
+                },
+                lost,
+            ));
         }
         let line = self.queue.pop_front()?;
-        self.bytes -= line.len();
+        self.bytes -= line.detail.len();
         Some((line, 0))
     }
 }

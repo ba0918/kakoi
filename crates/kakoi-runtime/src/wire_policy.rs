@@ -279,6 +279,7 @@ fn encode_network(network: &Network) -> Value {
 mod tests {
     use super::*;
 
+    // @kotowari[REQ-library-102, REQ-library-104]
     #[test]
     fn transport_preserves_every_policy_input_and_non_utf8_paths() {
         let policy = Policy::from_toml(

@@ -42,7 +42,7 @@ assert not pastas(),pastas()
 "#,consumer=consumer().to_str().unwrap()));
 }
 
-// @kotowari[REQ-library-201, REQ-library-202, REQ-library-203, REQ-library-204, REQ-library-301, REQ-148, EX-library-202, EX-library-204, EX-library-205, EX-library-207, EX-library-208, EX-library-301]
+// @kotowari[REQ-library-201, REQ-library-202, REQ-library-203, REQ-library-204, REQ-library-301, REQ-library-409, REQ-148, EX-library-202, EX-library-204, EX-library-205, EX-library-207, EX-library-208, EX-library-301, EX-library-415]
 #[test]
 fn filtered_real_traffic_is_blocked_before_termination_and_processes_are_reaped() {
     let host = FakeHost::new("", &[]);
@@ -103,7 +103,7 @@ assert not pastas(), pastas()
 "#,consumer=consumer().to_str().unwrap()));
 }
 
-// @kotowari[REQ-library-201, EX-library-201, REQ-148]
+// @kotowari[REQ-library-201, EX-library-201, REQ-148, REQ-library-302, REQ-068]
 #[test]
 fn filtered_recovers_forwarders_while_the_caller_is_not_waiting() {
     let host = FakeHost::new("", &[]);
@@ -111,7 +111,7 @@ fn filtered_recovers_forwarders_while_the_caller_is_not_waiting() {
 import time
 process = subprocess.Popen([{consumer:?}, '--self-test-filtered-owner'],
     cwd=os.environ['WORKSPACE'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
-    env={{'PATH': os.environ['BIN'] + ':/usr/sbin:/usr/bin:/bin', 'HOME': os.environ['HOME_DIR']}})
+    env={{'PATH': os.environ['BIN'] + ':/usr/sbin:/usr/bin:/bin', 'HOME': os.environ['HOME_DIR'], 'KAKOI_TEST_RECOVERY_EVENTS':'1'}})
 try:
  ready=line(process.stdout).strip()
 except AssertionError:

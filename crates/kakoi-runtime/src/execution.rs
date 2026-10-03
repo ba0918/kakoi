@@ -706,10 +706,21 @@ pub(crate) fn run_worker(
             }
         }
         if let Some(session) = &mut network {
-            while let Some((detail, missed)) = session.take_notification_with_loss() {
+            while let Some((notification, missed)) = session.take_state_notification() {
                 events.next = events.next.saturating_add(missed);
                 events.emit(crate::RunEventKind::Network {
-                    detail: detail.to_string(),
+                    state: notification.state.map(|state| match state {
+                        kakoi_net::notification::NetworkState::Running => {
+                            crate::NetworkEventState::Running
+                        }
+                        kakoi_net::notification::NetworkState::Isolated => {
+                            crate::NetworkEventState::Isolated
+                        }
+                        kakoi_net::notification::NetworkState::Unsafe => {
+                            crate::NetworkEventState::Unsafe
+                        }
+                    }),
+                    detail: notification.detail.to_string(),
                     truncated: false,
                 });
             }

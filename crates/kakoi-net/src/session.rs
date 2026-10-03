@@ -105,6 +105,9 @@ impl Session {
     pub fn take_notification_with_loss(&mut self) -> Option<(Arc<str>, u64)> {
         self.notifications.pop_with_loss()
     }
+    pub fn take_state_notification(&mut self) -> Option<(crate::notification::Notification, u64)> {
+        self.notifications.pop_record()
+    }
 
     /// Queues an event of the environment that is not a network state change.
     pub fn notice(&mut self, text: &str) {

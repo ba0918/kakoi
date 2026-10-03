@@ -16,7 +16,17 @@ pub(crate) const MAX_EVENT: usize = 8192;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RunEventKind {
     Status(RunStatus),
-    Network { detail: String, truncated: bool },
+    Network {
+        state: Option<NetworkEventState>,
+        detail: String,
+        truncated: bool,
+    },
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NetworkEventState {
+    Running,
+    Isolated,
+    Unsafe,
 }
 
 #[cfg(test)]
@@ -46,6 +56,7 @@ mod tests {
             let (detail, missed) = notifications.pop_with_loss().unwrap();
             sender.next += missed;
             sender.emit(RunEventKind::Network {
+                state: None,
                 detail: detail.to_string(),
                 truncated: false,
             });
@@ -114,6 +125,7 @@ mod tests {
             notifications.notice(&"\"".repeat(3800));
             let (detail, _) = notifications.pop_with_loss().unwrap();
             sender.emit(RunEventKind::Network {
+                state: None,
                 detail: detail.to_string(),
                 truncated: false,
             });
@@ -357,7 +369,10 @@ impl Sender {
         })
         .unwrap();
         while encoded.len() > MAX_EVENT {
-            if let RunEventKind::Network { detail, truncated } = &mut kind {
+            if let RunEventKind::Network {
+                detail, truncated, ..
+            } = &mut kind
+            {
                 *truncated = true;
                 detail.truncate(
                     detail

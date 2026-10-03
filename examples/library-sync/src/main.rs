@@ -842,6 +842,7 @@ fn self_test_filtered_owner() {
     .unwrap()
     .spawn()
     .unwrap();
+    let mut events = running.events();
     let mut line = String::new();
     BufReader::new(running.take_stdout().unwrap())
         .read_line(&mut line)
@@ -853,6 +854,32 @@ fn self_test_filtered_owner() {
     std::io::stdin().read_line(&mut line).unwrap();
     running.request_stop().unwrap();
     let outcome = running.wait();
+    if std::env::var_os("KAKOI_TEST_RECOVERY_EVENTS").is_some() {
+        let mut isolated = false;
+        let mut recovered = false;
+        loop {
+            match events.recv() {
+                kakoi_runtime::EventRead::Event(event) => {
+                    if let kakoi_runtime::RunEventKind::Network { state, .. } = event.kind {
+                        if state == Some(kakoi_runtime::NetworkEventState::Isolated) {
+                            isolated = true;
+                        }
+                        if isolated && state == Some(kakoi_runtime::NetworkEventState::Running) {
+                            recovered = true;
+                        }
+                    }
+                }
+                kakoi_runtime::EventRead::Closed => break,
+                kakoi_runtime::EventRead::Lagged { .. } => {
+                    panic!("short recovery history was lost")
+                }
+            }
+        }
+        assert!(
+            isolated && recovered,
+            "network state transitions were not observed"
+        );
+    }
     if std::env::var_os("KAKOI_TEST_CLOSURE_FAILURE").is_some() {
         assert_eq!(outcome.network, kakoi_runtime::NetworkCleanup::Unconfirmed);
         assert_eq!(
@@ -881,10 +908,20 @@ fn self_test_filtered() {
     signal_state::install_application_state();
     let before_signals = signal_state::Signals::capture();
     let before_raw = signal_state::raw_state();
-    let context = HostContext::capture().unwrap();
+    let caller = HostContext::capture().unwrap();
+    let requested_runtime = caller.cwd().join("requested-runtime");
+    std::fs::create_dir(&requested_runtime).unwrap();
+    let hidden = caller.cwd().join("shared-hidden");
+    std::fs::write(&hidden, "hidden").unwrap();
+    let mut env = caller.environment().clone();
+    env.insert(
+        "XDG_RUNTIME_DIR".into(),
+        requested_runtime.clone().into_os_string(),
+    );
+    let context = HostContext::new(caller.cwd().into(), env).unwrap();
     let ambient_path = std::env::var_os("PATH").unwrap();
     std::env::set_var("PATH", "/missing-ambient-tools");
-    let policy = Policy::from_toml("[network]\nmode='filtered'\n[[network.allow]]\ndestination={host-loopback='ipv4'}\nprotocol='tcp'\nports=['23450']\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nhost-port=23451\nport=23452\n").unwrap();
+    let policy = Policy::from_toml(&format!("[mounts]\nhide=[{:?}]\n[network]\nmode='filtered'\n[[network.allow]]\ndestination={{host-loopback='ipv4'}}\nprotocol='tcp'\nports=['23450']\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nhost-port=23451\nport=23452\n", hidden.to_str().unwrap())).unwrap();
     let script = r#"import socket,signal,time
 s=socket.create_connection(('169.254.1.2',23450),20)
 print(s.recv(64).decode(),flush=True)
@@ -902,7 +939,7 @@ signal.signal(signal.SIGTERM,term)
 print('ready',flush=True)
 while True: time.sleep(60)
 "#;
-    let mut running = prepare(RunRequest::new(
+    let prepared = prepare(RunRequest::new(
         policy,
         CommandSpec::new("/usr/bin/python3".into())
             .arg("-c".into())
@@ -914,9 +951,17 @@ while True: time.sleep(60)
             stderr: Io::Inherit,
         },
     ))
-    .unwrap()
-    .spawn()
     .unwrap();
+    assert!(!requested_runtime.join("kakoi").exists());
+    let mut running = prepared.spawn().unwrap();
+    assert_eq!(
+        std::fs::read(requested_runtime.join("kakoi/empty")).unwrap(),
+        b""
+    );
+    assert_eq!(
+        std::fs::read(requested_runtime.join("kakoi/resolv.conf")).unwrap(),
+        b"nameserver 127.0.0.53\n"
+    );
     std::env::set_var("PATH", ambient_path);
     let mut output = BufReader::new(running.take_stdout().unwrap());
     let mut line = String::new();
