@@ -15,32 +15,45 @@ entries:
     after: sha256:7839bb3b9535ddf095d65ce2253e7d2c80e7ca02ff7f681d8de4c10a8c61aceb
   - path: examples/library-sync/src/basic.rs
     before: null
-    after: sha256:cde8a7b7ab6d2e50e33655d61d72624fe51096301609a78a0123d4634f2e10eb
+    after: sha256:6dadbd35811a3a690058e332df357049e34671d0dfc60c8fc0cab0c86a7a8fd3
+  - path: tests/launch.rs
+    before: sha256:e166cfb338dc4ecdd7332bad5bcf736ac9cfe609f80b6e61fbafd47c955a9431
+    after: sha256:ca1fc0efcaa1a6595f4a919d0018aaab2bcfe2b116474492787b5f56a9d7d0a3
   ir:
   - path: docs/ir/library/library-integration.md
     sha256: sha256:9b92d40aab61503d5f9cd334e8673f2772ebd938e697d3fee58583a8c77af6c8
   - path: docs/ir/library/library-input.md
     sha256: sha256:698dd2a9e05084025d1c20f0b5d93a40089df027529bea4e1f73e26dc7e4a44a
+  - path: docs/ir/core/core-mounts.md
+    sha256: sha256:e5bcc143245e81181104d10bd5d561d1623dff7d7bfbee27763ef7620d005570
   conclusion: new
   reason: >-
     組み込みAPIはポリシーのro、rw、rw-fileが示す文字デバイスとブロックデバイスをdev-bindに置き換え、
     roでも隔離内から書き込めた。CLIは同じ項目をnodevで配置し、見えるが開けない（実測）。
     利用者が選んだA1に従い、dev-bindは計画自体がdev-bindとする項目だけに残し、ほかはbind-fdとro-bind-fdにした。
     REQ-library-402のCLI挙動の維持に沿い、観測可能な例EX-library-419をIRに加えた。
+    レビューの指摘を受けた利用者の判断A2に従い、比べる基準のCLIの挙動を中核IRのTBL-153の行とEX-966に書き、
+    tests/launch.rsのCLI実行試験で確かめた。この試験は既存の挙動の確認で、失敗から始まる試験ではない。
     単体試験でro-bindとbindのデバイスがfd版になることを、実行試験で隔離内から読込みでも書込みでも開けないことを確認した。
     マウント後の同一性照合は全保持項目に残り、bwrap 0.9.0がbind-fdでも差し替えたパスをマウントする場合を検出する既存の試験は維持した。
-    examples/library-sync/src/main.rsとbasic.rsは、同じファイルに入った基本例の移動も含む。基本例の内容は変えていない。
+    examples/library-sync/src/main.rsとbasic.rsは、基本例の移動と、基本例がdispatch_helperの後に呼ばれる前提の説明も含む。基本例の処理は変えていない。
   requirements:
   - REQ-library-402
   - REQ-library-106
+  - REQ-167
   decisions:
   - docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A1
+  - docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A2
   handoff: null
   gaps:
   - category: premise_conflict
     disposition: recorded
     refs:
     - docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A1
+  - category: missing_spec
+    disposition: recorded
+    refs:
+    - docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A2
 - id: library-examples-readme-implementation
   base: 226bafa64ae0365865f5395273fb840b96955ef2
   role: implementer
@@ -64,6 +77,25 @@ entries:
     実行手順、必要な環境、ガイドへの導線は変えていない。
   requirements:
   - REQ-library-404
+  decisions: []
+  handoff: null
+  gaps: []
+- id: cli-module-comment-implementation
+  base: 226bafa64ae0365865f5395273fb840b96955ef2
+  role: implementer
+  files:
+  - path: src/lib.rs
+    before: sha256:514281e6bae06121ca16d1cd97fe8fba3e22b5223f49a0b4c25ed98c046a5fde
+    after: sha256:902a4b06719d6eb897befde35a8c04d747b913145541b114629adf0f35a42da1
+  ir:
+  - path: docs/ir/network/network-library-boundary.md
+    sha256: sha256:796e8ed84afe88d259a2ba5e1e81314e3a07b522b40d0fe09a19500fcac1a6a1
+  conclusion: existing
+  reason: >-
+    モジュールの説明が、クレート分割でなくなったkakoi-coreを案内していた。REQ-150の責務分割に沿う現在の構成を書いた。
+    コメントだけの変更で、コードの振る舞いは変わらない。
+  requirements:
+  - REQ-150
   decisions: []
   handoff: null
   gaps: []
