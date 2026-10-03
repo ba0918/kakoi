@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- An experimental Rust embedding API. External Rust packages can depend on `kakoi-runtime`
+  through a path dependency to prepare, start, stop, and wait for an isolation from their own
+  process, with finite events and synchronous or runtime-independent asynchronous waits;
+  packages that only build and validate policies can depend on `kakoi-policy`. Policies can be
+  built from Rust types or read from TOML, and both go through the same validation as the CLI.
+  The packages are not published on crates.io, and the API may change between releases.
+  Embedded runs need a `bwrap` with `--bind-fd` and `--ro-bind-fd`; the CLI's requirements do
+  not change. See [Rust embedding API](README.md#rust-embedding-api) and the standalone
+  [policy](examples/library-policy/README.md), [sync](examples/library-sync/README.md), and
+  [async](examples/library-async/README.md) examples.
+
+### Changed
+
+- The internal `kakoi-core` crate is split into `kakoi-policy`, `kakoi-plan`, `kakoi-linux`,
+  and `kakoi-runtime`, and the CLI is built on them. The CLI's behavior, options, output, and
+  exit codes are unchanged.
+
 ## [0.6.0] - 2026-10-01
 
 ### Added
