@@ -25,6 +25,11 @@ pub enum SecretFile {
     Bytes(Vec<u8>),
     /// Exists but cannot be used, with the reason.
     Unreadable(String),
+    /// An actual I/O failure, distinct from invalid file type or size.
+    ReadFailure {
+        reason: String,
+        cause: crate::diagnostic::IoCause,
+    },
 }
 
 /// Written by hand for the reason given at `Environment`'s: the content read is the
@@ -35,6 +40,11 @@ impl fmt::Debug for SecretFile {
             SecretFile::Absent => f.write_str("Absent"),
             SecretFile::Bytes(bytes) => write!(f, "Bytes(<{} bytes>)", bytes.len()),
             SecretFile::Unreadable(reason) => f.debug_tuple("Unreadable").field(reason).finish(),
+            SecretFile::ReadFailure { reason, cause } => f
+                .debug_struct("ReadFailure")
+                .field("reason", reason)
+                .field("cause", cause)
+                .finish(),
         }
     }
 }
@@ -252,6 +262,12 @@ fn apply_secrets(
                 return Err(Diagnostic::secret(format!(
                     "the file of secret `{name}` ({path}) {reason}"
                 )));
+            }
+            SecretFile::ReadFailure { reason, cause } => {
+                return Err(Diagnostic::secret(format!(
+                    "the file of secret `{name}` ({path}) {reason}"
+                ))
+                .with_io_cause(*cause));
             }
         }
     }

@@ -38,6 +38,13 @@ impl Kind {
 pub struct Diagnostic {
     kind: Kind,
     description: String,
+    io_cause: Option<IoCause>,
+}
+
+/// An observed I/O failure, carried as data through pure policy and plan code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IoCause {
+    pub os_error: Option<i32>,
 }
 
 /// Writes the control characters of `text` (0x00 to 0x1F and 0x7F) in a visible form: `\n`,
@@ -71,6 +78,7 @@ impl Diagnostic {
         Self {
             kind,
             description: escape_control(&description.into()),
+            io_cause: None,
         }
     }
 
@@ -100,6 +108,15 @@ impl Diagnostic {
 
     pub fn kind(&self) -> Kind {
         self.kind
+    }
+
+    pub fn with_io_cause(mut self, cause: IoCause) -> Self {
+        self.io_cause = Some(cause);
+        self
+    }
+
+    pub fn io_cause(&self) -> Option<IoCause> {
+        self.io_cause
     }
 
     pub fn description(&self) -> &str {

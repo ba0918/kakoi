@@ -919,12 +919,17 @@ fn prepare_worker(
     let mut plan =
         crate::planning::plan_with_policy(&request, policy.source_layers(), policy.as_merged())
             .map_err(|cause| {
-                let kind = if cause.kind() == crate::diagnostic::Kind::Bwrap {
+                let io_cause = cause.io_cause();
+                let kind = if io_cause.is_some() {
+                    ErrorKind::Io
+                } else if cause.kind() == crate::diagnostic::Kind::Bwrap {
                     ErrorKind::UnsupportedEnvironment
                 } else {
                     ErrorKind::InvalidInput
                 };
-                error(Phase::Planning, kind, cause.to_string())
+                let mut failure = error(Phase::Planning, kind, cause.to_string());
+                failure.diagnostics[0].os_error = io_cause.and_then(|cause| cause.os_error);
+                failure
             })?;
     let guard_image = if plan.guards.table.entries.is_empty() {
         None

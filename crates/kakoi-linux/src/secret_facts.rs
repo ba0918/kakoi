@@ -30,6 +30,12 @@ pub fn read_secret_file(path: &Path) -> SecretFile {
     match read_regular_file(path, Links::Follow) {
         Ok(bytes) => SecretFile::Bytes(bytes),
         Err(ReadError::Absent) => SecretFile::Absent,
+        Err(ReadError::Unreadable(error)) => SecretFile::ReadFailure {
+            reason: format!("cannot be read: {error}"),
+            cause: crate::diagnostic::IoCause {
+                os_error: error.raw_os_error(),
+            },
+        },
         Err(error) => SecretFile::Unreadable(error.to_string()),
     }
 }

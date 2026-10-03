@@ -101,6 +101,37 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-input" => self_test_input(),
         Some(value) if value == "--self-test-prepare" => self_test_prepare(),
         Some(value) if value == "--self-test-prepare-errors" => self_test_prepare_errors(),
+        Some(value) if value == "--self-test-secret-permission" => {
+            let policy = Policy::from_toml(&format!(
+                "[network]\nmode='none'\n[secrets]\nPRIVATE={:?}\n",
+                std::env::current_dir()
+                    .unwrap()
+                    .join("unreadable")
+                    .to_str()
+                    .unwrap()
+            ))
+            .unwrap();
+            let request = RunRequest::new(
+                policy,
+                CommandSpec::new("/bin/true".into()),
+                HostContext::capture().unwrap(),
+                StdioSpec {
+                    stdin: Io::Null,
+                    stdout: Io::Null,
+                    stderr: Io::Null,
+                },
+            );
+            let error = prepare(request).unwrap_err();
+            assert_eq!(error.phase, kakoi_runtime::Phase::Planning);
+            assert_eq!(error.kind, kakoi_runtime::ErrorKind::Io, "{error:?}");
+            assert!(
+                error
+                    .diagnostics
+                    .iter()
+                    .any(|record| record.os_error == Some(13)),
+                "{error:?}"
+            );
+        }
         Some(value) if value == "--self-test-fds" => self_test_fds(),
         Some(value) if value == "--self-test-prepare-fault" => self_test_prepare_fault(),
         Some(value) if value == "--self-test-repeat" => self_test_repeat(),

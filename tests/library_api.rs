@@ -8,6 +8,30 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-101, REQ-library-105]
+#[test]
+fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("home/.keep", "");
+    dir.write("workspace/unreadable", "private value");
+    std::fs::set_permissions(
+        dir.path().join("workspace/unreadable"),
+        std::fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
+    let output = Command::new(consumer())
+        .arg("--self-test-secret-permission")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-104]
 #[test]
 fn command_names_matching_mount_options_are_values_not_operations() {
