@@ -85,11 +85,14 @@ impl QueryAllowance {
     }
 
     fn take(&self) -> bool {
-        self.0
+        // try_update is unavailable on the minimum supported Rust 1.88.
+        #[allow(deprecated)]
+        let reserved = self
+            .0
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
                 left.checked_sub(1)
-            })
-            .is_ok()
+            });
+        reserved.is_ok()
     }
 }
 

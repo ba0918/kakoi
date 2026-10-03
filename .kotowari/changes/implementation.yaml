@@ -1,38 +1,55 @@
 version: 1
 entries:
-- id: kotowari-changes-implementation
-  base: fae252ab6ea2cba95c5b17000d8ebf8ec970b8ab
+- id: main-ci-c-abi-implementation
+  base: f4d8bd099f3f5f45a87966fd4509b7ced9be62c5
   role: implementer
   files:
-  - path: .github/dependabot.yml
-    before: null
-    after: sha256:561bce6913434121e3d20403d6804692970319410e814f3992bfaa1a7b36cd4e
-  - path: .github/workflows/kotowari.yml
-    before: null
-    after: sha256:e01b6858b2b99137f4b6d28bfda0256d1d01dd35d63ac20e8be34ef84e5230d8
-  - path: .ignore
-    before: null
-    after: sha256:e2420745344351c45459e0c8a056fd60e9d86897a4ab61794d6f22565f0c8d7b
-  - path: PROJECT.md
-    before: sha256:cd41536cf7f2cafee88739b1d23b3eed4a25fad986882c2a20763906e7f5624d
-    after: sha256:35d6f99bd710d3e4a25ae5f4c01afad304e6e43e24c2b81749398b6e0f57a8ce
+  - path: examples/library-sync/src/main.rs
+    before: sha256:06576c73be864f833fe64d01e8e19462eedf920a1a8d91afb3166a5a0b4f9f28
+    after: sha256:672d9b7a95780fc846c35e9aab83ea1dccd1ddce4f673f0720e78dc4bb635c0f
   ir:
-  - path: docs/ir/change-review.md
-    sha256: sha256:ff3b1a84ceb3b29dc4a42e389834819070340ee115afb52c1d18b8ab855a7d00
-  conclusion: new
+  - path: docs/ir/library/library-integration.md
+    sha256: sha256:d247c932a0d054ef3f5302e2165fa7ff2261a4c16abdc16b9451e4eb0ccc3078
+  conclusion: existing
   reason: >-
-    利用者の変更照合の導入依頼に対し、呼出し側が委譲した設定、ローカル検証、CI、運用指示の範囲で実装担当がA1からA4を採用した。
-    hookへのchanges追加を避け、固定名の両役記録と独立レビューを用いる選択はkotowariスキルのchanges参照に基づく。
-    生成物を除く対象設定、明示的なローカル比較元とPR実headの最終ゲートを導入し、既存push CIと製品の既存要求は変更しない。
-    D1の役割分担とこの段階のコミット、push、公開の除外は呼出し側の委譲条件である。
+    利用者のmain CI修復依頼に対し、実装担当がRust 1.99.0で既存の独立consumerビルド失敗を再現した。
+    openをC ABIどおりの可変引数とし、readとwriteをc_voidポインタへ訂正する。
+    可変引数のmodeは従来のu32を明示し、送受信するバイトと初期化時の故障注入は変えない。
+    REQ-library-404の外部path依存実例をビルド可能に戻し、REQ-library-401のruntime単独依存を維持する。
+    公開API、ポリシー、IR、workflow、依存、Rustの最小対応版は変更しない。
   requirements:
-  - REQ-1000
-  - REQ-1001
-  decisions:
-  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A1
-  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A2
-  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A3
-  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A4
-  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#D1
+  - REQ-library-401
+  - REQ-library-404
+  decisions: []
+  handoff: null
+  gaps: []
+- id: main-ci-atomic-msrv-implementation
+  base: f4d8bd099f3f5f45a87966fd4509b7ced9be62c5
+  role: implementer
+  files:
+  - path: crates/kakoi-net/src/namespace/watchdog.rs
+    before: sha256:73815f7d183465545f0d1989bc729b5cd0697abbc9515cd6fe76a3d8b3986667
+    after: sha256:d58796f785042f1c50324f8831f6dd51c65200100b33cc24f1906e63e2c6198f
+  - path: crates/kakoi-net/src/resolution.rs
+    before: sha256:aef93fdee66e40fd4853ce207540caaffd83148cfa4e6a41743752663bd4dce4
+    after: sha256:fff8bd1827dbb83007e8148f91fac075e95ba265784a4cc20c1bbd74cf245e97
+  ir:
+  - path: docs/ir/network/recovery/network-ownership.md
+    sha256: sha256:b2618465f08e728f8e5547323be46e72202049400d48143ceb03c085d2059ea5
+  - path: docs/ir/network/dns-work-limits/network-dns-query-limit.md
+    sha256: sha256:3f9a8591dcf9ed3dfc4a93eef2724bce754abd900272990c0dc04cc09dcaa181
+  conclusion: existing
+  reason: >-
+    利用者のmain CI修復依頼と呼出し側のRust 1.88維持条件に対し、実装担当がRust 1.99.0のclippy失敗と
+    Rust 1.88.0でtry_updateが不安定機能となることを再現した。
+    代替APIや自作CASループへ変えず、既存fetch_updateの呼出しを含むlet文だけでdeprecatedを許容する。
+    理由を各呼出しに記し、他の警告は抑制しない。
+    世代番号のchecked_addとRelaxed順序を維持してREQ-060の独立管理を変えず、
+    問い合わせ残数のchecked_subとSeqCst順序を維持してREQ-122の上限消費と回数共有を変えない。
+    新しい製品挙動、仕様判断、依存、workflow、最小対応版の変更はない。
+  requirements:
+  - REQ-060
+  - REQ-122
+  decisions: []
   handoff: null
   gaps: []

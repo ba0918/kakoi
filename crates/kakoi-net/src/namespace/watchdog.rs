@@ -54,6 +54,8 @@ impl TransitWatchdog {
         }
         let mut script = unsafe { File::from_raw_fd(raw) };
         static NEXT_GUARD: AtomicU64 = AtomicU64::new(0);
+        // try_update is unavailable on the minimum supported Rust 1.88.
+        #[allow(deprecated)]
         let generation = NEXT_GUARD
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| io::Error::other("watchdog generation exhausted"))?;
