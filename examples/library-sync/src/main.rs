@@ -367,6 +367,33 @@ fn self_test_missing_features() {
     assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
     assert!(!std::path::Path::new("must-not-run").exists());
     assert!(!std::path::Path::new("helper-must-not-run").exists());
+    let real = std::env::split_paths(
+        before
+            .environment()
+            .get(std::ffi::OsStr::new("PATH"))
+            .unwrap(),
+    )
+    .map(|path| path.join("bwrap"))
+    .find(|path| path.is_file())
+    .unwrap();
+    let real = real.to_str().unwrap().replace('\'', "'\\''");
+    std::fs::write(&bwrap, format!("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'bubblewrap 0.1.0'; exit 0; fi\nexec '{real}' \"$@\"\n")).unwrap();
+    let mut env = before.environment().clone();
+    env.insert("PATH".into(), bwrap.parent().unwrap().into());
+    let running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/true".into()),
+        HostContext::new(before.cwd().into(), env).unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
 }
 
 fn self_test_raw_mounts() {
