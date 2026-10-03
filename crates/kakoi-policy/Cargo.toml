@@ -1,20 +1,16 @@
 [package]
-name = "kakoi-core"
+name = "kakoi-policy"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "The policy, plan, and bwrap command line of kakoi, without the command-line interface."
 license.workspace = true
 repository.workspace = true
-# Not on crates.io yet: the public interface is not declared stable.
+description = "Pure policy parsing, validation, composition, and command rules for kakoi."
 publish = false
 
 [dependencies]
-kakoi-policy = { path = "../kakoi-policy" }
-libc.workspace = true
 idna.workspace = true
 regex.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 shlex.workspace = true
 toml.workspace = true

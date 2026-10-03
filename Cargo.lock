@@ -486,6 +486,7 @@ name = "kakoi-core"
 version = "0.6.0"
 dependencies = [
  "idna",
+ "kakoi-policy",
  "libc",
  "regex",
  "serde",
@@ -505,6 +506,17 @@ dependencies = [
  "rustls-native-certs",
  "serde_json",
  "socket2",
+]
+
+[[package]]
+name = "kakoi-policy"
+version = "0.6.0"
+dependencies = [
+ "idna",
+ "regex",
+ "serde",
+ "shlex",
+ "toml",
 ]
 
 [[package]]

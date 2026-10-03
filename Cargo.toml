@@ -1,7 +1,7 @@
 # The root package is the `kakoi` binary, so that `cargo install --git` and a release
 # build at the root keep working; the library it is built on is the member below.
 [workspace]
-members = ["crates/kakoi-core", "crates/kakoi-net"]
+members = ["crates/kakoi-core", "crates/kakoi-net", "crates/kakoi-policy"]
 
 # Specification section 17: the version lives in one place. Both packages inherit it.
 [workspace.package]
