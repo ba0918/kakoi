@@ -149,3 +149,26 @@ pub fn denied_guard() {
     assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
     assert!(!cwd.join("target-ran").exists());
 }
+
+pub fn data_batches() {
+    let cwd = std::env::current_dir().unwrap();
+    let hidden: Vec<_> = (0..17).map(|n| cwd.join(format!("hide-{n}"))).collect();
+    let paths = hidden
+        .iter()
+        .map(|p| format!("{:?}", p.to_str().unwrap()))
+        .collect::<Vec<_>>()
+        .join(",");
+    let policy = format!("[mounts]\nhide=[{paths}]\n[network]\nmode='none'\n");
+    let code = "from pathlib import Path; assert all(Path('hide-'+str(n)).read_bytes()==b'' for n in range(17)); print('batches passed')";
+    let mut run = prepare(request(&policy, "/usr/bin/python3", &["-c", code]))
+        .unwrap()
+        .spawn()
+        .unwrap();
+    let mut output = String::new();
+    run.take_stdout()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    assert_eq!(run.wait().main, MainOutcome::Exited(0));
+    assert_eq!(output.trim(), "batches passed");
+}

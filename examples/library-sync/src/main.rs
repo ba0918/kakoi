@@ -158,6 +158,7 @@ fn main() -> std::process::ExitCode {
             helper_checks::missing_dynamic_dependencies()
         }
         Some(value) if value == "--self-test-denied-guard" => helper_checks::denied_guard(),
+        Some(value) if value == "--self-test-data-batches" => helper_checks::data_batches(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS

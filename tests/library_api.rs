@@ -203,6 +203,26 @@ fn guard_execution_denial_fails_before_target_release_without_disk_fallback() {
     assert!(output.status.success(), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-library-106]
+#[test]
+fn generated_data_checks_transfer_more_than_one_descriptor_batch() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    for n in 0..17 {
+        dir.write(format!("workspace/hide-{n}"), "hidden");
+    }
+    let output = Command::new(consumer())
+        .arg("--self-test-data-batches")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-301, REQ-library-303, EX-library-303]
 #[test]
 fn host_and_none_launch_report_exit_and_pipe_output_and_reap_descendants() {

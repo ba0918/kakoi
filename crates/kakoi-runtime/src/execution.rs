@@ -39,6 +39,10 @@ struct DataCheck {
     path: Vec<u8>,
     readonly: bool,
 }
+#[derive(Serialize, Deserialize)]
+struct DataBatch {
+    offset: usize,
+}
 pub(crate) struct SourceCheck {
     path: PathBuf,
     identity: Identity,
@@ -524,8 +528,8 @@ pub(crate) fn run_worker(
     let mut child = ChildGuard(child);
     let startup = (|| -> io::Result<InitReply> {
         ipc::send(&init_control, &request, &[])?;
-        for batch in expected_data.chunks(16) {
-            ipc::send(&init_control, &(), batch)?;
+        for (index, batch) in expected_data.chunks(16).enumerate() {
+            ipc::send(&init_control, &DataBatch { offset: index * 16 }, batch)?;
         }
         while !poll(&init_control, 20)? {
             if poll(owner, 0)? || poll(control, 0)? {
@@ -682,8 +686,11 @@ fn init(control: &UnixStream) -> io::Result<()> {
     let validation = (|| -> io::Result<()> {
         let mut data = Vec::new();
         while data.len() < request.data.len() {
-            let (_, batch): ((), _) = ipc::recv(control)?;
-            if batch.is_empty() || batch.len() > request.data.len() - data.len() {
+            let (header, batch): (DataBatch, _) = ipc::recv(control)?;
+            if header.offset != data.len()
+                || batch.is_empty()
+                || batch.len() > request.data.len() - data.len()
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid generated data descriptors",
