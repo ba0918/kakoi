@@ -792,7 +792,7 @@ fn self_test_stopping_failure() {
     use std::io::{BufRead, BufReader};
     use std::os::fd::{FromRawFd, OwnedFd};
     unsafe extern "C" {
-        fn syscall(number: isize, ...) -> isize;
+        fn syscall(number: i64, ...) -> i64;
         fn shutdown(fd: i32, how: i32) -> i32;
     }
     for fault in ["owner", "control", "both"] {
