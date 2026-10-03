@@ -83,6 +83,40 @@ pub fn assemble(plan: &Plan) -> Result<BwrapCommand, Diagnostic> {
     assemble_with_prefix(plan, &[])
 }
 
+/// Descriptor-based launch assembly for the library worker. The caller must
+/// still insert init's final identity checks and startup/reaping handshake.
+/// This is not a public runtime execution entrypoint.
+pub fn assemble_retained(
+    plan: &Plan,
+    mounts: &[crate::retained_mounts::RetainedMount],
+) -> io::Result<BwrapCommand> {
+    if plan.policy.network_mode == NetworkMode::Filtered {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "filtered launch requires a prepared network session",
+        ));
+    }
+    let output = Command::new(&plan.bwrap)
+        .arg("--help")
+        .env_clear()
+        .output()?;
+    let help = String::from_utf8_lossy(&output.stdout);
+    if !output.status.success()
+        || !help.split_whitespace().any(|word| word == "--bind-fd")
+        || !help.split_whitespace().any(|word| word == "--ro-bind-fd")
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "bwrap lacks descriptor mounts",
+        ));
+    }
+    crate::retained_mounts::recheck(mounts)?;
+    let (arguments, descriptors) =
+        crate::retained_mounts::descriptor_arguments(&plan.arguments, mounts)?;
+    assemble_with_owned_arguments(plan, &[], &arguments, descriptors)
+        .map_err(|cause| io::Error::other(cause.to_string()))
+}
+
 /// Assembly entry for the network executor, which must enter the prepared user
 /// and network namespaces before executing bwrap. This function performs no
 /// namespace operation and does not establish or verify network permissions.
@@ -178,8 +212,16 @@ fn assemble_with_arguments(
     prefix: &[OsString],
     arguments: &[Argument],
 ) -> Result<BwrapCommand, Diagnostic> {
+    assemble_with_owned_arguments(plan, prefix, arguments, Vec::new())
+}
+
+fn assemble_with_owned_arguments(
+    plan: &Plan,
+    prefix: &[OsString],
+    arguments: &[Argument],
+    mut descriptors: Vec<OwnedFd>,
+) -> Result<BwrapCommand, Diagnostic> {
     raise_open_file_limit();
-    let mut descriptors = Vec::new();
     let arguments = shared_files::settle(arguments);
     let arguments = numbered_arguments(&arguments, &mut descriptors).map_err(|error| {
         Diagnostic::bwrap(format!(

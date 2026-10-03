@@ -61,3 +61,4 @@ serde_json.workspace = true
 [dev-dependencies]
 libc.workspace = true
 kakoi-policy = { path = "crates/kakoi-policy" }
+kakoi-linux = { path = "crates/kakoi-linux" }

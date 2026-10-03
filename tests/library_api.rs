@@ -2,6 +2,8 @@ use std::path::Path;
 use std::process::Command;
 
 mod common;
+#[path = "library_api/retained_mounts.rs"]
+mod retained_mounts;
 use common::{output_report, TempDir};
 
 fn consumer() -> std::path::PathBuf {
@@ -253,6 +255,14 @@ fn preparation_transfers_only_requested_fds_and_drop_reaps_the_worker_without_gl
     }
     let product = delta(&output);
     let runtime = delta(&ordinary);
+    eprintln!(
+        "libc={}: product delta {product:016x?}, ordinary thread delta {runtime:016x?}",
+        if cfg!(target_env = "musl") {
+            "musl"
+        } else {
+            "gnu"
+        }
+    );
     assert_eq!(
         product, runtime,
         "changes differ from ordinary libc thread initialization"
