@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use crate::copies::{
     CopiedEntry, CopySource, CopySources, FileContent, NotCopied, BYTE_LIMIT, ENTRY_LIMIT,
 };
-use crate::diagnostic::Diagnostic;
+use crate::diagnostic::{Diagnostic, IoCause};
 use crate::layers::Directive;
 use crate::mounts::{EntryKind, ResolvedItem};
 
@@ -215,4 +215,7 @@ fn unreadable(item: &ResolvedItem, path: &Path, error: std::io::Error) -> Diagno
         item.real.display(),
         path.display()
     ))
+    .with_io_cause(IoCause {
+        os_error: error.raw_os_error(),
+    })
 }

@@ -98,6 +98,38 @@ fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
     assert!(output.status.success(), "{}", output_report(&output));
 }
 
+// @kotowari[REQ-library-301]
+#[test]
+fn copy_file_and_directory_permission_errors_retain_the_os_cause() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("home/.keep", "");
+    dir.write("workspace/unreadable", "private value");
+    dir.write("workspace/unreadable-tree/entry", "private value");
+    for path in ["workspace/unreadable", "workspace/unreadable-tree"] {
+        std::fs::set_permissions(
+            dir.path().join(path),
+            std::fs::Permissions::from_mode(0o000),
+        )
+        .unwrap();
+    }
+    let output = Command::new(consumer())
+        .arg("--self-test-copy-permission")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    std::fs::set_permissions(
+        dir.path().join("workspace/unreadable-tree"),
+        std::fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-104]
 #[test]
 fn command_names_matching_mount_options_are_values_not_operations() {
