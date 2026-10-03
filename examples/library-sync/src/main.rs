@@ -23,10 +23,20 @@ extern "C" fn prepare_fault() {
         fn atoi(value: *const std::ffi::c_char) -> i32;
         fn close(fd: i32) -> i32;
         fn raise(signal: i32) -> i32;
+        fn write(fd: i32, data: *const u8, length: usize) -> isize;
+        fn pause() -> i32;
     }
     unsafe {
         let worker = getenv(c"KAKOI_RUNTIME_WORKER_FD".as_ptr());
         let fault = getenv(c"KAKOI_TEST_PREPARE_FAULT".as_ptr());
+        if !getenv(c"KAKOI_RUNTIME_INIT_FD".as_ptr()).is_null()
+            && !getenv(c"KAKOI_TEST_STARTUP_FAULT".as_ptr()).is_null()
+        {
+            write(1, b"init-startup\n".as_ptr(), 13);
+            loop {
+                pause();
+            }
+        }
         if !worker.is_null() && !fault.is_null() {
             if *fault == b's' as std::ffi::c_char {
                 raise(19);
@@ -61,6 +71,22 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-worker-death" => self_test_worker_death(),
         Some(value) if value == "--self-test-main-retention" => self_test_main_retention(),
         Some(value) if value == "--self-test-owner" => self_test_owner(),
+        Some(value) if value == "--self-test-startup-owner" => {
+            let request = RunRequest::new(
+                Policy::from_toml(
+                    "[network]\nmode='none'\n[env.set]\nKAKOI_TEST_STARTUP_FAULT='stop'\n",
+                )
+                .unwrap(),
+                CommandSpec::new("/bin/true".into()),
+                HostContext::capture().unwrap(),
+                StdioSpec {
+                    stdin: Io::Null,
+                    stdout: Io::Inherit,
+                    stderr: Io::Null,
+                },
+            );
+            prepare(request).unwrap().spawn().unwrap().wait();
+        }
         Some(value) if value == "--self-test-preexec-death" => self_test_preexec_death(),
         Some(value) if value == "--self-test-context-run" => self_test_context_run(),
         Some(value) if value == "--self-test-missing-features" => self_test_missing_features(),

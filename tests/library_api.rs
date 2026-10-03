@@ -191,6 +191,66 @@ fn owner_process_death_terminates_the_private_isolation_without_drop() {
     }
 }
 
+// @kotowari[REQ-library-203]
+#[test]
+fn owner_death_during_init_startup_does_not_leave_a_blocked_isolation() {
+    use std::io::{BufRead, BufReader};
+    use std::time::{Duration, Instant};
+    fn descendants(pid: u32, found: &mut Vec<u32>) {
+        let children =
+            std::fs::read_to_string(format!("/proc/{pid}/task/{pid}/children")).unwrap_or_default();
+        for child in children
+            .split_whitespace()
+            .map(|s| s.parse::<u32>().unwrap())
+        {
+            found.push(child);
+            descendants(child, found);
+        }
+    }
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    let mut child = Command::new(consumer())
+        .arg("--self-test-startup-owner")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .env("KAKOI_TEST_STARTUP_FAULT", "stop")
+        .current_dir(dir.path().join("workspace"))
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    assert_eq!(line, "init-startup\n");
+    let mut owned = Vec::new();
+    descendants(child.id(), &mut owned);
+    assert!(owned.len() >= 3, "worker, bwrap and init were not observed");
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let live = owned
+            .iter()
+            .filter(|pid| {
+                std::fs::read_to_string(format!("/proc/{pid}/status"))
+                    .is_ok_and(|status| !status.lines().any(|line| line.starts_with("State:\tZ")))
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        if live.is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "startup processes survived: {live:?}"
+        );
+        std::thread::yield_now();
+    }
+}
+
 fn run_fixture(argument: &str) {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
