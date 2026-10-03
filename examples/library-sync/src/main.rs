@@ -64,7 +64,11 @@ fn self_test_prepare() {
     .unwrap();
     let request = RunRequest::new(
         policy,
-        CommandSpec::new(program).arg("argument".into()),
+        CommandSpec::new(program)
+            .arg("argument".into())
+            .arg("--bind".into())
+            .arg("/missing-mount-source".into())
+            .arg("/".into()),
         context,
         StdioSpec {
             stdin: Io::Null,

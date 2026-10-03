@@ -654,7 +654,14 @@ fn prepare_worker(control: &UnixStream, owner: &UnixStream) -> Result<(), Prepar
                 };
                 error(Phase::Planning, kind, cause.to_string())
             })?;
-    let _mounts = kakoi_linux::retained_mounts::retain(&plan.arguments)
+    let separator = plan.launch_layout.command_separator.ok_or_else(|| {
+        error(
+            Phase::Retention,
+            ErrorKind::Protocol,
+            "missing command boundary",
+        )
+    })?;
+    let _mounts = kakoi_linux::retained_mounts::retain(&plan.arguments[..separator])
         .map_err(|cause| io_error(Phase::Retention, cause))?;
     ipc::send(
         control,
