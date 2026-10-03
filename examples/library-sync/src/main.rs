@@ -105,6 +105,30 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-prepare-fault" => self_test_prepare_fault(),
         Some(value) if value == "--self-test-repeat" => self_test_repeat(),
         Some(value) if value == "--self-test-command-path" => self_test_command_path(),
+        Some(value) if value == "--self-test-option-command" => {
+            for name in ["ordinary", "--bind", "--ro-bind", "--dev-bind", "--tmpfs"] {
+                let request = RunRequest::new(
+                    Policy::from_toml(&format!(
+                        "[mounts]\nrw=[{:?}]\n[network]\nmode='none'\n",
+                        std::env::current_dir().unwrap().to_str().unwrap()
+                    ))
+                    .unwrap(),
+                    CommandSpec::new(name.into()),
+                    HostContext::capture().unwrap(),
+                    StdioSpec {
+                        stdin: Io::Null,
+                        stdout: Io::Null,
+                        stderr: Io::Null,
+                    },
+                );
+                let outcome = prepare(request).unwrap().spawn().unwrap().wait();
+                assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(0));
+                assert_eq!(
+                    outcome.processes,
+                    kakoi_runtime::ProcessCleanup::ConfirmedReaped
+                );
+            }
+        }
         Some(value) if value == "--self-test-command-guard-path" => self_test_command_guard_path(),
         Some(value) if value == "--self-test-spawn" => self_test_spawn(),
         Some(value) if value == "--self-test-lifetime" => self_test_lifetime(),

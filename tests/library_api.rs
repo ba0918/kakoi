@@ -8,6 +8,35 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-104]
+#[test]
+fn command_names_matching_mount_options_are_values_not_operations() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("home/.keep", "");
+    for name in ["ordinary", "--bind", "--ro-bind", "--dev-bind", "--tmpfs"] {
+        let destination = dir.path().join("tools").join(name);
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::copy("/bin/true", destination).unwrap();
+    }
+    let output = Command::new(consumer())
+        .arg("--self-test-option-command")
+        .env_clear()
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                dir.path().join("tools").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-205, EX-library-209]
 #[test]
 fn completion_during_wait_poll_registration_is_not_blocked_by_executor_waker_cloning() {

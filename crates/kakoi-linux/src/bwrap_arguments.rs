@@ -13,6 +13,37 @@ use crate::plan::{Argument, LaunchLayout, Provisions, ResolvedCommand, NESTING_M
 use crate::policy::NetworkMode;
 use crate::shared_files::SharedFile;
 
+/// Walk generated operations without interpreting their operand strings as options.
+pub fn operations(arguments: &[Argument]) -> std::io::Result<Vec<(usize, &[Argument])>> {
+    let mut result = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        let Argument::Literal(option) = &arguments[index] else {
+            return Err(std::io::Error::other("missing bwrap operation"));
+        };
+        let arity = match option.to_str() {
+            Some("--") => break,
+            Some("--unshare-all" | "--share-net" | "--die-with-parent" | "--as-pid-1") => 0,
+            Some(
+                "--dev" | "--proc" | "--tmpfs" | "--dir" | "--perms" | "--remount-ro"
+                | "--cap-drop" | "--chdir" | "--seccomp" | "--argv0",
+            ) => 1,
+            Some(
+                "--bind" | "--ro-bind" | "--dev-bind" | "--bind-data" | "--ro-bind-data" | "--file"
+                | "--symlink" | "--bind-fd" | "--ro-bind-fd",
+            ) => 2,
+            _ => return Err(std::io::Error::other("unknown generated bwrap operation")),
+        };
+        let end = index + 1 + arity;
+        let operation = arguments
+            .get(index..end)
+            .ok_or_else(|| std::io::Error::other("incomplete bwrap operation"))?;
+        result.push((index, operation));
+        index = end;
+    }
+    Ok(result)
+}
+
 fn put(
     provisions: &Provisions,
     file: SharedFile,

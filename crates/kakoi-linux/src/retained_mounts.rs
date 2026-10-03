@@ -83,8 +83,8 @@ pub fn settle_shared(
     mounts: &mut Vec<RetainedMount>,
 ) -> io::Result<Vec<Argument>> {
     let settled = crate::shared_files::settle(arguments);
-    for (index, window) in arguments.windows(3).enumerate() {
-        if !matches!(window[1], Argument::SharedFile { .. }) {
+    for (index, window) in crate::bwrap_arguments::operations(arguments)? {
+        if !matches!(window.get(1), Some(Argument::SharedFile { .. })) {
             continue;
         }
         for mut mount in retain(&settled[index..index + 3])? {
@@ -139,7 +139,7 @@ pub(crate) fn descriptor_arguments(
 
 pub fn retain(arguments: &[Argument]) -> io::Result<Vec<RetainedMount>> {
     let mut mounts = Vec::new();
-    for (argument_index, arguments) in arguments.windows(3).enumerate() {
+    for (argument_index, arguments) in crate::bwrap_arguments::operations(arguments)? {
         let Argument::Literal(option) = &arguments[0] else {
             continue;
         };
