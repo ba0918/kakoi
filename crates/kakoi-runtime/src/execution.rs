@@ -312,6 +312,7 @@ pub(crate) fn run_worker(
             Argument::Literal(INIT.into()),
         ]);
         let mut bwrap = kakoi_linux::launch::assemble_retained(&plan, &mounts)?;
+        crate::preparation::remove_helper_environment(&mut bwrap.command);
         let (init_control, child_control) = UnixStream::pair()?;
         let fd = child_control.as_raw_fd();
         bwrap.command.env(INIT_FD, fd.to_string());
@@ -538,6 +539,7 @@ fn init(control: &UnixStream) -> io::Result<()> {
     }
     let program = OsString::from_vec(request.program);
     let mut command = Command::new(program);
+    crate::preparation::remove_helper_environment(&mut command);
     command.arg0(OsString::from_vec(request.argv0));
     command.args(request.arguments.into_iter().map(OsString::from_vec));
     unsafe {

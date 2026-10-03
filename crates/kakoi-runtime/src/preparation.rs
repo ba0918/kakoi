@@ -21,6 +21,12 @@ const OWNER: &str = "KAKOI_RUNTIME_OWNER_FD";
 const RESULT: &str = "KAKOI_RUNTIME_RESULT_FD";
 const VERSION: u32 = 1;
 
+pub(crate) fn remove_helper_environment(command: &mut Command) {
+    for key in [WORKER, OWNER, RESULT, "KAKOI_RUNTIME_INIT_FD"] {
+        command.env_remove(key);
+    }
+}
+
 #[derive(Debug)]
 pub enum Dispatch {
     Application,

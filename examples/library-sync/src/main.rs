@@ -57,6 +57,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-mount-identity" => self_test_mount_identity(),
         Some(value) if value == "--self-test-parallel" => self_test_parallel(),
         Some(value) if value == "--self-test-inherit" => self_test_inherit(),
+        Some(value) if value == "--self-test-helper-environment" => self_test_helper_environment(),
         Some(value) if value == "--self-test-worker-death" => self_test_worker_death(),
         Some(value) if value == "--self-test-main-retention" => self_test_main_retention(),
         Some(value) if value == "--self-test-owner" => self_test_owner(),
@@ -269,6 +270,29 @@ fn self_test_context_run() {
     assert_eq!(output, format!("{}\nspecific-value\n", cwd.display()));
     running.wait();
     assert_eq!(HostContext::capture().unwrap(), before);
+}
+
+fn self_test_helper_environment() {
+    use std::io::Read;
+    let mut running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n[env]\nmode='inherit'\n[env.set]\nKAKOI_RUNTIME_WORKER_FD='caller-value'\nKAKOI_RUNTIME_OWNER_FD='caller-value'\nKAKOI_RUNTIME_RESULT_FD='caller-value'\nKAKOI_RUNTIME_INIT_FD='caller-value'\n").unwrap(),
+        CommandSpec::new("/usr/bin/env".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec { stdin: Io::Null, stdout: Io::Pipe, stderr: Io::Null },
+    )).unwrap().spawn().unwrap();
+    let mut output = String::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    assert!(
+        !output
+            .lines()
+            .any(|line| line.starts_with("KAKOI_RUNTIME_")),
+        "{output}"
+    );
 }
 
 fn self_test_missing_features() {

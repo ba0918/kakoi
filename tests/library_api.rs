@@ -53,6 +53,12 @@ fn inherited_stdio_keeps_the_preparation_snapshot_after_descriptor_replacement()
     run_fixture("--self-test-inherit");
 }
 
+// @kotowari[REQ-library-402]
+#[test]
+fn helper_control_environment_is_not_published_to_the_target() {
+    run_fixture("--self-test-helper-environment");
+}
+
 // @kotowari[REQ-library-104, EX-library-107, REQ-library-105, EX-library-108]
 #[test]
 fn requested_cwd_and_os_bytes_are_used_without_mutating_the_caller() {
