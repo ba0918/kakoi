@@ -30,11 +30,14 @@ Rustからの利用にTOML文字列の生成や一時ファイルの作成を要
 
 ### REQ-library-104: 要求ごとの実行環境
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-10-03-public-library-api.md#A9, docs/decision/brainstorm/2026-10-03-public-library-api.md#D13
+- source: docs/decision/brainstorm/2026-10-03-public-library-api.md#A9, docs/decision/brainstorm/2026-10-03-public-library-api.md#D13, docs/decision/brainstorm/2026-10-03-public-library-api.md#A29
 - verification: unit
 
 組み込みAPIは起動ごとに環境と作業ディレクトリを受け取り、呼び出し元のグローバルな状態を書き換えずに適用する。
 相対パスは要求の作業ディレクトリを基準に解決する。
+名前で渡した対象コマンドは、要求の環境にポリシーを適用した隔離用の実効PATHで解決する。
+"env.set" の "PATH" と "path-prepend" を反映し、ガードの本物選びと配置・省略はREQ-446とREQ-449に従い、対象コマンドの名前探索にもその配置を反映する。
+ホスト側の "bwrap" は、ポリシー適用前の要求の "HostContext" の "PATH" から探す。
 
 ### REQ-library-105: 不変で一度だけ起動できる計画
 - kind: invariant
@@ -123,4 +126,14 @@ Scenario: 通常のマウントは内容のスナップショットではない
   Given 通常のマウント先にファイルがある
   When ホストからそのファイルの内容を変更する
   Then 計画の不変性を理由に古い内容を固定する保証はない
+
+@id=EX-library-112 @about=REQ-library-104,REQ-446,REQ-449 @source=docs/decision/brainstorm/2026-10-03-public-library-api.md#A29
+Scenario: 対象コマンドとホスト側bwrapのPATHを区別する
+  Given 要求の "HostContext" の "PATH" にある "tool" と、ポリシー適用後の隔離用PATHにある同名の "tool" は異なる実行可能な通常ファイルで、どちらも隔離内に見える
+  And "env.set" の "PATH" と "path-prepend" により、後者がガードの場所を除いた隔離用PATHで最初の候補になる
+  And "tool" のガード規則が設定され、REQ-446とREQ-449に従ってガードが配置される
+  And ホスト側の "bwrap" は要求の "HostContext" の "PATH" にある
+  When "tool" を名前で渡して計画し起動する
+  Then 対象コマンドは隔離用の実効PATHに配置されたガードを通り、そのガードの本物はポリシー適用後の "tool" になる
+  And ホスト側の "bwrap" はポリシー適用前の要求の "HostContext" の "PATH" から選ばれる
 ```

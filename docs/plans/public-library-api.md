@@ -11,6 +11,7 @@
 そのコミットの文書に残る「草案」「承認前」は執筆時の状態表示であり、当該内容は利用者が承認しコミット済みである。
 実装済みという意味ではない。
 シグナル設定の保証は、その後に利用者が承認した[A28](../decision/brainstorm/2026-10-03-public-library-api.md#A28)による[REQ-library-201](../ir/library/library-lifecycle.md#REQ-library-201)の明確化を適用する。
+名前による対象コマンド探索とホスト側bwrap探索は、利用者が承認した[A29](../decision/brainstorm/2026-10-03-public-library-api.md#A29)による[REQ-library-104](../ir/library/library-input.md#REQ-library-104)の明確化を適用する。対象コマンドはポリシーと既存ガード配置を反映した隔離用の実効PATH、bwrapはポリシー適用前のHostContextのPATHを使う。
 
 - [入力](../ir/library/library-input.md): REQ-library-101、REQ-library-102、REQ-library-103、REQ-library-104、REQ-library-105、REQ-library-106。
 - [寿命](../ir/library/library-lifecycle.md): REQ-library-201、REQ-library-202、REQ-library-203、REQ-library-204、REQ-library-205、REQ-library-206。
@@ -93,7 +94,7 @@ TUN、pasta、nftables、Landlock、名前空間、bwrapの不足をskipで隠�
 
 ## Verification map
 
-下表のlibrary要求25件と未延期シナリオ51件をすべて検証する。
+下表のlibrary要求25件と未延期シナリオ52件をすべて検証する。EX-library-112はA29による追加であり、既存のステップと検証ゲートは維持する。
 各ステップで実際にその振る舞いを検証するテストへ要求・シナリオのマークを付ける。
 既存要求に既にマークがあっても、新APIへの追加契約が証明済みだとはみなさない。
 
@@ -101,9 +102,9 @@ TUN、pasta、nftables、Landlock、名前空間、bwrapの不足をskipで隠�
 |---|---|---|
 | S1 | REQ-library-102、REQ-library-103、REQ-library-401 | EX-library-103、104、105、106、402。policyだけの外部パッケージ、共通検証、型によるモード必須化 |
 | S2 | REQ-150、REQ-454、REQ-154、REQ-399、REQ-467、REQ-305、REQ-306、REQ-307、REQ-308、REQ-309、REQ-315 | 既存マーク付き試験を維持。REQ-150・454は依存グラフと実コードの責務レビュー。新APIの分岐はS3以降でも検証 |
-| S3 | REQ-library-101、REQ-library-104、REQ-library-105、REQ-library-403 | EX-library-101、102、107、108、109、405。起動を含む例はS4で完結 |
-| S4 | REQ-library-106、REQ-library-201、REQ-library-202、REQ-library-203、REQ-library-204、REQ-library-301、REQ-library-303、REQ-library-407、REQ-library-409 | EX-library-110、111、201、202、203、204、205、206、207、301、302、303、306、307、410、411、415。まずhost・none、filteredはS6 |
-| S5 | REQ-library-406、REQ-library-408、REQ-library-409、REQ-library-410、REQ-library-402、REQ-446、REQ-449、REQ-453、REQ-475 | EX-library-404、408、409、412、413、414、416、417。D8・D9・D12の実ファイル、最終制限、子孫回収も確認 |
+| S3 | REQ-library-101、REQ-library-104、REQ-library-105、REQ-library-403 | EX-library-101、102、107、108、109、112、405。EX-library-112の探索を準備段階で確認し、起動はS4、ガード適用はS5で完結 |
+| S4 | REQ-library-104、REQ-library-106、REQ-library-201、REQ-library-202、REQ-library-203、REQ-library-204、REQ-library-301、REQ-library-303、REQ-library-407、REQ-library-409 | EX-library-110、111、112、201、202、203、204、205、206、207、301、302、303、306、307、410、411、415。まずhost・none、filteredはS6。EX-library-112のガード適用はS5で完結 |
+| S5 | REQ-library-104、REQ-library-406、REQ-library-408、REQ-library-409、REQ-library-410、REQ-library-402、REQ-446、REQ-449、REQ-453、REQ-475 | EX-library-112、404、408、409、412、413、414、416、417。D8・D9・D12の実ファイル、最終制限、子孫回収も確認 |
 | S6 | REQ-library-201、REQ-library-202、REQ-library-203、REQ-library-204、REQ-library-206、REQ-library-301、REQ-library-402、REQ-148 | EX-library-201から208、211、212、301、302のfiltered適用と入れ子。既存の外側ガード継承・重複拒否も回帰確認 |
 | S7 | REQ-library-205、REQ-library-302、REQ-068、REQ-288 | EX-library-209、210、213、214、304、305。実際の通知と制御切断、有限保持、Pending取消し、最終結果の独立性 |
 | S8 | REQ-library-303、REQ-library-304、REQ-library-401、REQ-library-404 | EX-library-306、307、308、309、401、406。workspace外のパッケージのビルド・実行 |
@@ -233,7 +234,7 @@ push、mainへのmerge、ブランチ・worktreeの削除は最終成果の受�
 - Prerequisites: S2。公開署名は設計契約の「要求と準備」、内部転送は「起動の成立と通信経路」を読む。
 - May change: `crates/kakoi-runtime/`, `crates/kakoi-linux/`, `crates/kakoi-plan/`の観測値入力、manifest・lockfile、`tests/library_api.rs`, `tests/library_api/`, `tests/fixtures/library-api/`, `examples/library-sync/`。
 - Done when: 同期mainでdispatchする独立した利用側からprepareと明示config入口を利用できる。非UTF-8入力、要求のcwd・PATH、FD所有、説明の秘密値抑制が成立する。prepare破棄と準備途中の通信失敗でもワーカーを回収し、呼び出し元の環境・cwd・rlimitを変えない。シグナル設定はREQ-library-201に従い、アプリケーションが利用可能なハンドラと呼び出し元のマスクを変えず、ランタイム・libc自身の内部予約シグナル初期化だけを例外とする。
-- Shown by: test `cargo test --locked --test library_api`の準備・外部コンパイル試験。別profileのある環境、破棄、FD数と子の終了、非公開計画の書換え拒否を観測する。起動を含むEX-library-107・108・109はS4でも確認する。
+- Shown by: test `cargo test --locked --test library_api`の準備・外部コンパイル試験。別profileのある環境、破棄、FD数と子の終了、非公開計画の書換え拒否を観測する。起動を含むEX-library-107・108・109はS4でも確認する。EX-library-112では要求のHostContextのPATHと、env.setのPATH・path-prependを反映した隔離用PATHに異なる同名実行ファイルを置き、対象コマンドとホスト側bwrapの探索結果を区別する。相対コマンドパスの要求cwd基準は維持する。
 - Left to the implementer: 内部IPCと回収担当のモジュール配置。設計契約にある上限と所有者の分離は変更しない。
 - Stop and hand back if: 準備時に対象コマンドを動かす、設定を暗黙に読む、REQ-library-201で除外したランタイム・libc自身の内部予約シグナル初期化以外に呼び出し元のグローバル状態を変える必要がある。
 
@@ -244,7 +245,7 @@ push、mainへのmerge、ブランチ・worktreeの削除は最終成果の受�
 - Prerequisites: S3。内部設計の「マウント元の同一性」「停止と失敗時の回収」、D9・D12を読む。
 - May change: `crates/kakoi-runtime/`, `crates/kakoi-linux/`, `crates/kakoi-plan/`の実行記述、`tests/library_api.rs`, `tests/library_api/`, `tests/fixtures/library-api/`, `examples/library-sync/`。
 - Done when: host・noneで起動と同期wait、停止、Drop、所有者死亡、並行実行が成立する。bind-fd機能不足、リンク先置換、dev-bindの照合不一致では対象コマンドを動かさない。通常内容のライブ更新、spawnだけの共有ファイル準備、未読パイプ中の停止、主コマンドと回収の別結果を観測できる。
-- Shown by: test `cargo test --locked --test library_api`。実bwrapでの機能確認と保持対象の置換、役割付きinit、所有者・ワーカー強制終了、子孫回収、exec失敗と非0終了を確認する。独立した利用側fixtureでprepare後に標準FDを別の対象へ差し替え、Inheritで起動したコマンドが準備時の対象を使うことを確認する。EOFだけの起動成否と未確認回収を成功扱いしない試験を含める。EX-library-202では「Test command」の方法でアプリケーションが利用可能なハンドラと呼び出し元のマスクの不変を確認し、観測した例外がランタイム・libc自身の内部予約シグナル初期化だけであることを確かめる。
+- Shown by: test `cargo test --locked --test library_api`。実bwrapでの機能確認と保持対象の置換、役割付きinit、所有者・ワーカー強制終了、子孫回収、exec失敗と非0終了を確認する。独立した利用側fixtureでprepare後に標準FDを別の対象へ差し替え、Inheritで起動したコマンドが準備時の対象を使うことを確認する。EOFだけの起動成否と未確認回収を成功扱いしない試験を含める。EX-library-202では「Test command」の方法でアプリケーションが利用可能なハンドラと呼び出し元のマスクの不変を確認し、観測した例外がランタイム・libc自身の内部予約シグナル初期化だけであることを確かめる。EX-library-112の対象コマンドが隔離用の実効PATHで選ばれ、bwrapがポリシー適用前のHostContextのPATHから起動されることも実行で確認する。ガードを含む最終確認はS5で行う。
 - Left to the implementer: 実行所有者ごとの内部資源型と試験の同期手段。デバイス試験は私有名前空間で既存の無害なデバイスを使う。
 - Stop and hand back if: 実ファイル・デバイスの同一性を最終配置で確認できない、所有者死亡で実行が残る、未確認の回収をConfirmedとして報告しないとAPIが成立しない。
 
@@ -255,7 +256,7 @@ push、mainへのmerge、ブランチ・worktreeの削除は最終成果の受�
 - Prerequisites: S4。D8・D9・D12と内部設計の「役割の振り分けと起動の確認」を読む。
 - May change: `crates/kakoi-runtime/`, `crates/kakoi-linux/`, `crates/kakoi-plan/`の配置計画、policyの既存照合との接続、`tests/library_api/`, `tests/fixtures/library-api/`, `examples/library-sync/`。
 - Done when: 全配置コピーを最終listed制限下で実行でき、表消失・不正役割・inode不一致は通常アプリへ戻らない。元アプリを暗黙に実行許可せず、自身を対象とするガードも適用する。依存不足・実行拒否では対象コマンドが副作用を残さず、probeが作った子孫も解放前に回収される。
-- Shown by: test `cargo test --locked --test library_api`。複数配置、実名末尾の削除済み接尾辞、動的依存が見える場合と欠ける場合、失われた表、probe子孫、ホストへのバイナリ非保存を実行して確認する。既存ガード・listed試験も通す。
+- Shown by: test `cargo test --locked --test library_api`。複数配置、実名末尾の削除済み接尾辞、動的依存が見える場合と欠ける場合、失われた表、probe子孫、ホストへのバイナリ非保存を実行して確認する。既存ガード・listed試験も通す。EX-library-112では、ポリシー適用後に選ばれる同名実行ファイルを本物とするガードを通ることを確認する。REQ-446・REQ-449の本物選びと配置・省略を共用し、直接渡したコマンド専用の例外を設けない。
 - Left to the implementer: 役割情報の内部符号化と読取り実装。異常を通常アプリへ戻さない意味と配置方式は承認済み設計に従う。
 - Stop and hand back if: 制限適用前にprobeする必要がある、コピーの実行にOS設定変更が必要、依存の暗黙公開や共有方式への変更が必要。
 

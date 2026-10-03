@@ -69,7 +69,10 @@ Applicationだけが通常のアプリ初期化へ進む。CompletedとErrはmai
 async mainの属性マクロの内側で呼ぶ例は提供せず、同期mainから非同期ランタイムを構築する例を提供する。
 
 cwdは絶対パスを要求し、環境はこの要求の値だけを使う。
-programが名前なら要求のPATH、相対パスなら要求のcwdを基準に既存規則で解決する。
+programが名前なら、要求の環境にポリシーを適用した隔離用の実効PATHで解決する。
+env.setのPATHとpath-prependを反映し、ガードの本物選びと配置・省略は既存の[REQ-446・REQ-449](../../ir/core/core-command-guard-runtime.md)に従う。対象コマンドの名前探索にもそのガード配置を反映する。
+ホスト側のbwrapは、ポリシー適用前の要求のHostContextのPATHから探す。両者の区別は[A29](./2026-10-03-public-library-api.md#A29)に従う。
+programが相対パスなら要求のcwdを基準に既存規則で解決する。
 workspace省略時は要求のcwdを使い、指定時の相対パスもcwd基準にする。
 Homeやconfig_dirが必要な規則は、要求の環境から既存規則で解決できなければ入力エラーにする。
 NULを含むOS文字列と、不正な環境変数名はOS呼出し前に拒否する。
