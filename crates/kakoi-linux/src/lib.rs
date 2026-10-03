@@ -6,6 +6,7 @@ pub use kakoi_plan::{
 };
 pub use kakoi_policy::{diagnostic, guard, layers, network, policy, wildcard};
 
+pub mod bwrap_arguments;
 pub mod command_location;
 pub mod copy_facts;
 pub mod executables;

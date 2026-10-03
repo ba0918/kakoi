@@ -210,8 +210,23 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
             ),
         }),
     };
+    let provisions = plan::provisions(&inputs, &isolation, commands.clone());
+    let (arguments, layout) = kakoi_linux::bwrap_arguments::bwrap_arguments_with_layout(
+        policy.network_mode,
+        &request.current_dir,
+        &isolation.mounts.items,
+        &copies,
+        &guards,
+        &provisions,
+        command.as_ref(),
+    );
+    let launch = plan::LaunchDescription {
+        program: bwrap,
+        arguments,
+        layout,
+    };
     Ok(plan::plan(
-        &inputs, isolation, copies, bwrap, command, guards, commands,
+        &inputs, isolation, copies, launch, command, guards, commands,
     ))
 }
 
