@@ -4,6 +4,9 @@ use kakoi_runtime::{prepare, CommandSpec, HostContext, Io, Policy, RunRequest, S
 
 /// Runs `/bin/echo` in a `none` isolation over a synthetic home and workspace,
 /// reads its output through a pipe, and waits for the retained result.
+///
+/// Call it only after `kakoi_runtime::dispatch_helper()` at the start of a synchronous
+/// `main` returned `Dispatch::Application`, as `main.rs` does.
 pub fn run() {
     use std::io::Read;
     let root = std::env::current_exe()
