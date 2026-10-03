@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-03
+
 ### Added
 
 - An experimental Rust embedding API. External Rust packages can depend on `kakoi-runtime`
@@ -312,7 +314,8 @@ layered policy, and returns the command's exit code unchanged.
   of a profile and a shim with its tool section filled in, shows a diff, and waits for approval
   before writing.
 
-[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ba0918/kakoi/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ba0918/kakoi/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ba0918/kakoi/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ba0918/kakoi/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ba0918/kakoi/compare/v0.3.0...v0.4.0
