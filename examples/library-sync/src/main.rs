@@ -241,7 +241,11 @@ fn main() -> std::process::ExitCode {
             self_test_independent_supervision()
         }
         Some(value) if value == "--self-test-owner" => self_test_owner(),
-        Some(value) if value == "--self-test-terminal-signal" => {
+        Some(value)
+            if value == "--self-test-terminal-signal"
+                || value == "--self-test-terminal-continue" =>
+        {
+            let continues = value == "--self-test-terminal-continue";
             unsafe extern "C" {
                 fn signal(number: i32, handler: usize) -> usize;
             }
@@ -250,21 +254,34 @@ fn main() -> std::process::ExitCode {
                 unsafe { signal(2, caught as *const () as usize) },
                 usize::MAX
             );
+            assert_ne!(
+                unsafe { signal(15, caught as *const () as usize) },
+                usize::MAX
+            );
             signal_state::install_application_state();
             let before = signal_state::Signals::capture();
             let mode = std::env::var("KAKOI_TEST_SIGNAL_NETWORK").unwrap();
+            let command = if continues {
+                CommandSpec::new("/usr/bin/python3".into()).arg("-c".into()).arg(
+                    "import signal, sys, time\ncaught=[]\nsignal.signal(signal.SIGINT, lambda *_: caught.append(1))\nprint('app-ready', flush=True)\ntime.sleep(2)\nprint('continued caught='+str(len(caught)), flush=True)\nsys.exit(23)".into()
+                )
+            } else {
+                CommandSpec::new("/bin/sleep".into()).arg("30".into())
+            };
             let request = RunRequest::new(
                 Policy::from_toml(&format!("[network]\nmode={mode:?}\n")).unwrap(),
-                CommandSpec::new("/bin/sleep".into()).arg("30".into()),
+                command,
                 HostContext::capture().unwrap(),
                 StdioSpec {
                     stdin: Io::Null,
-                    stdout: Io::Null,
+                    stdout: if continues { Io::Inherit } else { Io::Null },
                     stderr: Io::Null,
                 },
             );
             let running = prepare(request).unwrap().spawn().unwrap();
-            println!("terminal-ready");
+            if !continues {
+                println!("terminal-ready");
+            }
             let controlled = std::env::var_os("KAKOI_TEST_SIGNAL_CONTROL").is_some();
             if controlled {
                 let mut line = String::new();
@@ -275,9 +292,33 @@ fn main() -> std::process::ExitCode {
             let outcome = running.wait();
             assert_eq!(
                 outcome.main,
-                kakoi_runtime::MainOutcome::Signaled(if controlled { 15 } else { 2 }, false),
+                if continues {
+                    kakoi_runtime::MainOutcome::Exited(23)
+                } else {
+                    kakoi_runtime::MainOutcome::Signaled(
+                        if controlled || std::env::var_os("KAKOI_TEST_SIGNAL_TERM").is_some() {
+                            15
+                        } else {
+                            2
+                        },
+                        false,
+                    )
+                },
                 "{outcome:?}"
             );
+            if continues || (!controlled && std::env::var_os("KAKOI_TEST_SIGNAL_TERM").is_none()) {
+                assert_eq!(
+                    outcome.reason,
+                    kakoi_runtime::ExitReason::Completed,
+                    "{outcome:?}"
+                );
+            } else {
+                assert_eq!(
+                    outcome.reason,
+                    kakoi_runtime::ExitReason::StopRequested,
+                    "{outcome:?}"
+                );
+            }
             assert_eq!(
                 outcome.processes,
                 kakoi_runtime::ProcessCleanup::ConfirmedReaped,
@@ -291,6 +332,7 @@ fn main() -> std::process::ExitCode {
                 );
             }
             before.assert_preserved();
+            println!("outcome={outcome:?}");
         }
         Some(value)
             if value == "--self-test-startup-owner"

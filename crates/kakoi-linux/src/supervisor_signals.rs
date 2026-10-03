@@ -2,15 +2,24 @@
 
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU8, Ordering};
 
 const TERMINAL: [i32; 4] = [libc::SIGHUP, libc::SIGINT, libc::SIGQUIT, libc::SIGTERM];
-static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+const INTERRUPT: u8 = 1;
+const SHUTDOWN: u8 = 2;
+static PENDING: AtomicU8 = AtomicU8::new(0);
 static READER: AtomicI32 = AtomicI32::new(-1);
 static WRITER: AtomicI32 = AtomicI32::new(-1);
 
-extern "C" fn interrupt(_: i32) {
-    INTERRUPTED.store(true, Ordering::Relaxed);
+extern "C" fn interrupt(signal: i32) {
+    PENDING.fetch_or(
+        if signal == libc::SIGINT {
+            INTERRUPT
+        } else {
+            SHUTDOWN
+        },
+        Ordering::Relaxed,
+    );
     // The pipe makes check/poll atomic with respect to an arriving signal.
     let fd = WRITER.load(Ordering::Relaxed);
     if fd >= 0 {
@@ -128,13 +137,16 @@ pub fn install(previously_blocked: [bool; 4]) -> io::Result<Guard> {
 }
 
 pub fn pending() -> bool {
-    INTERRUPTED.load(Ordering::Relaxed)
+    PENDING.load(Ordering::Relaxed) != 0
 }
 
-pub fn take_pending() -> bool {
+/// During execution, Ctrl+C already reaches the target through the terminal's
+/// foreground group. Do not forward it twice or replace it with a shutdown:
+/// an application may cancel only its current operation and continue.
+pub fn take_shutdown_requested() -> bool {
     if let Some(fd) = descriptor() {
         let mut buffer = [0u8; 64];
         while unsafe { libc::read(fd, buffer.as_mut_ptr().cast(), buffer.len()) } > 0 {}
     }
-    INTERRUPTED.swap(false, Ordering::Relaxed)
+    PENDING.swap(0, Ordering::Relaxed) & SHUTDOWN != 0
 }

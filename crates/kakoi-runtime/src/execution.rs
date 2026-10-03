@@ -599,7 +599,7 @@ pub(crate) fn run_worker(
     let mut network_diagnostics = Vec::new();
     let outcome = loop {
         events.flush();
-        if kakoi_linux::supervisor_signals::take_pending() && !stopping {
+        if kakoi_linux::supervisor_signals::take_shutdown_requested() && !stopping {
             reason = strongest_reason(reason, ExitReason::StopRequested);
             stopping = true;
             events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));

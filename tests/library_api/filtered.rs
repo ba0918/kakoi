@@ -1,24 +1,74 @@
 use super::{consumer, fake_host::FakeHost};
 
+// @kotowari[REQ-098, EX-214, REQ-library-201, REQ-library-402]
+#[test]
+fn terminal_ctrl_c_allows_the_application_to_continue_in_every_network_mode() {
+    let host = FakeHost::new("", &[]);
+    host.run(&format!(r#"
+import select, signal, time
+for mode in ['filtered','host','none']:
+ master,slave=os.openpty()
+ def terminal():
+  os.setsid()
+  import fcntl,termios
+  fcntl.ioctl(0,termios.TIOCSCTTY,0)
+ p=subprocess.Popen([{consumer:?},'--self-test-terminal-continue'],cwd=os.environ['WORKSPACE'],
+  stdin=slave,stdout=slave,stderr=slave,preexec_fn=terminal,
+  env={{'PATH':os.environ['BIN']+':/usr/sbin:/usr/bin:/bin','HOME':os.environ['HOME_DIR'],'KAKOI_TEST_SIGNAL_NETWORK':mode}})
+ os.close(slave)
+ data=b''
+ try:
+  deadline=time.monotonic()+30
+  while b'app-ready' not in data:
+   assert time.monotonic()<deadline,data
+   if select.select([master],[],[],0.1)[0]: data+=os.read(master,65536)
+  os.write(master,b'\x03')
+  while p.poll() is None:
+   assert time.monotonic()<deadline,data
+   if select.select([master],[],[],0.1)[0]:
+    try: data+=os.read(master,65536)
+    except OSError: break
+  p.wait(timeout=10)
+  while select.select([master],[],[],0)[0]:
+   try: data+=os.read(master,65536)
+   except OSError: break
+  assert p.returncode==0,(mode,data)
+  assert b'continued caught=1' in data,(mode,data)
+  assert b'Completed' in data,(mode,data)
+  assert not pastas(),pastas()
+ finally:
+  try: os.killpg(p.pid,signal.SIGKILL)
+  except ProcessLookupError: pass
+  p.wait();os.close(master)
+"#,consumer=consumer().to_str().unwrap()));
+}
+
 // @kotowari[REQ-library-201, REQ-library-202, REQ-148]
 #[test]
 fn filtered_terminal_interrupt_preserves_the_worker_and_confirms_cleanup() {
     let host = FakeHost::new("", &[]);
     host.run(&format!(r#"
 import signal
-p=subprocess.Popen([{consumer:?},'--self-test-terminal-signal'],cwd=os.environ['WORKSPACE'],
- start_new_session=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,
- env={{'PATH':os.environ['BIN']+':/usr/sbin:/usr/bin:/bin','HOME':os.environ['HOME_DIR'],'KAKOI_TEST_SIGNAL_NETWORK':'filtered'}})
-try:
- assert line(p.stdout).strip()=='terminal-ready'
- os.killpg(p.pid,signal.SIGINT)
- out,err=p.communicate(timeout=30)
- assert p.returncode==0,(out,err)
- assert not pastas(),pastas()
-finally:
- try: os.killpg(p.pid,signal.SIGKILL)
- except ProcessLookupError: pass
- p.wait()
+for trigger in ['interrupt','terminate','stop']:
+ env={{'PATH':os.environ['BIN']+':/usr/sbin:/usr/bin:/bin','HOME':os.environ['HOME_DIR'],'KAKOI_TEST_SIGNAL_NETWORK':'filtered'}}
+ if trigger=='terminate': env['KAKOI_TEST_SIGNAL_TERM']='1'
+ if trigger=='stop': env['KAKOI_TEST_SIGNAL_CONTROL']='1'
+ p=subprocess.Popen([{consumer:?},'--self-test-terminal-signal'],cwd=os.environ['WORKSPACE'],
+  start_new_session=True,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,env=env)
+ try:
+  assert line(p.stdout).strip()=='terminal-ready'
+  if trigger=='interrupt': os.killpg(p.pid,signal.SIGINT)
+  elif trigger=='terminate':
+   workers=open('/proc/'+str(p.pid)+'/task/'+str(p.pid)+'/children').read().split()
+   assert len(workers)==1,workers
+   os.kill(int(workers[0]),signal.SIGTERM)
+  out,err=p.communicate(b'stop\n' if trigger=='stop' else None,timeout=30)
+  assert p.returncode==0,(trigger,out,err)
+  assert not pastas(),pastas()
+ finally:
+  try: os.killpg(p.pid,signal.SIGKILL)
+  except ProcessLookupError: pass
+  p.wait()
 "#,consumer=consumer().to_str().unwrap()));
 }
 
