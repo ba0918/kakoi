@@ -8,7 +8,7 @@ use crate::{
     scope::{AddressContext, DnsAdmission},
 };
 use hickory_proto::rr::{DNSClass, RecordType};
-use kakoi_core::network::{validate_upstreams, Allow, DnsUpstream, NetworkLimits};
+use kakoi_policy::network::{validate_upstreams, Allow, DnsUpstream, NetworkLimits};
 use std::{collections::BTreeMap, io, net::IpAddr, time::Instant};
 
 /// Synchronous resolution worker for one immutable snapshot of upstreams, written

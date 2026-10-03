@@ -6,7 +6,7 @@ use crate::{
     namespace::NetworkNamespace,
     pasta::{Pasta, PastaStage},
 };
-use kakoi_core::network::FixedPublication;
+use kakoi_policy::network::FixedPublication;
 use std::{
     io,
     path::{Path, PathBuf},

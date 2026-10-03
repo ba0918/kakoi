@@ -2,7 +2,7 @@
 
 use crate::host::{HOST_LOOPBACK_V4, HOST_LOOPBACK_V6};
 use crate::{child_output, health::TRANSIT_INTERFACE, namespace::NetworkNamespace};
-use kakoi_core::network::{merge_publications, FixedPublication, IpFamily, Protocol};
+use kakoi_policy::network::{merge_publications, FixedPublication, IpFamily, Protocol};
 use std::io::{self, Read};
 use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;

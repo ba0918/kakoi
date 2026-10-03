@@ -140,8 +140,8 @@ unsafe fn bind_child(control: RawFd, user: RawFd, net: RawFd) -> ! {
         },
         sin_zero: [0; 8],
     };
-    let first = endpoint(kakoi_core::network::DNS_RESOLVER_ADDRESS);
-    let second = endpoint(kakoi_core::network::DNS_RESOLVER_SECOND_ADDRESS);
+    let first = endpoint(kakoi_policy::network::DNS_RESOLVER_ADDRESS);
+    let second = endpoint(kakoi_policy::network::DNS_RESOLVER_SECOND_ADDRESS);
     let mut sockets = [-1; SOCKETS];
     if error == 0 {
         for (index, (address, kind)) in [

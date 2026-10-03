@@ -1,7 +1,7 @@
 use super::{AddressCandidate, AddressProgress, DnsError, Question, ValidatedResponse};
 use crate::resolution::ResolutionBudget;
 use hickory_proto::rr::{Name, Record};
-use kakoi_core::network::NetworkLimits;
+use kakoi_policy::network::NetworkLimits;
 use std::time::{Duration, Instant};
 
 pub struct ResolvedAddresses {

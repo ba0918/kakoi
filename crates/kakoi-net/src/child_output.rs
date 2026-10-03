@@ -52,6 +52,6 @@ pub(crate) fn with_diagnostic(error: io::Error, diagnostic: &[u8]) -> io::Error 
 
 /// `what`, followed by the helper's standard error with control characters escaped.
 pub(crate) fn described(what: &dyn std::fmt::Display, diagnostic: &[u8]) -> String {
-    let message = kakoi_core::diagnostic::escape_control(&String::from_utf8_lossy(diagnostic));
+    let message = kakoi_policy::diagnostic::escape_control(&String::from_utf8_lossy(diagnostic));
     format!("{what}: {message}")
 }

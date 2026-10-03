@@ -1,7 +1,7 @@
 //! Kernel enforcement for resolved, static IP permissions. Host alias routing and
 //! DNS-derived permissions are separate from this compilation layer.
 
-use kakoi_core::network::{IpNetwork, Ports, Protocol, MAX_UDP_IDLE_TIMEOUT_SECONDS};
+use kakoi_policy::network::{IpNetwork, Ports, Protocol, MAX_UDP_IDLE_TIMEOUT_SECONDS};
 use std::fmt::Write;
 
 pub struct FilterRule {

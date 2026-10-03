@@ -1,6 +1,6 @@
 //! Physical worker accounting, independent of expired client/request slots.
 use crate::dns::{ResolutionId, ResolutionTask};
-use kakoi_core::network::MAX_DNS_CONCURRENT_RESOLUTIONS;
+use kakoi_policy::network::MAX_DNS_CONCURRENT_RESOLUTIONS;
 use std::{
     io,
     sync::{

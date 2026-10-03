@@ -1,7 +1,7 @@
 //! Work limits owned by one DNS resolution, across upstream and settings changes.
 
 use hickory_proto::rr::Name;
-use kakoi_core::network::NetworkLimits;
+use kakoi_policy::network::NetworkLimits;
 use std::{
     sync::{
         atomic::{AtomicU32, Ordering},

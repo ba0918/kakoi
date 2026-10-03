@@ -9,7 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-kakoi-core = { path = "../kakoi-core" }
+kakoi-policy = { path = "../kakoi-policy" }
+kakoi-plan = { path = "../kakoi-plan" }
+kakoi-linux = { path = "../kakoi-linux" }
 libc.workspace = true
 hickory-proto.workspace = true
 rustls.workspace = true

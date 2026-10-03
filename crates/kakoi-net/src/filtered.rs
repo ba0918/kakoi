@@ -12,12 +12,12 @@ use crate::{
     supervisor::Application,
     transport::Transport,
 };
-use kakoi_core::{
+use kakoi_linux::command_location::locate_command;
+use kakoi_plan::plan::Plan;
+use kakoi_policy::{
     diagnostic::Diagnostic,
     layers::Policy,
     network::{Allow, Destination, DnsUpstream, FixedPublication, IpFamily, IpNetwork},
-    plan::Plan,
-    planning::locate_command,
 };
 use std::{
     collections::BTreeMap,

@@ -7,7 +7,8 @@ use crate::{
     init,
     namespace::NetworkNamespace,
 };
-use kakoi_core::{diagnostic::Diagnostic, plan::Plan};
+use kakoi_plan::plan::Plan;
+use kakoi_policy::diagnostic::Diagnostic;
 use std::{
     ffi::CString,
     io,

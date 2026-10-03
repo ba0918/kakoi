@@ -4,7 +4,7 @@ use hickory_proto::rr::{
     rdata::{A, AAAA},
     DNSClass, RData, Record, RecordType,
 };
-use kakoi_core::network::{reserved_host, Allow, Destination, IpFamily};
+use kakoi_policy::network::{reserved_host, Allow, Destination, IpFamily};
 
 /// Per-environment immutable authorization boundary. Host-reserved names are
 /// served separately by the controller and never sent to an upstream here.

@@ -4,7 +4,7 @@
 //! resolved's proxy at 127.0.0.54, which forwards without rewriting answers.
 
 use crate::resolution::UpstreamWait;
-use kakoi_core::network::DnsUpstream;
+use kakoi_policy::network::DnsUpstream;
 use std::{
     net::{IpAddr, Ipv4Addr},
     num::NonZeroU16,

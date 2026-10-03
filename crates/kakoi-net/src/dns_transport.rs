@@ -47,7 +47,7 @@ pub enum PlainTransport {
 /// the controller at startup; absence of TLS trust is an error, never a downgrade.
 pub fn exchange_upstreams(
     wire: &[u8],
-    upstreams: &[kakoi_core::network::DnsUpstream],
+    upstreams: &[kakoi_policy::network::DnsUpstream],
     trust: Option<&TlsClient>,
     budget: &mut ResolutionBudget,
 ) -> io::Result<ReceivedResponse> {
@@ -63,13 +63,13 @@ pub fn exchange_upstreams(
 
 pub(crate) fn exchange_upstreams_cancellable(
     wire: &[u8],
-    upstreams: &[kakoi_core::network::DnsUpstream],
+    upstreams: &[kakoi_policy::network::DnsUpstream],
     trust: Option<&TlsClient>,
     budget: &mut ResolutionBudget,
     cancellation: Option<&Cancellation>,
     wait: UpstreamWait,
 ) -> io::Result<ReceivedResponse> {
-    kakoi_core::network::validate_upstreams(upstreams)
+    kakoi_policy::network::validate_upstreams(upstreams)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let Some(first) = upstreams.first() else {
         return Err(io::Error::new(

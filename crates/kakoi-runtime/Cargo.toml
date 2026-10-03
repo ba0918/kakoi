@@ -1,0 +1,15 @@
+[package]
+name = "kakoi-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Isolation orchestration and embedding API for kakoi."
+publish = false
+
+[dependencies]
+kakoi-policy = { path = "../kakoi-policy" }
+kakoi-plan = { path = "../kakoi-plan" }
+kakoi-linux = { path = "../kakoi-linux" }
+kakoi-net = { path = "../kakoi-net" }

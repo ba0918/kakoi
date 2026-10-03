@@ -1,0 +1,14 @@
+[package]
+name = "kakoi-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Linux observation and isolation operations for kakoi."
+publish = false
+
+[dependencies]
+kakoi-policy = { path = "../kakoi-policy" }
+kakoi-plan = { path = "../kakoi-plan" }
+libc.workspace = true

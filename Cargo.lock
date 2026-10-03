@@ -486,14 +486,19 @@ dependencies = [
 name = "kakoi-core"
 version = "0.6.0"
 dependencies = [
- "idna",
+ "kakoi-linux",
+ "kakoi-plan",
+ "kakoi-policy",
+ "kakoi-runtime",
+]
+
+[[package]]
+name = "kakoi-linux"
+version = "0.6.0"
+dependencies = [
+ "kakoi-plan",
  "kakoi-policy",
  "libc",
- "regex",
- "serde",
- "serde_json",
- "shlex",
- "toml",
 ]
 
 [[package]]
@@ -501,12 +506,23 @@ name = "kakoi-net"
 version = "0.6.0"
 dependencies = [
  "hickory-proto",
- "kakoi-core",
+ "kakoi-linux",
+ "kakoi-plan",
+ "kakoi-policy",
  "libc",
  "rustls",
  "rustls-native-certs",
  "serde_json",
  "socket2",
+]
+
+[[package]]
+name = "kakoi-plan"
+version = "0.6.0"
+dependencies = [
+ "kakoi-policy",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -518,6 +534,16 @@ dependencies = [
  "serde",
  "shlex",
  "toml",
+]
+
+[[package]]
+name = "kakoi-runtime"
+version = "0.6.0"
+dependencies = [
+ "kakoi-linux",
+ "kakoi-net",
+ "kakoi-plan",
+ "kakoi-policy",
 ]
 
 [[package]]

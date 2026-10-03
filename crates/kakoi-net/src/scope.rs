@@ -1,6 +1,6 @@
 //! DNS address admission from immutable policy and controller-observed addresses.
 
-use kakoi_core::network::{Allow, Destination, IpFamily, IpNetwork};
+use kakoi_policy::network::{Allow, Destination, IpFamily, IpNetwork};
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::OnceLock,

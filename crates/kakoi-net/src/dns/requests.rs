@@ -3,7 +3,7 @@ use super::{
     ResponseCode,
 };
 use hickory_proto::op::Query;
-use kakoi_core::network::{Allow, MAX_DNS_RESOLUTION_TIMEOUT_SECONDS};
+use kakoi_policy::network::{Allow, MAX_DNS_RESOLUTION_TIMEOUT_SECONDS};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},

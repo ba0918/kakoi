@@ -1,0 +1,237 @@
+//! Collects `mounts::MountFacts` from the file system: what is behind each candidate path,
+//! what the resolution of each protected path passes through, the scan hits, and the mount
+//! list or the fact that it could not be read (specification section 14). Runs no command.
+
+use std::collections::VecDeque;
+use std::ffi::OsString;
+use std::fs;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Component, Path, PathBuf};
+
+use crate::mount_list::{read_mount_list, MOUNTINFO};
+use crate::mounts::{Candidates, MountFacts};
+use crate::scan::scan;
+use crate::workspace_facts::real_entry;
+
+/// How many symbolic links one resolution follows before giving up: what the kernel
+/// allows a path lookup.
+const LINK_LIMIT: usize = 40;
+
+/// Looks up every candidate path, walks the resolution of every path whose traversal is
+/// asked for, walks every scan from its real root, and, when a `hide-mounts` asks for it,
+/// reads the mount list and looks up each mount target under its `under`.
+pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
+    let mut facts = collect_path_facts(candidates);
+    collect_generator_facts(candidates, &mut facts);
+    facts
+}
+
+/// Looks up every candidate path and walks the resolution of every path whose traversal
+/// is asked for: the facts the resolution needs before it knows which scans and
+/// `hide-mounts` apply.
+pub fn collect_path_facts(candidates: &Candidates) -> MountFacts {
+    let mut facts = MountFacts::default();
+    for path in &candidates.paths {
+        facts.paths.insert(path.clone(), real_entry(path));
+    }
+    for path in &candidates.traversals {
+        let traversal = traverse(path);
+        facts.link_targets.extend(traversal.targets);
+        facts.links.insert(path.clone(), traversal.links);
+        facts
+            .directories
+            .insert(path.clone(), traversal.directories);
+    }
+    facts
+}
+
+/// Adds to `facts`, which hold the real paths of the scan roots and the `under`s, what
+/// every scan of `candidates` finds from its real root and, when a `hide-mounts` asks for
+/// it, the mount list and each mount target under its `under`.
+pub fn collect_generator_facts(candidates: &Candidates, facts: &mut MountFacts) {
+    for request in &candidates.scans {
+        if let Some(root) = facts.entry(&request.root).path() {
+            facts
+                .scan_hits
+                .extend(scan(root, &request.names, &request.exclude, &request.prune));
+        }
+    }
+    if !candidates.hide_mounts_under.is_empty() {
+        match read_mount_list(Path::new(MOUNTINFO)) {
+            Some(mounts) => facts.mounts = mounts,
+            None => facts.mount_list_unreadable = true,
+        }
+        let unders: Vec<_> = candidates
+            .hide_mounts_under
+            .iter()
+            .filter_map(|under| facts.entry(under).path().map(Path::to_path_buf))
+            .collect();
+        for mount in &facts.mounts {
+            if unders.iter().any(|under| mount.target.starts_with(under)) {
+                facts
+                    .paths
+                    .insert(mount.target.clone(), real_entry(&mount.target));
+            }
+        }
+    }
+}
+
+/// What resolving one path passed through: the symbolic links, each by its own place (its
+/// parent's real path and its name), in the order they are followed, and the directories,
+/// each by its real path, whose entries the walk looked up, each once.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Traversal {
+    pub links: Vec<PathBuf>,
+    pub directories: Vec<PathBuf>,
+    /// The target, as written, of each link in `links` that could be read.
+    pub targets: Vec<(PathBuf, PathBuf)>,
+}
+
+/// Walks the resolution of the absolute `path` as the kernel does: component by
+/// component, a link's target spliced in where the link was and `..` taken against the
+/// directory resolved so far, so a directory a target enters and leaves again is passed
+/// through like any other. It stops where nothing exists, at a link that cannot be read
+/// (whose own place is still reported: it was consulted, and could be re-pointed), or
+/// after `LINK_LIMIT` links, and still reports what was passed through up to there: the
+/// existing part of a missing secret file's path is checked too (specification
+/// section 5.6). A relative path is not walked.
+pub fn traverse(path: &Path) -> Traversal {
+    walk(path).0
+}
+
+/// The real path behind the absolute `path`, found by the same walk as [`traverse`] and so
+/// with the same limit of `LINK_LIMIT` links, whatever the C library's `realpath` allows;
+/// `None` when the walk stops before the last name.
+pub fn resolve(path: &Path) -> Option<PathBuf> {
+    walk(path).1
+}
+
+/// The real path behind `path`, taken against the current directory when relative: what
+/// `fs::canonicalize` answers, but with the limit of [`resolve`]. Not `fs::canonicalize`:
+/// the C library's `realpath` has its own link limit (musl stops one link sooner than
+/// glibc), while the kernel follows 40 links and specification section 5.6 fixes the
+/// limit at 40.
+pub fn real_path(path: &Path) -> Option<PathBuf> {
+    if path.is_absolute() {
+        resolve(path)
+    } else {
+        resolve(&std::env::current_dir().ok()?.join(path))
+    }
+}
+
+fn walk(path: &Path) -> (Traversal, Option<PathBuf>) {
+    let mut traversal = Traversal::default();
+    if !path.is_absolute() {
+        return (traversal, None);
+    }
+    let mut resolved = PathBuf::from("/");
+    let mut remaining = names_of(path);
+    let mut followed = 0;
+    let mut complete = true;
+    while let Some(name) = remaining.pop_front() {
+        // `name` (`..` included) is looked up in `resolved`, so `resolved` is consulted.
+        if !traversal.directories.contains(&resolved) {
+            traversal.directories.push(resolved.clone());
+        }
+        // A name after one that is not a directory, `..` included, names nothing.
+        if !fs::metadata(&resolved).is_ok_and(|metadata| metadata.is_dir()) {
+            complete = false;
+            break;
+        }
+        if name == "." {
+            continue;
+        }
+        if name == ".." {
+            resolved.pop();
+            continue;
+        }
+        let candidate = resolved.join(&name);
+        let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+            complete = false;
+            break;
+        };
+        if !metadata.file_type().is_symlink() {
+            resolved = candidate;
+            continue;
+        }
+        followed += 1;
+        if followed > LINK_LIMIT {
+            complete = false;
+            break;
+        }
+        let target = fs::read_link(&candidate);
+        traversal.links.push(candidate.clone());
+        let Ok(target) = target else {
+            complete = false;
+            break;
+        };
+        traversal.targets.push((candidate, target.clone()));
+        if target.is_absolute() {
+            resolved = PathBuf::from("/");
+        }
+        if requires_directory(&target) {
+            remaining.push_front(OsString::from("."));
+        }
+        for name in names_of(&target).into_iter().rev() {
+            remaining.push_front(name);
+        }
+    }
+    let real = (complete
+        && (!requires_directory(path)
+            || fs::metadata(&resolved).is_ok_and(|entry| entry.is_dir())))
+    .then_some(resolved);
+    (traversal, real)
+}
+
+fn requires_directory(path: &Path) -> bool {
+    path.as_os_str().as_bytes().ends_with(b"/") || path.as_os_str().as_bytes().ends_with(b"/.")
+}
+
+/// The names of `path` in order, `..` included and `.` and the root left out.
+fn names_of(path: &Path) -> VecDeque<OsString> {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_os_string()),
+            Component::ParentDir => Some(OsString::from("..")),
+            Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve;
+    use std::path::Path;
+
+    #[test]
+    fn a_regular_file_with_a_trailing_directory_component_has_no_real_path() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        for suffix in ["/", "/."] {
+            let path = format!("{}{suffix}", manifest.display());
+            assert!(std::fs::metadata(&path).is_err());
+            assert_eq!(resolve(Path::new(&path)), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn a_link_target_requiring_a_directory_does_not_resolve_to_a_file() {
+        let directory = std::env::temp_dir().join(format!(
+            "kakoi-link-target-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let mut resolved = Vec::new();
+        for (name, suffix) in [("slash", "/"), ("dot", "/.")] {
+            let link = directory.join(name);
+            std::os::unix::fs::symlink(format!("{}{suffix}", manifest.display()), &link).unwrap();
+            assert!(std::fs::metadata(&link).is_err());
+            resolved.push((link.clone(), resolve(&link)));
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+        for (link, actual) in resolved {
+            assert_eq!(actual, None, "{}", link.display());
+        }
+    }
+}

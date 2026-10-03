@@ -7,7 +7,7 @@ use crate::{
     namespace::NetworkNamespace,
     nft,
 };
-use kakoi_core::network::{Allow, Destination};
+use kakoi_policy::network::{Allow, Destination};
 use std::{
     collections::BTreeMap,
     fmt::Write,

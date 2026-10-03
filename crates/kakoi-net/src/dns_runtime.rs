@@ -14,7 +14,7 @@ use crate::{
     resolution::{QueryAllowance, UpstreamWait},
     scope::AddressContext,
 };
-use kakoi_core::network::{Allow, DnsUpstream, NetworkLimits};
+use kakoi_policy::network::{Allow, DnsUpstream, NetworkLimits};
 use std::{
     collections::{HashMap, HashSet},
     io,

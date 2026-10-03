@@ -5,7 +5,7 @@ use crate::{
     dynamic::DynamicPermissions,
     namespace::NetworkNamespace,
 };
-use kakoi_core::network::{Allow, MAX_DNS_CONCURRENT_RESOLUTIONS};
+use kakoi_policy::network::{Allow, MAX_DNS_CONCURRENT_RESOLUTIONS};
 use std::{
     io,
     path::PathBuf,

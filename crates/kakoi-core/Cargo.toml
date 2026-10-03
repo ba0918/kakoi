@@ -11,10 +11,6 @@ publish = false
 
 [dependencies]
 kakoi-policy = { path = "../kakoi-policy" }
-libc.workspace = true
-idna.workspace = true
-regex.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-shlex.workspace = true
-toml.workspace = true
+kakoi-plan = { path = "../kakoi-plan" }
+kakoi-linux = { path = "../kakoi-linux" }
+kakoi-runtime = { path = "../kakoi-runtime" }

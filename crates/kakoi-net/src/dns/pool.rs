@@ -1,5 +1,5 @@
 use super::{DnsError, Question};
-use kakoi_core::network::{MAX_DNS_CONCURRENT_RESOLUTIONS, MAX_DNS_WAITERS_PER_RESOLUTION};
+use kakoi_policy::network::{MAX_DNS_CONCURRENT_RESOLUTIONS, MAX_DNS_WAITERS_PER_RESOLUTION};
 use std::{collections::HashMap, hash::Hash};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

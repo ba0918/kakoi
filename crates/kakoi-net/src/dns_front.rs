@@ -3,7 +3,7 @@
 
 use crate::namespace::DnsSockets;
 use hickory_proto::op::{Edns, Message};
-use kakoi_core::network::{MAX_DNS_CONCURRENT_RESOLUTIONS, MAX_DNS_RESOLUTION_TIMEOUT_SECONDS};
+use kakoi_policy::network::{MAX_DNS_CONCURRENT_RESOLUTIONS, MAX_DNS_RESOLUTION_TIMEOUT_SECONDS};
 use std::{
     collections::{BTreeMap, VecDeque},
     io::{self, Read, Write},
