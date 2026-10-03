@@ -334,7 +334,13 @@ fn repeated_preparation_releases_descriptors_and_reaps_each_worker() {
 
 fn compile_consumer(name: &str, source: &str) -> std::process::Output {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let directory = root.join("target/library-runtime-compile").join(name);
+    let directory = root
+        .join(if cfg!(target_env = "musl") {
+            "target/library-runtime-compile-musl"
+        } else {
+            "target/library-runtime-compile"
+        })
+        .join(name);
     std::fs::create_dir_all(directory.join("src")).unwrap();
     std::fs::write(directory.join("Cargo.toml"), format!(
         "[workspace]\n[package]\nname='runtime-{name}'\nversion='0.0.0'\nedition='2021'\n[dependencies]\nkakoi-runtime={{path={:?}}}\n", root.join("crates/kakoi-runtime")
@@ -345,7 +351,11 @@ fn compile_consumer(name: &str, source: &str) -> std::process::Output {
         .arg(directory.join("Cargo.toml"))
         .env(
             "CARGO_TARGET_DIR",
-            root.join("target/library-runtime-compile-target"),
+            root.join(if cfg!(target_env = "musl") {
+                "target/library-runtime-compile-target-musl"
+            } else {
+                "target/library-runtime-compile-target"
+            }),
         )
         .output()
         .unwrap()
@@ -443,7 +453,11 @@ fn preparation_distinguishes_invalid_input_from_missing_host_tools_and_reaps_fai
 #[test]
 fn launch_transfers_only_requested_fds_and_reaps_without_changing_caller_signals_or_limits() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let fixture = root.join("target/library-thread-signals");
+    let fixture = root.join(if cfg!(target_env = "musl") {
+        "target/library-thread-signals-musl"
+    } else {
+        "target/library-thread-signals-gnu"
+    });
     let mut command = Command::new("rustc");
     if cfg!(target_env = "musl") {
         command.args(["--target", "x86_64-unknown-linux-musl"]);
