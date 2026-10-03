@@ -77,6 +77,29 @@ extern "C" fn prepare_fault() {
         if !getenv(c"KAKOI_RUNTIME_INIT_FD".as_ptr()).is_null()
             && !getenv(c"KAKOI_TEST_STARTUP_FAULT".as_ptr()).is_null()
         {
+            if *getenv(c"KAKOI_TEST_STARTUP_FAULT".as_ptr()) == b'r' as std::ffi::c_char {
+                let fd = atoi(getenv(c"KAKOI_RUNTIME_INIT_FD".as_ptr()));
+                let mut header = [0u8; 8];
+                let mut position = 0;
+                while position < header.len() {
+                    let count = read(fd, header[position..].as_mut_ptr(), header.len() - position);
+                    if count <= 0 {
+                        return;
+                    }
+                    position += count as usize;
+                }
+                let mut remaining = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;
+                let mut buffer = [0u8; 4096];
+                while remaining > 0 {
+                    let count = read(fd, buffer.as_mut_ptr(), remaining.min(buffer.len()));
+                    if count <= 0 {
+                        return;
+                    }
+                    remaining -= count as usize;
+                }
+                // The ELF initializer is a reachable producer of a partial reply.
+                write(fd, b"\0".as_ptr(), 1);
+            }
             write(1, b"init-startup\n".as_ptr(), 13);
             loop {
                 pause();
@@ -176,13 +199,25 @@ fn main() -> std::process::ExitCode {
             self_test_independent_supervision()
         }
         Some(value) if value == "--self-test-owner" => self_test_owner(),
-        Some(value) if value == "--self-test-startup-owner" => {
+        Some(value)
+            if value == "--self-test-startup-owner"
+                || value == "--self-test-large-start"
+                || value == "--self-test-startup-reply-owner" =>
+        {
+            let mut command = CommandSpec::new("/bin/true".into());
+            for _ in 0..12000 {
+                command = command.arg("0123456789".into());
+            }
             let request = RunRequest::new(
-                Policy::from_toml(
-                    "[network]\nmode='none'\n[env.set]\nKAKOI_TEST_STARTUP_FAULT='stop'\n",
-                )
+                Policy::from_toml(if value == "--self-test-startup-owner" {
+                    "[network]\nmode='none'\n[env.set]\nKAKOI_TEST_STARTUP_FAULT='stop'\n"
+                } else if value == "--self-test-startup-reply-owner" {
+                    "[network]\nmode='none'\n[env.set]\nKAKOI_TEST_STARTUP_FAULT='reply'\n"
+                } else {
+                    "[network]\nmode='none'\n"
+                })
                 .unwrap(),
-                CommandSpec::new("/bin/true".into()),
+                command,
                 HostContext::capture().unwrap(),
                 StdioSpec {
                     stdin: Io::Null,
@@ -190,7 +225,12 @@ fn main() -> std::process::ExitCode {
                     stderr: Io::Null,
                 },
             );
-            prepare(request).unwrap().spawn().unwrap().wait();
+            let outcome = prepare(request).unwrap().spawn().unwrap().wait();
+            assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(0));
+            assert_eq!(
+                outcome.processes,
+                kakoi_runtime::ProcessCleanup::ConfirmedReaped
+            );
         }
         Some(value) if value == "--self-test-preexec-death" => self_test_preexec_death(),
         Some(value) if value == "--self-test-context-run" => self_test_context_run(),

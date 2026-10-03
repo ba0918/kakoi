@@ -538,19 +538,17 @@ pub(crate) fn run_worker(
     };
     let mut child = ChildGuard(child);
     let startup = (|| -> io::Result<InitReply> {
-        ipc::send(&init_control, &request, &[])?;
+        let watches = [owner.as_raw_fd(), control.as_raw_fd()];
+        ipc::send_watched(&init_control, &request, &[], &watches)?;
         for (index, batch) in expected_data.chunks(16).enumerate() {
-            ipc::send(&init_control, &DataBatch { offset: index * 16 }, batch)?;
+            ipc::send_watched(
+                &init_control,
+                &DataBatch { offset: index * 16 },
+                batch,
+                &watches,
+            )?;
         }
-        while !poll(&init_control, 20)? {
-            if poll(owner, 0)? || poll(control, 0)? {
-                return Err(io::Error::new(
-                    io::ErrorKind::ConnectionAborted,
-                    "owner or control lost during startup",
-                ));
-            }
-        }
-        let (reply, fds) = ipc::recv(&init_control)?;
+        let (reply, fds) = ipc::recv_watched(&init_control, &watches)?;
         if !fds.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,

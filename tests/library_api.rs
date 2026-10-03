@@ -8,6 +8,12 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-104, REQ-library-203]
+#[test]
+fn startup_transfers_large_valid_requests_without_a_timeout() {
+    run_fixture("--self-test-large-start");
+}
+
 // @kotowari[REQ-library-101, REQ-library-105]
 #[test]
 fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
@@ -632,7 +638,13 @@ fn owner_process_death_terminates_the_private_isolation_without_drop() {
 // @kotowari[REQ-library-203]
 #[test]
 fn owner_death_during_init_startup_does_not_leave_a_blocked_isolation() {
+    startup_owner_death("--self-test-startup-owner");
+    startup_owner_death("--self-test-startup-reply-owner");
+}
+
+fn startup_owner_death(mode: &str) {
     use std::io::{BufRead, BufReader};
+    use std::os::unix::process::CommandExt;
     use std::time::{Duration, Instant};
     fn descendants(pid: u32, found: &mut Vec<u32>) {
         let children =
@@ -649,7 +661,8 @@ fn owner_death_during_init_startup_does_not_leave_a_blocked_isolation() {
     dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
     let mut child = Command::new(consumer())
-        .arg("--self-test-startup-owner")
+        .arg(mode)
+        .process_group(0)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap())
         .env("HOME", dir.path().join("home"))
@@ -681,10 +694,13 @@ fn owner_death_during_init_startup_does_not_leave_a_blocked_isolation() {
         if live.is_empty() {
             break;
         }
-        assert!(
-            Instant::now() < deadline,
-            "startup processes survived: {live:?}"
-        );
+        if Instant::now() >= deadline {
+            // Only the fixture's private process group is terminated on a failed oracle.
+            unsafe {
+                libc::kill(-(child.id() as i32), libc::SIGKILL);
+            }
+            panic!("startup processes survived: {live:?}");
+        }
         std::thread::yield_now();
     }
 }

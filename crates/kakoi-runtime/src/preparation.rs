@@ -825,8 +825,8 @@ fn prepare_worker(
     result_channel: &UnixStream,
     event_channel: UnixDatagram,
 ) -> Result<(), PrepareError> {
-    let (input, descriptors): (RequestInput, _) =
-        ipc::recv(control).map_err(|cause| io_error(Phase::Worker, cause))?;
+    let (input, descriptors): (RequestInput, _) = ipc::recv_watched(control, &[owner.as_raw_fd()])
+        .map_err(|cause| io_error(Phase::Worker, cause))?;
     if input.version != VERSION {
         return Err(error(
             Phase::Worker,
@@ -952,10 +952,11 @@ fn prepare_worker(
         .map_err(|cause| io_error(Phase::Retention, cause))?;
     let sources = crate::execution::source_checks(&plan, &mounts, context.cwd())
         .map_err(|cause| io_error(Phase::Retention, cause))?;
-    ipc::send(
+    ipc::send_watched(
         control,
         &Response::Prepared(Box::new(DescriptionInput::from_plan(&plan, context.cwd()))),
         &[],
+        &[owner.as_raw_fd()],
     )
     .map_err(|cause| io_error(Phase::Worker, cause))?;
     // The command and network are not started at preparation. Resources stay here
@@ -987,7 +988,8 @@ fn prepare_worker(
         }
         if poll[1].revents != 0 {
             let (command, fds): (crate::running::Control, _) =
-                ipc::recv(control).map_err(|cause| io_error(Phase::Worker, cause))?;
+                ipc::recv_watched(control, &[owner.as_raw_fd()])
+                    .map_err(|cause| io_error(Phase::Worker, cause))?;
             if !fds.is_empty() {
                 return Err(error(
                     Phase::Worker,

@@ -1,7 +1,7 @@
 //! Bounded same-binary messages and owned descriptor transfer.
 
-use std::io::{self, Read, Write};
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::io;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::net::UnixStream;
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -17,6 +17,105 @@ pub(crate) fn send<T: Serialize>(
     socket: &UnixStream,
     message: &T,
     fds: &[OwnedFd],
+) -> io::Result<()> {
+    send_watched(socket, message, fds, &[])
+}
+
+fn ready(socket: &UnixStream, events: i16, watches: &[RawFd]) -> io::Result<()> {
+    let mut descriptors = vec![libc::pollfd {
+        fd: socket.as_raw_fd(),
+        events,
+        revents: 0,
+    }];
+    descriptors.extend(watches.iter().map(|fd| libc::pollfd {
+        fd: *fd,
+        events: libc::POLLIN,
+        revents: 0,
+    }));
+    loop {
+        let count = unsafe { libc::poll(descriptors.as_mut_ptr(), descriptors.len() as _, -1) };
+        if count < 0 {
+            let cause = io::Error::last_os_error();
+            if cause.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(cause);
+        }
+        if descriptors[1..].iter().any(|fd| fd.revents != 0) {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "owner or control lost during transfer",
+            ));
+        }
+        if descriptors[0].revents != 0 {
+            return Ok(());
+        }
+    }
+}
+
+fn write_all(socket: &UnixStream, mut bytes: &[u8], watches: &[RawFd]) -> io::Result<()> {
+    while !bytes.is_empty() {
+        ready(socket, libc::POLLOUT, watches)?;
+        let count = unsafe {
+            libc::send(
+                socket.as_raw_fd(),
+                bytes.as_ptr().cast(),
+                bytes.len(),
+                libc::MSG_DONTWAIT | libc::MSG_NOSIGNAL,
+            )
+        };
+        if count < 0 {
+            let cause = io::Error::last_os_error();
+            if matches!(
+                cause.kind(),
+                io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+            ) {
+                continue;
+            }
+            return Err(cause);
+        }
+        if count == 0 {
+            return Err(io::ErrorKind::WriteZero.into());
+        }
+        bytes = &bytes[count as usize..];
+    }
+    Ok(())
+}
+
+fn read_exact(socket: &UnixStream, mut bytes: &mut [u8], watches: &[RawFd]) -> io::Result<()> {
+    while !bytes.is_empty() {
+        ready(socket, libc::POLLIN, watches)?;
+        let count = unsafe {
+            libc::recv(
+                socket.as_raw_fd(),
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+                libc::MSG_DONTWAIT,
+            )
+        };
+        if count < 0 {
+            let cause = io::Error::last_os_error();
+            if matches!(
+                cause.kind(),
+                io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+            ) {
+                continue;
+            }
+            return Err(cause);
+        }
+        if count == 0 {
+            return Err(io::ErrorKind::UnexpectedEof.into());
+        }
+        bytes = &mut bytes[count as usize..];
+    }
+    Ok(())
+}
+
+pub(crate) fn send_watched<T: Serialize>(
+    socket: &UnixStream,
+    message: &T,
+    fds: &[OwnedFd],
+    watches: &[RawFd],
 ) -> io::Result<()> {
     let body = serde_json::to_vec(message)?;
     if body.len() > MAX_MESSAGE || fds.len() > MAX_FDS {
@@ -51,8 +150,18 @@ pub(crate) fn send<T: Serialize>(
             }
         }
         loop {
-            let sent = libc::sendmsg(socket.as_raw_fd(), &msg, libc::MSG_NOSIGNAL);
-            if sent >= 0 || io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+            ready(socket, libc::POLLOUT, watches)?;
+            let sent = libc::sendmsg(
+                socket.as_raw_fd(),
+                &msg,
+                libc::MSG_NOSIGNAL | libc::MSG_DONTWAIT,
+            );
+            if sent >= 0
+                || !matches!(
+                    io::Error::last_os_error().kind(),
+                    io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+                )
+            {
                 break sent;
             }
         }
@@ -66,12 +175,18 @@ pub(crate) fn send<T: Serialize>(
             "internal header was not sent",
         ));
     }
-    let mut socket = socket;
-    socket.write_all(&header[sent as usize..])?;
-    socket.write_all(&body)
+    write_all(socket, &header[sent as usize..], watches)?;
+    write_all(socket, &body, watches)
 }
 
 pub(crate) fn recv<T: DeserializeOwned>(socket: &UnixStream) -> io::Result<(T, Vec<OwnedFd>)> {
+    recv_watched(socket, &[])
+}
+
+pub(crate) fn recv_watched<T: DeserializeOwned>(
+    socket: &UnixStream,
+    watches: &[RawFd],
+) -> io::Result<(T, Vec<OwnedFd>)> {
     let mut header = [0u8; 8];
     let mut ancillary = [0usize; 32];
     let mut iov = libc::iovec {
@@ -87,8 +202,18 @@ pub(crate) fn recv<T: DeserializeOwned>(socket: &UnixStream) -> io::Result<(T, V
         msg.msg_control = ancillary.as_mut_ptr().cast();
         msg.msg_controllen = std::mem::size_of_val(&ancillary) as _;
         let count = loop {
-            let count = libc::recvmsg(socket.as_raw_fd(), &mut msg, libc::MSG_CMSG_CLOEXEC);
-            if count >= 0 || io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+            ready(socket, libc::POLLIN, watches)?;
+            let count = libc::recvmsg(
+                socket.as_raw_fd(),
+                &mut msg,
+                libc::MSG_CMSG_CLOEXEC | libc::MSG_DONTWAIT,
+            );
+            if count >= 0
+                || !matches!(
+                    io::Error::last_os_error().kind(),
+                    io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+                )
+            {
                 break count;
             }
         };
@@ -118,8 +243,7 @@ pub(crate) fn recv<T: DeserializeOwned>(socket: &UnixStream) -> io::Result<(T, V
     if truncated {
         return Err(invalid("truncated internal descriptor transfer"));
     }
-    let mut socket = socket;
-    socket.read_exact(&mut header[count..])?;
+    read_exact(socket, &mut header[count..], watches)?;
     let size = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;
     let declared = u32::from_be_bytes(header[4..].try_into().unwrap()) as usize;
     if size > MAX_MESSAGE || declared > MAX_FDS || declared != fds.len() {
@@ -128,6 +252,6 @@ pub(crate) fn recv<T: DeserializeOwned>(socket: &UnixStream) -> io::Result<(T, V
         ));
     }
     let mut body = vec![0; size];
-    socket.read_exact(&mut body)?;
+    read_exact(socket, &mut body, watches)?;
     Ok((serde_json::from_slice(&body)?, fds))
 }
