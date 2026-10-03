@@ -25,10 +25,25 @@ extern "C" fn prepare_fault() {
         fn raise(signal: i32) -> i32;
         fn write(fd: i32, data: *const u8, length: usize) -> isize;
         fn pause() -> i32;
+        fn open(path: *const std::ffi::c_char, flags: i32, mode: u32) -> i32;
+        fn strlen(value: *const std::ffi::c_char) -> usize;
     }
     unsafe {
         let worker = getenv(c"KAKOI_RUNTIME_WORKER_FD".as_ptr());
         let fault = getenv(c"KAKOI_TEST_PREPARE_FAULT".as_ptr());
+        let record = getenv(c"KAKOI_TEST_CONTROL_RECORD".as_ptr());
+        if !worker.is_null() && !record.is_null() {
+            let output = open(record, 1 | 64 | 512, 0o600);
+            if output >= 0 {
+                write(output, worker.cast(), strlen(worker));
+                let owner = getenv(c"KAKOI_RUNTIME_OWNER_FD".as_ptr());
+                if !owner.is_null() {
+                    write(output, b" ".as_ptr(), 1);
+                    write(output, owner.cast(), strlen(owner));
+                }
+                close(output);
+            }
+        }
         if !getenv(c"KAKOI_RUNTIME_INIT_FD".as_ptr()).is_null()
             && !getenv(c"KAKOI_TEST_STARTUP_FAULT".as_ptr()).is_null()
         {
@@ -71,6 +86,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-worker-death" => self_test_worker_death(),
         Some(value) if value == "--self-test-main-retention" => self_test_main_retention(),
         Some(value) if value == "--self-test-external-reap" => self_test_external_reap(),
+        Some(value) if value == "--self-test-stopping-failure" => self_test_stopping_failure(),
         Some(value) if value == "--self-test-owner" => self_test_owner(),
         Some(value) if value == "--self-test-startup-owner" => {
             let request = RunRequest::new(
@@ -728,6 +744,72 @@ fn self_test_external_reap() {
         "{outcome:?}"
     );
     assert!(children().is_empty());
+}
+
+fn self_test_stopping_failure() {
+    use std::io::{BufRead, BufReader};
+    use std::os::fd::{FromRawFd, OwnedFd};
+    unsafe extern "C" {
+        fn syscall(number: isize, ...) -> isize;
+        fn shutdown(fd: i32, how: i32) -> i32;
+    }
+    for fault in ["owner", "control", "both"] {
+        let context = HostContext::capture().unwrap();
+        let record = context.cwd().join("worker-control-record");
+        std::env::set_var("KAKOI_TEST_CONTROL_RECORD", &record);
+        let mut running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n[process]\nshutdown-grace-seconds=2\n").unwrap(),
+        CommandSpec::new("/usr/bin/python3".into()).arg("-c".into()).arg(
+            "import os,signal\ndef stopped(s,f):\n os.write(1,b'stopping\\n'); signal.signal(signal.SIGTERM,signal.SIG_IGN)\nsignal.signal(signal.SIGTERM,stopped)\nos.write(1,b'ready\\n')\nwhile True: signal.pause()".into(),
+        ),
+        context,
+        StdioSpec { stdin: Io::Null, stdout: Io::Pipe, stderr: Io::Null },
+    )).unwrap().spawn().unwrap();
+        std::env::remove_var("KAKOI_TEST_CONTROL_RECORD");
+        let mut output = BufReader::new(running.take_stdout().unwrap());
+        let mut line = String::new();
+        output.read_line(&mut line).unwrap();
+        assert_eq!(line, "ready\n");
+        running.request_stop().unwrap();
+        line.clear();
+        output.read_line(&mut line).unwrap();
+        assert_eq!(line, "stopping\n");
+        let worker: i32 = children().parse().unwrap();
+        let channels = std::fs::read_to_string(record)
+            .unwrap()
+            .split_whitespace()
+            .map(|number| number.parse::<i32>().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(channels.len(), 2);
+        let pidfd = unsafe { syscall(434, worker, 0i32) } as i32;
+        assert!(pidfd >= 0, "{}", std::io::Error::last_os_error());
+        let _pidfd = unsafe { OwnedFd::from_raw_fd(pidfd) };
+        for channel in match fault {
+            "owner" => &channels[1..],
+            "control" => &channels[..1],
+            _ => &channels[..],
+        } {
+            let duplicate = unsafe { syscall(438, pidfd, *channel, 0i32) } as i32;
+            assert!(duplicate >= 0, "{}", std::io::Error::last_os_error());
+            let _duplicate = unsafe { OwnedFd::from_raw_fd(duplicate) };
+            assert_eq!(unsafe { shutdown(duplicate, 2) }, 0);
+        }
+        let outcome = running.wait();
+        assert_eq!(
+            outcome.reason,
+            if fault == "owner" {
+                kakoi_runtime::ExitReason::OwnerLost
+            } else {
+                kakoi_runtime::ExitReason::InfrastructureFailure
+            },
+            "{fault}"
+        );
+        assert_eq!(
+            outcome.processes,
+            kakoi_runtime::ProcessCleanup::ConfirmedReaped
+        );
+        drop(running);
+    }
 }
 
 fn self_test_owner() {

@@ -433,9 +433,34 @@ pub(crate) fn run_worker(
     drop(pipes);
     let mut reason = ExitReason::Completed;
     let mut stopping = false;
+    let mut owner_lost = false;
+    let mut control_lost = false;
     let mut main = MainOutcome::Unknown;
     let outcome = loop {
-        if poll(&init_control, 20).map_err(prepare_failure)? {
+        let init_ready = poll(&init_control, 20).map_err(prepare_failure)?;
+        if !owner_lost && poll(owner, 0).map_err(prepare_failure)? {
+            owner_lost = true;
+            reason = strongest_reason(reason, ExitReason::OwnerLost);
+            if !stopping {
+                stopping = true;
+                let _ = ipc::send(&init_control, &Control::Stop, &[]);
+            }
+        }
+        if !control_lost && poll(control, 0).map_err(prepare_failure)? {
+            let observed = match ipc::recv::<Control>(control) {
+                Ok((Control::Stop, fds)) if fds.is_empty() => ExitReason::StopRequested,
+                _ => {
+                    control_lost = true;
+                    ExitReason::InfrastructureFailure
+                }
+            };
+            reason = strongest_reason(reason, observed);
+            if !stopping {
+                stopping = true;
+                let _ = ipc::send(&init_control, &Control::Stop, &[]);
+            }
+        }
+        if init_ready {
             match ipc::recv::<InitReply>(&init_control) {
                 Ok((InitReply::Main(observed), fds)) if fds.is_empty() => {
                     main = observed;
@@ -452,9 +477,7 @@ pub(crate) fn run_worker(
                         .map_err(prepare_failure)?;
                 }
                 Ok((InitReply::Finished(mut outcome), fds)) if fds.is_empty() => {
-                    if reason != ExitReason::Completed {
-                        outcome.reason = reason;
-                    }
+                    outcome.reason = strongest_reason(reason, outcome.reason);
                     break outcome;
                 }
                 _ => {
@@ -471,19 +494,6 @@ pub(crate) fn run_worker(
                 }
             }
         }
-        if !stopping && poll(owner, 0).map_err(prepare_failure)? {
-            reason = ExitReason::OwnerLost;
-            stopping = true;
-            let _ = ipc::send(&init_control, &Control::Stop, &[]);
-        }
-        if !stopping && poll(control, 0).map_err(prepare_failure)? {
-            reason = match ipc::recv::<Control>(control) {
-                Ok((Control::Stop, fds)) if fds.is_empty() => ExitReason::StopRequested,
-                _ => ExitReason::InfrastructureFailure,
-            };
-            stopping = true;
-            let _ = ipc::send(&init_control, &Control::Stop, &[]);
-        }
     };
     let waited = child.0.wait().map_err(prepare_failure)?;
     let mut outcome = outcome;
@@ -497,6 +507,20 @@ pub(crate) fn run_worker(
         &[],
     )
     .map_err(prepare_failure)
+}
+
+fn strongest_reason(current: ExitReason, observed: ExitReason) -> ExitReason {
+    let priority = |reason| match reason {
+        ExitReason::Completed => 0,
+        ExitReason::StopRequested => 1,
+        ExitReason::OwnerLost => 2,
+        ExitReason::InfrastructureFailure => 3,
+    };
+    if priority(observed) > priority(current) {
+        observed
+    } else {
+        current
+    }
 }
 
 fn init(control: &UnixStream) -> io::Result<()> {
@@ -582,6 +606,7 @@ fn init(control: &UnixStream) -> io::Result<()> {
         }
     }
     let mut killed = false;
+    let mut control_lost = false;
     loop {
         loop {
             let mut status = 0;
@@ -622,16 +647,23 @@ fn init(control: &UnixStream) -> io::Result<()> {
             }
             break;
         }
-        if stopping.is_none() && poll(control, 20)? {
-            reason = match ipc::recv::<Control>(control) {
+        if !control_lost && poll(control, 20)? {
+            let observed = match ipc::recv::<Control>(control) {
                 Ok((Control::Stop, fds)) if fds.is_empty() => ExitReason::StopRequested,
-                _ => ExitReason::OwnerLost,
+                _ => {
+                    control_lost = true;
+                    ExitReason::OwnerLost
+                }
             };
-            stopping = Some(Instant::now());
-            unsafe {
-                libc::kill(-1, libc::SIGTERM);
+            reason = strongest_reason(reason, observed);
+            if stopping.is_none() {
+                stopping = Some(Instant::now());
+                unsafe {
+                    libc::kill(-1, libc::SIGTERM);
+                }
             }
-        } else if let Some(start) = stopping {
+        }
+        if let Some(start) = stopping {
             if !killed && start.elapsed() >= Duration::from_millis(request.grace_ms) {
                 unsafe {
                     libc::kill(-1, libc::SIGKILL);

@@ -113,6 +113,12 @@ fn worker_death_after_main_exit_preserves_success_without_claiming_cleanup() {
 
 // @kotowari[REQ-library-301]
 #[test]
+fn later_control_failure_takes_priority_over_an_already_started_stop() {
+    run_fixture("--self-test-stopping-failure");
+}
+
+// @kotowari[REQ-library-301]
+#[test]
 fn command_death_before_exec_does_not_turn_error_pipe_eof_into_start_success() {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
