@@ -8,6 +8,66 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-201, REQ-library-203]
+#[test]
+fn worker_terminal_signals_are_protected_before_elf_initializers() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("home/.keep", "");
+    let record = dir.path().join("workspace/interrupt-record");
+    let output = Command::new(consumer())
+        .arg("--self-test-prepare-fault")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .env("KAKOI_TEST_PREPARE_FAULT", "interrupt")
+        .env("KAKOI_TEST_CONTROL_RECORD", &record)
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+    assert_eq!(std::fs::read(record).unwrap(), b"interrupt-returned");
+}
+
+// @kotowari[REQ-library-201, REQ-library-202, REQ-library-203]
+#[test]
+fn terminal_interrupt_keeps_supervision_alive_and_target_signals_default() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("home/.keep", "");
+    let script = r#"
+import os, signal, subprocess, sys
+for mode in ['host', 'none']:
+ env = dict(os.environ, KAKOI_TEST_SIGNAL_NETWORK=mode)
+ other = subprocess.Popen([sys.argv[1], '--self-test-terminal-signal'], env=dict(env, KAKOI_TEST_SIGNAL_CONTROL='1'), start_new_session=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+ p = subprocess.Popen([sys.argv[1], '--self-test-terminal-signal'], env=env, start_new_session=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+ try:
+  assert other.stdout.readline() == b'terminal-ready\n'
+  assert p.stdout.readline() == b'terminal-ready\n'
+  os.killpg(p.pid, signal.SIGINT)
+  output, errors = p.communicate(timeout=15)
+  assert p.returncode == 0, (output, errors)
+  assert other.poll() is None, 'independent execution was interrupted'
+  output, errors = other.communicate(b'stop\n', timeout=15)
+  assert other.returncode == 0, (output, errors)
+ finally:
+  for child in [p, other]:
+   try: os.killpg(child.pid, signal.SIGKILL)
+   except ProcessLookupError: pass
+   child.wait()
+"#;
+    let output = Command::new("python3")
+        .args(["-c", script])
+        .arg(consumer())
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 // @kotowari[REQ-library-104, REQ-library-203]
 #[test]
 fn startup_transfers_large_valid_requests_without_a_timeout() {

@@ -78,6 +78,7 @@ pub(crate) fn source_checks(
 }
 #[derive(Serialize, Deserialize)]
 struct InitRequest {
+    terminal_blocked: [bool; 4],
     program: Vec<u8>,
     argv0: Vec<u8>,
     arguments: Vec<Vec<u8>>,
@@ -402,6 +403,7 @@ pub(crate) fn run_worker(
         let checks = checks(&plan, &mounts)?;
         let command = plan.command.as_ref().unwrap();
         let mut request = InitRequest {
+            terminal_blocked: kakoi_linux::supervisor_signals::blocked()?,
             program: command.path.as_os_str().as_bytes().to_vec(),
             argv0: command.command.as_bytes().to_vec(),
             arguments: command
@@ -504,9 +506,11 @@ pub(crate) fn run_worker(
             .collect::<Vec<_>>();
         inherited.push(fd);
         unsafe {
-            bwrap
-                .command
-                .pre_exec(move || kakoi_linux::launch::inherit_only(&inherited));
+            bwrap.command.pre_exec(move || {
+                // bwrap is also a supervisor: it must outlive terminal interrupts.
+                kakoi_linux::supervisor_signals::block()?;
+                kakoi_linux::launch::inherit_only(&inherited)
+            });
         }
         let child = bwrap.command.spawn()?;
         drop(child_control);
@@ -609,6 +613,17 @@ pub(crate) fn run_worker(
     let mut network_diagnostics = Vec::new();
     let outcome = loop {
         events.flush();
+        if kakoi_linux::supervisor_signals::take_pending() && !stopping {
+            reason = strongest_reason(reason, ExitReason::StopRequested);
+            stopping = true;
+            events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
+            network_cleanup = close_network(&mut network, &mut network_diagnostics);
+            if network_cleanup == NetworkCleanup::Unconfirmed {
+                let _ = child.0.kill();
+            } else {
+                let _ = ipc::send(&init_control, &Control::Stop, &[]);
+            }
+        }
         if !stopping {
             if let Some(session) = &mut network {
                 if let Err(cause) = session.poll() {
@@ -830,6 +845,9 @@ fn init(control: &UnixStream) -> io::Result<()> {
             "unexpected init request descriptors",
         ));
     }
+    // PID 1's default dispositions survive terminal signals. Probes and the target
+    // inherit the original mask, not bwrap's supervisor-only blocking.
+    kakoi_linux::supervisor_signals::restore(request.terminal_blocked)?;
     // ELF initializers can create descendants before dispatch. None survive release.
     reap_before_release()?;
     let validation = (|| -> io::Result<()> {

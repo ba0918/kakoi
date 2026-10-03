@@ -237,6 +237,7 @@ pub(crate) enum IoInput {
 }
 #[derive(Serialize, Deserialize)]
 struct RequestInput {
+    terminal_blocked: [bool; 4],
     version: u32,
     policy: Vec<wire_policy::LayerInput>,
     program: Vec<u8>,
@@ -422,6 +423,8 @@ fn encode_request(request: RunRequest) -> Result<(RequestInput, Vec<OwnedFd>), P
     });
     Ok((
         RequestInput {
+            terminal_blocked: kakoi_linux::supervisor_signals::blocked()
+                .map_err(|cause| io_error(Phase::Input, cause))?,
             version: VERSION,
             policy: wire_policy::encode(&request.policy),
             program: bytes(&request.command.program),
@@ -506,9 +509,10 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
-    // SAFETY: only async-signal-safe fcntl calls occur in the child before exec.
+    // SAFETY: descriptor inheritance and sigprocmask are async-signal-safe.
     unsafe {
         command.pre_exec(move || {
+            kakoi_linux::supervisor_signals::block()?;
             kakoi_linux::launch::inherit_only(&[control_fd, owner_fd, result_fd, event_fd])
         });
     }
@@ -834,6 +838,8 @@ fn prepare_worker(
             "request version mismatch",
         ));
     }
+    let _signals = kakoi_linux::supervisor_signals::install(input.terminal_blocked)
+        .map_err(|cause| io_error(Phase::Worker, cause))?;
     let expected = input
         .stdio
         .iter()
@@ -972,6 +978,11 @@ fn prepare_worker(
             events: libc::POLLIN,
             revents: 0,
         },
+        libc::pollfd {
+            fd: kakoi_linux::supervisor_signals::descriptor().unwrap(),
+            events: libc::POLLIN,
+            revents: 0,
+        },
     ];
     loop {
         // SAFETY: poll only writes these two initialized entries.
@@ -985,6 +996,15 @@ fn prepare_worker(
         }
         if poll[0].revents != 0 {
             return Ok(());
+        }
+        if poll[2].revents != 0 {
+            return Err(io_error(
+                Phase::Worker,
+                io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "supervisor received a terminal signal",
+                ),
+            ));
         }
         if poll[1].revents != 0 {
             let (command, fds): (crate::running::Control, _) =

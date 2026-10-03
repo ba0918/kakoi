@@ -1,5 +1,27 @@
 use super::{consumer, fake_host::FakeHost};
 
+// @kotowari[REQ-library-201, REQ-library-202, REQ-148]
+#[test]
+fn filtered_terminal_interrupt_preserves_the_worker_and_confirms_cleanup() {
+    let host = FakeHost::new("", &[]);
+    host.run(&format!(r#"
+import signal
+p=subprocess.Popen([{consumer:?},'--self-test-terminal-signal'],cwd=os.environ['WORKSPACE'],
+ start_new_session=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,
+ env={{'PATH':os.environ['BIN']+':/usr/sbin:/usr/bin:/bin','HOME':os.environ['HOME_DIR'],'KAKOI_TEST_SIGNAL_NETWORK':'filtered'}})
+try:
+ assert line(p.stdout).strip()=='terminal-ready'
+ os.killpg(p.pid,signal.SIGINT)
+ out,err=p.communicate(timeout=30)
+ assert p.returncode==0,(out,err)
+ assert not pastas(),pastas()
+finally:
+ try: os.killpg(p.pid,signal.SIGKILL)
+ except ProcessLookupError: pass
+ p.wait()
+"#,consumer=consumer().to_str().unwrap()));
+}
+
 // @kotowari[REQ-library-204]
 #[test]
 fn filtered_publications_can_be_reused_after_real_traffic_and_confirmed_shutdown() {

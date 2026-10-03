@@ -24,4 +24,5 @@ pub mod scan;
 pub mod seccomp;
 pub mod secret_facts;
 pub mod shared_files;
+pub mod supervisor_signals;
 pub mod workspace_facts;

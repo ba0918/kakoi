@@ -98,7 +98,7 @@ extern "C" fn prepare_fault() {
                     remaining -= count as usize;
                 }
                 // The ELF initializer is a reachable producer of a partial reply.
-                write(fd, b"\0".as_ptr(), 1);
+                write(fd, [0u8].as_ptr(), 1);
             }
             write(1, b"init-startup\n".as_ptr(), 13);
             loop {
@@ -108,6 +108,15 @@ extern "C" fn prepare_fault() {
         if !worker.is_null() && !fault.is_null() {
             if *fault == b's' as std::ffi::c_char {
                 raise(19);
+            } else if *fault == b'i' as std::ffi::c_char {
+                raise(2);
+                if !record.is_null() {
+                    let output = open(record, 1 | 64 | 512, 0o600);
+                    if output >= 0 {
+                        write(output, b"interrupt-returned".as_ptr(), 18);
+                        close(output);
+                    }
+                }
             } else {
                 close(atoi(worker));
             }
@@ -199,6 +208,57 @@ fn main() -> std::process::ExitCode {
             self_test_independent_supervision()
         }
         Some(value) if value == "--self-test-owner" => self_test_owner(),
+        Some(value) if value == "--self-test-terminal-signal" => {
+            unsafe extern "C" {
+                fn signal(number: i32, handler: usize) -> usize;
+            }
+            extern "C" fn caught(_: i32) {}
+            assert_ne!(
+                unsafe { signal(2, caught as *const () as usize) },
+                usize::MAX
+            );
+            signal_state::install_application_state();
+            let before = signal_state::Signals::capture();
+            let mode = std::env::var("KAKOI_TEST_SIGNAL_NETWORK").unwrap();
+            let request = RunRequest::new(
+                Policy::from_toml(&format!("[network]\nmode={mode:?}\n")).unwrap(),
+                CommandSpec::new("/bin/sleep".into()).arg("30".into()),
+                HostContext::capture().unwrap(),
+                StdioSpec {
+                    stdin: Io::Null,
+                    stdout: Io::Null,
+                    stderr: Io::Null,
+                },
+            );
+            let running = prepare(request).unwrap().spawn().unwrap();
+            println!("terminal-ready");
+            let controlled = std::env::var_os("KAKOI_TEST_SIGNAL_CONTROL").is_some();
+            if controlled {
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line).unwrap();
+                assert_eq!(line, "stop\n");
+                running.request_stop().unwrap();
+            }
+            let outcome = running.wait();
+            assert_eq!(
+                outcome.main,
+                kakoi_runtime::MainOutcome::Signaled(if controlled { 15 } else { 2 }, false),
+                "{outcome:?}"
+            );
+            assert_eq!(
+                outcome.processes,
+                kakoi_runtime::ProcessCleanup::ConfirmedReaped,
+                "{outcome:?}"
+            );
+            if mode == "filtered" {
+                assert_eq!(
+                    outcome.network,
+                    kakoi_runtime::NetworkCleanup::ConfirmedBlocked,
+                    "{outcome:?}"
+                );
+            }
+            before.assert_preserved();
+        }
         Some(value)
             if value == "--self-test-startup-owner"
                 || value == "--self-test-large-start"

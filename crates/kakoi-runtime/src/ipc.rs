@@ -32,7 +32,22 @@ fn ready(socket: &UnixStream, events: i16, watches: &[RawFd]) -> io::Result<()> 
         events: libc::POLLIN,
         revents: 0,
     }));
+    if !watches.is_empty() {
+        if let Some(fd) = kakoi_linux::supervisor_signals::descriptor() {
+            descriptors.push(libc::pollfd {
+                fd,
+                events: libc::POLLIN,
+                revents: 0,
+            });
+        }
+    }
     loop {
+        if !watches.is_empty() && kakoi_linux::supervisor_signals::pending() {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "supervisor received a terminal signal",
+            ));
+        }
         let count = unsafe { libc::poll(descriptors.as_mut_ptr(), descriptors.len() as _, -1) };
         if count < 0 {
             let cause = io::Error::last_os_error();
