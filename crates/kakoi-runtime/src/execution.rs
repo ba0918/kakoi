@@ -682,7 +682,6 @@ pub(crate) fn run_worker(
         return Err(prepare_failure(cause));
     }
     drop(pipes);
-    events.emit(crate::RunEventKind::Status(crate::RunStatus::Running));
     let mut reason = ExitReason::Completed;
     let mut stopping = false;
     let mut owner_lost = false;
