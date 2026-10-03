@@ -35,6 +35,12 @@ pub enum PolicyPath {
     Variable(Variable, String),
 }
 
+impl From<PathBuf> for PolicyPath {
+    fn from(path: PathBuf) -> Self {
+        Self::Absolute(path)
+    }
+}
+
 impl TryFrom<String> for PolicyPath {
     type Error = String;
 
@@ -267,6 +273,44 @@ pub fn parse_policy(text: &str, origin: &Path) -> Result<PolicyFile, Diagnostic>
     let mut policy: PolicyFile = toml::from_str(text).map_err(|error| {
         Diagnostic::policy(format!("{}: {}", origin.display(), error.message()))
     })?;
+    validate_policy(&mut policy, origin)?;
+    Ok(policy)
+}
+
+/// Both Rust and TOML inputs reach this validator before composition.
+pub(crate) fn validate_policy(policy: &mut PolicyFile, origin: &Path) -> Result<(), Diagnostic> {
+    let paths = policy
+        .mounts
+        .rw
+        .iter()
+        .chain(&policy.mounts.rw_file)
+        .chain(&policy.mounts.rw_copy)
+        .chain(&policy.mounts.ro)
+        .chain(&policy.mounts.hide)
+        .chain(policy.mounts.scan.iter().map(|scan| &scan.root))
+        .chain(policy.mounts.hide_mounts.iter().map(|hide| &hide.under))
+        .chain(&policy.env.path_prepend)
+        .chain(policy.secrets.values())
+        .chain(&policy.commands.allow);
+    for path in paths {
+        let valid = match path {
+            PolicyPath::Absolute(path) => path.is_absolute(),
+            PolicyPath::Home(rest) => rest.is_empty() || rest.starts_with('/'),
+            PolicyPath::Variable(_, _) => true,
+        };
+        if !valid {
+            return Err(Diagnostic::policy(format!(
+                "{}: invalid policy path {path}",
+                origin.display()
+            )));
+        }
+    }
+    for allow in &policy.network.allow {
+        allow
+            .destination
+            .validate()
+            .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
+    }
     policy
         .process
         .validate()
@@ -291,8 +335,9 @@ pub fn parse_policy(text: &str, origin: &Path) -> Result<PolicyFile, Diagnostic>
         rule.validate()
             .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
     }
-    policy.network.publish = crate::network::merge_publications(policy.network.publish)
-        .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
+    policy.network.publish =
+        crate::network::merge_publications(std::mem::take(&mut policy.network.publish))
+            .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
     policy
         .network
         .limits
@@ -300,5 +345,5 @@ pub fn parse_policy(text: &str, origin: &Path) -> Result<PolicyFile, Diagnostic>
         .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
     crate::network::validate_upstreams(&policy.network.dns_upstream)
         .map_err(|error| Diagnostic::policy(format!("{}: {error}", origin.display())))?;
-    Ok(policy)
+    Ok(())
 }

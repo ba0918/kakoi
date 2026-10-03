@@ -71,18 +71,32 @@ impl TryFrom<DestinationInput> for Destination {
                 .expect("exactly one destination was checked")
                 .parse()?
         };
-        if let std::net::IpAddr::V6(address) = network.address {
-            if address.is_unicast_link_local()
-                && network.prefix >= 10
-                && input.host_interface.is_none()
-            {
-                return Err("IPv6 link-local destination requires host-interface".into());
-            }
-        }
-        Ok(Self::Address {
+        let destination = Self::Address {
             network,
             host_interface: input.host_interface,
-        })
+        };
+        destination.validate()?;
+        Ok(destination)
+    }
+}
+
+impl Destination {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if let Self::Address {
+            network,
+            host_interface,
+        } = self
+        {
+            if let std::net::IpAddr::V6(address) = network.address {
+                if address.is_unicast_link_local()
+                    && network.prefix >= 10
+                    && host_interface.is_none()
+                {
+                    return Err("IPv6 link-local destination requires host-interface".into());
+                }
+            }
+        }
+        Ok(())
     }
 }
 

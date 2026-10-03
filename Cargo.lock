@@ -476,6 +476,7 @@ dependencies = [
  "clap",
  "kakoi-core",
  "kakoi-net",
+ "kakoi-policy",
  "libc",
  "serde",
  "serde_json",

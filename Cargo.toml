@@ -60,3 +60,4 @@ serde_json.workspace = true
 # The tests that observe the seccomp filter and the raised file limit make raw calls.
 [dev-dependencies]
 libc.workspace = true
+kakoi-policy = { path = "crates/kakoi-policy" }
