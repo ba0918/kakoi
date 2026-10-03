@@ -1,11 +1,11 @@
 use crate::{common::TempDir, health::assert_loopback_command};
-use kakoi_core::network::NetworkLimits;
 use kakoi_net::{
     dns_runtime::DnsRuntimeConfig,
     scope::AddressContext,
     session::{Session, SessionState},
     transport::Transport,
 };
+use kakoi_runtime::cli::network::NetworkLimits;
 use std::{
     path::Path,
     process::Command,
@@ -140,7 +140,7 @@ fn failed_session_policy_preparation_reaps_transport_without_opening_it() {
 // @kotowari[REQ-116, REQ-131, REQ-058, EX-053]
 #[test]
 fn session_services_dns_and_closes_before_draining_its_controllers() {
-    use kakoi_core::network::{Allow, Destination, Protocol};
+    use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
     use std::{net::UdpSocket, process::Stdio};
     let directory = TempDir::new();
     let (transport, records) = transport(&directory);

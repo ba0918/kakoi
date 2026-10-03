@@ -4,11 +4,11 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use kakoi_core::environment::{HomeDirectory, HostEnvironment, RealEntry};
-use kakoi_core::layers::{merge, Layer, LayerOrigin, LayerSelection, Policy};
-use kakoi_core::mounts::{Mount, MountFacts, ScanHit};
-use kakoi_core::policy::parse_policy;
-use kakoi_core::variables::Variables;
+use kakoi_runtime::cli::environment::{HomeDirectory, HostEnvironment, RealEntry};
+use kakoi_runtime::cli::layers::{merge, Layer, LayerOrigin, LayerSelection, Policy};
+use kakoi_runtime::cli::mounts::{Mount, MountFacts, ScanHit};
+use kakoi_runtime::cli::policy::parse_policy;
+use kakoi_runtime::cli::variables::Variables;
 
 pub const HOME: &str = "/home/u";
 pub const CONFIG_DIR: &str = "/home/u/.config/kakoi";

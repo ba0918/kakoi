@@ -405,11 +405,11 @@ fn unsigned_address_answers_do_not_pass_forbidden_ips_in_other_sections() {
 // @kotowari[REQ-019, REQ-022, REQ-116, REQ-122]
 #[test]
 fn resolution_follows_cname_with_one_budget_and_ages_the_assembled_answer() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{
         dns::resolve_addresses,
         resolution::{ResolutionBudget, UpstreamWait},
     };
+    use kakoi_runtime::cli::network::NetworkLimits;
     let limits = NetworkLimits::default();
     let start = Instant::now();
     let mut budget = ResolutionBudget::new(start, &limits).unwrap();
@@ -469,11 +469,11 @@ fn resolution_follows_cname_with_one_budget_and_ages_the_assembled_answer() {
 // @kotowari[REQ-023, REQ-120, REQ-122]
 #[test]
 fn a_cname_resolution_cannot_reset_query_limits_or_return_partial_success() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{
         dns::resolve_addresses,
         resolution::{ResolutionBudget, UpstreamWait},
     };
+    use kakoi_runtime::cli::network::NetworkLimits;
     let limits = NetworkLimits {
         dns_max_upstream_queries: 1,
         ..NetworkLimits::default()
@@ -504,8 +504,8 @@ fn a_cname_resolution_cannot_reset_query_limits_or_return_partial_success() {
 // @kotowari[REQ-019, REQ-020, REQ-025]
 #[test]
 fn assembled_cname_answers_preserve_signed_rrsets_when_only_some_ips_are_allowed() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{dns::resolve_addresses, resolution::ResolutionBudget};
+    use kakoi_runtime::cli::network::NetworkLimits;
     let limits = NetworkLimits::default();
     let start = Instant::now();
     let mut budget = ResolutionBudget::new(start, &limits).unwrap();
@@ -571,11 +571,11 @@ fn assembled_cname_answers_preserve_signed_rrsets_when_only_some_ips_are_allowed
 // @kotowari[EX-718]
 #[test]
 fn the_zero_ttl_grace_counts_from_the_reception() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{
         dns::resolve_addresses,
         resolution::{ResolutionBudget, UpstreamWait},
     };
+    use kakoi_runtime::cli::network::NetworkLimits;
     let limits = NetworkLimits::default();
     let start = Instant::now();
     let mut budget = ResolutionBudget::new(start, &limits).unwrap();
@@ -732,8 +732,8 @@ fn a_message_signed_mixed_answer_reaches_the_application_unchanged() {
 // @kotowari[REQ-398, EX-735]
 #[test]
 fn an_address_behind_a_shorter_alias_reaches_the_application_with_the_alias_time_to_live() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{dns::resolve_addresses, resolution::ResolutionBudget};
+    use kakoi_runtime::cli::network::NetworkLimits;
     let limits = NetworkLimits::default();
     let start = Instant::now();
     let mut budget = ResolutionBudget::new(start, &limits).unwrap();

@@ -181,13 +181,13 @@ with socket.create_connection(('127.0.0.53', 53), timeout=2) as new:
 // @kotowari[REQ-027, REQ-116, REQ-127, REQ-130, REQ-131, EX-043, EX-286]
 #[test]
 fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
-    use kakoi_core::{
-        network::{Allow, Destination, NetworkLimits, Protocol},
-        policy::parse_policy,
-    };
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig},
         scope::AddressContext,
+    };
+    use kakoi_runtime::cli::{
+        network::{Allow, Destination, NetworkLimits, Protocol},
+        policy::parse_policy,
     };
     use std::{net::UdpSocket, thread};
     let namespace = Arc::new(NetworkNamespace::create().unwrap());
@@ -306,8 +306,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, socket.create_conn
 // @kotowari[REQ-116, REQ-123, REQ-131]
 #[test]
 fn service_returns_tcp_servfail_when_resolution_deadline_expires() {
-    use kakoi_core::network::{Allow, Destination, Protocol};
     use kakoi_net::{dns::DnsRequests, dns_service::DnsService};
+    use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
     let namespace = Arc::new(NetworkNamespace::create().unwrap());
     assert!(namespace
         .command("/usr/sbin/ip")

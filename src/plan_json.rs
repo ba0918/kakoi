@@ -10,10 +10,10 @@ use std::ffi::OsStr;
 
 use serde::Serialize;
 
-use kakoi_core::layers::{LayerOrigin, Policy, PolicySource};
-use kakoi_core::mounts::{EntryKind, ItemOrigin, SkippedRole};
-use kakoi_core::plan::{Argument, Plan};
-use kakoi_core::policy::PolicyPath;
+use kakoi_runtime::cli::layers::{LayerOrigin, Policy, PolicySource};
+use kakoi_runtime::cli::mounts::{EntryKind, ItemOrigin, SkippedRole};
+use kakoi_runtime::cli::plan::{Argument, Plan};
+use kakoi_runtime::cli::policy::PolicyPath;
 
 /// The version of the shape: bumped when a key is removed or changes its meaning.
 pub const FORMAT_VERSION: u32 = 1;
@@ -78,10 +78,10 @@ struct MergedPolicy<'a> {
     hide_mounts: Vec<HideMounts>,
     network_mode: &'static str,
     allow_nested_filtered: bool,
-    network_allow: Vec<kakoi_core::network::Allow>,
-    network_publish: Vec<kakoi_core::network::FixedPublication>,
-    network_limits: kakoi_core::network::NetworkLimits,
-    dns_upstream: Vec<kakoi_core::network::DnsUpstream>,
+    network_allow: Vec<kakoi_runtime::cli::network::Allow>,
+    network_publish: Vec<kakoi_runtime::cli::network::FixedPublication>,
+    network_limits: kakoi_runtime::cli::network::NetworkLimits,
+    dns_upstream: Vec<kakoi_runtime::cli::network::DnsUpstream>,
     shutdown_grace_seconds: u32,
     env_mode: &'static str,
     env_pass: Vec<String>,
@@ -97,7 +97,7 @@ struct MergedPolicy<'a> {
 #[derive(Serialize)]
 struct PolicyGuard<'a> {
     #[serde(flatten)]
-    rule: &'a kakoi_core::guard::GuardRule,
+    rule: &'a kakoi_runtime::cli::guard::GuardRule,
     origin: Origin,
 }
 

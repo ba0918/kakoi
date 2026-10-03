@@ -9,9 +9,9 @@ use std::process::Output;
 mod common;
 
 use common::{assert_diagnostic, binary, output_report, TempDir};
-use kakoi_core::diagnostic::{Diagnostic, Kind};
-use kakoi_core::layers::LayerSelection;
-use kakoi_core::planning::{plan_for, Request};
+use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind};
+use kakoi_runtime::cli::layers::LayerSelection;
+use kakoi_runtime::cli::planning::{plan_for, Request};
 
 /// A home with a workspace `ws` and a `default` profile that makes the workspace `rw`
 /// and adds `extra`.
@@ -74,7 +74,7 @@ impl Scene {
         &self,
         command: &[&str],
         abi: Option<u32>,
-    ) -> Result<kakoi_core::plan::Plan, Diagnostic> {
+    ) -> Result<kakoi_runtime::cli::plan::Plan, Diagnostic> {
         plan_for(&self.request(command, abi))
     }
 
@@ -229,12 +229,15 @@ fn ex_927_a_host_without_landlock_does_not_start_a_listed_command_mode() {
 fn nested_plan_under_an_outer_guard(
     scene: &Scene,
     table: Option<Vec<u8>>,
-) -> Result<kakoi_core::plan::Plan, Diagnostic> {
+) -> Result<kakoi_runtime::cli::plan::Plan, Diagnostic> {
     plan_for(&Request {
         nested: true,
         outer_guard: true,
         outer_table: table,
-        ..scene.request(&["/bin/true"], Some(kakoi_core::landlock::SCOPE_ABI))
+        ..scene.request(
+            &["/bin/true"],
+            Some(kakoi_runtime::cli::landlock::SCOPE_ABI),
+        )
     })
 }
 
@@ -270,7 +273,7 @@ fn ex_928_the_host_command_mode_needs_no_landlock() {
     let plan = scene
         .plan_with_landlock(&["/usr/bin/touch", marker.to_str().unwrap()], None)
         .unwrap();
-    let output = kakoi_core::launch::assemble(&plan)
+    let output = kakoi_runtime::cli::launch::assemble(&plan)
         .unwrap()
         .command
         .output()

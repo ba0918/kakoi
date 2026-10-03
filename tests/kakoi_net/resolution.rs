@@ -1,6 +1,6 @@
-use kakoi_core::network::NetworkLimits;
 use kakoi_net::resolution::{CnameChain, CnameError};
 use kakoi_net::resolution::{ResolutionBudget, ResolutionLimit, UpstreamWait};
+use kakoi_runtime::cli::network::NetworkLimits;
 use std::time::{Duration, Instant};
 
 // @kotowari[REQ-120, REQ-014, REQ-389, EX-264, EX-265, EX-266, EX-036]

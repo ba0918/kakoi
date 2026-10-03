@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use kakoi_core::policy::parse_policy;
+use kakoi_runtime::cli::policy::parse_policy;
 
 const FIXED: &str = "mode = 'fixed'\nprotocol = 'tcp'\nport = 8000\nhost-port = 18000\n";
 
-fn layer(text: &str) -> kakoi_core::layers::Layer {
-    kakoi_core::layers::Layer {
-        origin: kakoi_core::layers::LayerOrigin::PolicyFile("fixed.toml".into()),
+fn layer(text: &str) -> kakoi_runtime::cli::layers::Layer {
+    kakoi_runtime::cli::layers::Layer {
+        origin: kakoi_runtime::cli::layers::LayerOrigin::PolicyFile("fixed.toml".into()),
         policy: parse_policy(text, Path::new("fixed.toml")).unwrap(),
     }
 }
@@ -19,9 +19,12 @@ fn publication_merge_deduplicates_and_an_empty_upper_layer_preserves_lower_entri
         "[[network.publish]]\n{FIXED}target-family = 'ipv4'\nhost-family = 'ipv4'\n"
     ));
     let upper = layer("[network]\nmode = 'none'\npublish = []\n");
-    let merged = kakoi_core::layers::merge(&[lower.clone(), explicit, upper]).unwrap();
+    let merged = kakoi_runtime::cli::layers::merge(&[lower.clone(), explicit, upper]).unwrap();
     assert_eq!(merged.network_publish, lower.policy.network.publish);
-    assert_eq!(merged.network_mode, kakoi_core::policy::NetworkMode::None);
+    assert_eq!(
+        merged.network_mode,
+        kakoi_runtime::cli::policy::NetworkMode::None
+    );
 }
 
 // @kotowari[REQ-395, EX-729]
@@ -34,13 +37,13 @@ fn publication_conflicts_are_rejected_within_and_across_layers() {
         let entry = format!("[[network.publish]]\n{FIXED}");
         let other = format!("[[network.publish]]\n{conflicting}");
         assert!(parse_policy(&format!("{entry}{other}"), Path::new("fixed.toml")).is_err());
-        let error = kakoi_core::layers::merge(&[
+        let error = kakoi_runtime::cli::layers::merge(&[
             layer("[network]\nmode = 'host'"),
             layer(&entry),
             layer(&other),
         ])
         .unwrap_err();
-        assert_eq!(error.kind(), kakoi_core::diagnostic::Kind::Policy);
+        assert_eq!(error.kind(), kakoi_runtime::cli::diagnostic::Kind::Policy);
     }
 }
 
@@ -50,7 +53,7 @@ fn distinct_publication_protocols_and_families_can_share_numbers() {
     let tcp = format!("[[network.publish]]\n{FIXED}");
     let udp = tcp.replace("'tcp'", "'udp'");
     let ipv6 = format!("{tcp}target-family = 'ipv6'\nhost-family = 'ipv6'\n");
-    let merged = kakoi_core::layers::merge(&[
+    let merged = kakoi_runtime::cli::layers::merge(&[
         layer("[network]\nmode = 'host'"),
         layer(&tcp),
         layer(&udp),
@@ -66,14 +69,14 @@ fn empty_network_lists_still_require_an_explicit_mode_in_some_layer() {
     for field in ["allow", "publish"] {
         let empty = layer(&format!("[network]\n{field} = []"));
         assert!(
-            kakoi_core::layers::merge(std::slice::from_ref(&empty)).is_err(),
+            kakoi_runtime::cli::layers::merge(std::slice::from_ref(&empty)).is_err(),
             "{field}"
         );
         let mode = layer("[network]\nmode = 'host'");
-        assert!(kakoi_core::layers::merge(&[mode.clone(), empty.clone()]).is_ok());
-        assert!(kakoi_core::layers::merge(&[empty, mode]).is_ok());
+        assert!(kakoi_runtime::cli::layers::merge(&[mode.clone(), empty.clone()]).is_ok());
+        assert!(kakoi_runtime::cli::layers::merge(&[empty, mode]).is_ok());
     }
-    assert!(kakoi_core::layers::merge(&[layer("")]).is_ok());
+    assert!(kakoi_runtime::cli::layers::merge(&[layer("")]).is_ok());
 }
 
 // @kotowari[REQ-092, EX-195, EX-196, EX-197]
@@ -86,7 +89,8 @@ fn allow_merge_keeps_lower_rules_and_deduplicates_normalized_entries() {
     let third =
         layer("[[network.allow]]\ndestination={ip='192.0.2.1'}\nprotocol='udp'\nports=['443']");
     let empty = layer("[network]\nallow=[]");
-    let merged = kakoi_core::layers::merge(&[first.clone(), second, third.clone(), empty]).unwrap();
+    let merged =
+        kakoi_runtime::cli::layers::merge(&[first.clone(), second, third.clone(), empty]).unwrap();
     assert_eq!(
         merged.network_allow,
         [
@@ -175,8 +179,8 @@ fn allow_rules_without_a_mode_anywhere_are_an_error() {
     let rules = layer(
         "[[network.allow]]\ndestination = { dns = 'example.com' }\nprotocol = 'tcp'\nports = ['443']\n",
     );
-    assert!(kakoi_core::layers::merge(std::slice::from_ref(&rules)).is_err());
-    assert!(kakoi_core::layers::merge(&[layer(""), rules]).is_err());
+    assert!(kakoi_runtime::cli::layers::merge(std::slice::from_ref(&rules)).is_err());
+    assert!(kakoi_runtime::cli::layers::merge(&[layer(""), rules]).is_err());
 }
 
 // An unused rule's form is checked in none mode too.

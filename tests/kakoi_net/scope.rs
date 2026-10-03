@@ -1,5 +1,5 @@
-use kakoi_core::{network::Allow, policy::parse_policy};
 use kakoi_net::scope::{AddressContext, AddressScope, DnsAdmission};
+use kakoi_runtime::cli::{network::Allow, policy::parse_policy};
 use std::path::Path;
 
 fn rule(destination: &str, protocol: &str, ports: &str) -> Allow {

@@ -13,11 +13,11 @@ use std::path::Path;
 
 use crate::cli::PlanForm;
 use crate::plan_json;
-use kakoi_core::diagnostic::escape_control;
-use kakoi_core::layers::{Directive, LayerOrigin, Policy, PolicySource};
-use kakoi_core::mounts::{ItemOrigin, SkippedRole};
-use kakoi_core::plan::{Argument, Plan};
-use kakoi_core::policy::{NetworkMode, PolicyPath};
+use kakoi_runtime::cli::diagnostic::escape_control;
+use kakoi_runtime::cli::layers::{Directive, LayerOrigin, Policy, PolicySource};
+use kakoi_runtime::cli::mounts::{ItemOrigin, SkippedRole};
+use kakoi_runtime::cli::plan::{Argument, Plan};
+use kakoi_runtime::cli::policy::{NetworkMode, PolicyPath};
 
 /// The text of `plan` in `form`.
 pub fn render(plan: &Plan, form: PlanForm) -> String {

@@ -1,13 +1,13 @@
 use crate::common::{home_with_workspace, TempDir, RW_WORKSPACE};
-use kakoi_core::{
-    layers::LayerSelection,
-    plan::Plan,
-    planning::{plan_for, Request},
-};
 use kakoi_net::{
     exit::exit_code,
     namespace::NetworkNamespace,
     supervisor::{Application, ApplicationEvent},
+};
+use kakoi_runtime::cli::{
+    layers::LayerSelection,
+    plan::Plan,
+    planning::{plan_for, Request},
 };
 use std::{
     collections::BTreeMap,
@@ -51,7 +51,7 @@ pub(crate) fn filtered_plan(script: &str) -> (TempDir, PathBuf, Plan) {
         applied: true,
         outer_guard: false,
         outer_table: None,
-        landlock_abi: kakoi_core::landlock::abi_version(),
+        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
     })
     .unwrap();
     (home, workspace, plan)

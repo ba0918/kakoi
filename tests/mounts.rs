@@ -8,19 +8,19 @@ use common::fixture::{
     home, layers, merged, variables, variables_without_git, Facts, CONFIG_DIR, POLICY_FILE, PROFILE,
 };
 use common::TempDir;
-use kakoi_core::diagnostic::{Diagnostic, Kind};
-use kakoi_core::environment::{HostEnvironment, RealEntry};
-use kakoi_core::layers::{Directive, Layer, LayerOrigin};
-use kakoi_core::mount_facts::{collect_generator_facts, collect_mount_facts};
-use kakoi_core::mount_list::read_mount_list;
-use kakoi_core::mounts::{
+use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind};
+use kakoi_runtime::cli::environment::{HostEnvironment, RealEntry};
+use kakoi_runtime::cli::layers::{Directive, Layer, LayerOrigin};
+use kakoi_runtime::cli::mount_facts::{collect_generator_facts, collect_mount_facts};
+use kakoi_runtime::cli::mount_list::read_mount_list;
+use kakoi_runtime::cli::mounts::{
     candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
     MountFacts, ResolvedMounts, ScanHit, ScanRequest,
 };
-use kakoi_core::placement::protected_paths;
-use kakoi_core::scan::scan;
-use kakoi_core::variables::Variables;
-use kakoi_core::wildcard::matches;
+use kakoi_runtime::cli::placement::protected_paths;
+use kakoi_runtime::cli::scan::scan;
+use kakoi_runtime::cli::variables::Variables;
+use kakoi_runtime::cli::wildcard::matches;
 
 /// Resolves the mount items of the written layers against `facts` and applies the
 /// generated items, with no `ro` item held to be swappable (the placement rules that

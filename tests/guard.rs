@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 
 use common::{assert_diagnostic, home_with_workspace, output_report, run, TempDir};
-use kakoi_core::guard::{evaluate, GuardRule};
-use kakoi_core::layers::{merge, Layer, LayerOrigin};
-use kakoi_core::policy::parse_policy;
+use kakoi_runtime::cli::guard::{evaluate, GuardRule};
+use kakoi_runtime::cli::layers::{merge, Layer, LayerOrigin};
+use kakoi_runtime::cli::policy::parse_policy;
 
 /// Writes `policy` as a `--policy-file` beside the `RW_WORKSPACE` profile and runs
 /// `--print-plan` on the workspace.
@@ -941,7 +941,7 @@ fn a_relative_entry_on_path_is_not_where_the_real_program_is_looked_up() {
     assert_passed(&elsewhere, "real status\n");
 }
 
-// @kotowari[REQ-449]
+// @kotowari[REQ-449, REQ-library-410, EX-library-418]
 #[test]
 fn a_program_that_is_kakoi_itself_gets_no_guard() {
     let scene = Scene::new(&[]);

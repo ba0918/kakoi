@@ -12,14 +12,14 @@ mod common;
 
 use common::fixture::{home, layers, merged, variables, Facts, CONFIG_DIR, WORKTREE};
 use common::{binary, output_report, TempDir};
-use kakoi_core::copies::CopySources;
-use kakoi_core::diagnostic::Diagnostic;
-use kakoi_core::guard_placement::GuardPlan;
-use kakoi_core::mounts::{expand_policy, SkippedRole};
-use kakoi_core::plan::{
+use kakoi_runtime::cli::copies::CopySources;
+use kakoi_runtime::cli::diagnostic::Diagnostic;
+use kakoi_runtime::cli::guard_placement::GuardPlan;
+use kakoi_runtime::cli::mounts::{expand_policy, SkippedRole};
+use kakoi_runtime::cli::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts, Provisions,
 };
-use kakoi_core::policy::NetworkMode;
+use kakoi_runtime::cli::policy::NetworkMode;
 
 /// A scene on the real host: a directory under the build's own temporary directory, so
 /// that nothing of it is under "/tmp", which "listed" replaces; a home and a workspace
@@ -948,7 +948,7 @@ impl Scene {
         policy: &str,
         command: &[&str],
         abi: Option<u32>,
-    ) -> Result<kakoi_core::plan::Plan, Diagnostic> {
+    ) -> Result<kakoi_runtime::cli::plan::Plan, Diagnostic> {
         let policy_file = self.home.join("policy.toml");
         fs::write(&policy_file, policy).unwrap();
         let mut host = BTreeMap::new();
@@ -961,8 +961,8 @@ impl Scene {
             OsString::from("PATH"),
             std::env::var_os("PATH").unwrap_or_default(),
         );
-        kakoi_core::planning::plan_for(&kakoi_core::planning::Request {
-            layers: kakoi_core::layers::LayerSelection {
+        kakoi_runtime::cli::planning::plan_for(&kakoi_runtime::cli::planning::Request {
+            layers: kakoi_runtime::cli::layers::LayerSelection {
                 profile: "default".into(),
                 policy_file: Some(policy_file),
                 rw: vec![],
@@ -993,7 +993,7 @@ fn ex_917_a_host_without_the_abstract_socket_scope_does_not_start_listed_and_hos
             .unwrap_err();
         assert_eq!(
             error.kind(),
-            kakoi_core::diagnostic::Kind::Bwrap,
+            kakoi_runtime::cli::diagnostic::Kind::Bwrap,
             "{error:?}"
         );
         assert_eq!(error.exit_code(), 125);
@@ -1013,7 +1013,7 @@ fn listed_with_the_none_network_needs_no_abstract_socket_scope() {
             None,
         )
         .unwrap();
-    let output = kakoi_core::launch::assemble(&plan)
+    let output = kakoi_runtime::cli::launch::assemble(&plan)
         .unwrap()
         .command
         .output()

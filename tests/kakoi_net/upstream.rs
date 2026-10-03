@@ -1,5 +1,5 @@
-use kakoi_core::layers::{merge, Layer, LayerOrigin};
-use kakoi_core::policy::parse_policy;
+use kakoi_runtime::cli::layers::{merge, Layer, LayerOrigin};
+use kakoi_runtime::cli::policy::parse_policy;
 use std::path::Path;
 
 const TLS: &str = "[[network.dns-upstream]]\ntransport='tls'\nip='192.0.2.53'\nport=853\ntls-name='ＲＥＳＯＬＶＥＲ.example.'\n";

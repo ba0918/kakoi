@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgAction, CommandFactory, FromArgMatches, Parser, ValueEnum};
 
-use kakoi_core::diagnostic::{is_control_character, Diagnostic};
-use kakoi_core::layers::{LayerSelection, DEFAULT_PROFILE};
+use kakoi_runtime::cli::diagnostic::{is_control_character, Diagnostic};
+use kakoi_runtime::cli::layers::{LayerSelection, DEFAULT_PROFILE};
 
 /// The interpreted command line. Option paths are as written until `anchored` joins the
 /// relative ones to the current directory; `command` is passed through untouched.
@@ -69,8 +69,8 @@ impl Example {
     /// The bytes of the example.
     pub fn text(self) -> &'static str {
         match self {
-            Example::Default => kakoi_core::layers::BUILT_IN_DEFAULT,
-            Example::Listed => kakoi_core::layers::LISTED_EXAMPLE,
+            Example::Default => kakoi_runtime::cli::layers::BUILT_IN_DEFAULT,
+            Example::Listed => kakoi_runtime::cli::layers::LISTED_EXAMPLE,
         }
     }
 }

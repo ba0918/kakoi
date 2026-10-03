@@ -7,11 +7,11 @@ use std::process::{Command, ExitCode};
 use kakoi::init;
 use kakoi::plan_text;
 use kakoi::startup::{self, Outcome};
-use kakoi_core::diagnostic::{Diagnostic, Kind, Warning};
-use kakoi_core::launch::{self, BwrapCommand};
-use kakoi_core::plan::Plan;
-use kakoi_core::policy::NetworkMode;
-use kakoi_net::{filtered, notification::NotificationWriter, run};
+use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind, Warning};
+use kakoi_runtime::cli::launch::{self, BwrapCommand};
+use kakoi_runtime::cli::net::{filtered, notification::NotificationWriter, run};
+use kakoi_runtime::cli::plan::Plan;
+use kakoi_runtime::cli::policy::NetworkMode;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::os::fd::AsFd;
@@ -28,7 +28,7 @@ fn main() -> ExitCode {
         return code;
     }
     // The isolation's process 1 of a filtered run is this executable (kakoi-net).
-    kakoi_net::init::run_if_requested();
+    kakoi_runtime::cli::net::init::run_if_requested();
     match startup::prepare(std::env::args_os().skip(1)) {
         Ok(Outcome::Text(text)) => {
             let _ = std::io::stdout().write_all(text.as_bytes());

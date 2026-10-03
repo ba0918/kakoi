@@ -474,23 +474,13 @@ name = "kakoi"
 version = "0.6.0"
 dependencies = [
  "clap",
- "kakoi-core",
  "kakoi-linux",
  "kakoi-net",
  "kakoi-policy",
+ "kakoi-runtime",
  "libc",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "kakoi-core"
-version = "0.6.0"
-dependencies = [
- "kakoi-linux",
- "kakoi-plan",
- "kakoi-policy",
- "kakoi-runtime",
 ]
 
 [[package]]

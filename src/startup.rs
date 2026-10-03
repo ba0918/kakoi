@@ -9,12 +9,12 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::cli::{self, Example, Invocation, Nesting, Parsed};
-use kakoi_core::diagnostic::{Diagnostic, Warning};
-use kakoi_core::environment::{HostEnvironment, RealEntry};
-use kakoi_core::guard_placement::{GUARD_ROOT, GUARD_TABLE};
-use kakoi_core::plan::{Plan, NESTING_MARK};
-use kakoi_core::planning::{locate_command, plan_for, Request};
-use kakoi_core::workspace_facts::real_entry;
+use kakoi_runtime::cli::diagnostic::{Diagnostic, Warning};
+use kakoi_runtime::cli::environment::{HostEnvironment, RealEntry};
+use kakoi_runtime::cli::guard_placement::{GUARD_ROOT, GUARD_TABLE};
+use kakoi_runtime::cli::plan::{Plan, NESTING_MARK};
+use kakoi_runtime::cli::planning::{locate_command, plan_for, Request};
+use kakoi_runtime::cli::workspace_facts::real_entry;
 
 /// What the start-up ends with: text to print (the usage or the version), a nested run
 /// that goes straight to the command, or everything the start needs.
@@ -119,7 +119,7 @@ where
         outer_table: outer_guard
             .then(|| std::fs::read(GUARD_TABLE).ok())
             .flatten(),
-        landlock_abi: kakoi_core::landlock::abi_version(),
+        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
     })?;
     Ok(Outcome::Prepared(Box::new(Prepared {
         invocation,

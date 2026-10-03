@@ -1,6 +1,6 @@
 //! Roles belong to copied execution images, not application names or argv.
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -103,17 +103,14 @@ fn guard() -> io::Result<ExitCode> {
         crate::ipc::send(&control, &true, &[])?;
         return Ok(ExitCode::SUCCESS);
     }
-    let mut arguments = std::env::args_os();
-    let name = arguments.next().unwrap_or_default();
-    let arguments: Vec<_> = arguments.collect();
-    let environment: Vec<_> = std::env::vars_os().map(|(name, _)| name).collect();
-    if let Some(denial) = kakoi_policy::guard::evaluate(&entry.rules, &arguments, &environment) {
-        eprintln!("{} {}: {}", denial.program, denial.matched, denial.reason);
-        return Ok(ExitCode::from(126));
-    }
-    let mut command = Command::new(Path::new(OsStr::from_bytes(&entry.execute)));
+    let mut command = match crate::cli_guard::command(entry) {
+        Ok(command) => command,
+        Err(diagnostic) => {
+            eprintln!("{diagnostic}");
+            return Ok(ExitCode::from(126));
+        }
+    };
     crate::preparation::remove_helper_environment(&mut command);
-    command.arg0(name).args(arguments);
     unsafe {
         command.pre_exec(|| kakoi_linux::launch::inherit_only(&[]));
     }
@@ -124,7 +121,13 @@ pub(crate) fn dispatch_guard() -> ExitCode {
     match guard() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("command guard: {error}");
+            eprintln!(
+                "{}",
+                kakoi_policy::diagnostic::Diagnostic::new(
+                    kakoi_policy::diagnostic::Kind::Guard,
+                    error.to_string()
+                )
+            );
             ExitCode::from(126)
         }
     }

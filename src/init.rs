@@ -9,9 +9,9 @@ use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use crate::startup::InitRequest;
-use kakoi_core::diagnostic::Diagnostic;
-use kakoi_core::environment::PathState;
-use kakoi_core::workspace_facts::entry_state;
+use kakoi_runtime::cli::diagnostic::Diagnostic;
+use kakoi_runtime::cli::environment::PathState;
+use kakoi_runtime::cli::workspace_facts::entry_state;
 
 /// The mode `secrets/` is made with (specification section 4.1): its owner alone reads it.
 const SECRETS_MODE: u32 = 0o700;

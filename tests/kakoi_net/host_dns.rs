@@ -94,7 +94,6 @@ print(code, repr(out), err.startswith('kakoi: bwrap: '), len(err.splitlines()))
 
 mod following {
     use crate::common::TempDir;
-    use kakoi_core::network::{Allow, Destination, DnsUpstream, NetworkLimits, Protocol};
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig, HostDns},
         filter,
@@ -103,6 +102,7 @@ mod following {
         resolution::UpstreamWait,
         scope::AddressContext,
     };
+    use kakoi_runtime::cli::network::{Allow, Destination, DnsUpstream, NetworkLimits, Protocol};
     use std::{
         io::Read,
         net::UdpSocket,

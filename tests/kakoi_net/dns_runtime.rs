@@ -1,13 +1,13 @@
-use kakoi_core::{
-    network::{Allow, Destination, NetworkLimits, Protocol},
-    policy::parse_policy,
-};
 use kakoi_net::{
     dns_runtime::{DnsRuntime, DnsRuntimeConfig},
     filter,
     namespace::NetworkNamespace,
     nft,
     scope::AddressContext,
+};
+use kakoi_runtime::cli::{
+    network::{Allow, Destination, NetworkLimits, Protocol},
+    policy::parse_policy,
 };
 use std::{
     net::UdpSocket,

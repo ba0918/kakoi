@@ -4,12 +4,12 @@ use std::process::Command;
 mod common;
 
 use common::TempDir;
-use kakoi_core::diagnostic::Kind;
-use kakoi_core::environment::{HomeDirectory, HostEnvironment, PathState, RealEntry};
-use kakoi_core::variables::{
+use kakoi_runtime::cli::diagnostic::Kind;
+use kakoi_runtime::cli::environment::{HomeDirectory, HostEnvironment, PathState, RealEntry};
+use kakoi_runtime::cli::variables::{
     derive_variables, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
-use kakoi_core::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
+use kakoi_runtime::cli::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
 
 /// The checked home directory `/home/u`.
 fn home() -> HomeDirectory {

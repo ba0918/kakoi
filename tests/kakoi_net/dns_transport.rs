@@ -182,8 +182,8 @@ fn stalled_and_trickling_servers_cannot_extend_the_absolute_deadline() {
 // @kotowari[REQ-114, REQ-115, REQ-113, REQ-135, EX-248, EX-246]
 #[test]
 fn candidates_follow_order_skip_duplicates_and_stop_on_negative_answers() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{dns_transport::exchange_plain_candidates, resolution::ResolutionBudget};
+    use kakoi_runtime::cli::network::NetworkLimits;
     let first = UdpSocket::bind("127.0.0.1:0").unwrap();
     let second = UdpSocket::bind("127.0.0.1:0").unwrap();
     let unused = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -229,8 +229,8 @@ fn candidates_follow_order_skip_duplicates_and_stop_on_negative_answers() {
 // @kotowari[REQ-122, REQ-131]
 #[test]
 fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
-    use kakoi_core::network::NetworkLimits;
     use kakoi_net::{dns_transport::exchange_plain_candidates, resolution::ResolutionBudget};
+    use kakoi_runtime::cli::network::NetworkLimits;
     for maximum in [1, 2] {
         let (tcp, udp) = crate::common::tcp_and_udp_on_one_port();
         let peer = tcp.local_addr().unwrap();
@@ -443,10 +443,11 @@ except socket.timeout:
             peer.port()
         );
         let policy =
-            kakoi_core::policy::parse_policy(&text, std::path::Path::new("tls.toml")).unwrap();
+            kakoi_runtime::cli::policy::parse_policy(&text, std::path::Path::new("tls.toml"))
+                .unwrap();
         let mut budget = kakoi_net::resolution::ResolutionBudget::new(
             Instant::now(),
-            &kakoi_core::network::NetworkLimits::default(),
+            &kakoi_runtime::cli::network::NetworkLimits::default(),
         )
         .unwrap();
         let result = kakoi_net::dns_transport::exchange_upstreams(

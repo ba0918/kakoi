@@ -1,4 +1,4 @@
-use kakoi_core::network::{parse_ip, IpNetwork};
+use kakoi_runtime::cli::network::{parse_ip, IpNetwork};
 
 // @kotowari[REQ-044, REQ-048, REQ-050, REQ-051, EX-088, EX-089, EX-090, EX-096, EX-097]
 #[test]

@@ -1,7 +1,7 @@
 # The root package is the `kakoi` binary, so that `cargo install --git` and a release
 # build at the root keep working; the library it is built on is the member below.
 [workspace]
-members = ["crates/kakoi-core", "crates/kakoi-net", "crates/kakoi-policy", "crates/kakoi-plan", "crates/kakoi-linux", "crates/kakoi-runtime"]
+members = ["crates/kakoi-net", "crates/kakoi-policy", "crates/kakoi-plan", "crates/kakoi-linux", "crates/kakoi-runtime"]
 
 # Specification section 17: the version lives in one place. Both packages inherit it.
 [workspace.package]
@@ -52,13 +52,13 @@ strip = true
 
 [dependencies]
 clap.workspace = true
-kakoi-core = { path = "crates/kakoi-core" }
-kakoi-net = { path = "crates/kakoi-net" }
+kakoi-runtime = { path = "crates/kakoi-runtime" }
 serde.workspace = true
 serde_json.workspace = true
 
 # The tests that observe the seccomp filter and the raised file limit make raw calls.
 [dev-dependencies]
 libc.workspace = true
+kakoi-net = { path = "crates/kakoi-net" }
 kakoi-policy = { path = "crates/kakoi-policy" }
 kakoi-linux = { path = "crates/kakoi-linux" }

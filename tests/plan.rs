@@ -9,24 +9,24 @@ use common::fixture::{
     Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
 use common::{assert_diagnostic, binary, output_report, TempDir};
-use kakoi_core::command::{command_candidates, resolve_command};
-use kakoi_core::copies::{CopySources, FileContent};
-use kakoi_core::diagnostic::{Diagnostic, Kind};
-use kakoi_core::executables::first_executable;
-use kakoi_core::guard_placement::GuardPlan;
-use kakoi_core::isolated_env::SecretFile;
-use kakoi_core::layers::{Directive, LayerOrigin};
-use kakoi_core::mounts::{
+use kakoi_runtime::cli::command::{command_candidates, resolve_command};
+use kakoi_runtime::cli::copies::{CopySources, FileContent};
+use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind};
+use kakoi_runtime::cli::executables::first_executable;
+use kakoi_runtime::cli::guard_placement::GuardPlan;
+use kakoi_runtime::cli::isolated_env::SecretFile;
+use kakoi_runtime::cli::layers::{Directive, LayerOrigin};
+use kakoi_runtime::cli::mounts::{
     candidates, expand_policy, EntryKind, ItemOrigin, ResolvedItem, SkippedRole,
 };
-use kakoi_core::placement::protected_paths;
-use kakoi_core::plan::{
+use kakoi_runtime::cli::placement::protected_paths;
+use kakoi_runtime::cli::plan::{
     bwrap_arguments, resolve_isolation, Argument, Inputs, Isolation, IsolationFacts, Provisions,
     ResolvedCommand,
 };
-use kakoi_core::policy::NetworkMode;
-use kakoi_core::shared_files::{in_data_form, SharedFile};
-use kakoi_core::variables::Variables;
+use kakoi_runtime::cli::policy::NetworkMode;
+use kakoi_runtime::cli::shared_files::{in_data_form, SharedFile};
+use kakoi_runtime::cli::variables::Variables;
 
 /// Writes an executable script at `relative` under `dir`.
 fn executable(dir: &TempDir, relative: &str) -> PathBuf {
@@ -277,7 +277,7 @@ fn isolation(
 /// `isolation` with the variables given.
 fn isolation_with(
     profile: &str,
-    variables: &kakoi_core::variables::Variables,
+    variables: &kakoi_runtime::cli::variables::Variables,
     facts: Facts,
     secrets: &[(&str, SecretFile)],
 ) -> Result<Isolation, Diagnostic> {

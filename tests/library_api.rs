@@ -129,7 +129,7 @@ fn nested_api_creates_a_new_isolation_preserves_outer_guards_and_never_falls_bac
 mod retained_mounts;
 use common::{output_report, TempDir};
 
-// @kotowari[REQ-library-410, EX-library-417]
+// @kotowari[REQ-library-410, REQ-288, EX-library-417]
 #[test]
 fn consumer_itself_is_subject_to_its_requested_guard() {
     run_fixture("--self-test-own-guard");

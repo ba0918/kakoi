@@ -10,12 +10,16 @@ use kakoi_plan::{
 };
 use kakoi_policy::{diagnostic, policy};
 
+#[doc(hidden)]
+pub mod cli;
 pub mod layers;
 pub mod planning;
 
 pub mod config;
 mod input;
 pub use input::{HostContext, InputError};
+mod cli_first_process;
+mod cli_guard;
 mod events;
 mod execution;
 mod helper_image;

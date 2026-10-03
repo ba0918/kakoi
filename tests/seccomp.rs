@@ -1,4 +1,4 @@
-use kakoi_core::seccomp::filter_bytes;
+use kakoi_runtime::cli::seccomp::filter_bytes;
 
 /// One classic BPF instruction as `struct sock_filter` lays it out: `code`, `jt`, `jf`,
 /// `k`, little-endian, eight bytes.

@@ -1,9 +1,9 @@
-use kakoi_core::network::{Ports, Protocol};
 use kakoi_net::{
     filter::{self, FilterRule},
     namespace::NetworkNamespace,
     nft,
 };
+use kakoi_runtime::cli::network::{Ports, Protocol};
 use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
@@ -246,8 +246,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp, socket.socket(soc
     assert_eq!(line, "phase2\n");
     assert!(ongoing.0.wait().unwrap().success());
 
-    use kakoi_core::network::{Allow, Destination};
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    use kakoi_runtime::cli::network::{Allow, Destination};
     nft::apply(
         &client,
         Path::new("/usr/sbin/nft"),
@@ -311,8 +311,8 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
     prepared.activate().unwrap();
     sample(false, "198.18.0.3", "fd00:1::3"); // Referencing an expired set must never reinsert its elements.
 
-    use kakoi_core::{network::NetworkLimits, policy::parse_policy};
     use kakoi_net::{dns::UpstreamResolver, scope::AddressContext};
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::net::UdpSocket;
     sample(false, "1.1.1.1", "2606:4700:4700::1111");
     let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -396,8 +396,8 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
 // @kotowari[REQ-014, REQ-389]
 #[test]
 fn a_late_staging_acknowledgement_never_activates_candidate_permissions() {
-    use kakoi_core::network::{Allow, Destination};
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    use kakoi_runtime::cli::network::{Allow, Destination};
     use std::fs;
     let namespace = NetworkNamespace::create().unwrap();
     nft::apply(
@@ -456,8 +456,8 @@ fn a_late_staging_acknowledgement_never_activates_candidate_permissions() {
 // @kotowari[REQ-014, REQ-389]
 #[test]
 fn staging_rejects_elements_without_a_kernel_expiration() {
-    use kakoi_core::network::{Allow, Destination};
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    use kakoi_runtime::cli::network::{Allow, Destination};
     let namespace = NetworkNamespace::create().unwrap();
     nft::apply(
         &namespace,
@@ -489,8 +489,8 @@ fn staging_rejects_elements_without_a_kernel_expiration() {
 // @kotowari[REQ-133, REQ-014]
 #[test]
 fn an_old_grant_near_expiry_does_not_reduce_the_new_updates_staging_budget() {
-    use kakoi_core::network::{Allow, Destination};
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    use kakoi_runtime::cli::network::{Allow, Destination};
     let namespace = NetworkNamespace::create().unwrap();
     nft::apply(
         &namespace,
@@ -538,15 +538,15 @@ fn an_old_grant_near_expiry_does_not_reduce_the_new_updates_staging_budget() {
 // @kotowari[REQ-014]
 #[test]
 fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
-    use kakoi_core::{
-        network::{Allow, Destination, NetworkLimits},
-        policy::parse_policy,
-    };
     use kakoi_net::{
         dns::{EnforcedDnsError, UpstreamResolver},
         dynamic::DynamicPermissions,
         leases::ActiveGrant,
         scope::AddressContext,
+    };
+    use kakoi_runtime::cli::{
+        network::{Allow, Destination, NetworkLimits},
+        policy::parse_policy,
     };
     let namespace = NetworkNamespace::create().unwrap();
     let rules = vec![Allow {
@@ -600,15 +600,15 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
 // @kotowari[REQ-014, REQ-116]
 #[test]
 fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_kernel_faults() {
-    use kakoi_core::{
-        network::{Allow, Destination, NetworkLimits},
-        policy::parse_policy,
-    };
     use kakoi_net::{
         dns::{AcceptedRequest, DnsRequests, EnforcedDnsError, UpstreamResolver},
         dns_workers::{DnsWorkers, WorkResult},
         dynamic::DynamicPermissions,
         scope::AddressContext,
+    };
+    use kakoi_runtime::cli::{
+        network::{Allow, Destination, NetworkLimits},
+        policy::parse_policy,
     };
     use std::net::UdpSocket;
     for mode in ["cancel", "expiry", "mismatch", "kernel"] {
@@ -779,8 +779,8 @@ fn dns_owner_namespace() -> NetworkNamespace {
     namespace
 }
 
-fn api_rule() -> Vec<kakoi_core::network::Allow> {
-    use kakoi_core::network::{Allow, Destination};
+fn api_rule() -> Vec<kakoi_runtime::cli::network::Allow> {
+    use kakoi_runtime::cli::network::{Allow, Destination};
     vec![Allow {
         destination: Destination::Dns("api.example.com".parse().unwrap()),
         protocol: Protocol::Tcp,

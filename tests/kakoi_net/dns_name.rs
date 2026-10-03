@@ -1,4 +1,4 @@
-use kakoi_core::network::DnsPattern;
+use kakoi_runtime::cli::network::DnsPattern;
 
 // @kotowari[REQ-003, REQ-010, EX-004, EX-005, EX-006, EX-017, EX-018, EX-019]
 #[test]

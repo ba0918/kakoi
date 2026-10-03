@@ -1,5 +1,5 @@
-use kakoi_core::layers::{merge, Layer, LayerOrigin};
-use kakoi_core::policy::parse_policy;
+use kakoi_runtime::cli::layers::{merge, Layer, LayerOrigin};
+use kakoi_runtime::cli::policy::parse_policy;
 use std::path::Path;
 
 fn layer(text: &str) -> Layer {

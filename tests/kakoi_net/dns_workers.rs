@@ -1,8 +1,8 @@
-use kakoi_core::network::{Allow, Destination, Protocol};
 use kakoi_net::{
     dns::{AcceptedRequest, DnsRequests, ResolutionTask},
     dns_workers::{DnsWorkers, WorkResult},
 };
+use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
 use std::{
     sync::mpsc,
     time::{Duration, Instant},
@@ -118,8 +118,8 @@ fn worker_completion_and_panic_are_collected_without_blocking_other_work() {
 // @kotowari[REQ-116, REQ-131]
 #[test]
 fn stopping_workers_interrupts_udp_tcp_and_tls_waits_without_waiting_for_dns_deadlines() {
-    use kakoi_core::{network::NetworkLimits, policy::parse_policy};
     use kakoi_net::{dns::UpstreamResolver, dns_transport::TlsClient, scope::AddressContext};
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::io::Read;
     for mode in ["udp", "tcp", "tls", "connect"] {
         let (listener, udp) = crate::common::tcp_and_udp_on_one_port();

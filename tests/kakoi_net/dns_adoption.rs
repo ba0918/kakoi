@@ -1,7 +1,3 @@
-use kakoi_core::{
-    network::{Allow, Destination, NetworkLimits, Protocol},
-    policy::parse_policy,
-};
 use kakoi_net::{
     dns::{
         AcceptedRequest, DnsRequests, EnforcedDnsError, PreparedAnswer, ResolutionId,
@@ -12,6 +8,10 @@ use kakoi_net::{
     namespace::NetworkNamespace,
     nft,
     scope::AddressContext,
+};
+use kakoi_runtime::cli::{
+    network::{Allow, Destination, NetworkLimits, Protocol},
+    policy::parse_policy,
 };
 use std::{
     net::UdpSocket,

@@ -1,5 +1,5 @@
-use kakoi_core::network::{Allow, Destination, Protocol};
 use kakoi_net::dns::{DnsError, DnsGate};
+use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
 
 fn query(name: &str, kind: u16) -> Vec<u8> {
     let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
@@ -17,7 +17,7 @@ fn rule(pattern: &str) -> Allow {
     Allow {
         destination: Destination::Dns(pattern.parse().unwrap()),
         protocol: Protocol::Tcp,
-        ports: kakoi_core::network::Ports::try_from(vec!["443".into()]).unwrap(),
+        ports: kakoi_runtime::cli::network::Ports::try_from(vec!["443".into()]).unwrap(),
     }
 }
 
@@ -174,8 +174,8 @@ fn resolution_keys_share_case_and_client_ids_but_separate_dns_conditions() {
 // @kotowari[REQ-027, REQ-019, REQ-020, REQ-014, REQ-123, EX-030, EX-031, EX-045]
 #[test]
 fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
-    use kakoi_core::{network::NetworkLimits, policy::parse_policy};
     use kakoi_net::{dns::UpstreamResolver, scope::AddressContext};
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::{
         net::UdpSocket,
         thread,
@@ -384,11 +384,11 @@ fn shared_resolution_rejects_wrong_or_late_answers_and_keeps_dns_conditions_sepa
 // @kotowari[REQ-116, REQ-122, REQ-127]
 #[test]
 fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
-    use kakoi_core::{network::NetworkLimits, policy::parse_policy};
     use kakoi_net::{
         dns::{AcceptedRequest, DnsRequests, UpstreamResolver},
         scope::AddressContext,
     };
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::{
         net::UdpSocket,
         sync::{

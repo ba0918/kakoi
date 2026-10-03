@@ -1,8 +1,8 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use kakoi_core::plan::Argument;
 use kakoi_linux::retained_mounts::{recheck, retain, Identity};
+use kakoi_runtime::cli::plan::Argument;
 
 use crate::common::TempDir;
 
@@ -124,9 +124,9 @@ fn an_unlinked_descriptor_source_fails_before_the_command_can_write() {
     );
 }
 
-fn plan(dir: &TempDir, source: &Path, command: Vec<OsString>) -> kakoi_core::plan::Plan {
-    use kakoi_core::layers::LayerSelection;
-    use kakoi_core::planning::{plan_for, Request};
+fn plan(dir: &TempDir, source: &Path, command: Vec<OsString>) -> kakoi_runtime::cli::plan::Plan {
+    use kakoi_runtime::cli::layers::LayerSelection;
+    use kakoi_runtime::cli::planning::{plan_for, Request};
     let home = dir.path().join("home");
     dir.write(
         "home/.config/kakoi/profile/default.toml",

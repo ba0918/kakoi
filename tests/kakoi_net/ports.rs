@@ -1,4 +1,4 @@
-use kakoi_core::network::Ports;
+use kakoi_runtime::cli::network::Ports;
 
 fn parse(items: &[&str]) -> Result<Ports, String> {
     Ports::try_from(

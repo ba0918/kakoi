@@ -14,7 +14,7 @@ use common::{
     RW_WORKSPACE,
 };
 
-// @kotowari[REQ-291]
+// @kotowari[REQ-291, REQ-library-402, EX-library-403]
 #[test]
 fn a_command_exit_code_passes_through() {
     let (home, workspace) = home_with_workspace();
@@ -1416,7 +1416,7 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is
     // refused before the start rather than paged in.
     let (home, workspace) = home_with_workspace();
-    for index in 0..=kakoi_core::copies::ENTRY_LIMIT {
+    for index in 0..=kakoi_runtime::cli::copies::ENTRY_LIMIT {
         home.write(format!("conf/f{index}"), "x\n");
     }
     profile(
@@ -1431,7 +1431,7 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     assert!(
         diagnostic.contains(&format!(
             "more than {} entries",
-            kakoi_core::copies::ENTRY_LIMIT
+            kakoi_runtime::cli::copies::ENTRY_LIMIT
         )),
         "{diagnostic}"
     );

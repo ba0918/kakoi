@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use kakoi_core::policy::parse_policy;
+use kakoi_runtime::cli::policy::parse_policy;
 
 fn entry(destination: &str) -> String {
     format!("[[network.allow]]\ndestination = {{ {destination} }}\nprotocol = 'tcp'\nports = ['443', '8000-8010']\n")
@@ -18,7 +18,7 @@ fn allow_entries_accept_each_destination_kind_and_keep_protocol_ports() {
     ] {
         let parsed = parse_policy(&entry(destination), Path::new("allow.toml")).unwrap();
         let rule = &parsed.network.allow[0];
-        assert_eq!(rule.protocol, kakoi_core::network::Protocol::Tcp);
+        assert_eq!(rule.protocol, kakoi_runtime::cli::network::Protocol::Tcp);
         assert!(rule.ports.contains(443));
         assert!(rule.ports.contains(8010));
         assert!(!rule.ports.contains(8011));

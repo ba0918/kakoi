@@ -145,9 +145,11 @@ fn the_bundled_listed_example_loads_and_passes_the_placement_checks() {
 // @kotowari[REQ-480]
 #[test]
 fn the_ld_so_rule_of_the_listed_example_stops_every_run_of_ld_so() {
-    let policy =
-        kakoi_core::policy::parse_policy(&listed_example(), std::path::Path::new("/listed.toml"))
-            .unwrap();
+    let policy = kakoi_runtime::cli::policy::parse_policy(
+        &listed_example(),
+        std::path::Path::new("/listed.toml"),
+    )
+    .unwrap();
     let rules: Vec<_> = policy
         .commands
         .guard
@@ -166,7 +168,7 @@ fn the_ld_so_rule_of_the_listed_example_stops_every_run_of_ld_so() {
         let arguments: Vec<std::ffi::OsString> =
             arguments.iter().map(std::ffi::OsString::from).collect();
         assert!(
-            kakoi_core::guard::evaluate(rules.iter().copied(), &arguments, &[]).is_some(),
+            kakoi_runtime::cli::guard::evaluate(rules.iter().copied(), &arguments, &[]).is_some(),
             "{arguments:?}"
         );
     }

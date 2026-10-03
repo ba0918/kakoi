@@ -24,12 +24,27 @@ pub fn own_guard() {
     let cwd = std::env::current_dir().unwrap();
     std::os::unix::fs::symlink(std::env::current_exe().unwrap(), cwd.join("app")).unwrap();
     let policy = format!("[network]\nmode='none'\n[env.set]\nPATH={:?}\n[[commands.guard]]\nprogram='app'\ndeny=[['blocked']]\nreason='blocked application'\n", cwd.to_str().unwrap());
-    let prepared = prepare(request(&policy, "app", &["blocked"])).unwrap();
-    assert_eq!(prepared.description().guard_count, 1);
-    assert_eq!(
-        prepared.spawn().unwrap().wait().main,
-        MainOutcome::Exited(126)
+    let request = RunRequest::new(
+        Policy::from_toml(&policy).unwrap(),
+        CommandSpec::new("app".into()).arg("blocked".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Pipe,
+        },
     );
+    let prepared = prepare(request).unwrap();
+    assert_eq!(prepared.description().guard_count, 1);
+    let mut run = prepared.spawn().unwrap();
+    let mut stderr = String::new();
+    run.take_stderr()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert_eq!(run.wait().main, MainOutcome::Exited(126));
+    assert!(stderr.starts_with("kakoi: guard: "), "{stderr}");
+    assert_eq!(stderr.lines().count(), 1);
 }
 
 pub fn listed_copies() {

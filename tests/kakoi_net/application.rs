@@ -1,9 +1,9 @@
 use crate::common::{home_with_workspace, RW_WORKSPACE};
-use kakoi_core::{
+use kakoi_net::{application, namespace::NetworkNamespace};
+use kakoi_runtime::cli::{
     layers::LayerSelection,
     planning::{plan_for, Request},
 };
-use kakoi_net::{application, namespace::NetworkNamespace};
 use std::collections::BTreeMap;
 
 // @kotowari[REQ-060, REQ-150]
@@ -88,7 +88,7 @@ print('isolated')
         applied: true,
         outer_guard: false,
         outer_table: None,
-        landlock_abi: kakoi_core::landlock::abi_version(),
+        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
     })
     .unwrap();
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
@@ -118,14 +118,14 @@ print('isolated')
 // @kotowari[REQ-027, REQ-060, REQ-131]
 #[test]
 fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
-    use kakoi_core::{
-        network::{Allow, Destination, NetworkLimits, Protocol},
-        policy::parse_policy,
-    };
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig},
         filter, nft,
         scope::AddressContext,
+    };
+    use kakoi_runtime::cli::{
+        network::{Allow, Destination, NetworkLimits, Protocol},
+        policy::parse_policy,
     };
     use std::{
         net::UdpSocket,
@@ -228,7 +228,7 @@ print('managed-dns')
         applied: true,
         outer_guard: false,
         outer_table: None,
-        landlock_abi: kakoi_core::landlock::abi_version(),
+        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
     })
     .unwrap();
     let mut launch = application::prepare(&plan, &ns).unwrap();
@@ -268,7 +268,7 @@ print('managed-dns')
 /// workspace `rw` and `mounts`, over a network namespace of its own, and returns the
 /// plan's bwrap arguments and the output.
 fn filtered_run(mounts: &str, script: &str) -> (Vec<String>, std::process::Output) {
-    filtered_run_with_landlock(mounts, script, kakoi_core::landlock::abi_version())
+    filtered_run_with_landlock(mounts, script, kakoi_runtime::cli::landlock::abi_version())
 }
 
 /// `filtered_run` with the Landlock ABI version `abi` standing for the host's.
@@ -313,7 +313,9 @@ fn filtered_run_with_landlock(
         .arguments
         .iter()
         .filter_map(|argument| match argument {
-            kakoi_core::plan::Argument::Literal(text) => Some(text.to_string_lossy().into_owned()),
+            kakoi_runtime::cli::plan::Argument::Literal(text) => {
+                Some(text.to_string_lossy().into_owned())
+            }
             _ => None,
         })
         .collect();

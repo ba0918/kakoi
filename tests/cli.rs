@@ -9,7 +9,7 @@ use common::{
     TempDir, RW_WORKSPACE,
 };
 use kakoi::cli::{interpret, Invocation, Nesting, Parsed, PlanForm};
-use kakoi_core::diagnostic::Kind;
+use kakoi_runtime::cli::diagnostic::Kind;
 
 /// A name for the failure message and the arrangement it makes under a temporary home.
 type Arrangement = (&'static str, fn(&Path));

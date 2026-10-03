@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use kakoi_core::diagnostic::Kind;
-use kakoi_core::policy::{parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath, Variable};
+use kakoi_runtime::cli::diagnostic::Kind;
+use kakoi_runtime::cli::policy::{
+    parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath, Variable,
+};
 
 const EXAMPLE: &str = r#"
 [mounts]
