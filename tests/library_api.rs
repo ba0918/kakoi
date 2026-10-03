@@ -8,6 +8,18 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-205, EX-library-209, EX-library-210]
+#[test]
+fn wait_futures_cancel_without_stopping_and_share_the_retained_sync_result() {
+    run_fixture("--self-test-wait-future");
+}
+
+// @kotowari[REQ-library-301, EX-library-303]
+#[test]
+fn natural_main_completion_reports_stopping_while_descendant_cleanup_is_pending() {
+    run_fixture("--self-test-natural-stopping");
+}
+
 // @kotowari[REQ-library-206, REQ-library-402, EX-library-211, EX-library-212]
 #[test]
 fn nested_api_creates_a_new_isolation_preserves_outer_guards_and_never_falls_back_to_exec() {

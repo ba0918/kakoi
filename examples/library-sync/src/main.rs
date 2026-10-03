@@ -163,6 +163,8 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-filtered-owner" => self_test_filtered_owner(),
         Some(value) if value == "--self-test-api-nested" => self_test_api_nested(),
         Some(value) if value == "--self-test-api-inner" => self_test_api_inner(),
+        Some(value) if value == "--self-test-wait-future" => self_test_wait_future(),
+        Some(value) if value == "--self-test-natural-stopping" => self_test_natural_stopping(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
@@ -447,6 +449,105 @@ fn self_test_missing_features() {
     .spawn()
     .unwrap();
     assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+}
+
+fn self_test_natural_stopping() {
+    use std::io::{BufRead, BufReader, Write};
+    let script = r#"import os,signal,sys,time
+r,w=os.pipe()
+if os.fork():
+ os.close(w);os.read(r,1);os._exit(7)
+os.close(r)
+def term(*_):
+ print('stopping',flush=True)
+ sys.stdin.buffer.read(1)
+ raise SystemExit(0)
+signal.signal(signal.SIGTERM,term)
+os.write(w,b'x');os.close(w)
+while True: time.sleep(60)
+"#;
+    let mut running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/usr/bin/python3".into())
+            .arg("-c".into())
+            .arg(script.into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Pipe,
+            stdout: Io::Pipe,
+            stderr: Io::Inherit,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    let mut output = BufReader::new(running.take_stdout().unwrap());
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "stopping");
+    assert_eq!(running.status(), kakoi_runtime::RunStatus::Stopping);
+    assert!(running.outcome().is_none());
+    assert_eq!(
+        running.request_stop().unwrap(),
+        kakoi_runtime::StopReceipt::Queued
+    );
+    running.take_stdin().unwrap().write_all(b"x").unwrap();
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(7));
+}
+
+fn self_test_wait_future() {
+    use std::future::Future;
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+    use std::task::{Context, Poll, Wake, Waker};
+    struct Notify(std::sync::mpsc::Sender<()>);
+    impl Wake for Notify {
+        fn wake(self: Arc<Self>) {
+            self.0.send(()).unwrap();
+        }
+    }
+    let mut running = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut output = running.take_stdout().unwrap();
+    let mut input = running.take_stdin().unwrap();
+    let mut ready = [0; 5];
+    output.read_exact(&mut ready).unwrap();
+    assert_eq!(&ready, b"ready");
+    let (notify, notified) = std::sync::mpsc::channel();
+    let waker = Waker::from(Arc::new(Notify(notify)));
+    let mut context = Context::from_waker(&waker);
+    let mut canceled = Box::pin(running.wait_async());
+    assert!(canceled.as_mut().poll(&mut context).is_pending());
+    drop(canceled);
+    assert!(running.outcome().is_none());
+    let mut first = Box::pin(running.wait_async());
+    let mut second = Box::pin(running.wait_async());
+    assert!(first.as_mut().poll(&mut context).is_pending());
+    assert!(second.as_mut().poll(&mut context).is_pending());
+    input.write_all(b"still running").unwrap();
+    drop(input);
+    notified
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    let Poll::Ready(result) = first.as_mut().poll(&mut context) else {
+        panic!("notification preceded completion")
+    };
+    let Poll::Ready(other) = second.as_mut().poll(&mut context) else {
+        panic!("second wait lost completion")
+    };
+    assert!(Arc::ptr_eq(&result, &other));
+    assert!(Arc::ptr_eq(&result, &running.wait()));
+    notified
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    let mut ready_future = Box::pin(running.wait_async());
+    let Poll::Ready(ready_result) = ready_future.as_mut().poll(&mut context) else {
+        panic!("finished wait was pending")
+    };
+    assert!(Arc::ptr_eq(&result, &ready_result));
+    let mut bytes = Vec::new();
+    output.read_to_end(&mut bytes).unwrap();
+    assert_eq!(bytes, b"still running");
+    assert_eq!(result.main, kakoi_runtime::MainOutcome::Exited(0));
 }
 
 fn self_test_api_nested() {

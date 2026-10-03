@@ -565,6 +565,10 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
                 match ipc::recv::<crate::running::ResultUpdate>(&result_channel) {
                     Ok((crate::running::ResultUpdate::Main(observed), fds)) if fds.is_empty() => {
                         main = observed;
+                        let mut state =
+                            result_state.state.lock().unwrap_or_else(|e| e.into_inner());
+                        state.status = crate::RunStatus::Stopping;
+                        drop(state);
                         if let Err(cause) = ipc::send(&result_channel, &(), &[]) {
                             break Err(cause);
                         }

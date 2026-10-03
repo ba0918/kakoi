@@ -2,10 +2,14 @@
 
 use crate::{Cleanup, DiagnosticRecord, ErrorKind, Phase};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::future::Future;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::UnixStream;
+use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex};
+use std::task::{Context, Poll, Waker};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MainOutcome {
@@ -95,6 +99,9 @@ pub(crate) struct State {
     pub status: RunStatus,
     pub outcome: Option<Arc<RunOutcome>>,
     pub worker_reaped: bool,
+    stop_requested: bool,
+    waiters: BTreeMap<u64, Waker>,
+    next_waiter: u64,
 }
 pub(crate) struct Shared {
     pub state: Mutex<State>,
@@ -108,6 +115,9 @@ impl Shared {
                 status: RunStatus::Starting,
                 outcome: None,
                 worker_reaped: false,
+                stop_requested: false,
+                waiters: BTreeMap::new(),
+                next_waiter: 0,
             }),
             changed: Condvar::new(),
             control: Mutex::new(Some(control)),
@@ -117,15 +127,23 @@ impl Shared {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.status = RunStatus::Finished;
         state.outcome = Some(Arc::new(outcome));
+        let waiters = std::mem::take(&mut state.waiters);
+        drop(state);
         self.changed.notify_all();
+        for (_, waker) in waiters {
+            waker.wake();
+        }
     }
     fn stop(&self) -> Result<StopReceipt, ControlError> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        match state.status {
-            RunStatus::Finished => return Ok(StopReceipt::AlreadyFinished),
-            RunStatus::Stopping => return Ok(StopReceipt::AlreadyRequested),
-            _ => state.status = RunStatus::Stopping,
+        if state.status == RunStatus::Finished {
+            return Ok(StopReceipt::AlreadyFinished);
         }
+        if state.stop_requested {
+            return Ok(StopReceipt::AlreadyRequested);
+        }
+        state.stop_requested = true;
+        state.status = RunStatus::Stopping;
         let control = self.control.lock().unwrap_or_else(|e| e.into_inner());
         let Some(control) = control.as_ref() else {
             return Ok(StopReceipt::AlreadyFinished);
@@ -189,6 +207,12 @@ impl Running {
                 .unwrap_or_else(|e| e.into_inner());
         }
     }
+    pub fn wait_async(&self) -> impl Future<Output = Arc<RunOutcome>> + Send + '_ {
+        Wait {
+            running: self,
+            registration: None,
+        }
+    }
     pub fn take_stdin(&mut self) -> Option<PipeWriter> {
         self.stdin.take()
     }
@@ -202,6 +226,52 @@ impl Running {
 impl Drop for Running {
     fn drop(&mut self) {
         let _ = self.owner.shutdown(std::net::Shutdown::Both);
+    }
+}
+
+struct Wait<'a> {
+    running: &'a Running,
+    registration: Option<u64>,
+}
+impl Future for Wait<'_> {
+    type Output = Arc<RunOutcome>;
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        let mut state = this
+            .running
+            .shared
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(outcome) = state.outcome.clone() {
+            if let Some(id) = this.registration.take() {
+                state.waiters.remove(&id);
+            }
+            return Poll::Ready(outcome);
+        }
+        let id = *this.registration.get_or_insert_with(|| {
+            let id = state.next_waiter;
+            state.next_waiter = state
+                .next_waiter
+                .checked_add(1)
+                .expect("wait registration space exhausted");
+            id
+        });
+        state.waiters.insert(id, context.waker().clone());
+        Poll::Pending
+    }
+}
+impl Drop for Wait<'_> {
+    fn drop(&mut self) {
+        if let Some(id) = self.registration.take() {
+            self.running
+                .shared
+                .state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .waiters
+                .remove(&id);
+        }
     }
 }
 #[derive(Clone)]
