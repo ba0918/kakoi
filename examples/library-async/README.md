@@ -1,20 +1,24 @@
-# Tokioへのパイプ接続の例
+# Pipes with Tokio
 
-runtimeのパイプをOwnedFdへ移し、FileのO_NONBLOCKを設定してTokioのAsyncFdへ渡す独立パッケージである。
-Tokioは利用側だけの依存で、製品ライブラリのFutureはTokioに依存しない。
-libcもこの例でFDのフラグを設定するために直接使う。
+A standalone package that moves the runtime's pipes into `OwnedFd`, sets `O_NONBLOCK` on each
+`File`, and hands them to Tokio's `AsyncFd`. Tokio is a dependency of this consumer only; the
+library's futures do not depend on Tokio. The example also uses `libc` directly to set the
+descriptor flags.
 
-リポジトリのルートで実行する。
+Run from the repository root:
 
 ```sh
 cargo build --manifest-path examples/library-async/Cargo.toml --locked
 cargo run --manifest-path examples/library-async/Cargo.toml --locked -- --self-test
 ```
 
-同期mainで`dispatch_helper()`を呼んでから、current-threadランタイムを構築する。
-合成したhomeとworkspaceでcatを起動し、1 MiBの非同期書込み、読込み、終了待機を並行して行う。
-入力端を閉じてEOFを送り、同期waitと同じ結果になることも確認する。
+A synchronous `main` calls `dispatch_helper()` before it builds a current-thread runtime. The
+self-test starts `cat` over a synthetic home and workspace and runs a 1 MiB asynchronous write,
+the read, and the wait for exit concurrently. It then closes the input end to send EOF and checks
+that the result matches the synchronous wait.
 
-Linux x86_64、ユーザー名前空間、bwrapの`--bind-fd`と`--ro-bind-fd`が必要である。
-動的リンクした例では、補助役に必要な動的リンカと共有ライブラリを隔離内から見せる。
-実装は[src/main.rs](src/main.rs)、所有権とキャンセルの条件は[公開APIガイド](../../docs/guide/maintainer/library-api.md)を参照する。
+Requirements: Linux on x86_64, user namespaces, and a `bwrap` with `--bind-fd` and
+`--ro-bind-fd`. When the example is linked dynamically, the dynamic linker and shared libraries
+the helper needs must be visible inside the isolation. The code is in [src/main.rs](src/main.rs);
+ownership and cancellation are covered in the
+[API guide](../../docs/guide/maintainer/library-api.md) (in Japanese).

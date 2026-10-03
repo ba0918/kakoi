@@ -1,13 +1,15 @@
-# ポリシーだけを扱う例
+# Policy-only example
 
-`kakoi-policy`だけを直接依存にする独立パッケージである。
-Rust入力とTOMLの共通検証を試し、隔離は起動しない。
+A standalone package whose only direct dependency is `kakoi-policy`. It builds the same policy
+from Rust types and from TOML, checks that both pass the shared validation with the same result,
+and starts no isolation.
 
-リポジトリのルートで実行する。
+Run from the repository root:
 
 ```sh
 cargo build --manifest-path examples/library-policy/Cargo.toml --locked
 cargo run --manifest-path examples/library-policy/Cargo.toml --locked -- --self-test
 ```
 
-構築コードは[src/main.rs](src/main.rs)、入力の説明は[公開APIガイド](../../docs/guide/maintainer/library-api.md)を参照する。
+The code is in [src/main.rs](src/main.rs). The policy input types are described in the
+[API guide](../../docs/guide/maintainer/library-api.md) (in Japanese).
