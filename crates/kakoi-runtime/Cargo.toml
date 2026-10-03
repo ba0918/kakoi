@@ -13,3 +13,6 @@ kakoi-policy = { path = "../kakoi-policy" }
 kakoi-plan = { path = "../kakoi-plan" }
 kakoi-linux = { path = "../kakoi-linux" }
 kakoi-net = { path = "../kakoi-net" }
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true

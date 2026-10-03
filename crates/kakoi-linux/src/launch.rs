@@ -31,6 +31,30 @@ pub struct BwrapCommand {
     pub descriptors: Vec<OwnedFd>,
 }
 
+/// In a freshly forked helper, preserve only its assigned non-standard capabilities.
+/// This function uses only async-signal-safe syscalls and must run before exec.
+pub fn inherit_only(descriptors: &[libc::c_int]) -> io::Result<()> {
+    // SAFETY: close_range changes only this process's private descriptor table.
+    if unsafe {
+        libc::syscall(
+            libc::SYS_close_range,
+            3u32,
+            u32::MAX,
+            libc::CLOSE_RANGE_CLOEXEC,
+        )
+    } < 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    for &fd in descriptors {
+        // SAFETY: fcntl changes flags of the specified inherited descriptor only.
+        if unsafe { libc::fcntl(fd, libc::F_SETFD, 0) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
 /// Written by hand rather than derived: the environment's values have been moved into
 /// the `Command`, whose `Debug` prints them, secrets included, so the masking of
 /// `Environment` does not reach here. Only the names of the variables are shown
@@ -203,7 +227,7 @@ fn assemble_with_arguments(
 /// so that the same input gives the same result, and inherited by the command. A failure
 /// here is not reported on its own: if the descriptors then cannot be made, that is the
 /// `bwrap` diagnostic.
-fn raise_open_file_limit() {
+pub fn raise_open_file_limit() {
     let mut limit = libc::rlimit {
         rlim_cur: 0,
         rlim_max: 0,

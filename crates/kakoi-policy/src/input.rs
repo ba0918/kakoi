@@ -164,8 +164,15 @@ impl From<PolicyInput> for PolicyFile {
 }
 
 /// A validated policy. No mutable fields or unchecked deserialization are exposed.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Policy(crate::layers::Policy);
+#[derive(Clone)]
+pub struct Policy(crate::layers::Policy, Vec<Layer>);
+
+impl PartialEq for Policy {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl Eq for Policy {}
 
 pub type PolicyError = Diagnostic;
 
@@ -194,13 +201,19 @@ impl Policy {
         for layer in &mut layers {
             validate_policy(&mut layer.policy, Path::new("<layer>"))?;
         }
-        merge(&layers).map(Self)
+        merge(&layers).map(|merged| Self(merged, layers))
     }
 
     /// Read-only internal representation for the planning layers.
     #[doc(hidden)]
     pub fn as_merged(&self) -> &crate::layers::Policy {
         &self.0
+    }
+
+    /// Validated source layers for same-binary internal transport and planning.
+    #[doc(hidden)]
+    pub fn source_layers(&self) -> &[Layer] {
+        &self.1
     }
 
     pub fn mounts_mode(&self) -> ListMode {

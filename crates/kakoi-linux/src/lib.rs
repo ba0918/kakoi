@@ -15,6 +15,7 @@ pub mod launch;
 pub mod mount_facts;
 pub mod mount_list;
 pub mod regular_file;
+pub mod retained_mounts;
 pub mod scan;
 pub mod seccomp;
 pub mod secret_facts;

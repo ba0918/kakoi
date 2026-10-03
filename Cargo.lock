@@ -544,6 +544,9 @@ dependencies = [
  "kakoi-net",
  "kakoi-plan",
  "kakoi-policy",
+ "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

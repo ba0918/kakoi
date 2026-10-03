@@ -73,6 +73,27 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let config_dir = env.config_dir(&home);
     let layers = load_layers(&request.layers, &config_dir)?;
     let policy = merge(&layers)?;
+    plan_with_context(request, &layers, &policy, home, config_dir)
+}
+
+pub(crate) fn plan_with_policy(
+    request: &Request,
+    layers: &[crate::layers::Layer],
+    policy: &Policy,
+) -> Result<Plan, Diagnostic> {
+    let env = HostEnvironment::from_variables(&request.host);
+    let home = env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
+    let config_dir = env.config_dir(&home);
+    plan_with_context(request, layers, policy, home, config_dir)
+}
+
+fn plan_with_context(
+    request: &Request,
+    layers: &[crate::layers::Layer],
+    policy: &Policy,
+    home: crate::environment::HomeDirectory,
+    config_dir: PathBuf,
+) -> Result<Plan, Diagnostic> {
     // The guards of both runs cannot be laid one over the other (specification REQ-466).
     if request.outer_guard && !policy.guards.is_empty() {
         return Err(Diagnostic::policy(
@@ -91,11 +112,11 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     // planted there, so its existing prefixes are checked (specification section 5.6).
     let protected_config_dir = config_dir.as_path();
     // Stage 7: the core names the paths to look up, the outer layer looks them up.
-    let expanded = expand_policy(&policy, &variables, &home);
+    let expanded = expand_policy(policy, &variables, &home);
     let shared_files = shared_files::place(&request.host, request.nested);
     let protected = ProtectedPaths {
         shared_files: shared_files.clone(),
-        ..protected_paths(&expanded, &layers, protected_config_dir)
+        ..protected_paths(&expanded, layers, protected_config_dir)
     };
     let wanted = candidates(
         &expanded,
@@ -103,11 +124,11 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
         &variables,
         request.workspace.as_deref(),
     )
-    .with_walked(&listed_lookups(&policy))
-    .with_walked(&command_limits::lookups(&policy, &variables, &home));
+    .with_walked(&listed_lookups(policy))
+    .with_walked(&command_limits::lookups(policy, &variables, &home));
     let inputs = Inputs {
-        layers: &layers,
-        policy: &policy,
+        layers,
+        policy,
         expanded: &expanded,
         variables: &variables,
         home: &home,
@@ -131,7 +152,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     };
     let mut isolation = resolve_isolation(&inputs, &facts)?;
     let guards = plan_guards(
-        &policy,
+        policy,
         &mut isolation,
         request.executable.as_deref(),
         request.outer_guard,
@@ -169,7 +190,7 @@ pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
     let commands = (policy.commands_mode == ListMode::Listed)
         .then(|| {
             command_limits(
-                &policy,
+                policy,
                 &variables,
                 &home,
                 &facts.mounts,

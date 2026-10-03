@@ -16,9 +16,18 @@ pub mod planning;
 pub mod config;
 mod input;
 pub use input::{HostContext, InputError};
+mod ipc;
+mod preparation;
+mod request;
+mod wire_policy;
 pub use kakoi_policy::{
     Allow, Commands, Destination, DnsPattern, DnsUpstream, EnvMode, EnvironmentPolicy, Examples,
     FixedPublication, GuardRule, HideMounts, IpFamily, IpNetwork, LimitOverrides, ListMode,
     MountPolicy, NetworkMode, NetworkPolicy, Policy, PolicyError, PolicyInput, PolicyPath, Ports,
     Position, Process, Protocol, Scan, Sequence, Variable,
 };
+pub use preparation::{
+    dispatch_helper, prepare, Cleanup, DiagnosticRecord, Dispatch, DispatchError, ErrorKind,
+    MountDescription, Phase, PlanDescription, PrepareError, PreparedRun, SkippedDescription,
+};
+pub use request::{CommandSpec, Io, RunRequest, StdioSpec};

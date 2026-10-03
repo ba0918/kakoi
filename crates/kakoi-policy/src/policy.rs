@@ -223,6 +223,13 @@ pub struct Network {
     pub(crate) settings_present: bool,
 }
 
+impl Network {
+    #[doc(hidden)]
+    pub fn settings_present(&self) -> bool {
+        self.settings_present
+    }
+}
+
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 struct NetworkInput {
