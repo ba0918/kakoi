@@ -26,13 +26,13 @@ extern "C" fn prepare_fault() {
         fn atoi(value: *const std::ffi::c_char) -> i32;
         fn close(fd: i32) -> i32;
         fn raise(signal: i32) -> i32;
-        fn write(fd: i32, data: *const u8, length: usize) -> isize;
+        fn write(fd: i32, data: *const std::ffi::c_void, length: usize) -> isize;
         fn pause() -> i32;
-        fn open(path: *const std::ffi::c_char, flags: i32, mode: u32) -> i32;
+        fn open(path: *const std::ffi::c_char, flags: i32, ...) -> i32;
         fn strlen(value: *const std::ffi::c_char) -> usize;
         fn pipe(fds: *mut i32) -> i32;
         fn fork() -> i32;
-        fn read(fd: i32, data: *mut u8, length: usize) -> isize;
+        fn read(fd: i32, data: *mut std::ffi::c_void, length: usize) -> isize;
         fn prctl(option: i32, ...) -> i32;
     }
     unsafe {
@@ -45,16 +45,16 @@ extern "C" fn prepare_fault() {
                 if pid == 0 {
                     close(fds[0]);
                     prctl(15, c"probe-child".as_ptr(), 0usize, 0usize, 0usize);
-                    write(fds[1], b"x".as_ptr(), 1);
+                    write(fds[1], b"x".as_ptr().cast(), 1);
                     close(fds[1]);
                     loop {
                         pause();
                     }
                 }
                 close(fds[1]);
-                let mut ready = 0;
-                if read(fds[0], &mut ready, 1) == 1 {
-                    write(1, b"probe-created\n".as_ptr(), 14);
+                let mut ready = 0u8;
+                if read(fds[0], (&mut ready as *mut u8).cast(), 1) == 1 {
+                    write(1, b"probe-created\n".as_ptr().cast(), 14);
                 }
                 close(fds[0]);
             }
@@ -63,12 +63,12 @@ extern "C" fn prepare_fault() {
         let fault = getenv(c"KAKOI_TEST_PREPARE_FAULT".as_ptr());
         let record = getenv(c"KAKOI_TEST_CONTROL_RECORD".as_ptr());
         if !worker.is_null() && !record.is_null() {
-            let output = open(record, 1 | 64 | 512, 0o600);
+            let output = open(record, 1 | 64 | 512, 0o600u32);
             if output >= 0 {
                 write(output, worker.cast(), strlen(worker));
                 let owner = getenv(c"KAKOI_RUNTIME_OWNER_FD".as_ptr());
                 if !owner.is_null() {
-                    write(output, b" ".as_ptr(), 1);
+                    write(output, b" ".as_ptr().cast(), 1);
                     write(output, owner.cast(), strlen(owner));
                 }
                 close(output);
@@ -82,7 +82,11 @@ extern "C" fn prepare_fault() {
                 let mut header = [0u8; 8];
                 let mut position = 0;
                 while position < header.len() {
-                    let count = read(fd, header[position..].as_mut_ptr(), header.len() - position);
+                    let count = read(
+                        fd,
+                        header[position..].as_mut_ptr().cast(),
+                        header.len() - position,
+                    );
                     if count <= 0 {
                         return;
                     }
@@ -91,16 +95,16 @@ extern "C" fn prepare_fault() {
                 let mut remaining = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;
                 let mut buffer = [0u8; 4096];
                 while remaining > 0 {
-                    let count = read(fd, buffer.as_mut_ptr(), remaining.min(buffer.len()));
+                    let count = read(fd, buffer.as_mut_ptr().cast(), remaining.min(buffer.len()));
                     if count <= 0 {
                         return;
                     }
                     remaining -= count as usize;
                 }
                 // The ELF initializer is a reachable producer of a partial reply.
-                write(fd, [0u8].as_ptr(), 1);
+                write(fd, [0u8].as_ptr().cast(), 1);
             }
-            write(1, b"init-startup\n".as_ptr(), 13);
+            write(1, b"init-startup\n".as_ptr().cast(), 13);
             loop {
                 pause();
             }
@@ -111,9 +115,9 @@ extern "C" fn prepare_fault() {
             } else if *fault == b'i' as std::ffi::c_char {
                 raise(2);
                 if !record.is_null() {
-                    let output = open(record, 1 | 64 | 512, 0o600);
+                    let output = open(record, 1 | 64 | 512, 0o600u32);
                     if output >= 0 {
-                        write(output, b"interrupt-returned".as_ptr(), 18);
+                        write(output, b"interrupt-returned".as_ptr().cast(), 18);
                         close(output);
                     }
                 }
