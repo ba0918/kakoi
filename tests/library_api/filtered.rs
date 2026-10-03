@@ -1,5 +1,27 @@
 use super::{consumer, fake_host::FakeHost};
 
+// @kotowari[REQ-library-204]
+#[test]
+fn filtered_publications_can_be_reused_after_real_traffic_and_confirmed_shutdown() {
+    let host = FakeHost::new("", &[]);
+    host.run(&format!(
+        r#"
+for _ in range(2):
+ process=subprocess.Popen([{consumer:?},'--self-test-filtered-owner'],cwd=os.environ['WORKSPACE'],
+  stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,
+  env={{'PATH':os.environ['BIN']+':/usr/sbin:/usr/bin:/bin','HOME':os.environ['HOME_DIR']}})
+ ready=line(process.stdout).strip()
+ assert ready=='ready',(ready,process.stderr.read())
+ assert exchange('127.0.0.1',23451,'tcp',PERMITTED)=='published'
+ process.stdin.write(b'stop\n');process.stdin.flush()
+ out,err=process.communicate(timeout=30)
+ assert process.returncode==0,(out,err)
+ assert not pastas(),pastas()
+"#,
+        consumer = consumer().to_str().unwrap()
+    ));
+}
+
 // @kotowari[REQ-library-206, REQ-library-402, EX-library-211, EX-library-212]
 #[test]
 fn nested_api_inside_filtered_retains_outer_restrictions_and_guards() {
