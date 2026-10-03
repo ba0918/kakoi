@@ -1,55 +1,27 @@
 version: 1
 entries:
-- id: main-ci-c-abi-implementation
-  base: f4d8bd099f3f5f45a87966fd4509b7ced9be62c5
+- id: dependabot-pr6-msrv-implementation
+  base: 04bde54d609936bab807c81554d5529c98edd906
   role: implementer
   files:
-  - path: examples/library-sync/src/main.rs
-    before: sha256:06576c73be864f833fe64d01e8e19462eedf920a1a8d91afb3166a5a0b4f9f28
-    after: sha256:672d9b7a95780fc846c35e9aab83ea1dccd1ddce4f673f0720e78dc4bb635c0f
+  - path: .github/workflows/ci.yml
+    before: sha256:d84d1df3cbca26e3715eee136158bf208feebf409b8ffb82d181bce239c5f3e1
+    after: sha256:edeae01c75fcdfd01591e35a3de0176d0624f6c938dbda68a2fd1c1c02cfd44b
   ir:
-  - path: docs/ir/library/library-integration.md
-    sha256: sha256:d247c932a0d054ef3f5302e2165fa7ff2261a4c16abdc16b9451e4eb0ccc3078
-  conclusion: existing
+  - path: docs/ir/change-review.md
+    sha256: sha256:ff3b1a84ceb3b29dc4a42e389834819070340ee115afb52c1d18b8ab855a7d00
+  conclusion: new
   reason: >-
-    利用者のmain CI修復依頼に対し、実装担当がRust 1.99.0で既存の独立consumerビルド失敗を再現した。
-    openをC ABIどおりの可変引数とし、readとwriteをc_voidポインタへ訂正する。
-    可変引数のmodeは従来のu32を明示し、送受信するバイトと初期化時の故障注入は変えない。
-    REQ-library-404の外部path依存実例をビルド可能に戻し、REQ-library-401のruntime単独依存を維持する。
-    公開API、ポリシー、IR、workflow、依存、Rustの最小対応版は変更しない。
+    利用者のPR確認・取り込み依頼に対し、呼出し側が委譲した1.88維持の技術的修正を行う。
+    公式masterの入力対応実装を完全SHAで固定し、with.toolchainを1.88.0とする方式は実装担当の選択であり、利用者の直接指定ではない。
+    Cargo.tomlとPROJECT.mdのMSRV、stable側、ビルド対象、ゲートと製品の動作要求は変更しない。
+    比較元はmainとのmerge-baseである指定完全IDとし、その比較に含まれる設定対象の全変更はこのworkflowのみである。
+    Git modeとblobおよび関連IRは通常indexを変えない代替indexのsnapshotから計算した。
+    REQ-1000に従い独立レビューは未完了とし、REQ-1001に従い別比較のmain CI記録を無効化した。
   requirements:
-  - REQ-library-401
-  - REQ-library-404
-  decisions: []
-  handoff: null
-  gaps: []
-- id: main-ci-atomic-msrv-implementation
-  base: f4d8bd099f3f5f45a87966fd4509b7ced9be62c5
-  role: implementer
-  files:
-  - path: crates/kakoi-net/src/namespace/watchdog.rs
-    before: sha256:73815f7d183465545f0d1989bc729b5cd0697abbc9515cd6fe76a3d8b3986667
-    after: sha256:d58796f785042f1c50324f8831f6dd51c65200100b33cc24f1906e63e2c6198f
-  - path: crates/kakoi-net/src/resolution.rs
-    before: sha256:aef93fdee66e40fd4853ce207540caaffd83148cfa4e6a41743752663bd4dce4
-    after: sha256:fff8bd1827dbb83007e8148f91fac075e95ba265784a4cc20c1bbd74cf245e97
-  ir:
-  - path: docs/ir/network/recovery/network-ownership.md
-    sha256: sha256:b2618465f08e728f8e5547323be46e72202049400d48143ceb03c085d2059ea5
-  - path: docs/ir/network/dns-work-limits/network-dns-query-limit.md
-    sha256: sha256:3f9a8591dcf9ed3dfc4a93eef2724bce754abd900272990c0dc04cc09dcaa181
-  conclusion: existing
-  reason: >-
-    利用者のmain CI修復依頼と呼出し側のRust 1.88維持条件に対し、実装担当がRust 1.99.0のclippy失敗と
-    Rust 1.88.0でtry_updateが不安定機能となることを再現した。
-    代替APIや自作CASループへ変えず、既存fetch_updateの呼出しを含むlet文だけでdeprecatedを許容する。
-    理由を各呼出しに記し、他の警告は抑制しない。
-    世代番号のchecked_addとRelaxed順序を維持してREQ-060の独立管理を変えず、
-    問い合わせ残数のchecked_subとSeqCst順序を維持してREQ-122の上限消費と回数共有を変えない。
-    新しい製品挙動、仕様判断、依存、workflow、最小対応版の変更はない。
-  requirements:
-  - REQ-060
-  - REQ-122
-  decisions: []
+  - REQ-1000
+  - REQ-1001
+  decisions:
+  - docs/decision/brainstorm/2026-10-03-dependabot-pr6-msrv.md#A1
   handoff: null
   gaps: []

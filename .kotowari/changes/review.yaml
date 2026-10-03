@@ -1,61 +1,35 @@
 version: 1
 entries:
-- id: main-ci-c-abi-independent-review
-  base: f4d8bd099f3f5f45a87966fd4509b7ced9be62c5
+- id: dependabot-pr6-msrv-independent-sol-review
+  base: 04bde54d609936bab807c81554d5529c98edd906
   role: reviewer
   files:
-  - path: examples/library-sync/src/main.rs
-    before: sha256:06576c73be864f833fe64d01e8e19462eedf920a1a8d91afb3166a5a0b4f9f28
-    after: sha256:672d9b7a95780fc846c35e9aab83ea1dccd1ddce4f673f0720e78dc4bb635c0f
+  - path: .github/workflows/ci.yml
+    before: sha256:d84d1df3cbca26e3715eee136158bf208feebf409b8ffb82d181bce239c5f3e1
+    after: sha256:edeae01c75fcdfd01591e35a3de0176d0624f6c938dbda68a2fd1c1c02cfd44b
   ir:
-  - path: docs/ir/library/library-integration.md
-    sha256: sha256:d247c932a0d054ef3f5302e2165fa7ff2261a4c16abdc16b9451e4eb0ccc3078
-  conclusion: existing
+  - path: docs/ir/change-review.md
+    sha256: sha256:ff3b1a84ceb3b29dc4a42e389834819070340ee115afb52c1d18b8ab855a7d00
+  conclusion: new
   reason: >-
-    実装と別のレビューで全差分とELF初期化処理の呼出し側を確認し、Rust 1.99.0のGNUとmuslで
-    workspace全960テストと独立sync consumerの警告をエラーにするclippyをそれぞれ再実行した。
-    openのC可変引数、Linux x86_64のmodeに対応するu32、readとwriteのc_voidポインタを確認した。
-    ポインタ変換はバッファの位置と長さを変えず、readの一バイト領域もu8で保持する。
-    記録先、作成権限、送受信内容、停止と故障注入の順序は従来どおりである。
-    REQ-library-401とREQ-library-404および利用者が採用したA15に照らし、
-    consumerの直接依存がruntimeのみであることとmanifestが未変更であることを確認した。
-    Rust 1.88.0での独立consumerビルドも再実行し、最小対応版を変えずに既存利用を回復すると判断した。
-    各変更ファイルのGit modeとblob、および関連IR全bytesの同一性を独立に計算した。
+    実装と別のレビューで指定基点からの全差分、実装者記録の置換、新しい判断記録を確認した。
+    公式リポジトリのmaster解決とcommit APIを独立に読み取り、固定SHAのaction.yml全体を確認した。
+    toolchain入力は環境変数から解析され、1.88.0は変換されずrustup installとdefaultへ渡る。
+    解析ステップだけをLinux条件で実行し、toolchain=1.88.0の出力を確認した。
+    workflowの意味比較ではMSRVアクション参照と明示入力だけが変わり、権限、イベント、ジョブ名、
+    検査対象、コマンド、統合ゲートは不変で、Cargo.tomlとPROJECT.mdの最低対応版も維持される。
+    A1は委譲された技術的選択であり、利用者によるSHA指定やMSRV変更の承認ではない。
+    新しい製品動作や制約を追加しないためIR変更は不要と判断した。
+    各ファイルのGit modeとblob、実装者の全関連IRを候補snapshotから独立に再計算した。
+    REQ-1001に従って別比較の記録を置換し、REQ-1000に従う独立レビューとして本記録を作成する。
+    actionlintは終了0。zizmorは未導入で静的セキュリティ解析は未確認であり、既存の未固定参照、
+    checkoutの認証保持、ジョブ時間制限欠如は今回変更していない。
+    Rustの製品テストは再実行しておらず、実際のアクション実行と候補の外部CIは未完了である。
+    本判断は変更範囲のレビューであり、公開headでの再照合と必要CI成功前の統合を承認しない。
   requirements:
-  - REQ-library-401
-  - REQ-library-404
-  decisions: []
-  handoff: null
-  gaps: []
-- id: main-ci-atomic-msrv-independent-review
-  base: f4d8bd099f3f5f45a87966fd4509b7ced9be62c5
-  role: reviewer
-  files:
-  - path: crates/kakoi-net/src/namespace/watchdog.rs
-    before: sha256:73815f7d183465545f0d1989bc729b5cd0697abbc9515cd6fe76a3d8b3986667
-    after: sha256:d58796f785042f1c50324f8831f6dd51c65200100b33cc24f1906e63e2c6198f
-  - path: crates/kakoi-net/src/resolution.rs
-    before: sha256:aef93fdee66e40fd4853ce207540caaffd83148cfa4e6a41743752663bd4dce4
-    after: sha256:fff8bd1827dbb83007e8148f91fac075e95ba265784a4cc20c1bbd74cf245e97
-  ir:
-  - path: docs/ir/network/recovery/network-ownership.md
-    sha256: sha256:b2618465f08e728f8e5547323be46e72202049400d48143ceb03c085d2059ea5
-  - path: docs/ir/network/dns-work-limits/network-dns-query-limit.md
-    sha256: sha256:3f9a8591dcf9ed3dfc4a93eef2724bce754abd900272990c0dc04cc09dcaa181
-  conclusion: existing
-  reason: >-
-    独立レビューで基点との差分と既存要求を双方向に確認した。
-    世代番号はchecked_add、Relaxed、枯渇時のエラーを維持し、REQ-060の独立管理を変更しない。
-    問い合わせ残数はchecked_sub、SeqCst、共有カウントとis_okの返値を維持し、REQ-122の送信上限を変更しない。
-    deprecatedの許容は二つのfetch_updateを含むlet文のみで、関数やモジュール全体の警告を隠さない。
-    Rust 1.88.0でtry_updateのE0658を独立に再現し、代替APIへ置き換えない理由が最小対応版の条件に基づくと確認した。
-    Rust 1.99.0のGNUとmuslで全960テストとworkspace clippyをそれぞれ再実行した。
-    Rust 1.88.0でworkspaceと三consumerのビルド、resolutionとwatchdog各5テストも再実行して成功を確認した。
-    IR、依存、workflow、公開APIと最小対応版は未変更で、新しい製品判断を導入しないと判断した。
-    各変更ファイルのGit modeとblob、および対応する実装者記録の全関連IRの同一性を独立に計算した。
-  requirements:
-  - REQ-060
-  - REQ-122
-  decisions: []
+  - REQ-1000
+  - REQ-1001
+  decisions:
+  - docs/decision/brainstorm/2026-10-03-dependabot-pr6-msrv.md#A1
   handoff: null
   gaps: []
