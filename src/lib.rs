@@ -1,6 +1,7 @@
 //! `kakoi`: runs a command inside a bubblewrap mount namespace shaped by a layered
 //! policy. The specification is `docs/ir/`, read through `docs/guide/`. This crate is the command-line
-//! interface; everything else is `kakoi-core`.
+//! interface; policy, planning, Linux operations, and the shared runtime are in the crates
+//! under `crates/`.
 
 pub mod cli;
 pub mod first_process;
