@@ -44,39 +44,14 @@ pub(crate) fn source_checks(
     mounts: &[RetainedMount],
     cwd: &Path,
 ) -> io::Result<Vec<SourceCheck>> {
-    use kakoi_plan::environment::{HostEnvironment, RealEntry};
-    let home = HostEnvironment {
-        home: Some(plan.home.clone()),
-        xdg_config_home: None,
-    }
-    .home_directory(&RealEntry::Directory(plan.home.clone()))
-    .map_err(|e| io::Error::other(e.to_string()))?;
-    let expanded = kakoi_plan::mounts::expand_policy(&plan.policy, &plan.variables, &home);
     let mut checks = Vec::new();
-    for entry in expanded.mounts {
-        if !matches!(
-            entry.directive,
-            kakoi_policy::layers::Directive::Rw
-                | kakoi_policy::layers::Directive::RwFile
-                | kakoi_policy::layers::Directive::Ro
-        ) {
-            continue;
-        }
-        let Some(source) = entry.path.path() else {
-            continue;
-        };
+    for (source, real) in &plan.source_paths {
         let source = if source.is_absolute() {
             source.to_path_buf()
         } else {
             cwd.join(source)
         };
-        let selected = plan.mounts.items.iter().find(|item| {
-            item.written == entry.written.to_string() && item.directive == entry.directive
-        });
-        let Some(selected) = selected else {
-            continue;
-        };
-        let Some(retained) = mounts.iter().find(|mount| mount.source == selected.real) else {
+        let Some(retained) = mounts.iter().find(|mount| &mount.source == real) else {
             continue;
         };
         let identity = Identity::of_fd(&retained.descriptor)?;

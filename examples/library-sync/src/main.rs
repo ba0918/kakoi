@@ -64,6 +64,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-missing-features" => self_test_missing_features(),
         Some(value) if value == "--self-test-shared-files" => self_test_shared_files(),
         Some(value) if value == "--self-test-live-device" => self_test_live_device(),
+        Some(value) if value == "--self-test-raw-mounts" => self_test_raw_mounts(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
@@ -298,6 +299,55 @@ fn self_test_missing_features() {
     assert_eq!(error.cleanup, kakoi_runtime::Cleanup::Confirmed);
     assert!(!std::path::Path::new("must-not-run").exists());
     assert!(!std::path::Path::new("helper-must-not-run").exists());
+}
+
+fn self_test_raw_mounts() {
+    use kakoi_runtime::{
+        EnvMode, EnvironmentPolicy, MountPolicy, NetworkPolicy, PolicyInput, PolicyPath,
+    };
+    use std::io::Read;
+    let context = HostContext::capture().unwrap();
+    let first = context
+        .cwd()
+        .join(OsString::from_vec(b"source-\xff".to_vec()));
+    let second = context
+        .cwd()
+        .join(OsString::from_vec(b"source-\xfe".to_vec()));
+    std::fs::write(&first, b"first").unwrap();
+    std::fs::write(&second, b"second").unwrap();
+    let mut mounts = MountPolicy::new(ListMode::Host);
+    mounts.rw_file = vec![
+        PolicyPath::from(first.clone()),
+        PolicyPath::from(second.clone()),
+    ];
+    let policy = Policy::validate(PolicyInput::new(
+        mounts,
+        NetworkPolicy::new(NetworkMode::None),
+        EnvironmentPolicy::new(EnvMode::Inherit),
+    ))
+    .unwrap();
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/bin/cat".into())
+            .arg(first.into())
+            .arg(second.into()),
+        context,
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    let mut running = prepared.spawn().unwrap();
+    let mut output = Vec::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_end(&mut output)
+        .unwrap();
+    assert_eq!(output, b"firstsecond");
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
 }
 
 fn self_test_shared_files() {

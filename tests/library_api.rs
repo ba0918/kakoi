@@ -59,6 +59,12 @@ fn requested_cwd_and_os_bytes_are_used_without_mutating_the_caller() {
     run_fixture("--self-test-context-run");
 }
 
+// @kotowari[REQ-library-104]
+#[test]
+fn distinct_non_utf8_mount_sources_are_not_matched_by_lossy_display_strings() {
+    run_fixture("--self-test-raw-mounts");
+}
+
 // @kotowari[REQ-library-407, EX-library-411]
 #[test]
 fn missing_descriptor_mount_features_fail_before_any_target_side_effect() {

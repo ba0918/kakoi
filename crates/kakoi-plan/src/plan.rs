@@ -54,6 +54,7 @@ pub struct IsolationFacts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Isolation {
     pub mounts: ResolvedMounts,
+    pub source_paths: BTreeMap<PathBuf, PathBuf>,
     pub skipped_paths: Vec<SkippedPath>,
     pub environment: Environment,
     pub warnings: Vec<Warning>,
@@ -129,8 +130,29 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
     let assembled =
         assemble_environment(inputs.policy, inputs.host, &facts.secrets, &path_prepend)?;
     warnings.extend(assembled.warnings);
+    let source_paths = inputs
+        .expanded
+        .mounts
+        .iter()
+        .filter_map(|item| {
+            if !matches!(
+                item.directive,
+                Directive::Rw | Directive::RwFile | Directive::Ro
+            ) {
+                return None;
+            }
+            let written = item.path.path()?;
+            let real = facts.mounts.entry(written).path()?.to_path_buf();
+            mounts
+                .items
+                .iter()
+                .any(|selected| selected.real == real && selected.directive == item.directive)
+                .then(|| (written.to_path_buf(), real))
+        })
+        .collect();
     Ok(Isolation {
         mounts,
+        source_paths,
         skipped_paths: skipped,
         environment: assembled.environment,
         warnings,
@@ -192,6 +214,7 @@ pub struct Plan {
     pub variables: Variables,
     pub home: PathBuf,
     pub mounts: ResolvedMounts,
+    pub source_paths: BTreeMap<PathBuf, PathBuf>,
     pub skipped_paths: Vec<SkippedPath>,
     pub not_copied: Vec<NotCopied>,
     pub environment: Environment,
@@ -253,6 +276,7 @@ pub fn plan(
         variables: inputs.variables.clone(),
         home: inputs.home.path().to_path_buf(),
         mounts: isolation.mounts,
+        source_paths: isolation.source_paths,
         skipped_paths: isolation.skipped_paths,
         not_copied: copies.not_copied,
         environment: isolation.environment,
