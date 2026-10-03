@@ -359,11 +359,7 @@ pub(crate) fn run_worker(
             if let Some(target) = kakoi_linux::launch::network_resolver_target(&plan)
                 .map_err(|cause| io::Error::other(cause.to_string()))?
             {
-                let index = plan
-                    .launch_layout
-                    .resolver_destination
-                    .ok_or_else(|| io::Error::other("missing managed resolver"))?;
-                plan.arguments[index] = Argument::Literal(target.into());
+                kakoi_linux::helper_placement::retarget_resolver(&mut plan, target)?;
             }
             if plan.nested {
                 let index = plan
@@ -385,17 +381,7 @@ pub(crate) fn run_worker(
                         // cannot work on all supported versions; verify the same
                         // final data below instead of changing its contents.
                         inherited_resolver = Some((check, content.bytes().to_vec()));
-                        kakoi_linux::retained_mounts::remove_generated_arguments(
-                            &mut plan.arguments,
-                            &mut mounts,
-                            index - 2..index + 1,
-                        )?;
-                        plan.launch_layout.resolver_destination = None;
-                        kakoi_linux::helper_placement::shift_layout(
-                            &mut plan.launch_layout,
-                            index + 1,
-                            -3,
-                        );
+                        kakoi_linux::helper_placement::reuse_resolver(&mut plan, &mut mounts)?;
                     }
                 }
             }

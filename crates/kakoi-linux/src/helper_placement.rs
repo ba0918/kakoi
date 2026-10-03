@@ -6,6 +6,33 @@ use crate::bwrap_arguments::operations;
 use crate::copies::FileContent;
 use crate::plan::{Argument, LaunchLayout, Plan};
 
+pub fn retarget_resolver(plan: &mut Plan, target: std::path::PathBuf) -> io::Result<()> {
+    let index = plan
+        .launch_layout
+        .resolver_destination
+        .ok_or_else(|| io::Error::other("missing managed resolver"))?;
+    plan.arguments[index] = Argument::Literal(target.into());
+    Ok(())
+}
+
+pub fn reuse_resolver(
+    plan: &mut Plan,
+    mounts: &mut [crate::retained_mounts::RetainedMount],
+) -> io::Result<()> {
+    let index = plan
+        .launch_layout
+        .resolver_destination
+        .ok_or_else(|| io::Error::other("missing managed resolver"))?;
+    crate::retained_mounts::remove_generated_arguments(
+        &mut plan.arguments,
+        mounts,
+        index - 2..index + 1,
+    )?;
+    plan.launch_layout.resolver_destination = None;
+    shift_layout(&mut plan.launch_layout, index + 1, -3);
+    Ok(())
+}
+
 pub fn place(plan: &mut Plan, guard_image: Option<FileContent>) -> io::Result<()> {
     if plan.commands.is_some() {
         let root = crate::command_limits::FIRST_ROOT;
@@ -52,7 +79,7 @@ pub fn place(plan: &mut Plan, guard_image: Option<FileContent>) -> io::Result<()
     Ok(())
 }
 
-pub fn shift_layout(layout: &mut LaunchLayout, from: usize, delta: isize) {
+fn shift_layout(layout: &mut LaunchLayout, from: usize, delta: isize) {
     for position in [
         &mut layout.argv0,
         &mut layout.command_separator,
