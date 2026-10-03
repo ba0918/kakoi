@@ -2573,3 +2573,40 @@ fn network_host_reaches_a_listener_on_the_host_loopback() {
     assert_eq!(assert_ran_clean(&output), "hello\n");
     server.join().unwrap();
 }
+
+// A device behind `ro` or `rw-file` is visible but cannot be opened: bwrap's --ro-bind and
+// --bind mount it nodev. The devices are /dev/null bound over files in a private namespace.
+// @kotowari[REQ-167, EX-966]
+#[test]
+fn devices_named_by_ro_and_rw_file_are_visible_but_cannot_be_opened() {
+    let (home, workspace) = home_with_workspace();
+    std::fs::write(workspace.join("ro-device"), "").unwrap();
+    std::fs::write(workspace.join("rw-device"), "").unwrap();
+    profile(
+        &home,
+        &format!(
+            "{RW_WORKSPACE}ro = [{:?}]\nrw-file = [{:?}]\n",
+            workspace.join("ro-device").to_str().unwrap(),
+            workspace.join("rw-device").to_str().unwrap(),
+        ),
+    );
+    let script = "for device in ro-device rw-device; do \
+        test -c $device && ! (: >$device) 2>/dev/null && ! (: <$device) 2>/dev/null \
+        && echo $device; done";
+    let output = Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "/bin/sh", "-c"])
+        .arg(
+            "mount --bind /dev/null ro-device && mount --bind /dev/null rw-device \
+             && exec \"$0\" --workspace \"$PWD\" -- /bin/sh -c \"$1\"",
+        )
+        .arg(env!("CARGO_BIN_EXE_kakoi"))
+        .arg(script)
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", home.path())
+        .env("XDG_CONFIG_HOME", home.path().join(".config"))
+        .current_dir(&workspace)
+        .output()
+        .unwrap();
+    assert_eq!(assert_ran_clean(&output), "ro-device\nrw-device\n");
+}

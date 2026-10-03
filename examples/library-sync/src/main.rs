@@ -8,6 +8,9 @@ use kakoi_runtime::{
     NetworkMode, Policy, RunRequest, StdioSpec,
 };
 
+// The basic embedding is in basic.rs. Every other argument below selects a
+// fixture that tests/library_api.rs runs in a synthetic environment.
+mod basic;
 mod helper_checks;
 mod mount_checks;
 #[path = "../../../tests/fixtures/library-api/signal_state.rs"]
@@ -407,9 +410,9 @@ fn main() -> std::process::ExitCode {
             wait_checks::registration_race(false)
         }
         Some(value) if value == "--self-test-pty" => self_test_pty(),
-        Some(value) if value == "--self-test" => self_test_standalone(),
+        Some(value) if value == "--self-test" => basic::run(),
         Some(value) if value == "--self-test-natural-stopping" => self_test_natural_stopping(),
-        _ => self_test_standalone(),
+        _ => basic::run(),
     }
     std::process::ExitCode::SUCCESS
 }
@@ -831,48 +834,6 @@ fn self_test_pty() {
         .unwrap();
         assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
     }
-}
-
-fn self_test_standalone() {
-    use std::io::Read;
-    let root = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join(format!("library-self-test-{}", std::process::id()));
-    std::fs::create_dir_all(root.join("home")).unwrap();
-    std::fs::create_dir_all(root.join("workspace/.git")).unwrap();
-    let context = HostContext::new(
-        root.join("workspace"),
-        BTreeMap::from([
-            ("HOME".into(), root.join("home").into_os_string()),
-            ("PATH".into(), std::env::var_os("PATH").unwrap()),
-        ]),
-    )
-    .unwrap();
-    let mut running = prepare(RunRequest::new(
-        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
-        CommandSpec::new("/bin/echo".into()).arg("library sync".into()),
-        context,
-        StdioSpec {
-            stdin: Io::Null,
-            stdout: Io::Pipe,
-            stderr: Io::Null,
-        },
-    ))
-    .unwrap()
-    .spawn()
-    .unwrap();
-    let mut output = String::new();
-    running
-        .take_stdout()
-        .unwrap()
-        .read_to_string(&mut output)
-        .unwrap();
-    assert_eq!(output, "library sync\n");
-    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
-    std::fs::remove_dir_all(root).unwrap();
-    println!("sync self-test passed");
 }
 
 fn self_test_wait_future() {
@@ -1479,7 +1440,7 @@ fn self_test_live_device() {
         policy,
         CommandSpec::new("/bin/sh".into())
             .arg("-c".into())
-            .arg("test -c device && cat live-source >device && cat live-source".into()),
+            .arg("test -c device && ! (: >device) 2>/dev/null && ! (: <device) 2>/dev/null && cat live-source".into()),
         context.clone(),
         StdioSpec {
             stdin: Io::Null,
@@ -1502,14 +1463,14 @@ fn self_test_live_device() {
     let running = prepare(RunRequest::new(
         Policy::from_toml(&format!("[mounts]\nro=[{:?}]\n[network]\nmode='none'\n", context.cwd().join("device").to_str().unwrap())).unwrap(),
         CommandSpec::new("/usr/bin/python3".into()).arg("-c".into()).arg(
-            "import os,stat,sys\np=sys.argv[1]\nassert stat.S_ISCHR(os.stat(p).st_mode)\nmounts=[s.split() for s in open('/proc/self/mountinfo')]\nassert any(m[4]==p and 'ro' in m[5].split(',') for m in mounts)".into(),
+            "import os,stat,sys\np=sys.argv[1]\nassert stat.S_ISCHR(os.stat(p).st_mode)\nmounts=[s.split() for s in open('/proc/self/mountinfo')]\nassert any(m[4]==p and 'ro' in m[5].split(',') and 'nodev' in m[5].split(',') for m in mounts)\nfor flags in (os.O_WRONLY, os.O_RDONLY):\n    try:\n        os.open(p, flags)\n    except PermissionError:\n        continue\n    sys.exit('device opened')".into(),
         ).arg(context.cwd().join("device").into()),
         context.clone(), StdioSpec { stdin: Io::Null, stdout: Io::Null, stderr: Io::Inherit },
     )).unwrap().spawn().unwrap();
     assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
     drop(running);
-    // A private overmount after the worker's checks reproduces the dev-bind race.
-    // The real bwrap still performs every mount; init must reject its changed result.
+    // A private overmount after the worker's checks swaps the path under bwrap.
+    // bwrap may mount the swapped path; init must reject the changed result.
     let tools = context.cwd().join("racing-tools");
     std::fs::create_dir(&tools).unwrap();
     let wrapper = tools.join("bwrap");
