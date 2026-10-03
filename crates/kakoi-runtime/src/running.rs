@@ -242,6 +242,8 @@ impl Future for Wait<'_> {
     type Output = Arc<RunOutcome>;
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
+        // Executor callbacks may pause; never run them while holding result retention.
+        let waker = context.waker().clone();
         let mut state = this
             .running
             .shared
@@ -249,9 +251,12 @@ impl Future for Wait<'_> {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         if let Some(outcome) = state.outcome.clone() {
-            if let Some(id) = this.registration.take() {
-                state.waiters.remove(&id);
-            }
+            let previous = this
+                .registration
+                .take()
+                .and_then(|id| state.waiters.remove(&id));
+            drop(state);
+            drop(previous);
             return Poll::Ready(outcome);
         }
         let id = *this.registration.get_or_insert_with(|| {
@@ -262,20 +267,24 @@ impl Future for Wait<'_> {
                 .expect("wait registration space exhausted");
             id
         });
-        state.waiters.insert(id, context.waker().clone());
+        let previous = state.waiters.insert(id, waker);
+        drop(state);
+        drop(previous);
         Poll::Pending
     }
 }
 impl Drop for Wait<'_> {
     fn drop(&mut self) {
         if let Some(id) = self.registration.take() {
-            self.running
+            let previous = self
+                .running
                 .shared
                 .state
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .waiters
                 .remove(&id);
+            drop(previous);
         }
     }
 }

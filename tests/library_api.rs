@@ -8,6 +8,18 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-205, EX-library-209]
+#[test]
+fn completion_during_wait_poll_registration_is_not_blocked_by_executor_waker_cloning() {
+    run_fixture("--self-test-wait-registration");
+}
+
+// @kotowari[REQ-library-205, REQ-library-302, EX-library-213]
+#[test]
+fn completion_during_event_poll_registration_retains_the_event_and_independent_result() {
+    run_fixture("--self-test-event-registration");
+}
+
 // @kotowari[REQ-library-304, REQ-library-401, REQ-library-404, EX-library-308, EX-library-401, EX-library-406]
 #[test]
 fn standalone_async_consumer_moves_pipe_ownership_and_reads_and_writes_nonblocking() {

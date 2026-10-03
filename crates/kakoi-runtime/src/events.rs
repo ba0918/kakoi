@@ -306,6 +306,8 @@ impl Future for Receive<'_> {
     type Output = EventRead;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<EventRead> {
         let this = self.get_mut();
+        // Keep executor callbacks outside the lock used by the event reader/reaper.
+        let waker = cx.waker().clone();
         let mut state = this
             .events
             .history
@@ -313,9 +315,12 @@ impl Future for Receive<'_> {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         if let Some(event) = read(&state, &mut this.events.cursor) {
-            if let Some(id) = this.registration.take() {
-                state.waiters.remove(&id);
-            }
+            let previous = this
+                .registration
+                .take()
+                .and_then(|id| state.waiters.remove(&id));
+            drop(state);
+            drop(previous);
             return Poll::Ready(event);
         }
         let id = *this.registration.get_or_insert_with(|| {
@@ -326,20 +331,24 @@ impl Future for Receive<'_> {
                 .expect("event registration space exhausted");
             id
         });
-        state.waiters.insert(id, cx.waker().clone());
+        let previous = state.waiters.insert(id, waker);
+        drop(state);
+        drop(previous);
         Poll::Pending
     }
 }
 impl Drop for Receive<'_> {
     fn drop(&mut self) {
         if let Some(id) = self.registration.take() {
-            self.events
+            let previous = self
+                .events
                 .history
                 .state
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .waiters
                 .remove(&id);
+            drop(previous);
         }
     }
 }

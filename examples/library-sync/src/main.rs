@@ -12,6 +12,7 @@ mod helper_checks;
 mod mount_checks;
 #[path = "../../../tests/fixtures/library-api/signal_state.rs"]
 mod signal_state;
+mod wait_checks;
 
 // A supported ELF initializer can run before main. The fixture deliberately
 // interrupts only the product-owned worker, never an unrelated process.
@@ -165,6 +166,12 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-api-inner" => self_test_api_inner(),
         Some(value) if value == "--self-test-wait-future" => self_test_wait_future(),
         Some(value) if value == "--self-test-events" => self_test_events(),
+        Some(value) if value == "--self-test-wait-registration" => {
+            wait_checks::registration_race(true)
+        }
+        Some(value) if value == "--self-test-event-registration" => {
+            wait_checks::registration_race(false)
+        }
         Some(value) if value == "--self-test-pty" => self_test_pty(),
         Some(value) if value == "--self-test" => self_test_standalone(),
         Some(value) if value == "--self-test-natural-stopping" => self_test_natural_stopping(),
