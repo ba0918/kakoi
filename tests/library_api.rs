@@ -6,6 +6,45 @@ mod common;
 mod retained_mounts;
 use common::{output_report, TempDir};
 
+// @kotowari[REQ-library-104]
+#[test]
+fn command_names_use_the_effective_path_while_bwrap_uses_the_host_path() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write_executable("workspace/requested-tools/tool", "#!/bin/sh\nexit 0\n");
+    dir.write_executable("workspace/policy-tools/tool", "#!/bin/sh\nexit 1\n");
+    dir.write_executable("workspace/prepended-tools/tool", "#!/bin/sh\nexit 2\n");
+    let output = Command::new(consumer())
+        .arg("--self-test-command-path")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-446]
+#[test]
+fn named_command_follows_the_guard_placed_on_the_isolated_path() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write_executable("workspace/requested-tools/tool", "#!/bin/sh\nexit 0\n");
+    dir.write_executable("workspace/policy-tools/tool", "#!/bin/sh\nexit 1\n");
+    let output = Command::new(consumer())
+        .arg("--self-test-command-guard-path")
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
 fn consumer() -> std::path::PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("target/library-sync-consumer");

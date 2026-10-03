@@ -49,6 +49,8 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-fds" => self_test_fds(),
         Some(value) if value == "--self-test-prepare-fault" => self_test_prepare_fault(),
         Some(value) if value == "--self-test-repeat" => self_test_repeat(),
+        Some(value) if value == "--self-test-command-path" => self_test_command_path(),
+        Some(value) if value == "--self-test-command-guard-path" => self_test_command_guard_path(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
@@ -211,6 +213,101 @@ fn null_request() -> RunRequest {
             stderr: Io::Null,
         },
     )
+}
+
+fn self_test_command_path() {
+    let before = HostContext::capture().unwrap();
+    let mut env = before.environment().clone();
+    let mut path = before.cwd().join("requested-tools").into_os_string();
+    path.push(":");
+    path.push(env.get(std::ffi::OsStr::new("PATH")).unwrap());
+    env.insert("PATH".into(), path);
+    let context = HostContext::new(before.cwd().into(), env).unwrap();
+    for prepend in [false, true] {
+        let extra = if prepend {
+            format!(
+                "path-prepend=[{:?}]\n",
+                before.cwd().join("prepended-tools").to_str().unwrap()
+            )
+        } else {
+            String::new()
+        };
+        let policy = Policy::from_toml(&format!(
+            "[network]\nmode='none'\n[env]\nmode='clear'\n{extra}[env.set]\nPATH={:?}\n",
+            before.cwd().join("policy-tools").to_str().unwrap(),
+        ))
+        .unwrap();
+        let prepared = prepare(RunRequest::new(
+            policy.clone(),
+            CommandSpec::new("tool".into()),
+            context.clone(),
+            StdioSpec {
+                stdin: Io::Null,
+                stdout: Io::Null,
+                stderr: Io::Null,
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            prepared.description().program,
+            before.cwd().join(if prepend {
+                "prepended-tools/tool"
+            } else {
+                "policy-tools/tool"
+            })
+        );
+        drop(prepared);
+        // Policy PATH cannot supply a host dependency missing from HostContext.
+        let mut missing = context.environment().clone();
+        missing.insert("PATH".into(), before.cwd().join("requested-tools").into());
+        let missing = HostContext::new(before.cwd().into(), missing).unwrap();
+        let failure = prepare(RunRequest::new(
+            policy,
+            CommandSpec::new("/bin/true".into()),
+            missing,
+            StdioSpec {
+                stdin: Io::Null,
+                stdout: Io::Null,
+                stderr: Io::Null,
+            },
+        ))
+        .unwrap_err();
+        assert_eq!(
+            failure.kind,
+            kakoi_runtime::ErrorKind::UnsupportedEnvironment
+        );
+    }
+    assert_eq!(HostContext::capture().unwrap(), before);
+}
+
+fn self_test_command_guard_path() {
+    let before = HostContext::capture().unwrap();
+    let mut env = before.environment().clone();
+    let mut path = before.cwd().join("requested-tools").into_os_string();
+    path.push(":");
+    path.push(env.get(std::ffi::OsStr::new("PATH")).unwrap());
+    env.insert("PATH".into(), path);
+    let context = HostContext::new(before.cwd().into(), env).unwrap();
+    let policy = Policy::from_toml(&format!(
+        "[network]\nmode='none'\n[env]\nmode='clear'\n[env.set]\nPATH={:?}\n[[commands.guard]]\nprogram='tool'\ndeny=[['blocked']]\nreason='guarded'\n",
+        before.cwd().join("policy-tools").to_str().unwrap(),
+    )).unwrap();
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("tool".into()),
+        context,
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    assert_eq!(prepared.description().guard_count, 1);
+    assert_eq!(
+        prepared.description().program,
+        PathBuf::from("/dev/kakoi-guard/bin/tool")
+    );
 }
 
 fn self_test_prepare_fault() {
