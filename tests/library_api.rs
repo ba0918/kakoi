@@ -284,6 +284,12 @@ fn owner_death_during_init_startup_does_not_leave_a_blocked_isolation() {
     }
 }
 
+// @kotowari[REQ-library-106]
+#[test]
+fn final_mount_checks_accept_intentional_hides_child_overlays_and_copies() {
+    run_fixture("--self-test-final-mounts");
+}
+
 fn run_fixture(argument: &str) {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");

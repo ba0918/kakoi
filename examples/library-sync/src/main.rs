@@ -8,6 +8,7 @@ use kakoi_runtime::{
     NetworkMode, Policy, RunRequest, StdioSpec,
 };
 
+mod mount_checks;
 #[path = "../../../tests/fixtures/library-api/signal_state.rs"]
 mod signal_state;
 
@@ -113,6 +114,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-shared-files" => self_test_shared_files(),
         Some(value) if value == "--self-test-live-device" => self_test_live_device(),
         Some(value) if value == "--self-test-raw-mounts" => self_test_raw_mounts(),
+        Some(value) if value == "--self-test-final-mounts" => mount_checks::final_mounts(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
