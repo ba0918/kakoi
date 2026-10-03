@@ -548,6 +548,16 @@ fn self_test_live_device() {
         .unwrap();
     assert_eq!(output, b"updated after prepare");
     assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    drop(running);
+    let running = prepare(RunRequest::new(
+        Policy::from_toml(&format!("[mounts]\nro=[{:?}]\n[network]\nmode='none'\n", context.cwd().join("device").to_str().unwrap())).unwrap(),
+        CommandSpec::new("/usr/bin/python3".into()).arg("-c".into()).arg(
+            "import os,stat,sys\np=sys.argv[1]\nassert stat.S_ISCHR(os.stat(p).st_mode)\nmounts=[s.split() for s in open('/proc/self/mountinfo')]\nassert any(m[4]==p and 'ro' in m[5].split(',') for m in mounts)".into(),
+        ).arg(context.cwd().join("device").into()),
+        context.clone(), StdioSpec { stdin: Io::Null, stdout: Io::Null, stderr: Io::Inherit },
+    )).unwrap().spawn().unwrap();
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    drop(running);
     // A private overmount after the worker's checks reproduces the dev-bind race.
     // The real bwrap still performs every mount; init must reject its changed result.
     let tools = context.cwd().join("racing-tools");
