@@ -356,6 +356,7 @@ pub(crate) fn run_worker(
     sources: Vec<SourceCheck>,
     stdio: [IoInput; 3],
     descriptors: Vec<OwnedFd>,
+    host: &std::collections::BTreeMap<OsString, OsString>,
     channels: Channels<'_>,
 ) -> Result<(), PrepareError> {
     let Channels {
@@ -363,19 +364,47 @@ pub(crate) fn run_worker(
         owner,
         result,
     } = channels;
-    if plan.policy.network_mode == crate::NetworkMode::Filtered {
-        let mut error = failure(
-            ErrorKind::UnsupportedEnvironment,
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "filtered supervision not yet connected",
-            ),
-            MainOutcome::NotStarted,
-        );
-        error.cleanup = Cleanup::Confirmed;
-        ipc::send(control, &Started::Failed(error), &[]).map_err(prepare_failure)?;
-        return Ok(());
+    // This dedicated worker owns only this run's helpers, not caller children.
+    if unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) } != 0 {
+        return Err(prepare_failure(io::Error::last_os_error()));
     }
+    let mut network = if plan.policy.network_mode == crate::NetworkMode::Filtered {
+        let prepared = kakoi_net::filtered::Tools::locate(host)
+            .map_err(kakoi_net::filtered::PreparationError::from)
+            .and_then(|tools| {
+                kakoi_net::filtered::check_publications(&plan.policy)?;
+                kakoi_net::filtered::prepare_session(&plan.policy, &tools)
+            });
+        match prepared {
+            Ok(session) => Some(session),
+            Err(cause) => {
+                let mut error = failure(
+                    if cause.resource_conflict {
+                        ErrorKind::ResourceConflict
+                    } else if cause.unsupported_environment {
+                        ErrorKind::UnsupportedEnvironment
+                    } else {
+                        ErrorKind::HelperFailure
+                    },
+                    io::Error::other(cause.diagnostic.to_string()),
+                    MainOutcome::NotStarted,
+                );
+                error.diagnostics[0].os_error = cause.os_error;
+                let mut diagnostics = Vec::new();
+                error.cleanup = if drain_network(&mut None, &mut diagnostics) {
+                    Cleanup::Confirmed
+                } else {
+                    Cleanup::Unconfirmed
+                };
+                error.diagnostics.extend(diagnostics);
+                error.phase = Phase::Execution;
+                ipc::send(control, &Started::Failed(error), &[]).map_err(prepare_failure)?;
+                return Ok(());
+            }
+        }
+    } else {
+        None
+    };
     let prepared = (|| -> io::Result<_> {
         for source in sources {
             if Identity::of_path(&source.path)
@@ -389,6 +418,48 @@ pub(crate) fn run_worker(
             }
         }
         plan.arguments = kakoi_linux::retained_mounts::settle_shared(&plan.arguments, &mut mounts)?;
+        let mut inherited_resolver = None;
+        if network.is_some() {
+            if let Some(target) = kakoi_linux::launch::network_resolver_target(&plan)
+                .map_err(|cause| io::Error::other(cause.to_string()))?
+            {
+                let index = plan
+                    .launch_layout
+                    .resolver_destination
+                    .ok_or_else(|| io::Error::other("missing managed resolver"))?;
+                plan.arguments[index] = Argument::Literal(target.into());
+            }
+            if plan.nested {
+                let index = plan
+                    .launch_layout
+                    .resolver_destination
+                    .ok_or_else(|| io::Error::other("missing managed resolver"))?;
+                if let (Argument::CopiedFile(content), Argument::Literal(path)) =
+                    (&plan.arguments[index - 1], &plan.arguments[index])
+                {
+                    let check = DataCheck {
+                        path: path.as_bytes().to_vec(),
+                        readonly: true,
+                    };
+                    let expected =
+                        kakoi_linux::launch::memory_file("kakoi-resolver", content.bytes())?;
+                    if verify_data(&check, expected).is_ok() {
+                        // An inherited read-only managed resolver already has the
+                        // required bytes. Overmounting bwrap's unlinked data file
+                        // cannot work on all supported versions; verify the same
+                        // final data below instead of changing its contents.
+                        inherited_resolver = Some((check, content.bytes().to_vec()));
+                        kakoi_linux::retained_mounts::remove_generated_arguments(
+                            &mut plan.arguments,
+                            &mut mounts,
+                            index - 2..index + 1,
+                        )?;
+                        plan.launch_layout.resolver_destination = None;
+                        shift_layout(&mut plan.launch_layout, index + 1, -3);
+                    }
+                }
+            }
+        }
         let checks = checks(&plan, &mounts)?;
         let command = plan.command.as_ref().unwrap();
         let mut request = InitRequest {
@@ -459,7 +530,16 @@ pub(crate) fn run_worker(
             });
             expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", bytes)?);
         }
-        let mut bwrap = kakoi_linux::launch::assemble_retained(&plan, &mounts)?;
+        if let Some((check, bytes)) = inherited_resolver {
+            request.data.push(check);
+            expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", &bytes)?);
+        }
+        let mut bwrap = match &network {
+            Some(session) => {
+                kakoi_net::application::prepare_retained(&plan, &mounts, session.namespace())?
+            }
+            None => kakoi_linux::launch::assemble_retained(&plan, &mounts)?,
+        };
         crate::preparation::remove_helper_environment(&mut bwrap.command);
         let (init_control, child_control) = UnixStream::pair()?;
         let fd = child_control.as_raw_fd();
@@ -520,7 +600,15 @@ pub(crate) fn run_worker(
                 ErrorKind::Io
             };
             let mut error = failure(kind, cause, MainOutcome::NotStarted);
-            error.cleanup = Cleanup::Confirmed;
+            let mut diagnostics = Vec::new();
+            let closed = close_network(&mut network, &mut diagnostics);
+            let drained = drain_network(&mut network, &mut diagnostics);
+            error.cleanup = if closed != NetworkCleanup::Unconfirmed && drained {
+                Cleanup::Confirmed
+            } else {
+                Cleanup::Unconfirmed
+            };
+            error.diagnostics.extend(diagnostics);
             ipc::send(control, &Started::Failed(error), &[]).map_err(prepare_failure)?;
             return Ok(());
         }
@@ -558,6 +646,8 @@ pub(crate) fn run_worker(
                 MainOutcome::Unknown,
             ),
         };
+        let mut diagnostics = Vec::new();
+        let closed = close_network(&mut network, &mut diagnostics);
         let _ = init_control.shutdown(std::net::Shutdown::Both);
         if !reported {
             let _ = child.0.kill();
@@ -565,7 +655,12 @@ pub(crate) fn run_worker(
         // A reported pre-release failure is followed by init's orderly descendant wait.
         // On an unreported failure, closing control starts its independent death path.
         let waited = child.0.wait();
-        error.cleanup = if matches!(waited, Ok(status) if status.success()) {
+        let drained = drain_network(&mut network, &mut diagnostics);
+        error.diagnostics.extend(diagnostics);
+        error.cleanup = if matches!(waited, Ok(status) if status.success())
+            && drained
+            && closed != NetworkCleanup::Unconfirmed
+        {
             Cleanup::Confirmed
         } else {
             Cleanup::Unconfirmed
@@ -576,8 +671,11 @@ pub(crate) fn run_worker(
     if let Err(cause) =
         ipc::send(control, &Started::Ready, &pipes).and_then(|()| ipc::send(control, &slots, &[]))
     {
+        let mut diagnostics = Vec::new();
+        close_network(&mut network, &mut diagnostics);
         let _ = init_control.shutdown(std::net::Shutdown::Both);
         let _ = child.0.wait();
+        drain_network(&mut network, &mut diagnostics);
         return Err(prepare_failure(cause));
     }
     drop(pipes);
@@ -586,14 +684,34 @@ pub(crate) fn run_worker(
     let mut owner_lost = false;
     let mut control_lost = false;
     let mut main = MainOutcome::Unknown;
+    let mut network_cleanup = NetworkCleanup::NotApplicable;
+    let mut network_diagnostics = Vec::new();
     let outcome = loop {
+        if !stopping {
+            if let Some(session) = &mut network {
+                if let Err(cause) = session.poll() {
+                    if session.state() == kakoi_net::session::SessionState::Unsafe {
+                        network_diagnostics.push(record(&cause));
+                        reason = ExitReason::InfrastructureFailure;
+                        stopping = true;
+                        network_cleanup = close_network(&mut network, &mut network_diagnostics);
+                        let _ = child.0.kill();
+                    }
+                }
+            }
+        }
         let init_ready = poll(&init_control, 20).map_err(prepare_failure)?;
         if !owner_lost && poll(owner, 0).map_err(prepare_failure)? {
             owner_lost = true;
             reason = strongest_reason(reason, ExitReason::OwnerLost);
             if !stopping {
                 stopping = true;
-                let _ = ipc::send(&init_control, &Control::Stop, &[]);
+                network_cleanup = close_network(&mut network, &mut network_diagnostics);
+                if network_cleanup == NetworkCleanup::Unconfirmed {
+                    let _ = child.0.kill();
+                } else {
+                    let _ = ipc::send(&init_control, &Control::Stop, &[]);
+                }
             }
         }
         if !control_lost && poll(control, 0).map_err(prepare_failure)? {
@@ -607,24 +725,38 @@ pub(crate) fn run_worker(
             reason = strongest_reason(reason, observed);
             if !stopping {
                 stopping = true;
-                let _ = ipc::send(&init_control, &Control::Stop, &[]);
+                network_cleanup = close_network(&mut network, &mut network_diagnostics);
+                if network_cleanup == NetworkCleanup::Unconfirmed {
+                    let _ = child.0.kill();
+                } else {
+                    let _ = ipc::send(&init_control, &Control::Stop, &[]);
+                }
             }
         }
         if init_ready {
             match ipc::recv::<InitReply>(&init_control) {
                 Ok((InitReply::Main(observed), fds)) if fds.is_empty() => {
                     main = observed;
-                    ipc::send(result, &crate::running::ResultUpdate::Main(main), &[])
-                        .map_err(prepare_failure)?;
-                    let (_, fds): ((), _) = ipc::recv(result).map_err(prepare_failure)?;
+                    stopping = true;
+                    let retained =
+                        ipc::send(result, &crate::running::ResultUpdate::Main(main), &[])
+                            .and_then(|()| ipc::recv::<()>(result));
+                    // Retain the observed main independently before a network
+                    // close can block or fail; init still waits for release.
+                    network_cleanup = close_network(&mut network, &mut network_diagnostics);
+                    let (_, fds) = retained.map_err(prepare_failure)?;
                     if !fds.is_empty() {
                         return Err(prepare_failure(io::Error::new(
                             io::ErrorKind::InvalidData,
                             "unexpected result acknowledgement descriptors",
                         )));
                     }
-                    ipc::send(&init_control, &Control::MainRetained, &[])
-                        .map_err(prepare_failure)?;
+                    if network_cleanup == NetworkCleanup::Unconfirmed {
+                        let _ = child.0.kill();
+                    } else {
+                        ipc::send(&init_control, &Control::MainRetained, &[])
+                            .map_err(prepare_failure)?;
+                    }
                 }
                 Ok((InitReply::Finished(mut outcome), fds)) if fds.is_empty() => {
                     outcome.reason = strongest_reason(reason, outcome.reason);
@@ -647,6 +779,19 @@ pub(crate) fn run_worker(
     };
     let waited = child.0.wait().map_err(prepare_failure)?;
     let mut outcome = outcome;
+    if network.is_some() {
+        if network_cleanup == NetworkCleanup::NotApplicable {
+            network_cleanup = close_network(&mut network, &mut network_diagnostics);
+        }
+        if !drain_network(&mut network, &mut network_diagnostics) {
+            outcome.processes = ProcessCleanup::Unconfirmed;
+        }
+    }
+    outcome.network = network_cleanup;
+    if !network_diagnostics.is_empty() {
+        outcome.reason = ExitReason::InfrastructureFailure;
+        outcome.diagnostics.extend(network_diagnostics);
+    }
     if !waited.success() {
         outcome.processes = ProcessCleanup::Unconfirmed;
         outcome.reason = ExitReason::InfrastructureFailure;
@@ -657,6 +802,63 @@ pub(crate) fn run_worker(
         &[],
     )
     .map_err(prepare_failure)
+}
+
+fn close_network(
+    network: &mut Option<kakoi_net::session::Session>,
+    diagnostics: &mut Vec<DiagnosticRecord>,
+) -> NetworkCleanup {
+    match network {
+        None => NetworkCleanup::NotApplicable,
+        Some(session) => match session.close_until(Instant::now() + Duration::from_secs(2)) {
+            Ok(()) => NetworkCleanup::ConfirmedBlocked,
+            Err(cause) => {
+                diagnostics.push(record(&cause));
+                NetworkCleanup::Unconfirmed
+            }
+        },
+    }
+}
+
+fn drain_network(
+    network: &mut Option<kakoi_net::session::Session>,
+    diagnostics: &mut Vec<DiagnosticRecord>,
+) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut drained = true;
+    if let Some(session) = network.as_mut() {
+        while !session.is_drained() && Instant::now() < deadline {
+            let _ = session.poll();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        drained = session.is_drained();
+    }
+    drop(network.take());
+    // Drop ends the existing helper owners; independently confirm that no child
+    // or adopted helper descendant remains before claiming process cleanup.
+    loop {
+        let mut status = 0;
+        let pid = unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) };
+        if pid > 0 {
+            continue;
+        }
+        let cause = io::Error::last_os_error();
+        if pid < 0 && cause.raw_os_error() == Some(libc::ECHILD) {
+            return drained;
+        }
+        if pid < 0 && cause.kind() != io::ErrorKind::Interrupted {
+            diagnostics.push(record(&cause));
+            return false;
+        }
+        if Instant::now() >= deadline {
+            diagnostics.push(record(&io::Error::new(
+                io::ErrorKind::TimedOut,
+                "network helper cleanup not confirmed",
+            )));
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn strongest_reason(current: ExitReason, observed: ExitReason) -> ExitReason {

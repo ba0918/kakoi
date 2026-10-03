@@ -65,7 +65,75 @@ pub fn start(
     init: &Path,
     stdout: Stdio,
 ) -> Result<(Session, Application), Diagnostic> {
-    let policy = &plan.policy;
+    let session = prepare_session(&plan.policy, tools).map_err(|error| error.diagnostic)?;
+    let application = Application::spawn(
+        plan,
+        session.namespace(),
+        init,
+        Duration::from_secs(plan.policy.shutdown_grace_seconds.into()),
+        stdout,
+    )?;
+    Ok((session, application))
+}
+
+/// Network setup failure with the OS cause retained for structured consumers.
+pub struct PreparationError {
+    pub diagnostic: Diagnostic,
+    pub os_error: Option<i32>,
+    pub resource_conflict: bool,
+    pub unsupported_environment: bool,
+}
+impl From<Diagnostic> for PreparationError {
+    fn from(diagnostic: Diagnostic) -> Self {
+        Self {
+            diagnostic,
+            os_error: None,
+            resource_conflict: false,
+            unsupported_environment: true,
+        }
+    }
+}
+fn preparation_failure(what: &str, error: std::io::Error) -> PreparationError {
+    PreparationError {
+        os_error: error.raw_os_error(),
+        resource_conflict: error.kind() == std::io::ErrorKind::AddrInUse,
+        unsupported_environment: error.kind() == std::io::ErrorKind::Unsupported,
+        diagnostic: failure(what, error),
+    }
+}
+
+/// Checks publication conflicts for a structured library start error. Pasta
+/// still owns the real bind; successful probing does not reserve a port.
+pub fn check_publications(policy: &Policy) -> Result<(), PreparationError> {
+    // The host-side publication boundary can report the OS bind failure directly,
+    // rather than classifying pasta's diagnostic prose as a resource conflict.
+    for publication in &policy.network_publish {
+        let address = match publication.family {
+            IpFamily::Ipv4 => {
+                std::net::SocketAddr::from(([127, 0, 0, 1], publication.host_port.get()))
+            }
+            IpFamily::Ipv6 => std::net::SocketAddr::from((
+                std::net::Ipv6Addr::LOCALHOST,
+                publication.host_port.get(),
+            )),
+        };
+        match publication.protocol {
+            kakoi_policy::network::Protocol::Tcp => {
+                std::net::TcpListener::bind(address)
+                    .map_err(|error| preparation_failure("bind publication", error))?;
+            }
+            kakoi_policy::network::Protocol::Udp => {
+                std::net::UdpSocket::bind(address)
+                    .map_err(|error| preparation_failure("bind publication", error))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Establishes and verifies communication independently of application launch.
+/// Both CLI and retained-descriptor library launches use this same controller.
+pub fn prepare_session(policy: &Policy, tools: &Tools) -> Result<Session, PreparationError> {
     let rules = filter_rules(&policy.network_allow)?;
     let (upstreams, following) = dns_upstreams(policy)?;
     let trust = if upstreams
@@ -74,7 +142,7 @@ pub fn start(
     {
         Some(
             TlsClient::from_host()
-                .map_err(|error| failure("load the host CA certificates", error))?,
+                .map_err(|error| preparation_failure("load the host CA certificates", error))?,
         )
     } else {
         None
@@ -89,7 +157,7 @@ pub fn start(
         // network namespace.
         scope: AddressContext {
             host_addresses: host::addresses()
-                .map_err(|error| failure("read the host's addresses", error))?,
+                .map_err(|error| preparation_failure("read the host's addresses", error))?,
             host_loopback_v4: Some(HOST_LOOPBACK_V4),
             host_loopback_v6: Some(HOST_LOOPBACK_V6),
             ..AddressContext::default()
@@ -104,27 +172,21 @@ pub fn start(
         PASTA_STARTUP,
     )
     .map_err(|error| match pasta::early_exit(&error) {
-        Some(deadline) => {
-            outdated(&tools.pasta, deadline).unwrap_or_else(|| failure("start pasta", error))
-        }
-        None => failure("start pasta", error),
+        Some(deadline) => match outdated(&tools.pasta, deadline) {
+            Some(diagnostic) => diagnostic.into(),
+            None => preparation_failure("start pasta", error),
+        },
+        None => preparation_failure("start pasta", error),
     })?;
     let mut session = Session::prepare(transport, config, &rules, |_| None)
-        .map_err(|error| failure("prepare the network policy", error))?;
+        .map_err(|error| preparation_failure("prepare the network policy", error))?;
     session
         .activate()
-        .map_err(|error| failure("activate the network", error))?;
+        .map_err(|error| preparation_failure("activate the network", error))?;
     for publication in &policy.network_publish {
         session.notice(&published(publication));
     }
-    let application = Application::spawn(
-        plan,
-        session.namespace(),
-        init,
-        Duration::from_secs(policy.shutdown_grace_seconds.into()),
-        stdout,
-    )?;
-    Ok((session, application))
+    Ok(session)
 }
 
 /// The diagnostic for a pasta that ended during its start because it is too

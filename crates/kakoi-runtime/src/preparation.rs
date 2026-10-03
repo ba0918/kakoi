@@ -895,6 +895,7 @@ fn prepare_worker(
                     sources,
                     input.stdio,
                     descriptors,
+                    context.environment(),
                     crate::execution::Channels {
                         control,
                         owner,

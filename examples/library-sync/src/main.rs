@@ -159,6 +159,10 @@ fn main() -> std::process::ExitCode {
         }
         Some(value) if value == "--self-test-denied-guard" => helper_checks::denied_guard(),
         Some(value) if value == "--self-test-data-batches" => helper_checks::data_batches(),
+        Some(value) if value == "--self-test-filtered" => self_test_filtered(),
+        Some(value) if value == "--self-test-filtered-owner" => self_test_filtered_owner(),
+        Some(value) if value == "--self-test-api-nested" => self_test_api_nested(),
+        Some(value) if value == "--self-test-api-inner" => self_test_api_inner(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
     std::process::ExitCode::SUCCESS
@@ -443,6 +447,350 @@ fn self_test_missing_features() {
     .spawn()
     .unwrap();
     assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+}
+
+fn self_test_api_nested() {
+    let cwd = std::env::current_dir().unwrap();
+    let network = if std::env::var_os("KAKOI_TEST_FILTERED_NESTED").is_some() {
+        "mode='filtered'\nallow-nested-filtered=true"
+    } else {
+        "mode='none'"
+    };
+    let policy = Policy::from_toml(&format!("[mounts]\nhide=[{:?}]\n[network]\n{network}\n[[commands.guard]]\nprogram='tool'\ndeny=[['forbidden']]\nreason='outer restriction'\n",cwd.join("secret").to_str().unwrap())).unwrap();
+    let running = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new(std::env::current_exe().unwrap().into())
+            .arg("--self-test-api-inner".into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Inherit,
+            stderr: Io::Inherit,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+}
+
+fn self_test_api_inner() {
+    use std::io::Read;
+    let context = HostContext::capture().unwrap();
+    let outer_ns = std::fs::read_link("/proc/self/ns/mnt").unwrap();
+    let inner_network = if std::env::var_os("KAKOI_TEST_FILTERED_NESTED").is_some() {
+        "host"
+    } else {
+        "none"
+    };
+    let policy = Policy::from_toml(&format!("[network]\nmode='{inner_network}'\n")).unwrap();
+    let mut running = prepare(RunRequest::new(
+        policy.clone(),
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("readlink /proc/self/ns/mnt; cat secret; tool forbidden".into()),
+        context.clone(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    let mut text = String::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_string(&mut text)
+        .unwrap();
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(126));
+    assert_ne!(text.trim(), outer_ns.to_str().unwrap());
+    assert_eq!(
+        text.lines().count(),
+        1,
+        "outer hidden secret became visible: {text}"
+    );
+    if inner_network == "host" {
+        let outer_net = std::fs::read_link("/proc/self/ns/net").unwrap();
+        let nested_filtered = Policy::from_toml("[network]\nmode='filtered'\n").unwrap();
+        let mut inner = prepare(RunRequest::new(
+            nested_filtered,
+            CommandSpec::new("/usr/bin/readlink".into()).arg("/proc/self/ns/net".into()),
+            context.clone(),
+            StdioSpec {
+                stdin: Io::Null,
+                stdout: Io::Pipe,
+                stderr: Io::Inherit,
+            },
+        ))
+        .unwrap()
+        .spawn()
+        .unwrap();
+        let mut net = String::new();
+        inner
+            .take_stdout()
+            .unwrap()
+            .read_to_string(&mut net)
+            .unwrap();
+        assert_ne!(net.trim(), outer_net.to_str().unwrap());
+        assert_eq!(inner.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+        assert_eq!(
+            inner.wait().network,
+            kakoi_runtime::NetworkCleanup::ConfirmedBlocked
+        );
+    }
+    let duplicate=Policy::from_toml("[network]\nmode='none'\n[[commands.guard]]\nprogram='tool'\ndeny=[['forbidden']]\nreason='duplicate'\n").unwrap();
+    assert!(prepare(RunRequest::new(
+        duplicate,
+        CommandSpec::new("/bin/true".into()),
+        context.clone(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null
+        }
+    ))
+    .is_err());
+    let mut env = context.environment().clone();
+    env.insert(
+        "PATH".into(),
+        format!(
+            "{}:{}",
+            context.cwd().join("failing").display(),
+            env.get(std::ffi::OsStr::new("PATH"))
+                .unwrap()
+                .to_str()
+                .unwrap()
+        )
+        .into(),
+    );
+    let prepared = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/bin/sh".into())
+            .arg("-c".into())
+            .arg("printf ran > escaped".into()),
+        HostContext::new(context.cwd().into(), env).unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Null,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap();
+    assert!(prepared.spawn().is_err());
+    assert!(!context.cwd().join("escaped").exists());
+}
+
+fn self_test_filtered_owner() {
+    use std::io::{BufRead, BufReader};
+    let policy = Policy::from_toml("[network]\nmode='filtered'\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nhost-port=23451\nport=23452\n").unwrap();
+    let script = "import socket\ns=socket.socket();s.bind(('0.0.0.0',23452));s.listen()\nprint('ready',flush=True)\nwhile True:\n c,_=s.accept();c.sendall(b'published');c.close()\n";
+    let mut running = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/usr/bin/python3".into())
+            .arg("-c".into())
+            .arg(script.into()),
+        HostContext::capture().unwrap(),
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Inherit,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    let mut line = String::new();
+    BufReader::new(running.take_stdout().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    assert_eq!(line.trim(), "ready");
+    println!("ready");
+    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+    line.clear();
+    std::io::stdin().read_line(&mut line).unwrap();
+    running.request_stop().unwrap();
+    let outcome = running.wait();
+    if std::env::var_os("KAKOI_TEST_CLOSURE_FAILURE").is_some() {
+        assert_eq!(outcome.network, kakoi_runtime::NetworkCleanup::Unconfirmed);
+        assert_eq!(
+            outcome.reason,
+            kakoi_runtime::ExitReason::InfrastructureFailure
+        );
+        assert_eq!(
+            outcome.processes,
+            kakoi_runtime::ProcessCleanup::Unconfirmed
+        );
+        assert!(!outcome.diagnostics.is_empty());
+    } else {
+        assert_eq!(
+            outcome.network,
+            kakoi_runtime::NetworkCleanup::ConfirmedBlocked
+        );
+        assert_eq!(
+            outcome.processes,
+            kakoi_runtime::ProcessCleanup::ConfirmedReaped
+        );
+    }
+}
+
+fn self_test_filtered() {
+    use std::io::{BufRead, BufReader, Read};
+    signal_state::install_application_state();
+    let before_signals = signal_state::Signals::capture();
+    let before_raw = signal_state::raw_state();
+    let context = HostContext::capture().unwrap();
+    let ambient_path = std::env::var_os("PATH").unwrap();
+    std::env::set_var("PATH", "/missing-ambient-tools");
+    let policy = Policy::from_toml("[network]\nmode='filtered'\n[[network.allow]]\ndestination={host-loopback='ipv4'}\nprotocol='tcp'\nports=['23450']\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nhost-port=23451\nport=23452\n").unwrap();
+    let script = r#"import socket,signal,time
+s=socket.create_connection(('169.254.1.2',23450),20)
+print(s.recv(64).decode(),flush=True)
+server=socket.socket();server.bind(('0.0.0.0',23452));server.listen()
+def term(*_):
+ import sys
+ sys.stdin.readline()
+ try:
+  probe=socket.create_connection(('169.254.1.2',23450),1)
+  raise AssertionError('network remains open during termination')
+ except OSError: pass
+ print('blocked',flush=True)
+ raise SystemExit(23)
+signal.signal(signal.SIGTERM,term)
+print('ready',flush=True)
+while True: time.sleep(60)
+"#;
+    let mut running = prepare(RunRequest::new(
+        policy,
+        CommandSpec::new("/usr/bin/python3".into())
+            .arg("-c".into())
+            .arg(script.into()),
+        context,
+        StdioSpec {
+            stdin: Io::Pipe,
+            stdout: Io::Pipe,
+            stderr: Io::Inherit,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    std::env::set_var("PATH", ambient_path);
+    let mut output = BufReader::new(running.take_stdout().unwrap());
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "permitted");
+    print!("{line}");
+    line.clear();
+    output.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "ready");
+    assert_eq!(
+        running.request_stop().unwrap(),
+        kakoi_runtime::StopReceipt::Queued
+    );
+    assert!(running.outcome().is_none());
+    std::io::Write::write_all(&mut running.take_stdin().unwrap(), b"finish\n").unwrap();
+    let outcome = running.wait();
+    assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(23));
+    assert_eq!(
+        outcome.network,
+        kakoi_runtime::NetworkCleanup::ConfirmedBlocked
+    );
+    assert_eq!(
+        outcome.processes,
+        kakoi_runtime::ProcessCleanup::ConfirmedReaped
+    );
+    let mut rest = String::new();
+    output.read_to_string(&mut rest).unwrap();
+    assert_eq!(rest.trim(), "blocked");
+    before_signals.assert_preserved();
+    signal_state::report(before_raw, before_signals.usable);
+    let launch = |published: bool, script: &str| {
+        let policy = Policy::from_toml(if published {
+            "[network]\nmode='filtered'\n[[network.publish]]\nmode='fixed'\nprotocol='tcp'\nhost-port=23451\nport=23452\n"
+        } else {"[network]\nmode='filtered'\n"}).unwrap();
+        prepare(RunRequest::new(
+            policy,
+            CommandSpec::new("/usr/bin/python3".into())
+                .arg("-c".into())
+                .arg(script.into()),
+            HostContext::capture().unwrap(),
+            StdioSpec {
+                stdin: Io::Pipe,
+                stdout: Io::Pipe,
+                stderr: Io::Inherit,
+            },
+        ))
+        .unwrap()
+        .spawn()
+    };
+    let mut first = launch(
+        true,
+        "import sys\nprint('ready',flush=True)\nprint(sys.stdin.readline(),flush=True)",
+    )
+    .unwrap();
+    let mut reader = BufReader::new(first.take_stdout().unwrap());
+    line.clear();
+    reader.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "ready");
+    let conflict = launch(true, "raise AssertionError('conflicting command ran')").unwrap_err();
+    assert_eq!(conflict.kind, kakoi_runtime::ErrorKind::ResourceConflict);
+    assert_eq!(conflict.diagnostics[0].os_error, Some(98));
+    assert_eq!(conflict.main, kakoi_runtime::MainOutcome::NotStarted);
+    let mut second = launch(
+        false,
+        "import sys\nprint('ready',flush=True)\nprint(sys.stdin.readline(),flush=True)",
+    )
+    .unwrap();
+    let mut second_reader = BufReader::new(second.take_stdout().unwrap());
+    line.clear();
+    second_reader.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "ready");
+    first.request_stop().unwrap();
+    assert_eq!(
+        first.wait().network,
+        kakoi_runtime::NetworkCleanup::ConfirmedBlocked
+    );
+    assert!(second.outcome().is_none());
+    use std::io::Write;
+    second
+        .take_stdin()
+        .unwrap()
+        .write_all(b"still-running\n")
+        .unwrap();
+    line.clear();
+    second_reader.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "still-running");
+    let natural = second.wait();
+    assert_eq!(natural.main, kakoi_runtime::MainOutcome::Exited(0));
+    assert_eq!(
+        natural.network,
+        kakoi_runtime::NetworkCleanup::ConfirmedBlocked
+    );
+    assert_eq!(
+        natural.processes,
+        kakoi_runtime::ProcessCleanup::ConfirmedReaped
+    );
+    let mut dropped = launch(
+        true,
+        "import sys\nprint('ready',flush=True)\nsys.stdin.read()",
+    )
+    .unwrap();
+    let mut dropped_reader = BufReader::new(dropped.take_stdout().unwrap());
+    line.clear();
+    dropped_reader.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "ready");
+    let handle = dropped.stop_handle();
+    drop(dropped);
+    let mut rest = String::new();
+    dropped_reader.read_to_string(&mut rest).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while handle.request_stop().unwrap() != kakoi_runtime::StopReceipt::AlreadyFinished {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
 }
 
 fn self_test_raw_mounts() {
@@ -965,7 +1313,12 @@ fn self_test_lifetime() {
     use kakoi_runtime::{ExitReason, ProcessCleanup, StopReceipt};
     use std::io::Read;
     use std::time::{Duration, Instant};
-    for mode in ["host", "none"] {
+    let modes: &[&str] = if std::env::var_os("KAKOI_TEST_FILTERED_SCENARIOS").is_some() {
+        &["filtered"]
+    } else {
+        &["host", "none"]
+    };
+    for mode in modes {
         let policy = Policy::from_toml(&format!(
             "[network]\nmode='{mode}'\n[process]\nshutdown-grace-seconds=1\n"
         ))

@@ -168,3 +168,27 @@ pub fn retain(arguments: &[Argument]) -> io::Result<Vec<RetainedMount>> {
     }
     Ok(mounts)
 }
+
+/// Remove a generated (non-retained) operation without reopening any source.
+pub fn remove_generated_arguments(
+    arguments: &mut Vec<Argument>,
+    mounts: &mut [RetainedMount],
+    range: std::ops::Range<usize>,
+) -> io::Result<()> {
+    if mounts
+        .iter()
+        .any(|mount| mount.argument_index < range.end && mount.argument_index + 3 > range.start)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cannot remove retained operation",
+        ));
+    }
+    for mount in mounts {
+        if mount.argument_index >= range.end {
+            mount.argument_index -= range.len();
+        }
+    }
+    arguments.drain(range);
+    Ok(())
+}

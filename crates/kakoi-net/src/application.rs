@@ -8,6 +8,21 @@ use kakoi_linux::{
 };
 use std::{os::fd::RawFd, time::Duration};
 
+/// Connects the library's descriptor-mounted init to the same network boundary
+/// as the CLI, without replacing its separately owned process supervisor.
+pub fn prepare_retained(
+    plan: &Plan,
+    mounts: &[kakoi_linux::retained_mounts::RetainedMount],
+    namespace: &NetworkNamespace,
+) -> std::io::Result<BwrapCommand> {
+    let mut bwrap =
+        launch::assemble_retained_network(plan, mounts, unsafe { libc::getuid() }, unsafe {
+            libc::getgid()
+        })?;
+    namespace.enter_before_exec(&mut bwrap.command)?;
+    Ok(bwrap)
+}
+
 /// The supervisor must install and verify network enforcement before spawning the
 /// returned command. This prepares the privilege boundary, not a network policy.
 pub fn prepare(plan: &Plan, namespace: &NetworkNamespace) -> Result<BwrapCommand, Diagnostic> {

@@ -96,6 +96,40 @@ pub fn assemble_retained(
             "filtered launch requires a prepared network session",
         ));
     }
+    assemble_retained_arguments(plan, mounts, &[])
+}
+
+/// Retained mount assembly for an already verified filtered executor. The
+/// executor must enter its prepared namespaces before exec, as for CLI launch.
+pub fn assemble_retained_network(
+    plan: &Plan,
+    mounts: &[crate::retained_mounts::RetainedMount],
+    uid: u32,
+    gid: u32,
+) -> io::Result<BwrapCommand> {
+    if plan.policy.network_mode != NetworkMode::Filtered {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "expected filtered plan",
+        ));
+    }
+    assemble_retained_arguments(
+        plan,
+        mounts,
+        &[
+            "--uid".into(),
+            uid.to_string().into(),
+            "--gid".into(),
+            gid.to_string().into(),
+        ],
+    )
+}
+
+fn assemble_retained_arguments(
+    plan: &Plan,
+    mounts: &[crate::retained_mounts::RetainedMount],
+    prefix: &[OsString],
+) -> io::Result<BwrapCommand> {
     let output = Command::new(&plan.bwrap)
         .arg("--help")
         .env_clear()
@@ -113,7 +147,7 @@ pub fn assemble_retained(
     crate::retained_mounts::recheck(mounts)?;
     let (arguments, descriptors) =
         crate::retained_mounts::descriptor_arguments(&plan.arguments, mounts)?;
-    assemble_with_owned_arguments(plan, &[], &arguments, descriptors)
+    assemble_with_owned_arguments(plan, prefix, &arguments, descriptors)
         .map_err(|cause| io::Error::other(cause.to_string()))
 }
 

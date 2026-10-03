@@ -2,6 +2,49 @@ use std::path::Path;
 use std::process::Command;
 
 mod common;
+#[allow(dead_code)]
+#[path = "kakoi_net/fake_host.rs"]
+mod fake_host;
+#[path = "library_api/filtered.rs"]
+mod filtered;
+
+// @kotowari[REQ-library-206, REQ-library-402, EX-library-211, EX-library-212]
+#[test]
+fn nested_api_creates_a_new_isolation_preserves_outer_guards_and_never_falls_back_to_exec() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir.write("workspace/secret", "outer secret");
+    dir.write_executable("workspace/tools/tool", "#!/bin/sh\nprintf unguarded\n");
+    let real = Command::new("/bin/sh")
+        .args(["-c", "command -v bwrap"])
+        .output()
+        .unwrap();
+    let real = String::from_utf8(real.stdout).unwrap();
+    dir.write_executable(
+        "workspace/failing/bwrap",
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = --help ]; then exec {} --help; fi\nexit 1\n",
+            real.trim()
+        ),
+    );
+    let output = Command::new(consumer())
+        .arg("--self-test-api-nested")
+        .env_clear()
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                dir.path().join("workspace/tools").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
 #[path = "library_api/retained_mounts.rs"]
 mod retained_mounts;
 use common::{output_report, TempDir};
