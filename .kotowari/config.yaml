@@ -6,6 +6,7 @@ tests:
   files:
     - "tests/*.rs"
     - "tests/**/*.rs"
+    - "crates/kakoi-runtime/src/**/*.rs"
   rust:
     attributes: []
     macros: []

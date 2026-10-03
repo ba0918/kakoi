@@ -164,6 +164,7 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-api-nested" => self_test_api_nested(),
         Some(value) if value == "--self-test-api-inner" => self_test_api_inner(),
         Some(value) if value == "--self-test-wait-future" => self_test_wait_future(),
+        Some(value) if value == "--self-test-events" => self_test_events(),
         Some(value) if value == "--self-test-natural-stopping" => self_test_natural_stopping(),
         _ => panic!("this example currently verifies input and preparation only"),
     }
@@ -493,6 +494,66 @@ while True: time.sleep(60)
     );
     running.take_stdin().unwrap().write_all(b"x").unwrap();
     assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(7));
+}
+
+fn self_test_events() {
+    use kakoi_runtime::{EventRead, RunEventKind};
+    use std::future::Future;
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+    use std::task::{Context, Wake, Waker};
+    struct Notify(std::sync::mpsc::Sender<()>);
+    impl Wake for Notify {
+        fn wake(self: Arc<Self>) {
+            let _ = self.0.send(());
+        }
+    }
+    let mut running = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut output = running.take_stdout().unwrap();
+    let mut input = running.take_stdin().unwrap();
+    let mut ready = [0; 5];
+    output.read_exact(&mut ready).unwrap();
+    let mut first = running.events();
+    let mut second = running.events();
+    let (notify, notified) = std::sync::mpsc::channel();
+    let waker = Waker::from(Arc::new(Notify(notify)));
+    let mut context = Context::from_waker(&waker);
+    let mut canceled = Box::pin(first.recv_async());
+    assert!(canceled.as_mut().poll(&mut context).is_pending());
+    drop(canceled);
+    assert!(running.outcome().is_none());
+    let mut canceled_after_wake = Box::pin(first.recv_async());
+    assert!(canceled_after_wake.as_mut().poll(&mut context).is_pending());
+    input.write_all(b"still running").unwrap();
+    drop(input);
+    notified
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    drop(canceled_after_wake);
+    let EventRead::Event(a) = first.recv() else {
+        panic!("cancellation consumed event")
+    };
+    let EventRead::Event(b) = second.recv() else {
+        panic!("second receiver lost event")
+    };
+    assert_eq!(a, b);
+    assert!(matches!(
+        a.kind,
+        RunEventKind::Status(kakoi_runtime::RunStatus::Stopping)
+    ));
+    let outcome = running.wait();
+    assert_eq!(outcome.main, kakoi_runtime::MainOutcome::Exited(0));
+    while !matches!(first.recv(), EventRead::Closed) {}
+    assert!(matches!(running.events().recv(), EventRead::Closed));
+    let running = prepare(cat_request()).unwrap().spawn().unwrap();
+    let mut events = running.events();
+    let stop = running.stop_handle();
+    drop(running);
+    while !matches!(events.recv(), EventRead::Closed) {}
+    assert!(matches!(
+        stop.request_stop().unwrap(),
+        kakoi_runtime::StopReceipt::AlreadyFinished
+    ));
 }
 
 fn self_test_wait_future() {

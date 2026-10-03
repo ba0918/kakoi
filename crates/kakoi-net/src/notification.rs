@@ -92,6 +92,9 @@ impl Notifications {
         }
     }
     pub fn pop(&mut self) -> Option<Arc<str>> {
+        self.pop_with_loss().map(|(line, _)| line)
+    }
+    pub fn pop_with_loss(&mut self) -> Option<(Arc<str>, u64)> {
         if self.omitted != 0 {
             // Summarize the backlog as well: showing old state changes after the
             // latest state would misleadingly appear to reverse the recovery.
@@ -108,14 +111,15 @@ impl Notifications {
                 ),
                 None => bounded_line(&format!("kakoi: {omitted} notifications omitted"), ""),
             };
+            let lost = self.omitted.saturating_add(self.queue.len() as u64);
             self.queue.clear();
             self.bytes = 0;
             self.omitted = 0;
-            return Some(summary.into());
+            return Some((summary.into(), lost));
         }
         let line = self.queue.pop_front()?;
         self.bytes -= line.len();
-        Some(line)
+        Some((line, 0))
     }
 }
 

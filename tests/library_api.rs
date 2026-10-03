@@ -8,6 +8,12 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
+// @kotowari[REQ-library-205, REQ-library-302, EX-library-210, EX-library-213, EX-library-304]
+#[test]
+fn event_wait_cancellation_preserves_unread_events_and_receivers_are_independent() {
+    run_fixture("--self-test-events");
+}
+
 // @kotowari[REQ-library-205, EX-library-209, EX-library-210]
 #[test]
 fn wait_futures_cancel_without_stopping_and_share_the_retained_sync_result() {

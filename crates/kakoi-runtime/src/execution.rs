@@ -348,6 +348,7 @@ pub(crate) struct Channels<'a> {
     pub control: &'a UnixStream,
     pub owner: &'a UnixStream,
     pub result: &'a UnixStream,
+    pub events: std::os::unix::net::UnixDatagram,
 }
 
 pub(crate) fn run_worker(
@@ -363,7 +364,9 @@ pub(crate) fn run_worker(
         control,
         owner,
         result,
+        events,
     } = channels;
+    let mut events = crate::events::Sender::new(events).map_err(prepare_failure)?;
     // This dedicated worker owns only this run's helpers, not caller children.
     if unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) } != 0 {
         return Err(prepare_failure(io::Error::last_os_error()));
@@ -679,6 +682,7 @@ pub(crate) fn run_worker(
         return Err(prepare_failure(cause));
     }
     drop(pipes);
+    events.emit(crate::RunEventKind::Status(crate::RunStatus::Running));
     let mut reason = ExitReason::Completed;
     let mut stopping = false;
     let mut owner_lost = false;
@@ -687,6 +691,7 @@ pub(crate) fn run_worker(
     let mut network_cleanup = NetworkCleanup::NotApplicable;
     let mut network_diagnostics = Vec::new();
     let outcome = loop {
+        events.flush();
         if !stopping {
             if let Some(session) = &mut network {
                 if let Err(cause) = session.poll() {
@@ -694,10 +699,20 @@ pub(crate) fn run_worker(
                         network_diagnostics.push(record(&cause));
                         reason = ExitReason::InfrastructureFailure;
                         stopping = true;
+                        events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
                         network_cleanup = close_network(&mut network, &mut network_diagnostics);
                         let _ = child.0.kill();
                     }
                 }
+            }
+        }
+        if let Some(session) = &mut network {
+            while let Some((detail, missed)) = session.take_notification_with_loss() {
+                events.next = events.next.saturating_add(missed);
+                events.emit(crate::RunEventKind::Network {
+                    detail: detail.to_string(),
+                    truncated: false,
+                });
             }
         }
         let init_ready = poll(&init_control, 20).map_err(prepare_failure)?;
@@ -706,6 +721,7 @@ pub(crate) fn run_worker(
             reason = strongest_reason(reason, ExitReason::OwnerLost);
             if !stopping {
                 stopping = true;
+                events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
                 network_cleanup = close_network(&mut network, &mut network_diagnostics);
                 if network_cleanup == NetworkCleanup::Unconfirmed {
                     let _ = child.0.kill();
@@ -725,6 +741,7 @@ pub(crate) fn run_worker(
             reason = strongest_reason(reason, observed);
             if !stopping {
                 stopping = true;
+                events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
                 network_cleanup = close_network(&mut network, &mut network_diagnostics);
                 if network_cleanup == NetworkCleanup::Unconfirmed {
                     let _ = child.0.kill();
@@ -738,6 +755,7 @@ pub(crate) fn run_worker(
                 Ok((InitReply::Main(observed), fds)) if fds.is_empty() => {
                     main = observed;
                     stopping = true;
+                    events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
                     let retained =
                         ipc::send(result, &crate::running::ResultUpdate::Main(main), &[])
                             .and_then(|()| ipc::recv::<()>(result));
@@ -796,9 +814,10 @@ pub(crate) fn run_worker(
         outcome.processes = ProcessCleanup::Unconfirmed;
         outcome.reason = ExitReason::InfrastructureFailure;
     }
+    events.emit(crate::RunEventKind::Status(crate::RunStatus::Finished));
     ipc::send(
         result,
-        &crate::running::ResultUpdate::Finished(outcome),
+        &crate::running::ResultUpdate::Finished(outcome, events.next),
         &[],
     )
     .map_err(prepare_failure)

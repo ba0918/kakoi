@@ -6,7 +6,7 @@ use std::fmt;
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{UnixDatagram, UnixStream};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitCode};
@@ -19,6 +19,7 @@ use crate::{ipc, wire_policy, HostContext, Io, ListMode, NetworkMode, RunRequest
 const WORKER: &str = "KAKOI_RUNTIME_WORKER_FD";
 const OWNER: &str = "KAKOI_RUNTIME_OWNER_FD";
 const RESULT: &str = "KAKOI_RUNTIME_RESULT_FD";
+const EVENTS: &str = "KAKOI_RUNTIME_EVENTS_FD";
 const VERSION: u32 = 1;
 
 pub(crate) fn remove_helper_environment(command: &mut Command) {
@@ -26,6 +27,7 @@ pub(crate) fn remove_helper_environment(command: &mut Command) {
         WORKER,
         OWNER,
         RESULT,
+        EVENTS,
         "KAKOI_RUNTIME_INIT_FD",
         crate::helper_image::PROBE,
     ] {
@@ -485,14 +487,21 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
         UnixStream::pair().map_err(|cause| io_error(Phase::Worker, cause))?;
     let (result_channel, child_result) =
         UnixStream::pair().map_err(|cause| io_error(Phase::Worker, cause))?;
+    let (event_channel, child_events) =
+        UnixDatagram::pair().map_err(|cause| io_error(Phase::Worker, cause))?;
+    event_channel
+        .set_read_timeout(Some(std::time::Duration::from_millis(20)))
+        .map_err(|cause| io_error(Phase::Worker, cause))?;
     let control_fd = child_control.as_raw_fd();
     let owner_fd = child_owner.as_raw_fd();
     let result_fd = child_result.as_raw_fd();
+    let event_fd = child_events.as_raw_fd();
     let mut command = Command::new("/proc/self/exe");
     command
         .env(WORKER, control_fd.to_string())
         .env(OWNER, owner_fd.to_string())
-        .env(RESULT, result_fd.to_string());
+        .env(RESULT, result_fd.to_string())
+        .env(EVENTS, event_fd.to_string());
     command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -500,7 +509,7 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     // SAFETY: only async-signal-safe fcntl calls occur in the child before exec.
     unsafe {
         command.pre_exec(move || {
-            kakoi_linux::launch::inherit_only(&[control_fd, owner_fd, result_fd])
+            kakoi_linux::launch::inherit_only(&[control_fd, owner_fd, result_fd, event_fd])
         });
     }
     let mut child = ChildOwner(Some(
@@ -511,6 +520,7 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     drop(child_control);
     drop(child_owner);
     drop(child_result);
+    drop(child_events);
     let result = (|| {
         let (hello, fds): (Hello, _) =
             ipc::recv(&control).map_err(|cause| io_error(Phase::Worker, cause))?;
@@ -560,7 +570,42 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     if let Err(cause) = std::thread::Builder::new()
         .name("kakoi-reaper".into())
         .spawn(move || {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            let done = Arc::new(AtomicBool::new(false));
+            let event_done = done.clone();
+            let history = result_state.events.clone();
+            let event_reader = std::thread::Builder::new()
+                .name("kakoi-events".into())
+                .spawn(move || {
+                    let mut buffer = [0; crate::events::MAX_EVENT + 1];
+                    loop {
+                        if event_done.load(Ordering::Acquire) {
+                            let _ = event_channel.set_nonblocking(true);
+                        }
+                        match event_channel.recv(&mut buffer) {
+                            Ok(size) if size <= crate::events::MAX_EVENT => {
+                                if let Ok(event) = serde_json::from_slice(&buffer[..size]) {
+                                    history.push(event, size);
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(cause) if cause.kind() == io::ErrorKind::Interrupted => continue,
+                            Err(cause)
+                                if matches!(
+                                    cause.kind(),
+                                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                                ) =>
+                            {
+                                if event_done.load(Ordering::Acquire) {
+                                    break;
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                });
             let mut main = crate::MainOutcome::Unknown;
+            let mut event_count = None;
             let received = loop {
                 match ipc::recv::<crate::running::ResultUpdate>(&result_channel) {
                     Ok((crate::running::ResultUpdate::Main(observed), fds)) if fds.is_empty() => {
@@ -573,9 +618,10 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
                             break Err(cause);
                         }
                     }
-                    Ok((crate::running::ResultUpdate::Finished(outcome), fds))
+                    Ok((crate::running::ResultUpdate::Finished(outcome, next), fds))
                         if fds.is_empty() =>
                     {
+                        event_count = Some(next);
                         break Ok(outcome);
                     }
                     Ok(_) => {
@@ -593,6 +639,8 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take();
+            done.store(true, Ordering::Release);
+            let events_ok = event_reader.is_ok_and(|reader| reader.join().is_ok());
             let mut owner = reaper.lock().unwrap_or_else(|error| error.into_inner());
             let waited = owner.0.as_mut().map(Child::wait);
             owner.0 = None;
@@ -625,12 +673,20 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
                         .and_then(io::Error::raw_os_error),
                 });
             }
+            if !events_ok {
+                outcome.reason = crate::ExitReason::InfrastructureFailure;
+                outcome.diagnostics.push(DiagnosticRecord {
+                    detail: "event receiver unavailable".into(),
+                    os_error: None,
+                });
+            }
             result_state
                 .state
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .worker_reaped = matches!(waited, Some(Ok(_)));
             result_state.finish(outcome);
+            result_state.events.close(event_count);
         })
     {
         let mut error = io_error(Phase::Worker, cause);
@@ -699,13 +755,20 @@ pub fn dispatch_helper() -> Result<Dispatch, DispatchError> {
     if std::env::var_os(WORKER).is_none()
         && std::env::var_os(OWNER).is_none()
         && std::env::var_os(RESULT).is_none()
+        && std::env::var_os(EVENTS).is_none()
     {
         return Ok(Dispatch::Application);
     }
     let control_fd = descriptor_number(WORKER)?;
     let owner_fd = descriptor_number(OWNER)?;
     let result_fd = descriptor_number(RESULT)?;
-    if control_fd == owner_fd || result_fd == control_fd || result_fd == owner_fd {
+    let event_fd = descriptor_number(EVENTS)?;
+    let channel_fds = [control_fd, owner_fd, result_fd, event_fd];
+    if channel_fds
+        .iter()
+        .enumerate()
+        .any(|(i, fd)| channel_fds[..i].contains(fd))
+    {
         return Err(error(
             Phase::Worker,
             ErrorKind::Protocol,
@@ -715,12 +778,38 @@ pub fn dispatch_helper() -> Result<Dispatch, DispatchError> {
     let control = inherited_socket(control_fd)?;
     let owner = inherited_socket(owner_fd)?;
     let result_channel = inherited_socket(result_fd)?;
+    let mut ty: libc::c_int = 0;
+    let mut size = std::mem::size_of_val(&ty) as libc::socklen_t;
+    // SAFETY: getsockopt writes into the initialized type and size only.
+    if unsafe {
+        libc::getsockopt(
+            event_fd,
+            libc::SOL_SOCKET,
+            libc::SO_TYPE,
+            (&mut ty as *mut libc::c_int).cast(),
+            &mut size,
+        )
+    } < 0
+        || ty != libc::SOCK_DGRAM
+    {
+        return Err(error(
+            Phase::Worker,
+            ErrorKind::Protocol,
+            "invalid event descriptor",
+        ));
+    }
+    // SAFETY: the validated, distinct descriptor is inherited exclusively by this worker.
+    let event_channel = unsafe { UnixDatagram::from_raw_fd(event_fd) };
+    unsafe {
+        libc::fcntl(event_fd, libc::F_SETFD, libc::FD_CLOEXEC);
+    }
     std::env::remove_var(WORKER);
     std::env::remove_var(OWNER);
     std::env::remove_var(RESULT);
+    std::env::remove_var(EVENTS);
     ipc::send(&control, &Hello { version: VERSION }, &[])
         .map_err(|cause| io_error(Phase::Worker, cause))?;
-    let result = prepare_worker(&control, &owner, &result_channel);
+    let result = prepare_worker(&control, &owner, &result_channel, event_channel);
     match result {
         Ok(()) => Ok(Dispatch::Completed(ExitCode::SUCCESS)),
         Err(error) => {
@@ -734,6 +823,7 @@ fn prepare_worker(
     control: &UnixStream,
     owner: &UnixStream,
     result_channel: &UnixStream,
+    event_channel: UnixDatagram,
 ) -> Result<(), PrepareError> {
     let (input, descriptors): (RequestInput, _) =
         ipc::recv(control).map_err(|cause| io_error(Phase::Worker, cause))?;
@@ -904,6 +994,7 @@ fn prepare_worker(
                         control,
                         owner,
                         result: result_channel,
+                        events: event_channel,
                     },
                 );
             }

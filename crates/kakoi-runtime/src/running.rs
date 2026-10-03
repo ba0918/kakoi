@@ -58,7 +58,7 @@ impl std::fmt::Display for StartError {
     }
 }
 impl std::error::Error for StartError {}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RunStatus {
     Starting,
     Running,
@@ -93,7 +93,7 @@ pub(crate) enum Started {
 #[derive(Serialize, Deserialize)]
 pub(crate) enum ResultUpdate {
     Main(MainOutcome),
-    Finished(RunOutcome),
+    Finished(RunOutcome, u64),
 }
 pub(crate) struct State {
     pub status: RunStatus,
@@ -104,6 +104,7 @@ pub(crate) struct State {
     next_waiter: u64,
 }
 pub(crate) struct Shared {
+    pub events: Arc<crate::events::EventHistory>,
     pub state: Mutex<State>,
     pub changed: Condvar,
     pub control: Mutex<Option<UnixStream>>,
@@ -111,6 +112,7 @@ pub(crate) struct Shared {
 impl Shared {
     pub fn new(control: UnixStream) -> Self {
         Self {
+            events: Arc::default(),
             state: Mutex::new(State {
                 status: RunStatus::Starting,
                 outcome: None,
@@ -193,6 +195,9 @@ impl Running {
         StopHandle {
             shared: self.shared.clone(),
         }
+    }
+    pub fn events(&self) -> crate::Events {
+        self.shared.events.receiver()
     }
     pub fn wait(&self) -> Arc<RunOutcome> {
         let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());

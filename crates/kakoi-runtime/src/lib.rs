@@ -16,12 +16,14 @@ pub mod planning;
 pub mod config;
 mod input;
 pub use input::{HostContext, InputError};
+mod events;
 mod execution;
 mod helper_image;
 mod ipc;
 mod preparation;
 mod request;
 mod running;
+pub use events::{EventRead, Events, RunEvent, RunEventKind};
 pub use running::{
     ControlError, ExitReason, MainOutcome, NetworkCleanup, PipeReader, PipeWriter, ProcessCleanup,
     RunOutcome, RunStatus, Running, StartError, StopHandle, StopReceipt,

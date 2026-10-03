@@ -102,6 +102,9 @@ impl Session {
     pub fn take_notification(&mut self) -> Option<Arc<str>> {
         self.notifications.pop()
     }
+    pub fn take_notification_with_loss(&mut self) -> Option<(Arc<str>, u64)> {
+        self.notifications.pop_with_loss()
+    }
 
     /// Queues an event of the environment that is not a network state change.
     pub fn notice(&mut self, text: &str) {
