@@ -14,6 +14,34 @@ guides:
   files:
     - "docs/guide/*.md"
     - "docs/guide/**/*.md"
+changes:
+  files:
+    - "src/**"
+    - "crates/**"
+    - "tests/**"
+    - "examples/**"
+    - "skills/**"
+    - "tools/**"
+    - "Cargo.toml"
+    - "Cargo.lock"
+    - "build.rs"
+    - "rust-toolchain*"
+    - ".cargo/**"
+    - "lefthook.yml"
+    - ".claude/hooks/**"
+    - ".claude/settings.json"
+    - ".github/**"
+    - "AGENTS.md"
+    - "PROJECT.md"
+    - ".gitignore"
+    - ".ignore"
+  exclude:
+    - "target/**"
+    - "**/target/**"
+    - "**/__pycache__/**"
+    - "**/*.pyc"
+  records:
+    - ".kotowari/changes/*.yaml"
 limits:
   lines: 200
   requirements: 10

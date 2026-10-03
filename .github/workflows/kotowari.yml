@@ -1,0 +1,46 @@
+name: Kotowari
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  changes:
+    name: Specification and change review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the actual PR head with history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install verified kotowari
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/kotowari.tar.gz" https://github.com/ba0918/kotowari/releases/download/kotowari-v0.3.0/kotowari-v0.3.0-x86_64-unknown-linux-gnu.tar.gz
+          echo "e1075253b380ae8978a01eb17dcd4f4a6704a0574a813a93f8063c1033e1dc4d  $RUNNER_TEMP/kotowari.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/kotowari-bin"
+          tar -xzf "$RUNNER_TEMP/kotowari.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/kotowari-bin"
+          echo "$RUNNER_TEMP/kotowari-bin" >> "$GITHUB_PATH"
+
+      - name: Check the specification and the full PR comparison
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "$PR_BASE" "$PR_HEAD"
+          base=$(git merge-base "$PR_BASE" "$PR_HEAD")
+          kotowari check --format json
+          kotowari changes --base "$base" --head "$PR_HEAD" --phase review --format json

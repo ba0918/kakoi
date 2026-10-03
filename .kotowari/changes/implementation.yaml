@@ -1,0 +1,38 @@
+version: 1
+entries:
+- id: kotowari-changes-implementation
+  base: fae252ab6ea2cba95c5b17000d8ebf8ec970b8ab
+  role: implementer
+  files:
+  - path: .github/dependabot.yml
+    before: null
+    after: sha256:561bce6913434121e3d20403d6804692970319410e814f3992bfaa1a7b36cd4e
+  - path: .github/workflows/kotowari.yml
+    before: null
+    after: sha256:e01b6858b2b99137f4b6d28bfda0256d1d01dd35d63ac20e8be34ef84e5230d8
+  - path: .ignore
+    before: null
+    after: sha256:e2420745344351c45459e0c8a056fd60e9d86897a4ab61794d6f22565f0c8d7b
+  - path: PROJECT.md
+    before: sha256:cd41536cf7f2cafee88739b1d23b3eed4a25fad986882c2a20763906e7f5624d
+    after: sha256:35d6f99bd710d3e4a25ae5f4c01afad304e6e43e24c2b81749398b6e0f57a8ce
+  ir:
+  - path: docs/ir/change-review.md
+    sha256: sha256:ff3b1a84ceb3b29dc4a42e389834819070340ee115afb52c1d18b8ab855a7d00
+  conclusion: new
+  reason: >-
+    利用者の変更照合の導入依頼に対し、呼出し側が委譲した設定、ローカル検証、CI、運用指示の範囲で実装担当がA1からA4を採用した。
+    hookへのchanges追加を避け、固定名の両役記録と独立レビューを用いる選択はkotowariスキルのchanges参照に基づく。
+    生成物を除く対象設定、明示的なローカル比較元とPR実headの最終ゲートを導入し、既存push CIと製品の既存要求は変更しない。
+    D1の役割分担とこの段階のコミット、push、公開の除外は呼出し側の委譲条件である。
+  requirements:
+  - REQ-1000
+  - REQ-1001
+  decisions:
+  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A1
+  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A2
+  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A3
+  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#A4
+  - docs/decision/brainstorm/2026-10-03-kotowari-changes.md#D1
+  handoff: null
+  gaps: []
