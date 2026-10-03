@@ -127,6 +127,12 @@ Scenario: 組み込みでもガードを適用する
   When ガードが禁止する引数でコマンドを実行する
   Then ライブラリ利用を理由にガードを省略しない
 
+@id=EX-library-419 @about=REQ-library-402 @source=docs/decision/brainstorm/2026-10-03-library-device-nodev.md#A1
+Scenario: ポリシーが示すデバイスはCLIと同じく開けない
+  Given ポリシーのroまたはrw-fileが文字デバイスを示す
+  When 組み込みAPIで計画し起動する
+  Then 隔離内でそのデバイスは見えるが、読み込みでも書込みでも開けない
+
 @id=EX-library-405 @about=REQ-library-403 @source=docs/decision/brainstorm/2026-10-03-public-library-api.md#A7
 Scenario: 単一バイナリから補助処理を起動する
   Given 利用側のmainの先頭が公式の振り分け関数を呼ぶ
