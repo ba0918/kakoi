@@ -1,5 +1,5 @@
 //! Network execution for kakoi, usable by Rust callers independently of the CLI.
-//! Configuration validation and planning belong to `kakoi-core`.
+//! Configuration validation belongs to `kakoi-policy`, and pure planning to `kakoi-plan`.
 
 pub mod application;
 mod child_output;
