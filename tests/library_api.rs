@@ -12,7 +12,7 @@ fn consumer_itself_is_subject_to_its_requested_guard() {
     run_fixture("--self-test-own-guard");
 }
 
-// @kotowari[REQ-library-408, REQ-library-409, REQ-475, EX-library-412, EX-library-416]
+// @kotowari[REQ-library-408, REQ-library-409, REQ-449, REQ-475, EX-library-412, EX-library-416]
 #[test]
 fn listed_allows_each_copied_guard_but_not_the_original_consumer() {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));

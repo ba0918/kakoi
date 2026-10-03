@@ -34,8 +34,8 @@ pub fn own_guard() {
 
 pub fn listed_copies() {
     let cwd = std::env::current_dir().unwrap();
-    let policy = format!("[mounts]\nhide=[{:?}]\n[network]\nmode='none'\n[env.set]\nPATH={:?}\n[commands]\nmode='listed'\nallow=['/usr/bin/python3','/bin/sh',{:?}]\n[[commands.guard]]\nprogram='tool'\ndeny=[['blocked']]\nreason='blocked'\n[[commands.guard]]\nprogram='tool2'\ndeny=[['blocked']]\nreason='blocked'\n",cwd.join("secret").to_str().unwrap(), cwd.join("tools").to_str().unwrap(), cwd.join("tools").to_str().unwrap());
-    let code = "import os,subprocess; a=os.stat('/dev/kakoi-guard/bin/tool'); b=os.stat('/dev/kakoi-guard/bin/tool2'); assert (a.st_dev,a.st_ino)!=(b.st_dev,b.st_ino); assert subprocess.call(['tool'])==7; assert subprocess.call(['tool2'])==8; assert subprocess.call(['tool','blocked'])==126; print('copies passed')";
+    let policy = format!("[mounts]\nhide=[{:?}]\n[network]\nmode='none'\n[env.set]\nPATH={:?}\n[commands]\nmode='listed'\nallow=['/usr/bin/python3','/bin/sh',{:?}]\n[[commands.guard]]\nprogram='tool'\nguard-absolute-path=true\ndeny=[['blocked']]\nreason='blocked'\n[[commands.guard]]\nprogram='tool2'\ndeny=[['blocked']]\nreason='blocked'\n",cwd.join("secret").to_str().unwrap(), cwd.join("tools").to_str().unwrap(), cwd.join("tools").to_str().unwrap());
+    let code = "import os,subprocess; a=os.stat('/dev/kakoi-guard/bin/tool'); b=os.stat('/dev/kakoi-guard/bin/tool2'); c=os.stat(os.getcwd()+'/tools/tool'); assert len({(a.st_dev,a.st_ino),(b.st_dev,b.st_ino),(c.st_dev,c.st_ino)})==3; assert subprocess.call(['tool'])==7; assert subprocess.call(['tool2'])==8; assert subprocess.call(['tool','blocked'])==126; assert subprocess.call([os.getcwd()+'/tools/tool'])==7; assert subprocess.call([os.getcwd()+'/tools/tool','blocked'])==126; print('copies passed')";
     let mut run = prepare(request(&policy, "/usr/bin/python3", &["-c", code]))
         .unwrap()
         .spawn()
