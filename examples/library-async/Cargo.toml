@@ -1,0 +1,13 @@
+[package]
+name = "kakoi-library-async-example"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[workspace]
+
+[dependencies]
+kakoi-runtime = { path = "../../crates/kakoi-runtime" }
+tokio = { version = "=1.48.0", features = ["rt", "net", "macros"] }
+libc = "=0.2.189"

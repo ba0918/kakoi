@@ -8,7 +8,69 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
-// @kotowari[REQ-library-205, REQ-library-302, EX-library-210, EX-library-213, EX-library-304]
+// @kotowari[REQ-library-304, REQ-library-401, REQ-library-404, EX-library-308, EX-library-401, EX-library-406]
+#[test]
+fn standalone_async_consumer_moves_pipe_ownership_and_reads_and_writes_nonblocking() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let target = root.join("target/library-async-consumer");
+    let mut build = Command::new(env!("CARGO"));
+    if cfg!(target_env = "musl") {
+        build.args(["--config", "build.target='x86_64-unknown-linux-musl'"]);
+    }
+    let output = build
+        .args(["build", "--locked", "--manifest-path"])
+        .arg(root.join("examples/library-async/Cargo.toml"))
+        .env("CARGO_TARGET_DIR", &target)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+    let target = if cfg!(target_env = "musl") {
+        target.join("x86_64-unknown-linux-musl")
+    } else {
+        target
+    };
+    let output = Command::new(target.join("debug/kakoi-library-async-example"))
+        .arg("--self-test")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-library-303, REQ-library-304, EX-library-306, EX-library-309]
+#[test]
+fn caller_created_terminal_descriptors_and_inheritance_remain_terminals() {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("home/.keep", "");
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let script = r#"
+import os, subprocess, sys, termios, tty
+master, slave = os.openpty()
+tty.setraw(slave)
+p = subprocess.Popen([sys.argv[1], '--self-test-pty'], stdin=slave, stdout=slave, stderr=subprocess.PIPE, close_fds=True)
+os.close(slave)
+data = b''
+while data.count(b'pty-connected') < 2:
+    chunk = os.read(master, 4096)
+    if not chunk: break
+    data += chunk
+_, errors = p.communicate(timeout=10)
+assert p.returncode == 0, errors
+assert data == b'pty-connectedpty-connected', data
+os.close(master)
+"#;
+    let output = Command::new("python3")
+        .args(["-c", script])
+        .arg(consumer())
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap())
+        .env("HOME", dir.path().join("home"))
+        .current_dir(dir.path().join("workspace"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+// @kotowari[REQ-library-205, REQ-library-302, EX-library-210, EX-library-213, EX-library-304, EX-library-306]
 #[test]
 fn event_wait_cancellation_preserves_unread_events_and_receivers_are_independent() {
     run_fixture("--self-test-events");

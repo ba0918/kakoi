@@ -165,8 +165,10 @@ fn main() -> std::process::ExitCode {
         Some(value) if value == "--self-test-api-inner" => self_test_api_inner(),
         Some(value) if value == "--self-test-wait-future" => self_test_wait_future(),
         Some(value) if value == "--self-test-events" => self_test_events(),
+        Some(value) if value == "--self-test-pty" => self_test_pty(),
+        Some(value) if value == "--self-test" => self_test_standalone(),
         Some(value) if value == "--self-test-natural-stopping" => self_test_natural_stopping(),
-        _ => panic!("this example currently verifies input and preparation only"),
+        _ => self_test_standalone(),
     }
     std::process::ExitCode::SUCCESS
 }
@@ -554,6 +556,82 @@ fn self_test_events() {
         stop.request_stop().unwrap(),
         kakoi_runtime::StopReceipt::AlreadyFinished
     ));
+}
+
+fn self_test_pty() {
+    use std::os::fd::BorrowedFd;
+    for inherited in [false, true] {
+        let descriptor = |fd| {
+            if inherited {
+                Io::Inherit
+            } else {
+                // SAFETY: the example's standard descriptors are live throughout preparation.
+                Io::Fd(
+                    unsafe { BorrowedFd::borrow_raw(fd) }
+                        .try_clone_to_owned()
+                        .unwrap(),
+                )
+            }
+        };
+        let running = prepare(RunRequest::new(
+            Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+            CommandSpec::new("/bin/sh".into())
+                .arg("-c".into())
+                .arg("test -t 0 && test -t 1 && printf pty-connected".into()),
+            HostContext::capture().unwrap(),
+            StdioSpec {
+                stdin: descriptor(0),
+                stdout: descriptor(1),
+                stderr: Io::Null,
+            },
+        ))
+        .unwrap()
+        .spawn()
+        .unwrap();
+        assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    }
+}
+
+fn self_test_standalone() {
+    use std::io::Read;
+    let root = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join(format!("library-self-test-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("home")).unwrap();
+    std::fs::create_dir_all(root.join("workspace/.git")).unwrap();
+    let context = HostContext::new(
+        root.join("workspace"),
+        BTreeMap::from([
+            ("HOME".into(), root.join("home").into_os_string()),
+            ("PATH".into(), std::env::var_os("PATH").unwrap()),
+        ]),
+    )
+    .unwrap();
+    let mut running = prepare(RunRequest::new(
+        Policy::from_toml("[network]\nmode='none'\n").unwrap(),
+        CommandSpec::new("/bin/echo".into()).arg("library sync".into()),
+        context,
+        StdioSpec {
+            stdin: Io::Null,
+            stdout: Io::Pipe,
+            stderr: Io::Null,
+        },
+    ))
+    .unwrap()
+    .spawn()
+    .unwrap();
+    let mut output = String::new();
+    running
+        .take_stdout()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    assert_eq!(output, "library sync\n");
+    assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
+    std::fs::remove_dir_all(root).unwrap();
+    println!("sync self-test passed");
 }
 
 fn self_test_wait_future() {
