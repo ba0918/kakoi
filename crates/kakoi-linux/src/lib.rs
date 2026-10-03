@@ -13,6 +13,7 @@ pub mod bwrap_arguments;
 pub mod command_location;
 pub mod copy_facts;
 pub mod executables;
+pub mod helper_placement;
 pub mod landlock;
 pub mod launch;
 pub mod mount_facts;

@@ -926,7 +926,15 @@ fn prepare_worker(
                 };
                 error(Phase::Planning, kind, cause.to_string())
             })?;
-    crate::execution::place_helper_images(&mut plan)
+    let guard_image = if plan.guards.table.entries.is_empty() {
+        None
+    } else {
+        Some(kakoi_plan::copies::FileContent::new(
+            crate::helper_image::copy(crate::helper_image::Role::Guard)
+                .map_err(|cause| io_error(Phase::Retention, cause))?,
+        ))
+    };
+    kakoi_linux::helper_placement::place(&mut plan, guard_image)
         .map_err(|cause| io_error(Phase::Retention, cause))?;
     let separator = plan.launch_layout.command_separator.ok_or_else(|| {
         error(

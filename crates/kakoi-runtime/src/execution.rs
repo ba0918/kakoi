@@ -47,73 +47,6 @@ pub(crate) struct SourceCheck {
     path: PathBuf,
     identity: Identity,
 }
-pub(crate) fn place_helper_images(plan: &mut Plan) -> io::Result<()> {
-    if plan.commands.is_some() {
-        let root = kakoi_plan::command_limits::FIRST_ROOT;
-        let start = plan
-            .arguments
-            .windows(2)
-            .position(|args| {
-                matches!(args, [Argument::Literal(option), Argument::Literal(path)]
-                if option == "--tmpfs" && path == root)
-            })
-            .and_then(|index| index.checked_sub(2))
-            .ok_or_else(|| io::Error::other("missing first-process placement"))?;
-        let end = plan
-            .arguments
-            .windows(2)
-            .position(|args| {
-                matches!(args, [Argument::Literal(option), Argument::Literal(path)]
-                if option == "--remount-ro" && path == root)
-            })
-            .ok_or_else(|| io::Error::other("missing first-process boundary"))?
-            + 2;
-        plan.arguments.drain(start..end);
-        shift_layout(&mut plan.launch_layout, end, -((end - start) as isize));
-    }
-    if plan.guards.table.entries.is_empty() {
-        return Ok(());
-    }
-    let guard_image =
-        FileContent::new(crate::helper_image::copy(crate::helper_image::Role::Guard)?);
-    for entry in &plan.guards.table.entries {
-        let index = plan
-            .arguments
-            .windows(3)
-            .position(|args| {
-                matches!(args, [Argument::Literal(option), _, Argument::Literal(path)]
-                if option == "--ro-bind" && path.as_bytes() == entry.location)
-            })
-            .ok_or_else(|| io::Error::other("missing guard placement"))?;
-        plan.arguments[index] = Argument::Literal("--ro-bind-data".into());
-        plan.arguments[index + 1] = Argument::CopiedFile(guard_image.clone());
-        plan.arguments.splice(
-            index..index,
-            [
-                Argument::Literal("--perms".into()),
-                Argument::Literal("0555".into()),
-            ],
-        );
-        shift_layout(&mut plan.launch_layout, index, 2);
-    }
-    Ok(())
-}
-fn shift_layout(layout: &mut kakoi_plan::plan::LaunchLayout, from: usize, delta: isize) {
-    for position in [
-        &mut layout.argv0,
-        &mut layout.command_separator,
-        &mut layout.resolver_destination,
-    ]
-    .into_iter()
-    .flatten()
-    {
-        if *position >= from {
-            *position = position
-                .checked_add_signed(delta)
-                .expect("layout shift stays in bounds");
-        }
-    }
-}
 pub(crate) fn source_checks(
     plan: &Plan,
     mounts: &[RetainedMount],
@@ -262,7 +195,7 @@ fn checks(plan: &Plan, mounts: &[RetainedMount]) -> io::Result<Vec<Check>> {
             &plan.arguments[..separator],
             mount.argument_index(),
             &mount.destination,
-        );
+        )?;
         if covered {
             continue;
         }
@@ -278,14 +211,13 @@ fn checks(plan: &Plan, mounts: &[RetainedMount]) -> io::Result<Vec<Check>> {
     Ok(result)
 }
 
-fn data_covered(arguments: &[Argument], index: usize, path: &Path) -> bool {
-    arguments.windows(3).enumerate().any(|(later,args)| {
-        later > index && matches!(args, [Argument::Literal(option), _, Argument::Literal(dest)]
+fn data_covered(arguments: &[Argument], index: usize, path: &Path) -> io::Result<bool> {
+    Ok(kakoi_linux::bwrap_arguments::operations(arguments)?.into_iter().any(|(later,args)| {
+        later > index && (matches!(args, [Argument::Literal(option), _, Argument::Literal(dest)]
             if matches!(option.to_str(),Some("--bind" | "--ro-bind" | "--dev-bind" | "--ro-bind-data" | "--bind-data")) && path.starts_with(Path::new(dest)))
-    }) || arguments.windows(2).enumerate().any(|(later,args)| {
-        later > index && matches!(args,[Argument::Literal(option), Argument::Literal(dest)]
-            if matches!(option.to_str(),Some("--tmpfs" | "--proc" | "--dev")) && path.starts_with(Path::new(dest)))
-    })
+        || matches!(args,[Argument::Literal(option), Argument::Literal(dest)]
+            if matches!(option.to_str(),Some("--tmpfs" | "--proc" | "--dev")) && path.starts_with(Path::new(dest))))
+    }))
 }
 
 fn verify_data(check: &DataCheck, expected: OwnedFd) -> io::Result<()> {
@@ -458,7 +390,11 @@ pub(crate) fn run_worker(
                             index - 2..index + 1,
                         )?;
                         plan.launch_layout.resolver_destination = None;
-                        shift_layout(&mut plan.launch_layout, index + 1, -3);
+                        kakoi_linux::helper_placement::shift_layout(
+                            &mut plan.launch_layout,
+                            index + 1,
+                            -3,
+                        );
                     }
                 }
             }
@@ -494,32 +430,16 @@ pub(crate) fn run_worker(
             data: Vec::new(),
         };
         let image = crate::helper_image::copy(crate::helper_image::Role::Init)?;
-        let separator = plan.launch_layout.command_separator.unwrap();
-        plan.arguments.truncate(separator);
-        if let Some(index) = plan.launch_layout.argv0 {
-            plan.arguments[index] = Argument::Literal(INIT.into());
-        }
-        plan.arguments.extend([
-            Argument::Literal("--dir".into()),
-            Argument::Literal("/dev/kakoi-runtime".into()),
-            Argument::Literal("--perms".into()),
-            Argument::Literal("0700".into()),
-            Argument::Literal("--ro-bind-data".into()),
-            Argument::CopiedFile(FileContent::new(image)),
-            Argument::Literal(INIT.into()),
-            Argument::Literal("--as-pid-1".into()),
-            Argument::Literal("--".into()),
-            Argument::Literal(INIT.into()),
-        ]);
+        kakoi_linux::helper_placement::place_init(&mut plan, FileContent::new(image), INIT);
         let mut expected_data = Vec::new();
-        for (index, args) in plan.arguments.windows(3).enumerate() {
+        for (index, args) in kakoi_linux::bwrap_arguments::operations(&plan.arguments)? {
             let [Argument::Literal(option), content, Argument::Literal(path)] = args else {
                 continue;
             };
             if !matches!(option.to_str(), Some("--ro-bind-data" | "--bind-data")) {
                 continue;
             }
-            if data_covered(&plan.arguments, index, Path::new(path)) {
+            if data_covered(&plan.arguments, index, Path::new(path))? {
                 continue;
             }
             let bytes = match content {
