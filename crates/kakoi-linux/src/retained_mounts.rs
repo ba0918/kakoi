@@ -104,14 +104,9 @@ pub(crate) fn descriptor_arguments(
 ) -> io::Result<(Vec<Argument>, Vec<OwnedFd>)> {
     let mut arguments = arguments.to_vec();
     let mut descriptors = Vec::new();
-    let mut remounts = Vec::new();
     for mount in mounts {
         if mount.device {
-            // bind-fd uses nodev. Devices require dev-bind plus init's final check.
-            arguments[mount.argument_index] = Argument::Literal("--dev-bind".into());
-            if mount.read_only {
-                remounts.push((mount.argument_index + 3, mount.destination.clone()));
-            }
+            // Only the plan's own --dev-bind stays a path; init checks its result.
             continue;
         }
         let fd = mount.descriptor.try_clone()?;
@@ -123,16 +118,6 @@ pub(crate) fn descriptor_arguments(
         arguments[mount.argument_index] = Argument::Literal(option.into());
         arguments[mount.argument_index + 1] = Argument::Literal(fd.as_raw_fd().to_string().into());
         descriptors.push(fd);
-    }
-    // Insert backwards so the observed positions remain valid for every mount.
-    for (index, destination) in remounts.into_iter().rev() {
-        arguments.splice(
-            index..index,
-            [
-                Argument::Literal("--remount-ro".into()),
-                Argument::Literal(destination.into_os_string()),
-            ],
-        );
     }
     Ok((arguments, descriptors))
 }
@@ -160,8 +145,8 @@ pub fn retain(arguments: &[Argument]) -> io::Result<Vec<RetainedMount>> {
             destination: destination.into(),
             descriptor,
             read_only: option == "--ro-bind",
-            device: option == "--dev-bind"
-                || matches!(identity.kind, libc::S_IFCHR | libc::S_IFBLK),
+            // A device under --bind or --ro-bind stays nodev, as the CLI mounts it.
+            device: option == "--dev-bind",
             argument_index,
             identity,
         });
@@ -191,4 +176,39 @@ pub fn remove_generated_arguments(
     }
     arguments.drain(range);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn literals(words: &[&str]) -> Vec<Argument> {
+        words
+            .iter()
+            .map(|word| Argument::Literal((*word).into()))
+            .collect()
+    }
+
+    // A device named by a policy item stays nodev, as with the CLI's --ro-bind and --bind.
+    #[test]
+    fn policy_device_items_keep_nodev_descriptor_binds() {
+        for (option, expected) in [("--ro-bind", "--ro-bind-fd"), ("--bind", "--bind-fd")] {
+            let arguments = literals(&[option, "/dev/null", "/isolated/device"]);
+            let mounts = retain(&arguments).unwrap();
+            let (launched, descriptors) = descriptor_arguments(&arguments, &mounts).unwrap();
+            assert_eq!(launched[0], Argument::Literal(expected.into()));
+            assert_eq!(descriptors.len(), 1);
+            assert!(!launched.contains(&Argument::Literal("--dev-bind".into())));
+            assert!(!launched.contains(&Argument::Literal("--remount-ro".into())));
+        }
+    }
+
+    #[test]
+    fn planned_device_binds_stay_device_binds() {
+        let arguments = literals(&["--dev-bind", "/dev/null", "/dev/net/tun"]);
+        let mounts = retain(&arguments).unwrap();
+        let (launched, descriptors) = descriptor_arguments(&arguments, &mounts).unwrap();
+        assert_eq!(launched, arguments);
+        assert!(descriptors.is_empty());
+    }
 }

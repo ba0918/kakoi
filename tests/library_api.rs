@@ -586,9 +586,9 @@ fn requested_shared_files_are_prepared_at_spawn_but_not_at_prepare() {
     run_fixture("--self-test-shared-files");
 }
 
-// @kotowari[REQ-library-106, EX-library-111]
+// @kotowari[REQ-library-106, EX-library-111, REQ-library-402, EX-library-419]
 #[test]
-fn public_descriptor_mounts_keep_live_content_and_validate_device_identity() {
+fn public_descriptor_mounts_keep_live_content_and_devices_nodev_and_validate_identity() {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
     dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");

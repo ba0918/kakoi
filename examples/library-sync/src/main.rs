@@ -1479,7 +1479,7 @@ fn self_test_live_device() {
         policy,
         CommandSpec::new("/bin/sh".into())
             .arg("-c".into())
-            .arg("test -c device && cat live-source >device && cat live-source".into()),
+            .arg("test -c device && ! (: >device) 2>/dev/null && ! (: <device) 2>/dev/null && cat live-source".into()),
         context.clone(),
         StdioSpec {
             stdin: Io::Null,
@@ -1502,14 +1502,14 @@ fn self_test_live_device() {
     let running = prepare(RunRequest::new(
         Policy::from_toml(&format!("[mounts]\nro=[{:?}]\n[network]\nmode='none'\n", context.cwd().join("device").to_str().unwrap())).unwrap(),
         CommandSpec::new("/usr/bin/python3".into()).arg("-c".into()).arg(
-            "import os,stat,sys\np=sys.argv[1]\nassert stat.S_ISCHR(os.stat(p).st_mode)\nmounts=[s.split() for s in open('/proc/self/mountinfo')]\nassert any(m[4]==p and 'ro' in m[5].split(',') for m in mounts)".into(),
+            "import os,stat,sys\np=sys.argv[1]\nassert stat.S_ISCHR(os.stat(p).st_mode)\nmounts=[s.split() for s in open('/proc/self/mountinfo')]\nassert any(m[4]==p and 'ro' in m[5].split(',') and 'nodev' in m[5].split(',') for m in mounts)\nfor flags in (os.O_WRONLY, os.O_RDONLY):\n    try:\n        os.open(p, flags)\n    except PermissionError:\n        continue\n    sys.exit('device opened')".into(),
         ).arg(context.cwd().join("device").into()),
         context.clone(), StdioSpec { stdin: Io::Null, stdout: Io::Null, stderr: Io::Inherit },
     )).unwrap().spawn().unwrap();
     assert_eq!(running.wait().main, kakoi_runtime::MainOutcome::Exited(0));
     drop(running);
-    // A private overmount after the worker's checks reproduces the dev-bind race.
-    // The real bwrap still performs every mount; init must reject its changed result.
+    // A private overmount after the worker's checks swaps the path under bwrap.
+    // bwrap may mount the swapped path; init must reject the changed result.
     let tools = context.cwd().join("racing-tools");
     std::fs::create_dir(&tools).unwrap();
     let wrapper = tools.join("bwrap");
