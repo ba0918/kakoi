@@ -39,8 +39,13 @@ while True:
         born = ctypes.c_ulong()
         if libc.ptrace(0x4201, pid, None, ctypes.cast(ctypes.byref(born), ctypes.c_void_p)) < 0:
             raise OSError(ctypes.get_errno(), "get fork event")
-        image = os.readlink(f"/proc/{pid}/exe")
-        if image == "/dev/kakoi-runtime/init (deleted)":
+        with open(f"/proc/{pid}/status", encoding="utf-8") as info:
+            namespace_pids = next(
+                line.split()[1:] for line in info if line.startswith("NSpid:")
+            )
+        # The product's init is PID 1 in its own namespace, independent of its
+        # internal filename and the kernel's deleted-file display suffix.
+        if len(namespace_pids) > 1 and namespace_pids[-1] == "1":
             assert not killed
             os.kill(born.value, signal.SIGKILL)
             killed = True
