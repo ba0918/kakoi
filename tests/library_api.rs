@@ -8,7 +8,7 @@ mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
 
-// @kotowari[REQ-library-201, REQ-library-203]
+// @kotowari[REQ-library-201]
 #[test]
 fn worker_terminal_signals_are_protected_before_elf_initializers() {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
@@ -29,7 +29,7 @@ fn worker_terminal_signals_are_protected_before_elf_initializers() {
     assert_eq!(std::fs::read(record).unwrap(), b"interrupt-returned");
 }
 
-// @kotowari[REQ-library-201, REQ-library-202, REQ-library-203]
+// @kotowari[REQ-library-201, REQ-library-202, REQ-library-301]
 #[test]
 fn terminal_interrupt_keeps_supervision_alive_and_target_signals_default() {
     let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
@@ -68,13 +68,13 @@ for mode in ['host', 'none']:
     assert!(output.status.success(), "{}", output_report(&output));
 }
 
-// @kotowari[REQ-library-104, REQ-library-203]
+// @kotowari[REQ-library-301]
 #[test]
 fn startup_transfers_large_valid_requests_without_a_timeout() {
     run_fixture("--self-test-large-start");
 }
 
-// @kotowari[REQ-library-101, REQ-library-105]
+// @kotowari[REQ-273]
 #[test]
 fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
     use std::os::unix::fs::PermissionsExt;

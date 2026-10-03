@@ -985,7 +985,7 @@ fn prepare_worker(
         },
     ];
     loop {
-        // SAFETY: poll only writes these two initialized entries.
+        // SAFETY: poll only writes the initialized entries in this array.
         let result = unsafe { libc::poll(poll.as_mut_ptr(), poll.len() as libc::nfds_t, -1) };
         if result < 0 {
             let cause = io::Error::last_os_error();
