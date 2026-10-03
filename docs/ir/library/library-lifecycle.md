@@ -6,11 +6,15 @@
 
 ### REQ-library-201: 利用者の待機から独立した監督
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-10-03-public-library-api.md#A6
+- source: docs/decision/brainstorm/2026-10-03-public-library-api.md#A6, docs/decision/brainstorm/2026-10-03-public-library-api.md#A28
 - verification: unit
 
 起動後は`実行ハンドル`を返し、利用者の待機やイベント受信に依存せず監督を継続する。
 呼び出し元プロセス全体のシグナル設定を暗黙に変更しない。
+この保証から、スレッドランタイム・libc自身による内部予約シグナルの初期化だけを除外する。
+アプリケーションが利用可能なシグナルのハンドラと、呼び出し元のシグナルマスクは変更しない。
+内部予約の範囲は使用するランタイム・libcに従い、特定のシグナル番号を全環境で例外にしない。
+kakoiによる予約シグナルの任意の操作、事前のスレッド起動による変化の隠蔽、libcのハンドラの復元は行わない。
 
 ### REQ-library-202: 停止要求と回収確認
 - kind: ubiquitous
@@ -66,11 +70,13 @@ Scenario: 利用者が別の処理をしていても監督する
   When 利用者が待機もイベント受信も行わず別の処理をする
   Then 隔離の監督は継続する
 
-@id=EX-library-202 @about=REQ-library-201 @source=docs/decision/brainstorm/2026-10-03-public-library-api.md#A6
+@id=EX-library-202 @about=REQ-library-201 @source=docs/decision/brainstorm/2026-10-03-public-library-api.md#A6,docs/decision/brainstorm/2026-10-03-public-library-api.md#A28
 Scenario: シグナル設定を奪わない
-  Given 呼び出し元が自身のシグナル処理を設定している
+  Given 呼び出し元がアプリケーションで利用可能なシグナルのハンドラと自身のシグナルマスクを設定している
   When 組み込みAPIで隔離を起動して終了する
   Then 呼び出し元のシグナル設定を暗黙に置き換えない
+  And 設定したハンドラと呼び出し元のシグナルマスクは変わらない
+  And 例外は使用するスレッドランタイム・libc自身による内部予約シグナルの初期化だけである
 
 @id=EX-library-203 @about=REQ-library-202 @source=docs/decision/brainstorm/2026-10-03-public-library-api.md#A6,docs/decision/brainstorm/2026-10-03-public-library-api.md#A8
 Scenario: 停止を要求してから回収結果を待つ

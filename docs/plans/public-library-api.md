@@ -10,6 +10,7 @@
 設計承認後のコミット`d2a993e74e3706209a552872b94d221870e8914b`を仕様の基準とする。
 そのコミットの文書に残る「草案」「承認前」は執筆時の状態表示であり、当該内容は利用者が承認しコミット済みである。
 実装済みという意味ではない。
+シグナル設定の保証は、その後に利用者が承認した[A28](../decision/brainstorm/2026-10-03-public-library-api.md#A28)による[REQ-library-201](../ir/library/library-lifecycle.md#REQ-library-201)の明確化を適用する。
 
 - [入力](../ir/library/library-input.md): REQ-library-101、REQ-library-102、REQ-library-103、REQ-library-104、REQ-library-105、REQ-library-106。
 - [寿命](../ir/library/library-lifecycle.md): REQ-library-201、REQ-library-202、REQ-library-203、REQ-library-204、REQ-library-205、REQ-library-206。
@@ -152,6 +153,10 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 
 新しい統合試験のコマンドは`cargo test --locked --test library_policy`と`cargo test --locked --test library_api`とする。
 個別のREDとGREENでは同じコマンドへ対象のテスト名を付ける。
+シグナル設定の検証ではprepare前後と起動・終了前後で、アプリケーションが利用可能なハンドラと呼び出し元のシグナルマスクの不変を確認する。
+生の/proc/self/statusのビット集合の一致だけを保証全体の判定には使わない。
+差分があれば使用するランタイム・libcの内部予約範囲と通常のスレッド生成による初期化の観測に照合し、ランタイム・libc自身の内部予約シグナル初期化だけであることを確かめる。
+GNU・muslの予約範囲を同一と見なさず、特定のシグナル番号の一律除外、事前のスレッド起動による変化の隠蔽、libcハンドラの復元で通さない。
 クレート内へ移した試験は`cargo test --locked -p <移動先クレート>`で確認する。
 rootのall-targetsに加え`cargo test --workspace --doc --locked`を実行して公開例とコンパイル契約を確認する。
 
@@ -223,14 +228,14 @@ push、mainへのmerge、ブランチ・worktreeの削除は最終成果の受�
 
 ### S3: 同一バイナリのワーカーとprepare
 
-- Purpose: 呼び出し元の状態を変えず、説明可能な計画と保持資源を一つの所有者へ結び付ける。
+- Purpose: 呼び出し元の環境・cwd・rlimitとREQ-library-201の対象となるシグナル設定を維持し、説明可能な計画と保持資源を一つの所有者へ結び付ける。
 - Specification: `docs/ir/library/library-input.md#REQ-library-101`, `docs/ir/library/library-input.md#REQ-library-104`, `docs/ir/library/library-input.md#REQ-library-105`, `docs/ir/library/library-integration.md#REQ-library-403`, `docs/ir/core/core-policy.md#REQ-154`
 - Prerequisites: S2。公開署名は設計契約の「要求と準備」、内部転送は「起動の成立と通信経路」を読む。
 - May change: `crates/kakoi-runtime/`, `crates/kakoi-linux/`, `crates/kakoi-plan/`の観測値入力、manifest・lockfile、`tests/library_api.rs`, `tests/library_api/`, `tests/fixtures/library-api/`, `examples/library-sync/`。
-- Done when: 同期mainでdispatchする独立した利用側からprepareと明示config入口を利用できる。非UTF-8入力、要求のcwd・PATH、FD所有、説明の秘密値抑制が成立する。prepare破棄と準備途中の通信失敗でもワーカーを回収し、呼び出し元の環境・cwd・rlimit・シグナル設定を変えない。
+- Done when: 同期mainでdispatchする独立した利用側からprepareと明示config入口を利用できる。非UTF-8入力、要求のcwd・PATH、FD所有、説明の秘密値抑制が成立する。prepare破棄と準備途中の通信失敗でもワーカーを回収し、呼び出し元の環境・cwd・rlimitを変えない。シグナル設定はREQ-library-201に従い、アプリケーションが利用可能なハンドラと呼び出し元のマスクを変えず、ランタイム・libc自身の内部予約シグナル初期化だけを例外とする。
 - Shown by: test `cargo test --locked --test library_api`の準備・外部コンパイル試験。別profileのある環境、破棄、FD数と子の終了、非公開計画の書換え拒否を観測する。起動を含むEX-library-107・108・109はS4でも確認する。
 - Left to the implementer: 内部IPCと回収担当のモジュール配置。設計契約にある上限と所有者の分離は変更しない。
-- Stop and hand back if: 準備時に対象コマンドを動かす、設定を暗黙に読む、呼び出し元のグローバル状態を変える必要がある。
+- Stop and hand back if: 準備時に対象コマンドを動かす、設定を暗黙に読む、REQ-library-201で除外したランタイム・libc自身の内部予約シグナル初期化以外に呼び出し元のグローバル状態を変える必要がある。
 
 ### S4: 記述子マウントとhost・noneの寿命
 
@@ -239,7 +244,7 @@ push、mainへのmerge、ブランチ・worktreeの削除は最終成果の受�
 - Prerequisites: S3。内部設計の「マウント元の同一性」「停止と失敗時の回収」、D9・D12を読む。
 - May change: `crates/kakoi-runtime/`, `crates/kakoi-linux/`, `crates/kakoi-plan/`の実行記述、`tests/library_api.rs`, `tests/library_api/`, `tests/fixtures/library-api/`, `examples/library-sync/`。
 - Done when: host・noneで起動と同期wait、停止、Drop、所有者死亡、並行実行が成立する。bind-fd機能不足、リンク先置換、dev-bindの照合不一致では対象コマンドを動かさない。通常内容のライブ更新、spawnだけの共有ファイル準備、未読パイプ中の停止、主コマンドと回収の別結果を観測できる。
-- Shown by: test `cargo test --locked --test library_api`。実bwrapでの機能確認と保持対象の置換、役割付きinit、所有者・ワーカー強制終了、子孫回収、exec失敗と非0終了を確認する。独立した利用側fixtureでprepare後に標準FDを別の対象へ差し替え、Inheritで起動したコマンドが準備時の対象を使うことを確認する。EOFだけの起動成否と未確認回収を成功扱いしない試験を含める。
+- Shown by: test `cargo test --locked --test library_api`。実bwrapでの機能確認と保持対象の置換、役割付きinit、所有者・ワーカー強制終了、子孫回収、exec失敗と非0終了を確認する。独立した利用側fixtureでprepare後に標準FDを別の対象へ差し替え、Inheritで起動したコマンドが準備時の対象を使うことを確認する。EOFだけの起動成否と未確認回収を成功扱いしない試験を含める。EX-library-202では「Test command」の方法でアプリケーションが利用可能なハンドラと呼び出し元のマスクの不変を確認し、観測した例外がランタイム・libc自身の内部予約シグナル初期化だけであることを確かめる。
 - Left to the implementer: 実行所有者ごとの内部資源型と試験の同期手段。デバイス試験は私有名前空間で既存の無害なデバイスを使う。
 - Stop and hand back if: 実ファイル・デバイスの同一性を最終配置で確認できない、所有者死亡で実行が残る、未確認の回収をConfirmedとして報告しないとAPIが成立しない。
 

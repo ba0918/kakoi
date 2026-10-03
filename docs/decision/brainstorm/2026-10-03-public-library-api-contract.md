@@ -75,7 +75,9 @@ Homeやconfig_dirが必要な規則は、要求の環境から既存規則で解
 NULを含むOS文字列と、不正な環境変数名はOS呼出し前に拒否する。
 
 PreparedRunとRunningはSendだがCloneを提供しない。
-prepareはワーカーを起動して資源を保持し、その過程で呼び出し元のcwd、環境、rlimit、シグナル設定を変更しない。
+prepareはワーカーを起動して資源を保持し、その過程で呼び出し元のcwd、環境、rlimitを変更しない。
+シグナル設定は[A28](./2026-10-03-public-library-api.md#A28)を反映した[REQ-library-201](../../ir/library/library-lifecycle.md#REQ-library-201)に従い、アプリケーションが利用可能なハンドラと呼び出し元のマスクを変更しない。
+スレッドランタイム・libc自身による内部予約シグナルの初期化だけを例外とし、特定のシグナル番号を全環境で除外しない。
 prepareが成功しても対象コマンドはまだ動いていない。
 StdioSpecのFdは所有権を移す。Inheritは準備時に呼び出し元の対応するFDを複製し、後で別のFDへ差し替わっても追従しない。
 Pipeは起動時に作り、利用側の端をRunningに所有させる。
