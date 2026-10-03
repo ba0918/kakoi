@@ -7,18 +7,27 @@
 ### REQ-446: 見張り役を置く
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A3, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A29, docs/decision/brainstorm/2026-09-25-command-policy.md#A20, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#D1, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A43, docs/decision/brainstorm/2026-09-25-command-policy.md#A44, docs/decision/brainstorm/2026-09-25-command-policy.md#A45, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A9, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A1, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A5
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A3, docs/decision/brainstorm/2026-09-25-command-policy.md#A26, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A29, docs/decision/brainstorm/2026-09-25-command-policy.md#A20, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#D1, docs/decision/brainstorm/2026-09-25-command-policy.md#A8, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A41, docs/decision/brainstorm/2026-09-25-command-policy.md#A43, docs/decision/brainstorm/2026-09-25-command-policy.md#A44, docs/decision/brainstorm/2026-09-25-command-policy.md#A45, docs/decision/brainstorm/2026-09-30-hotspot-review.md#A9, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A1, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A5, docs/decision/brainstorm/2026-10-03-public-library-api.md#A24, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11, docs/decision/brainstorm/2026-09-25-command-policy.md#A37
 - verification: unit
 
 合成したポリシーに規則のあるプログラムごとに、kakoiは隔離へ渡すPATH（path-prepend を足した後で、見張り役の場所を除く）でそのプログラムの本物を探し（本物は、隔離の中でその名前で起動されるもので、PATHの項目の順に見て、その名前の場所も、リンクを解決した実体も、途中で辿るリンクの置き場もマウントの "hide" で隠されず（自動で生成された "hide" を含め、それを含む項目のうちマウント順で最後に効くものが "hide" でない）、リンクを解決した先が実行できる通常ファイルである最初の同じ名前とする。ディレクトリ、行き先の無いリンク、実行できない通常ファイル、場所、実体、途中で辿るリンクの置き場のどれかが隠される名前は飛ばして先を探す。PATHの項目のうち絶対パスでないもの（空の項目を含む）は使わない）、kakoi専用のtmpfsの中の見張り役の場所に同じ名前の見張り役を置き、その場所をPATHの最も先頭に足す。規則が "guard-absolute-path" を真にしているときは、本物のリンクを解決した実体のパスにも見張り役を重ね、本物をそのtmpfsの中に置き直す。ただし、本物のリンクを解決した実体のファイル名が、その実体を指すどのプログラムの名前とも違うときは、実体に見張り役を重ねず、本物を置き直さない（見張り役の場所の見張り役は置く）。どれか一つの名前と同じなら、その実体を指すすべてのプログラムについて重ねる。起動された名前で別のプログラムとして動く実行ファイルに重ねると、そのプログラムの規則がほかのプログラムに当たるためである。見張り役はkakoi自身の実行ファイルで、見張り役、規則、置き直した本物は、見張り役の場所を通しては隔離の中から書き換えられない（kakoi自身の実行ファイルが書ける項目の下にあるときは、その項目を通して見張り役の中身が変わる）。見張り役を置くのにkakoi自身の実行ファイルの場所が分からないときは、種類bwrapの診断を出して125で終わる。これらは利用者のマウントより後に重ね、host、none、filteredのすべてで同じにする。kakoiに直接渡したコマンドも、隔離の中で起動される以上この見張り役の置き方に従う。
 
+前段のうち、kakoi自身の実行ファイルを見張り役として重ねる規則、その実行ファイルの場所が分からない場合の診断、書ける元の項目を通して見張り役の中身が変わる規則はCLIに限る。
+組み込みAPIではREQ-library-408に従い、役割識別情報付きの利用側バイナリを配置先ごとにコピーし、読み取り専用の実行ファイルとして配置する。
+
 ### REQ-453: 見張り役としての起動を見分ける
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A27, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A2, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A6
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A27, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A2, docs/decision/brainstorm/2026-10-01-guard-under-inner-sandbox.md#A6, docs/decision/brainstorm/2026-10-03-public-library-api.md#A24, docs/decision/brainstorm/2026-10-03-public-library-api.md#D8, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 kakoiは、起動された実行ファイルの場所が、自分が置いた見張り役の場所とプログラムの対応に載っていれば見張り役として動く。この判定は入れ子の判定と引数の解析より前に行い、見張り役として動くときは入れ子の警告を出さない。同じ本物を複数のプログラムの名前が指すときは、それらすべての規則を当てる。対応に載っていない場所から起動されたkakoiは、見張り役として動かない。起動された実行ファイルのファイル名が "kakoi" でなく、この対応を読めず、環境変数 KAKOI が "1" のときは、kakoiとして動かず、コマンドを実行せずに種類 guard の診断で126とする。説明には対応を読めないことと、"/dev" を作り直すsandboxの中ではこの見張り役を使えないことを含める。ファイル名が "kakoi" のときと、KAKOI が "1" でないときは見張り役として動かない。
+
+前段の実行ファイル名、KAKOI、場所とプログラムの対応による見張り役判定はCLIに限る。
+組み込みAPIでは実行中ファイルから役割識別情報を読み、ガード役割の場合は表の候補パスと実行中ファイルのdevice・inodeを照合して規則を選ぶ。
+自己パスの削除済み接尾辞は候補パスの生成にだけ使い、名前だけで規則を選ばない。
+役割付きガードが表を読めない場合、表が不正な場合、対応する規則がない場合は、通常アプリへ戻らず終了126とする。
+役割情報のない通常アプリにはこのガード判定を適用しない。
 
 ### REQ-447: 禁止に当たったとき
 
@@ -39,10 +48,13 @@ kakoiは、起動された実行ファイルの場所が、自分が置いた見
 ### REQ-449: 見張り役を置かないプログラム
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A13, docs/decision/brainstorm/2026-09-25-command-policy.md#A19, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A32, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A44
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A13, docs/decision/brainstorm/2026-09-25-command-policy.md#A19, docs/decision/brainstorm/2026-09-25-command-policy.md#A28, docs/decision/brainstorm/2026-09-25-command-policy.md#A32, docs/decision/brainstorm/2026-09-25-command-policy.md#A35, docs/decision/brainstorm/2026-09-25-command-policy.md#A37, docs/decision/brainstorm/2026-09-25-command-policy.md#A38, docs/decision/brainstorm/2026-09-25-command-policy.md#A44, docs/decision/brainstorm/2026-10-03-public-library-api.md#A26, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 規則のあるプログラムについて、本物が隔離へ渡すPATHに見つからないとき、本物がkakoi自身の実行ファイルであるとき、隔離へ渡す環境にPATHが無いときは、そのプログラムに見張り役を置かず、理由を付けて飛ばす。規則の形と例の検証は行う。本物を探すことと隠されるかの判定は、マウントの解決の後に行う。
+
+前段のうち、本物がkakoi自身の実行ファイルであることを理由に見張り役を置かない規則はCLIに限る。
+組み込みAPIではREQ-library-410に従い、利用側アプリ自身も指定されたガード規則の対象とし、自己再実行用バイナリであることを理由に除外しない。
 
 ### REQ-450: 計画表示
 
@@ -73,11 +85,14 @@ kakoiは、起動された実行ファイルの場所が、自分が置いた見
 ### REQ-454: 責務の分け方
 
 - kind: invariant
-- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A36
+- source: docs/decision/brainstorm/2026-09-25-command-policy.md#A36, docs/decision/brainstorm/2026-10-03-public-library-api.md#D10
 - verification: review
-- how_to_verify: crates/kakoi-core と src を読み、規則の型、読み込み、段の合成、語の照合、例の検証、見張り役を置く計画が crates/kakoi-core にあり、見張り役として起動されたときの処理（場所の対応を読む、引数と環境を受け取る、禁止の1行を出す、本物を exec する）が src にあることを確かめる。例の検証と見張り役が同じ照合の関数を使い、見張り役のための新しいクレートが無いことを確かめる。
+- how_to_verify: policy、plan、linux、runtimeとCLIを読み、規則の型・解析・検証・合成・語の照合・例の検証がpolicy、配置計画がplan、OS観測・記述子準備・bwrap組立てがlinux、補助役の振り分けと実行手順がruntimeにあることを確かめる。CLIが共有する照合と実行処理を呼び、例の検証と見張り役が同じ照合を使い、ガード専用クレートがないことを確かめる。
 
-規則と照合と見張り役の計画は kakoi-core に置き、見張り役として起動されたときの処理は kakoi の実行ファイルに置く。例の検証と見張り役は同じ照合を使う。
+規則の型・解析・検証・合成、語の照合、例の検証はpolicyに置き、見張り役の配置計画はplanに置く。
+見張り役の配置に必要なOS観測と記述子準備、bwrapの組立てはlinuxに置く。
+見張り役としての補助役の振り分けと実行手順はruntimeに置き、CLIは共有する照合と実行処理を呼ぶ。
+例の検証と見張り役は同じ照合を使い、ガード専用クレートは作らない。
 
 ## Examples
 

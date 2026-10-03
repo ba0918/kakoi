@@ -22,11 +22,14 @@ kakoiはRust製CLIとして、指定したポリシーとワークスペース�
 
 ### REQ-352: 対応環境
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-25-u5-and-review-checks.md#A4, docs/decision/brainstorm/2026-10-03-public-library-api.md#A22, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: review
 - how_to_verify: "README.md" の対応環境の記述とソースを読み、対応環境がLinux x86_64、bwrap 0.9.0以上、root以外の利用者、setuidでないbwrapで、WSL2を含むことを確かめる。x86_64以外を対象にしたビルドがコンパイル時に失敗すること、隔離の中で32ビットとx32のバイナリを実行できないことを観測する。filteredの追加依存が無い環境でhostとnoneの起動が通ることを観測する。
 
 対応環境はLinux x86_64、bwrap 0.9.0以上、root以外の利用者、setuidでないbwrapである。WSL2を含む。x86_64以外へのビルドはコンパイル時に拒否する。32ビットとx32のバイナリは隔離内で実行できない。filteredの追加依存は実証工程で確定し、host/noneに必須としない。
+
+前段のbwrap 0.9.0以上という版の対応条件はCLIの契約とする。
+組み込みAPIはREQ-library-407に従い、版名だけでなく必要なbwrapの機能を確認し、不足時は起動エラーにする。
 
 ### REQ-353: 対象外の機能
 - kind: ubiquitous

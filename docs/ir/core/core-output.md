@@ -20,10 +20,13 @@ usage、policy、path、secret、env、bwrapは125、command not foundは127、"
 
 ### REQ-291: コマンドとbwrapの終了
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 host/noneではbwrapへexecし、bwrap自身の失敗出力・終了コードをそのまま返す。主コマンドの標準出力・標準エラーと終了コードnを返し、シグナルsの終了は128+sとする。filteredの監督と安全上の125優先は既存のネットワーク仕様を優先する。
+
+前段のbwrapへのexecと数値の終了コードへの変換はCLIに限る。
+組み込みAPIはREQ-library-201の実行ハンドルを返し、終了結果と制御エラーをREQ-library-301の構造化された結果として返す。
 
 ### REQ-292: 計画の事前検査
 - kind: ubiquitous
@@ -48,10 +51,13 @@ REQ-293 のcwdの段階でカレントディレクトリを取得できないと
 
 ### REQ-401: bwrap自身のexecの失敗
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A11, docs/decision/brainstorm/2026-09-25-command-policy.md#A40, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A11, docs/decision/brainstorm/2026-09-25-command-policy.md#A40, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 host/noneの起動の段階でbwrap自身のexecに失敗したとき（所在確認の後に消された、実行できない）は、まだkakoiが動いているので種類bwrapの診断を出して125で終わる。包んだコマンドのexecの失敗はbwrapが報告し、REQ-291のとおりbwrapの失敗出力と終了コードをそのまま返す。"--nested=exec"の入れ子ではkakoiがコマンドを直接execするので、同じ失敗がREQ-290のcommand not executableの126になる。見張り役が本物をexecするときも同じである。この非対称は受け入れる。
+
+前段のCLI自身のexec、診断表示、数値の終了コードへの変換はCLIに限り、見張り役のexec失敗の終了126は見張り役の子プロセスの契約として維持する。
+組み込みAPIはREQ-library-201の実行ハンドルとREQ-library-301の構造化された結果を使い、呼び出し元をexecで置き換えず、制御エラーで呼び出し元を終了しない。
 
 ## Examples
 

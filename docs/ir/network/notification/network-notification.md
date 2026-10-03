@@ -7,10 +7,13 @@
 ### REQ-068: 標準エラーへのネットワーク通知
 
 - kind: event_driven
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A73, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 実行中のネットワーク通知は標準エラーへ1件1行で出し、kakoiの通知と分かる接頭辞を付ける。標準出力には通知を混ぜない。アプリの標準エラーと同じ出力先を使い、専用の受信設定を要求しない。
+
+前段の標準エラーへのネットワーク通知はCLIの契約とする。
+組み込みAPIはREQ-library-302に従って構造化した状態イベントを提供し、ライブラリ自身は状態通知を呼び出し元の標準エラーへ書き込まない。
 
 ### REQ-069: 通知不能で通信制御を止めない
 

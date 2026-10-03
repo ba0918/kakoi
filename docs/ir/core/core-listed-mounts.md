@@ -6,10 +6,13 @@
 
 ### REQ-467: マウントのモード
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A1, docs/decision/brainstorm/2026-09-30-allowlist.md#A4, docs/decision/brainstorm/2026-09-30-allowlist.md#A7, docs/decision/brainstorm/2026-09-30-allowlist.md#A10, docs/decision/brainstorm/2026-09-30-allowlist.md#A36, docs/decision/brainstorm/2026-09-30-allowlist.md#A50
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A1, docs/decision/brainstorm/2026-09-30-allowlist.md#A4, docs/decision/brainstorm/2026-09-30-allowlist.md#A7, docs/decision/brainstorm/2026-09-30-allowlist.md#A10, docs/decision/brainstorm/2026-09-30-allowlist.md#A36, docs/decision/brainstorm/2026-09-30-allowlist.md#A50, docs/decision/brainstorm/2026-10-03-public-library-api.md#A13, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 ポリシーの "mounts.mode" は "host" か "listed" で、どの段にも書かれていなければ "host" とする。どれかの段が "listed" なら、上の段が "host" でも合成後は "listed" とする。"mounts.system" は真偽値で、どの段にも書かれていなければ true とする。どれかの段が false なら、上の段が true でも合成後は false とする。"mounts.mode" に "host" と "listed" 以外の値を書いたとき、"mounts.system" に真偽値以外を書いたとき、合成後の "mounts.mode" が "listed" でないのに "mounts.system" が false のときは、ポリシー読み込み失敗とする。
+
+前段の省略時の既定値は既存TOMLの契約として維持する。
+新しいRust構築APIはREQ-library-103に従い、マウント、ネットワーク、環境の各モードを明示させる。
 
 ### REQ-468: "listed" で見える場所
 - kind: ubiquitous

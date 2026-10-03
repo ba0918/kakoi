@@ -13,10 +13,16 @@
 
 ### REQ-475: 許していないプログラムの起動を止める
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58, docs/decision/brainstorm/2026-09-30-allowlist.md#A63, docs/decision/brainstorm/2026-09-30-allowlist.md#A71
+- source: docs/decision/brainstorm/2026-09-30-allowlist.md#A13, docs/decision/brainstorm/2026-09-30-allowlist.md#A17, docs/decision/brainstorm/2026-09-30-allowlist.md#A41, docs/decision/brainstorm/2026-09-30-allowlist.md#A45, docs/decision/brainstorm/2026-09-30-allowlist.md#A58, docs/decision/brainstorm/2026-09-30-allowlist.md#A63, docs/decision/brainstorm/2026-09-30-allowlist.md#A71, docs/decision/brainstorm/2026-10-03-public-library-api.md#A21, docs/decision/brainstorm/2026-10-03-public-library-api.md#A24, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11, docs/decision/brainstorm/2026-10-03-public-library-api.md#D12
 - verification: unit
 
 コマンドのモードが "listed" のとき、bwrap はコマンドの代わりに `隔離の中の最初のプロセス` を起動し、それが Landlock を掛けてからコマンドを起動する。Landlock は "commands.allow" の項目と、kakoiが自動で許すものだけに実行を許す。項目は `隔離の中の最初のプロセス` が隔離の中のパスとして開く。項目がディレクトリならその下のすべてに、ファイルならそのファイルに許す。シンボリックリンクの項目は、辿った先の実体に許す。kakoiが自動で許すのは、動的リンカ "/lib64/ld-linux-x86-64.so.2" の実体と kakoi 自身の実行ファイル（`見張り役` と `隔離の中の最初のプロセス` に使うもの）だけである（外の見張り役を引き継ぐ入れ子では、REQ-485 の外の見張り役の実行ファイルも許す）。許した項目の実体を見張り役が "guard-absolute-path" で置き直したときは、置き直した先をその項目の実体として許す。許していないプログラムを起動すると、起動は失敗する。コマンドの起動が失敗したときは、`隔離の中の最初のプロセス` がコマンドの名前と理由を示す診断を出して 126 で終わる。`隔離の中の最初のプロセス` が項目を開けなければ、その項目を許さずに進め、標準エラーに警告を1行出す。動的リンカが隔離の中に無ければ、それを許さずに進める。kakoi 自身の実行ファイルの場所が分からなければ、コマンドを実行せず種類 bwrap の診断で 125 とする。
+
+前段のkakoi自身の実行ファイルと動的リンカを自動で実行許可する規則はCLIで維持する。
+組み込みAPIでは、実際に配置したすべてのガードのコピーと必要な補助実行イメージにLandlockの実行許可を与える。
+元の利用側アプリへの実行許可を、配置した各ガードのコピーへの実行許可の代わりにしない。
+隔離内initも役割付きコピーとして許可し、元の利用側アプリを補助処理の実行元という理由だけで自動許可しない。
+この実行許可を理由に、動的リンカや共有ライブラリをポリシー外から自動でマウントして公開しない。
 
 ### REQ-476: 許すプログラムがホストに無いとき
 - kind: ubiquitous

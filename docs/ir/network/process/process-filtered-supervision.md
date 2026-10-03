@@ -7,10 +7,13 @@
 ### REQ-148: filteredの監督プロセス
 
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146
+- source: docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 "filtered" では監督プロセスを残し、通信障害からの復帰と主コマンド終了後の子プロセス回収を担う。bwrapへのexec契約を "filtered" に限り改訂し、"host" と "none" は維持する。
+
+前段のhostとnoneでbwrapへのexec契約を維持する規則はCLIに限る。
+組み込みAPIではREQ-library-201に従ってhost、none、filteredのすべてを監督し、呼び出し元へ実行ハンドルを返す。
 
 ## Examples
 
@@ -21,9 +24,9 @@ Scenario: filteredでは監督を残す
   When 主コマンドが動作している
   Then 監督プロセスが残る
 
-@id=EX-329 @about=REQ-148 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146
+@id=EX-329 @about=REQ-148 @source=docs/decision/brainstorm/2026-09-15-kakoi-net.md#A146,docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 Scenario: 従来のモードの実行方式を変えない
-  Given hostまたはnoneで環境を起動する
+  Given CLIからhostまたはnoneで環境を起動する
   When bwrapへ実行を移す
   Then 従来のexec契約を維持する
 

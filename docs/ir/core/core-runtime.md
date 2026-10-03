@@ -6,38 +6,55 @@
 
 ### REQ-305: ホストへの書込み境界
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A21, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A43
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A21, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A43, docs/decision/brainstorm/2026-10-03-public-library-api.md#A25, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 コマンドを包む起動は計画表示を含め永続状態を持たず、自身でホストのファイルを書かない。initだけが設定ディレクトリまでの欠けた成分とprofile/、secrets/、出力ファイルを作る。例外は、入れ子でない実行（計画表示を除く）が共有ファイルの置き場のディレクトリと、中身が決まった2つのファイル（空のファイルと"nameserver 127.0.0.53"の1行）を作り直すことだけである（REQ-461）。/tmp/kakoiを作らない。
 
+組み込みAPIも同じホストへの書込み境界を守り、REQ-library-409に従って、非入れ子のspawn時に要求の環境から決めた共有ファイルの置き場を準備する。
+prepareでは共有ファイルのディレクトリやファイルを書き込まず、ガード用実行ファイルも共有ファイルの置き場へ保存しない。
+
 ### REQ-306: 収集する事実
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A31, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A21, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A38
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A49, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A53, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A31, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A21, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A38, docs/decision/brainstorm/2026-10-03-public-library-api.md#A5, docs/decision/brainstorm/2026-10-03-public-library-api.md#A9, docs/decision/brainstorm/2026-10-03-public-library-api.md#A19, docs/decision/brainstorm/2026-10-03-public-library-api.md#A22, docs/decision/brainstorm/2026-10-03-public-library-api.md#A24, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 本体はポリシー・秘密、.gitとGit関係ファイル、共通ディレクトリHEADの存在種類、マウント一覧、走査ディレクトリ、候補パスの存在種類実体、配置検査の通過ディレクトリとリンク先、サブモジュールconfig、適用rw-copyの名前種類モード内容リンク先を読む。HEAD内容は読まない。入れ子の印と外の見張り役の置き場の有無、共有ファイルの置き場のディレクトリとファイルの持ち主・種類・権限・中身、network.allow-nested-filteredがtrueのときのホストの/dev/net/tunの有無も読む。filtered追加観測は既存のネットワーク仕様に従う。
 
+組み込みAPIは要求に渡された環境と作業ディレクトリを使って事実を収集し、呼び出し元の環境や作業ディレクトリを暗黙の入力にしない。
+メモリ上のポリシーを受け取る主入口は既存の設定ファイルを暗黙に読まない。
+自己ELFの読み取り可能性、必要なbwrapの機能、保持対象と起動直前の同一性を確認する。
+
 ### REQ-307: 外部コマンド
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11, docs/decision/brainstorm/2026-10-03-public-library-api.md#D13
 - verification: unit
 
 host/noneはbwrap以外の外部コマンドを実行せず、bwrapをホストPATHから探し不在ならbwrap診断にする。filtered追加依存は既存の実証完了条件で確定する。
 
+前段のhost/noneでbwrap以外の外部コマンドを実行しない規則とホストPATHを使う規則はCLIに限る。
+組み込みAPIはREQ-library-403に従って利用側バイナリを補助役として再実行でき、bwrapは要求に渡されたPATHから探す。
+
 ### REQ-308: メモリ上の記述子
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A16, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A19, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A20, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 hideの空ファイル（共有ファイルの置き場を使わない起動だけ。REQ-460）、filteredのresolv.conf（同じ）、rw-copy各通常ファイル、seccompをメモリ上のファイル記述子でbwrapへ渡しホストのファイルシステムに残さない。記述子を用意できない場合はbwrapで125。番号は起動直前に割り当て計画では記号を示す。
 
+前段の記述子番号を起動直前に割り当てる時期と、準備失敗を診断と終了コード125にする規則はCLIに限る。
+組み込みAPIはREQ-library-105に従ってprepareから必要な資源と対象の記述子を保持し、失敗はREQ-library-301の構造化エラーで返す。
+ホストのファイルシステムに複製内容を残さない規則は組み込みAPIにも適用する。
+
 ### REQ-309: ファイル数上限
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A40, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 記述子を作る前に開けるファイル数のsoft上限を毎回hard上限まで上げ、コマンドに継承する。"--nested=exec"の入れ子では記述子を作らず上限を上げない。rw-copyは通常ファイル1個につき記述子1個を使う。
+
+前段の呼び出し元でsoft上限を上げる規則はCLIに限る。
+組み込みAPIは呼び出し元のrlimitを変更せず、上限を上げる処理を補助プロセス内に限る。
 
 ### REQ-310: 通常ファイルだけを読む
 - kind: ubiquitous
@@ -76,10 +93,13 @@ HOME、XDG_CONFIG_HOME、XDG_RUNTIME_DIR、PATH、cwdを信頼し、ホストで
 
 ### REQ-315: 固定引数の順序
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A37, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A37, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A14, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A51, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A23, docs/decision/brainstorm/2026-09-29-nested-isolation.md#A30, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 host/noneの固定引数は--ro-bind / /、--dev /dev、入れ子の印の読み取り専用のファイル（/dev/kakoi-isolated）、network.allow-nested-filteredがtrueのときだけホストの/dev/net/tunを見せる引数、外の見張り役の置き場を引き継ぐときだけその読み取り専用の引数（REQ-465）、--proc /proc、--unshare-all、hostだけ--share-net、--die-with-parent、--chdir cwd、--seccomp記述子、--argv0 COMMANDの順。続けて適用順のマウント、1個の--、解決済みコマンドパス、ARGSを置く。ポリシーで固定部分を変えない。例外はnetwork.allow-nested-filteredによるtunだけである。
+
+前段の固定引数の列とその順序はCLIに限る。
+組み込みAPIは保持した対象を指す記述子参照と補助役を使って起動し、マウント、ネットワーク、環境、コマンド規則の意味を同じに保つ。
 
 ### REQ-316: COMMANDなしの固定引数
 - kind: ubiquitous

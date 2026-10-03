@@ -51,7 +51,7 @@ network と process の追加キーはネットワーク IR で、commands.guard
 
 ### REQ-154: 選択するプロファイルと合成の優先順位
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1
+- source: docs/decision/brainstorm/2026-09-16-kakoi-spec-readability.md#A1, docs/decision/brainstorm/2026-10-03-public-library-api.md#A5, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 書かれた段は最大 3 つ。下から、"--profile"（省略時 "default"）、"--policy-file"、コマンドライン。"--profile" で "default" 以外を指定したとき "default.toml" は読まない。指定したプロファイルのファイルが無ければポリシー読み込み失敗。
@@ -71,6 +71,9 @@ network と process の追加キーはネットワーク IR で、commands.guard
 反例: "--profile strict" が無いときに黙って組み込みの既定で起動する。組み込みの既定と "default.toml" が同時に読まれる。リンク切れの "default.toml" で組み込みの既定が使われる。合成規則は値の種類ごとに決まる。表 TBL-152 に従う。"env.path-prepend" の連結は上の段の項目が先頭側に来る。
 
 "PATH" に足したとき、上の段の項目ほど前に置かれる。
+
+前段の暗黙のプロファイル選択と設定ファイルの探索はCLI、または設定読み込みを明示的に選んだ入口に限る。
+メモリ上のポリシーを受け取る組み込みAPIの主入口はREQ-library-101に従い、ホームの既存設定を暗黙に読み込まない。
 
 ### REQ-155: 削除を持たない合成とワイルドカード
 - kind: ubiquitous
@@ -99,10 +102,13 @@ network と process の追加キーはネットワーク IR で、commands.guard
 
 ### REQ-399: 省略時のモード
 - kind: ubiquitous
-- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A9
+- source: docs/decision/brainstorm/2026-09-25-spec-only-rules.md#A9, docs/decision/brainstorm/2026-10-03-public-library-api.md#A13, docs/decision/brainstorm/2026-10-03-public-library-api.md#D11
 - verification: unit
 
 合成後に、"network.mode" をどの段も書いていなければ "host"、"env.mode" をどの段も書いていなければ "inherit" とする。REQ-087 の条件に当たるネットワークのキーをどれかの段が書いたときは "network.mode" の既定値を使わず、どの段にも "network.mode" が無ければ種類 "policy" の診断で終わる。
+
+前段のモード省略時の既定値は既存TOMLの契約として維持する。
+新しいRust構築APIはREQ-library-103に従い、マウント、ネットワーク、環境の各モードを明示させる。
 
 ## Decision tables
 
