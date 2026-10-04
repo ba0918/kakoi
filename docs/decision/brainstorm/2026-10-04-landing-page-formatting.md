@@ -11,9 +11,12 @@ LPのテンプレートは字下げがなく、CSSは1規則1行、JavaScriptと
 - A1 LPのソースを字下げと改行で整え、表示を変えない。テンプレートでテキストとインライン要素が隣り合う箇所と pre の中は、改行が表示上の空白になるため1行のまま残す。
   - why: 人が読んで直せる形にしながら、公開されるページの見た目と文言を保つため。
   - decided_by: 利用者が整形を依頼し、表示を保つ範囲の線引きは実装者が描画を比べて選んだ。
-- A2 site/ の整形を oxfmt で検査する。検査は site/ を含むコミットの pre-commit と、Pagesのビルド前に置く。版は 0.70.0 に固定し、設定は site/.oxfmtrc.json に置く。template.html は対象から外し、字下げを手で保つ。
+- A2 site/ の整形を oxfmt で検査する。検査は site/ を含むコミットの pre-commit と、Pagesのビルド前に置く。版は site/package.json と package-lock.json で 0.70.0 に固定し、CI は lockfile の完全性ハッシュを検証する npm ci で入れる。設定は site/.oxfmtrc.json に置く。template.html は対象から外し、字下げを手で保つ。
   - why: Pagesの検査はmainに入った後にしか動かないため、手元のコミットでも止める。template.html は整形器がインライン要素の空白を保つために `>…</a` と `>` を行をまたいで分け、かえって読みにくくなる。
   - decided_by: oxfmt の採用と pre-commit への追加は利用者。版の固定と template.html の除外は実装者。
+- A3 Pagesの公開ジョブが外から取ってきて実行するものは、版と完全性ハッシュで固定する。Python の依存は site/requirements.in から uv pip compile --generate-hashes で生成した requirements.txt を pip の --require-hashes で入れ、Node.js の依存は package-lock.json を npm ci で入れる。Python と Node.js の版は setup-python・setup-node で明示し、どちらも cache を使わない。Dependabot が pip と npm の固定を7日の猶予つきで更新する。
+  - why: 公開ジョブは pages: write と id-token: write を持つため、取得時に中身が差し替わるとその権限で動く。版だけでは中身を保証できず、ランナーの既定のランタイムはイメージ更新で変わる。
+  - decided_by: 利用者がCIの規約に従うことを条件にし、固定の手段は実装者が選んだ。
 
 ## Prohibitions
 

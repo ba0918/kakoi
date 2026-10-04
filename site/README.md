@@ -1,10 +1,11 @@
 # Landing page
 
-Python 3.11+ and Node.js 18+ are required for the local and Pages checks.
+Python 3.11+ and Node.js 20.19+ or 22.12+ are required for the local and Pages checks.
 
 ```sh
 python3 -m pip install -r site/requirements.txt
-npx --yes oxfmt@0.70.0 --check site
+npm ci --prefix site --ignore-scripts
+site/node_modules/.bin/oxfmt --check site
 python3 site/test_build.py
 python3 site/build.py --out _site
 python3 site/check.py --out _site
@@ -26,7 +27,8 @@ button click saves the shared value. Storage denial still permits in-page switch
 Other pages inherit the choice on navigation or reload; open tabs need not synchronize.
 
 `.oxfmtrc.json` sets the formatting of the CSS, JavaScript, JSON and Markdown here; run
-`npx --yes oxfmt@0.70.0 site` to apply it. `template.html` is excluded: to keep inline
+`site/node_modules/.bin/oxfmt site` to apply it. The version is fixed in
+`package.json` and `package-lock.json`. `template.html` is excluded: to keep inline
 whitespace, the formatter wraps inline markup as `>…</a\n>`, which is harder to read.
 Keep its indentation by hand, and keep text next to inline elements and `<pre>` contents
 on one line, since a line break there adds visible space.

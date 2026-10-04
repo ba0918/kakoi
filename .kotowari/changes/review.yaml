@@ -2,69 +2,59 @@
   "version": 1,
   "entries": [
     {
-      "id": "lp-formatting-independent-review",
-      "base": "5843305968450d2d4ae8868f6829904c3da2d2b5",
+      "id": "lp-ci-pinning-independent-review",
+      "base": "63aeea68914c769d08ecae520c35fbaa621e6bc6",
       "role": "reviewer",
       "files": [
         {
+          "path": ".github/dependabot.yml",
+          "before": "sha256:561bce6913434121e3d20403d6804692970319410e814f3992bfaa1a7b36cd4e",
+          "after": "sha256:dab4eda4df14661644fd3ee70906f5383e427dcb875a1099d6f014c6cadb21ff"
+        },
+        {
           "path": ".github/workflows/pages.yml",
-          "before": "sha256:2f107172fb459d796ce83c26fe02f3f7ded96135753d632889cef36d3a12ae5a",
-          "after": "sha256:936b428052420b60848a16a9554ecb8546378a1f2393e59cbb0861b1589aed2d"
+          "before": "sha256:936b428052420b60848a16a9554ecb8546378a1f2393e59cbb0861b1589aed2d",
+          "after": "sha256:4e48362425e6c4e14d25efa25288c14057ce06f1f3b9ec7ed2db204035d13f6c"
+        },
+        {
+          "path": ".gitignore",
+          "before": "sha256:e8c7793dbfa1c57c27d4fb0cef788cead3fdc13d94d7c792867c70da4514078e",
+          "after": "sha256:7d7373defee21ae5983276fdbff6b8174fce7a6f5c6e65a236fd8536b64b5d64"
         },
         {
           "path": "PROJECT.md",
-          "before": "sha256:35d6f99bd710d3e4a25ae5f4c01afad304e6e43e24c2b81749398b6e0f57a8ce",
-          "after": "sha256:562bfa719085fe6694ce11d951c7d108ca94c60765196d7da7314adba28deaba"
+          "before": "sha256:562bfa719085fe6694ce11d951c7d108ca94c60765196d7da7314adba28deaba",
+          "after": "sha256:bf0b3bfc8a5b4417be819b48d55cec0415bb070f346657db992c9a4c8b368024"
         },
         {
           "path": "lefthook.yml",
-          "before": "sha256:3b149ec59180210a00370148a8d3e6dd3ee145587209f0c21eff31ab6257cc5f",
-          "after": "sha256:b67c1695880d7052ad3be3fc5419929015a01edc5a9a9d9f071668d413b30f5a"
-        },
-        {
-          "path": "site/.oxfmtrc.json",
-          "before": null,
-          "after": "sha256:258a61a64dcc4e378832d9c9d7e6892c17d142f9c6adf1c0c4e53abc833a9414"
+          "before": "sha256:b67c1695880d7052ad3be3fc5419929015a01edc5a9a9d9f071668d413b30f5a",
+          "after": "sha256:9c8b51ff01b324cb4a94eadc27026ca0fd5f5e3aea00201cc8416c2f1a7a9c9f"
         },
         {
           "path": "site/README.md",
-          "before": "sha256:0962c998f829134d3ea8031488019eb672e8464641e1916078f0cbf4ef5fadba",
-          "after": "sha256:19e9706132ab7d0db1f34a4589208a8505106f4435d43186c51edd3292564222"
+          "before": "sha256:19e9706132ab7d0db1f34a4589208a8505106f4435d43186c51edd3292564222",
+          "after": "sha256:f5cf464d124947b1a324f322cc2c1f4462ff5dbfc7ccb0d292de3dc92014750c"
         },
         {
-          "path": "site/app.js",
-          "before": "sha256:a58ca4bbffac8f4ac1652d0f6efd0a295cd368c68d24b15d028411620ce233bd",
-          "after": "sha256:9e615ef29bca78e11de8edeb72b8f3c68f1fd9e9649b3214022abd6dc45c89c8"
+          "path": "site/package-lock.json",
+          "before": null,
+          "after": "sha256:1dbb12d248078185ff3e3a39217fcc89f0195fbc56f43d370075fb26410d4cbf"
         },
         {
-          "path": "site/build.py",
-          "before": "sha256:a830c275a8a1e0ecc5a91a4af781c27581190d234577769bcbc12f3d2b54a401",
-          "after": "sha256:289c1217dbdbb6d71679a95f8e28ec101c2d6ca265fbe965ef7216006b4f4a96"
+          "path": "site/package.json",
+          "before": null,
+          "after": "sha256:acc7dfaed36ba36dd318ce4a943f12185c78224346b471a819f4f9d9dbb67fa4"
         },
         {
-          "path": "site/check.py",
-          "before": "sha256:9bed96ea68942768e53d4b3e241b0f4d94e97b579b7d73d105b28657cd0d22c0",
-          "after": "sha256:b5ec520234e24dab5e6d9b3caa895fb77d45c1b8e98a1ef3b8cb053e1308a1e3"
+          "path": "site/requirements.in",
+          "before": null,
+          "after": "sha256:c91fc52c155b198c0af0d9852e0109f221fcc12a606de132c1a45122e830a569"
         },
         {
-          "path": "site/language-preference.js",
-          "before": "sha256:38a2059031b847ae000d7bae501ed1b76b255f4a1b2925e879a65a61e5d7cd47",
-          "after": "sha256:34132ae72970e0c482dd4669d4a505a2e4acd34f8becf9eb8f0dbb4b04b6c330"
-        },
-        {
-          "path": "site/language-preference.test.cjs",
-          "before": "sha256:1320494648c56fc98a4518a8f3ff762c1bfac62b07b07266954a828fb50eaa9a",
-          "after": "sha256:9f78995e7a1f858e0a98692780aefdb1d9532c63feaa7519f37de2e7d52f621b"
-        },
-        {
-          "path": "site/style.css",
-          "before": "sha256:31456c3d8c86169df3e132303e708c4287d627d22bc44950d8c099446ef47a1b",
-          "after": "sha256:d608d4f8a7bcbfd41b6bab6f3136ec9c2df0b3f98a4ed6c5d64195ddbb0e63ce"
-        },
-        {
-          "path": "site/template.html",
-          "before": "sha256:55b8056c231483b8b9f721d055ec658f239d5c0238aaff3c69d2d859e5a51c37",
-          "after": "sha256:75ca8c58bf72024b0652ee1b62c09d73ec9bf36a5b977b64d6d5b337147223f0"
+          "path": "site/requirements.txt",
+          "before": "sha256:c91fc52c155b198c0af0d9852e0109f221fcc12a606de132c1a45122e830a569",
+          "after": "sha256:2a5f2e2fa7460b059dbdd934d99afad9900248a12e80b8dde4a9d6cc44583bc9"
         }
       ],
       "ir": [
@@ -74,16 +64,14 @@
         }
       ],
       "conclusion": "new",
-      "reason": "base 5843305 と head 0f516ef を git archive で別々に展開し、GITHUB_SHA を同じ値に固定して build.py を実行した。messages.js はバイト一致。index.html は html.parser の字句列で比べ、空白だけのテキストを除くと開始・終了タグ、属性、テキスト、pre の中身の 587 字句がすべて一致した。空白の有無が変わった 172 箇所はすべてタグ境界で、親が flex・grid か、h1>span のような block 要素か、空白が行頭・行末に落ちる位置であり、表示に出ない。両方の生成物を 1700・1440・1024・390・320px と日英で全画面撮影した 10 枚は PNG がバイト一致した（日英の画像は互いに異なり、撮影自体は有効）。style.css は空白と引用符と先頭の 0 と !important 前の空白と属性値の引用符を正規化すると、メディアクエリを含む 276 規則が一致した。app.js と language-preference.js は esbuild で縮約した結果がバイト一致した。test.cjs は局所変数 legacy の抽出、build.py と check.py は中間変数の抽出だけで、AST と縮約結果から等価と判断した。test_build.py は変更されていない。base と head の両方で test_build.py（node --test 5 件を含む）と check.py が通った。oxfmt 0.70.0 の --check site は head で 0 終了し、対象は template.html を除く 7 ファイルだった。設定を外すと 5 ファイルで違反になり、崩した行を足すと 1 で終了したので、site/.oxfmtrc.json が読まれ、違反を検出できる。lefthook 2.1.14 で site-format は site/app.js と site/template.html を指定したとき起動し、src/lib.rs では起動しなかった。PROJECT.md と site/README.md の説明と一致する。pages.yml の追加は依存の導入とビルドの間の 1 ステップだけで、起動条件、権限、環境、upload の path は変わらず、生成物も同じ 5 ファイルなので REQ-site-102 と P1 を保つ。REQ-site-101・103・104 の表示、版、言語選択も上の比較で変わらない。整形検査は公開物を変えない開発時の運用上の制約で、既存の test_build.py や check.py の実行も IR の要求にはなっていない。そのため IR を変えずに A2 として判断記録に置き、missing_spec の recorded とするのが契約に合うと判断し、conclusion を new とした。未確認: Pages の新ステップは main に入るまで CI で走らないため、ubuntu-24.04 で npx が使えることはローカルでの実行結果から推測した。",
+      "reason": "base 63aeea6 と head e092fcd の差分を独立に確かめた。files の識別値は git ls-tree と git cat-file から mode・NUL・blob で再計算し、IR の SHA-256 も再計算した。pages.yml: uses はすべて40桁のコミットハッシュで、setup-node 8207627… と setup-python 5fda3b9… は git ls-remote で各リポジトリの refs/tags/v7.0.0 を指す（軽量タグ）。固定コミットの action.yml に python-version・node-version・package-manager-cache の入力があり、setup-python の cache は既定で無効、setup-node の package-manager-cache は false で無効化されている。actionlint 1.7.12 は指摘なし、zizmor 1.30.1 auditor は pages.yml と dependabot.yml の両方で指摘なし。起動条件（main の site/**・Cargo.toml・pages.yml と workflow_dispatch）、ジョブ権限（contents: read・pages: write・id-token: write、理由コメントのみ追加）、github-pages 環境、concurrency（cancel-in-progress: false）、timeout、persist-credentials: false、アップロード対象 _site は base から変わっておらず REQ-site-102 と P1 を守る。defaults.run.shell: bash で -eo pipefail になる。依存の固定: head を git archive で展開し、site/requirements.in から同じ uv pip compile コマンドで再生成した結果は requirements.txt とコメント以外一致、site/package.json から npm install --package-lock-only で再生成した lockfile も name 以外一致し、どちらもツール生成物と確認した。package-lock.json の22項目のうち依存21件すべてに integrity（sha512）がある。展開先で uv venv（Python 3.12）に pip install --require-hashes が通り、npm ci --prefix site --ignore-scripts で oxfmt・tinypool・linux-x64 バインディングだけが入り、oxfmt --check site は8ファイル合格、test_build.py 合格、GITHUB_SHA を与えた build.py と check.py が通り、生成物は index.html・messages.js・style.css・app.js・language-preference.js の5ファイルのまま（node_modules は公開物に入らない）。lefthook の site-format は lockfile から入れた site/node_modules/.bin/oxfmt を使い、PROJECT.md と site/README.md の導入手順（npm ci --prefix site --ignore-scripts、Node.js ^20.19.0 || >=22.12.0 は lockfile の engines と一致）と合う。.gitignore に site/node_modules を追加。dependabot.yml の npm・pip は /site で cooldown 7日。依存固定の方針は IR に定めがなく判断記録 A3 に新たに記録されたため、missing_spec の recorded gap と conclusion new は妥当。未確認: 公開ワークフローの実際の実行は main への push 後にしか観測できない。Dependabot が uv 生成ヘッダの requirements.txt を requirements.in と整合させて更新するかは実運用で未確認。",
       "requirements": [
-        "REQ-site-101",
         "REQ-site-102",
-        "REQ-site-103",
-        "REQ-site-104"
+        "REQ-site-103"
       ],
       "decisions": [
-        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A1",
         "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A2",
+        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A3",
         "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#P1"
       ],
       "handoff": null,
@@ -92,7 +80,7 @@
           "category": "missing_spec",
           "disposition": "recorded",
           "refs": [
-            "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A2"
+            "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A3"
           ]
         }
       ]
