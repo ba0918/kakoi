@@ -2,59 +2,14 @@
   "version": 1,
   "entries": [
     {
-      "id": "lp-ci-pinning-independent-review",
-      "base": "63aeea68914c769d08ecae520c35fbaa621e6bc6",
+      "id": "pages-actions-bump-review",
+      "base": "b66e91c7759f0580b7207fd978bfbb7759d7b773",
       "role": "reviewer",
       "files": [
         {
-          "path": ".github/dependabot.yml",
-          "before": "sha256:561bce6913434121e3d20403d6804692970319410e814f3992bfaa1a7b36cd4e",
-          "after": "sha256:dab4eda4df14661644fd3ee70906f5383e427dcb875a1099d6f014c6cadb21ff"
-        },
-        {
           "path": ".github/workflows/pages.yml",
-          "before": "sha256:936b428052420b60848a16a9554ecb8546378a1f2393e59cbb0861b1589aed2d",
-          "after": "sha256:4e48362425e6c4e14d25efa25288c14057ce06f1f3b9ec7ed2db204035d13f6c"
-        },
-        {
-          "path": ".gitignore",
-          "before": "sha256:e8c7793dbfa1c57c27d4fb0cef788cead3fdc13d94d7c792867c70da4514078e",
-          "after": "sha256:7d7373defee21ae5983276fdbff6b8174fce7a6f5c6e65a236fd8536b64b5d64"
-        },
-        {
-          "path": "PROJECT.md",
-          "before": "sha256:562bfa719085fe6694ce11d951c7d108ca94c60765196d7da7314adba28deaba",
-          "after": "sha256:bf0b3bfc8a5b4417be819b48d55cec0415bb070f346657db992c9a4c8b368024"
-        },
-        {
-          "path": "lefthook.yml",
-          "before": "sha256:b67c1695880d7052ad3be3fc5419929015a01edc5a9a9d9f071668d413b30f5a",
-          "after": "sha256:9c8b51ff01b324cb4a94eadc27026ca0fd5f5e3aea00201cc8416c2f1a7a9c9f"
-        },
-        {
-          "path": "site/README.md",
-          "before": "sha256:19e9706132ab7d0db1f34a4589208a8505106f4435d43186c51edd3292564222",
-          "after": "sha256:f5cf464d124947b1a324f322cc2c1f4462ff5dbfc7ccb0d292de3dc92014750c"
-        },
-        {
-          "path": "site/package-lock.json",
-          "before": null,
-          "after": "sha256:1dbb12d248078185ff3e3a39217fcc89f0195fbc56f43d370075fb26410d4cbf"
-        },
-        {
-          "path": "site/package.json",
-          "before": null,
-          "after": "sha256:acc7dfaed36ba36dd318ce4a943f12185c78224346b471a819f4f9d9dbb67fa4"
-        },
-        {
-          "path": "site/requirements.in",
-          "before": null,
-          "after": "sha256:c91fc52c155b198c0af0d9852e0109f221fcc12a606de132c1a45122e830a569"
-        },
-        {
-          "path": "site/requirements.txt",
-          "before": "sha256:c91fc52c155b198c0af0d9852e0109f221fcc12a606de132c1a45122e830a569",
-          "after": "sha256:2a5f2e2fa7460b059dbdd934d99afad9900248a12e80b8dde4a9d6cc44583bc9"
+          "before": "sha256:4e48362425e6c4e14d25efa25288c14057ce06f1f3b9ec7ed2db204035d13f6c",
+          "after": "sha256:c50e0b9ef20dc937da7626b504c671d7a77c49a972ffa80fc5d941a3f0e77319"
         }
       ],
       "ir": [
@@ -63,27 +18,16 @@
           "sha256": "sha256:14a27c1a7ac89b0aa3f78cadb5e84d05d0df8f3e1da803e1a9314a49bf4d0697"
         }
       ],
-      "conclusion": "new",
-      "reason": "base 63aeea6 と head e092fcd の差分を独立に確かめた。files の識別値は git ls-tree と git cat-file から mode・NUL・blob で再計算し、IR の SHA-256 も再計算した。pages.yml: uses はすべて40桁のコミットハッシュで、setup-node 8207627… と setup-python 5fda3b9… は git ls-remote で各リポジトリの refs/tags/v7.0.0 を指す（軽量タグ）。固定コミットの action.yml に python-version・node-version・package-manager-cache の入力があり、setup-python の cache は既定で無効、setup-node の package-manager-cache は false で無効化されている。actionlint 1.7.12 は指摘なし、zizmor 1.30.1 auditor は pages.yml と dependabot.yml の両方で指摘なし。起動条件（main の site/**・Cargo.toml・pages.yml と workflow_dispatch）、ジョブ権限（contents: read・pages: write・id-token: write、理由コメントのみ追加）、github-pages 環境、concurrency（cancel-in-progress: false）、timeout、persist-credentials: false、アップロード対象 _site は base から変わっておらず REQ-site-102 と P1 を守る。defaults.run.shell: bash で -eo pipefail になる。依存の固定: head を git archive で展開し、site/requirements.in から同じ uv pip compile コマンドで再生成した結果は requirements.txt とコメント以外一致、site/package.json から npm install --package-lock-only で再生成した lockfile も name 以外一致し、どちらもツール生成物と確認した。package-lock.json の22項目のうち依存21件すべてに integrity（sha512）がある。展開先で uv venv（Python 3.12）に pip install --require-hashes が通り、npm ci --prefix site --ignore-scripts で oxfmt・tinypool・linux-x64 バインディングだけが入り、oxfmt --check site は8ファイル合格、test_build.py 合格、GITHUB_SHA を与えた build.py と check.py が通り、生成物は index.html・messages.js・style.css・app.js・language-preference.js の5ファイルのまま（node_modules は公開物に入らない）。lefthook の site-format は lockfile から入れた site/node_modules/.bin/oxfmt を使い、PROJECT.md と site/README.md の導入手順（npm ci --prefix site --ignore-scripts、Node.js ^20.19.0 || >=22.12.0 は lockfile の engines と一致）と合う。.gitignore に site/node_modules を追加。dependabot.yml の npm・pip は /site で cooldown 7日。依存固定の方針は IR に定めがなく判断記録 A3 に新たに記録されたため、missing_spec の recorded gap と conclusion new は妥当。未確認: 公開ワークフローの実際の実行は main への push 後にしか観測できない。Dependabot が uv 生成ヘッダの requirements.txt を requirements.in と整合させて更新するかは実運用で未確認。",
+      "conclusion": "existing",
+      "reason": "base b66e91c と head fb877ec の差分のうちワークフローは .github/workflows/pages.yml の uses 3行だけで、残りは実装者の記録。git ls-remote で configure-pages v6.0.0=45bfe019、upload-pages-artifact v5.0.0=fc324d35、deploy-pages v5.0.1=368f8252 がタグの指すコミットと一致し（いずれも注釈なしタグ）、Dependabot PR #7〜#9 の差分とも一致した。固定コミットの action.yml では configure-pages と deploy-pages は node24、upload-pages-artifact は composite で内部の actions/upload-artifact を bbbca2dd（ls-remote で v7.0.0 と一致、node24）にハッシュ固定している。使う入力 path は upload-pages-artifact にあり、environment の url が参照する deploy-pages の page_url 出力も残っている。リリースノートの変更は Node.js 24 移行、upload-artifact v7（ESM 化と archive 入力の追加、既定は従来どおり zip）、include-hidden-files 入力の追加、デプロイ状態の問い合わせへの backoff 追加で、このワークフローの使い方を変えない。旧 v4 の action.yml も隠しファイルを --exclude=.[^/]* で除いており、新版の既定 false と同じ。head で site/build.py と check.py を実行すると _site は index.html、messages.js、style.css、app.js、language-preference.js の5ファイルで隠しファイルはなく、公開物は変わらない。起動条件・permissions・github-pages environment・timeout・アップロード対象は変わらず REQ-site-102 を満たし続ける。外部アクションをハッシュで固定し Dependabot（github-actions、7日猶予）で更新する点は A3 に沿う。actionlint 1.7.12 と zizmor 1.30.1（auditor、offline）は指摘なし。実際の公開は main への push 後にしか観測できない。",
       "requirements": [
-        "REQ-site-102",
-        "REQ-site-103"
+        "REQ-site-102"
       ],
       "decisions": [
-        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A2",
-        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A3",
-        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#P1"
+        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A3"
       ],
       "handoff": null,
-      "gaps": [
-        {
-          "category": "missing_spec",
-          "disposition": "recorded",
-          "refs": [
-            "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A3"
-          ]
-        }
-      ]
+      "gaps": []
     }
   ]
 }
