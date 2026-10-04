@@ -11,7 +11,9 @@ function setLanguage(language) {
 }
 
 setLanguage(siteLanguage.read('kakoi-lp-language'));
-languageButtons.forEach(button => button.addEventListener('click', () => {
-  setLanguage(button.dataset.language);
-  siteLanguage.save(button.dataset.language);
-}));
+languageButtons.forEach(button =>
+  button.addEventListener('click', () => {
+    setLanguage(button.dataset.language);
+    siteLanguage.save(button.dataset.language);
+  })
+);
