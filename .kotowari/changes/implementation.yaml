@@ -2,61 +2,109 @@
   "version": 1,
   "entries": [
     {
-      "id": "landing-page-implementation",
-      "base": "c2a78958027e784d9cb81855638bf78e62490956",
+      "id": "lp-maintenance-implementation",
+      "base": "d66744fd12e1d9b2f077741473a8a1e780b26369",
       "role": "implementer",
       "files": [
         {
-          "path": "site/index.html",
-          "before": null,
-          "after": "sha256:e08f16cae7b6785583bba643e09bba39e14668f46d5c95b76e8c3cb3e9a027cd"
+          "path": ".github/workflows/pages.yml",
+          "before": "sha256:7632c141784e9ad4bf52d33c4a4565b23a65e4e4e328aa589f5d753291102dd6",
+          "after": "sha256:2f107172fb459d796ce83c26fe02f3f7ded96135753d632889cef36d3a12ae5a"
         },
         {
-          "path": "site/style.css",
-          "before": null,
-          "after": "sha256:4d13a408034de0e65faf067045e7a666f314c2a1c3587e0212deaacbb03852f7"
+          "path": ".gitignore",
+          "before": "sha256:3cf6c696708345237515750b0a86f8d9cced4635a2d4135549eb0719cc58c6f7",
+          "after": "sha256:e8c7793dbfa1c57c27d4fb0cef788cead3fdc13d94d7c792867c70da4514078e"
         },
         {
           "path": "site/app.js",
-          "before": null,
-          "after": "sha256:ee2882ac66de8a686114d6ef6892a6159f87473c3601511209fa3a6d87020389"
+          "before": "sha256:ee2882ac66de8a686114d6ef6892a6159f87473c3601511209fa3a6d87020389",
+          "after": "sha256:a58ca4bbffac8f4ac1652d0f6efd0a295cd368c68d24b15d028411620ce233bd"
         },
         {
-          "path": ".github/workflows/pages.yml",
+          "path": "site/index.html",
+          "before": "sha256:e08f16cae7b6785583bba643e09bba39e14668f46d5c95b76e8c3cb3e9a027cd",
+          "after": null
+        },
+        {
+          "path": "site/style.css",
+          "before": "sha256:4d13a408034de0e65faf067045e7a666f314c2a1c3587e0212deaacbb03852f7",
+          "after": "sha256:31456c3d8c86169df3e132303e708c4287d627d22bc44950d8c099446ef47a1b"
+        },
+        {
+          "path": "site/README.md",
           "before": null,
-          "after": "sha256:7632c141784e9ad4bf52d33c4a4565b23a65e4e4e328aa589f5d753291102dd6"
+          "after": "sha256:0962c998f829134d3ea8031488019eb672e8464641e1916078f0cbf4ef5fadba"
+        },
+        {
+          "path": "site/build.py",
+          "before": null,
+          "after": "sha256:a830c275a8a1e0ecc5a91a4af781c27581190d234577769bcbc12f3d2b54a401"
+        },
+        {
+          "path": "site/check.py",
+          "before": null,
+          "after": "sha256:9bed96ea68942768e53d4b3e241b0f4d94e97b579b7d73d105b28657cd0d22c0"
+        },
+        {
+          "path": "site/language-preference.js",
+          "before": null,
+          "after": "sha256:38a2059031b847ae000d7bae501ed1b76b255f4a1b2925e879a65a61e5d7cd47"
+        },
+        {
+          "path": "site/language-preference.test.cjs",
+          "before": null,
+          "after": "sha256:1320494648c56fc98a4518a8f3ff762c1bfac62b07b07266954a828fb50eaa9a"
+        },
+        {
+          "path": "site/messages.json",
+          "before": null,
+          "after": "sha256:1dfe5c600e6c63839a3c306dcee314714bc89c180e72e33253e75878671d997a"
+        },
+        {
+          "path": "site/requirements.txt",
+          "before": null,
+          "after": "sha256:c91fc52c155b198c0af0d9852e0109f221fcc12a606de132c1a45122e830a569"
+        },
+        {
+          "path": "site/template.html",
+          "before": null,
+          "after": "sha256:55b8056c231483b8b9f721d055ec658f239d5c0238aaff3c69d2d859e5a51c37"
+        },
+        {
+          "path": "site/test_build.py",
+          "before": null,
+          "after": "sha256:a77cd5aa79f43f0b7c79591c2659a867b7615771ccdaf5b7a666bd8033c3ad93"
         }
       ],
       "ir": [
         {
           "path": "docs/ir/site/site-publication.md",
-          "sha256": "sha256:fc1ea9674daf05ec1c5e1b5d960cac1d52ff400ab756bc4ffc51f0a047a24b18"
-        },
-        {
-          "path": "docs/ir/core/core-release.md",
-          "sha256": "sha256:5ea01b443adad1bd0b5922a7c5bb2fad58f1b1dda82043d228793dbf0a333e58"
-        },
-        {
-          "path": "docs/ir/change-review.md",
-          "sha256": "sha256:ff3b1a84ceb3b29dc4a42e389834819070340ee115afb52c1d18b8ab855a7d00"
+          "sha256": "sha256:14a27c1a7ac89b0aa3f78cadb5e84d05d0df8f3e1da803e1a9314a49bf4d0697"
         }
       ],
       "conclusion": "new",
-      "reason": "承認されたLPをsiteへ配置し、main限定の既存Pages環境でサイト3ファイルだけを公開する。版はCargo.tomlから、公開commitはGITHUB_SHAから生成する。siteを変更照合対象に追加した。日英の1440・390・320px、切替保持、CTAと既存Docsへの遷移をChromeで確認し、workflowのactionlintとkotowari checkを実行した。製品や既存CI、保護設定は変更しない。",
+      "reason": "承認された同一originの言語契約をREQ-site-104へ具体化し、既存の英語初期表示・日英切替・本文・導線・版とcommit識別・公開保護を維持する。文言の単一辞書化、標準Jinja2テンプレート、CSS統合とローカル/Pages共通checkは保守性整理の範囲。日英1440/390/320pxの6画像比較は差分0、言語の互換読取と非昇格、明示保存、保存拒否、TOPとの遷移をブラウザで確認した。製品本体と無関係なCIは変更しない。",
       "requirements": [
         "REQ-site-101",
         "REQ-site-102",
         "REQ-site-103",
-        "REQ-386",
-        "REQ-1000"
+        "REQ-site-104"
       ],
       "decisions": [
-        "docs/decision/brainstorm/2026-10-04-landing-page.md#A1",
-        "docs/decision/brainstorm/2026-10-04-landing-page.md#A2",
-        "docs/decision/brainstorm/2026-10-04-landing-page.md#A3"
+        "docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A1",
+        "docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A2"
       ],
       "handoff": null,
-      "gaps": []
+      "gaps": [
+        {
+          "category": "missing_spec",
+          "disposition": "recorded",
+          "refs": [
+            "docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A1"
+          ]
+        }
+      ]
     }
   ]
 }

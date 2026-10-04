@@ -2,3 +2,6 @@
 /target/
 /mise.local.toml
 /lefthook-local.yml
+
+/_site/
+/site/__pycache__/

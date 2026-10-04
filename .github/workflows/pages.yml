@@ -37,23 +37,14 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
-      - name: Build the static site
-        run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          import shutil
-          import tomllib
+      - name: Install site dependencies
+        run: python3 -m pip install -r site/requirements.txt
 
-          version = tomllib.loads(Path('Cargo.toml').read_text())['workspace']['package']['version']
-          html = Path('site/index.html').read_text()
-          html = html.replace('__KAKOI_VERSION__', version).replace('__KAKOI_COMMIT__', os.environ['GITHUB_SHA'])
-          output = Path('_site')
-          output.mkdir(exist_ok=True)
-          (output / 'index.html').write_text(html)
-          for asset in ('style.css', 'app.js'):
-              shutil.copyfile(Path('site') / asset, output / asset)
-          PY
+      - name: Build and check the static site
+        run: |
+          python3 site/test_build.py
+          python3 site/build.py --out _site
+          python3 site/check.py --out _site
 
       - name: Upload the site only
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4

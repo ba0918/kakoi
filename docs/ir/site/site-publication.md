@@ -27,3 +27,11 @@ Pagesはmain上のサイト、公開workflow、Cargo.tomlの変更とmain上の�
 - how_to_verify: 生成された版表示をCargo.tomlと比べ、公開HTMLのcommitメタデータ、Pages runのheadとremote commitを比較する。サイトがchanges.filesに含まれ、両役の記録と最終照合があることを確認する。
 
 LPの版表示はCargo.tomlから生成する。公開HTMLに対象commitを記録する。サイトの変更は既存の実装者と独立レビュアーによる変更照合の対象とする。
+
+### REQ-site-104: 同一originでの言語選択
+- kind: invariant
+- source: docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A1
+- verification: review
+- how_to_verify: 共通値と旧値の優先順、無効値の無視、初回読み取りで保存しないこと、明示切替時の保存、保存拒否時の切替、および同一originのTOPとLPの遷移・再読込を確認する。
+
+有効な共通キー "ba0918-language" の "en" または "ja" を優先する。共通値が無効または存在しなければ当該LPの旧キー "kakoi-lp-language" の有効値を読み、それもなければ英語を表示する。明示切替時だけ共通値を保存し、旧値の自動昇格や旧キー同士の新旧推測はしない。保存拒否時もページ内切替を動作させる。選択の引継ぎは次の遷移または再読込で行い、既存タブの即時同期は要求しない。

@@ -47,10 +47,10 @@ h1>span{display:block}
 .host-note{font-size:11px;color:#99adbc;margin:8px 0 26px}
 .map-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 32px;position:relative}
 .map-node{border:1px solid #597180;background:#172c3b;min-width:0;padding:12px;position:relative;z-index:1}
-.node-label{display:flex;gap:9px;align-items:center;font:9px var(--mono);letter-spacing:.4px;color:#afc3ce;margin-bottom:9px}
+.node-label{display:flex;gap:9px;align-items:center;font:10px var(--mono);letter-spacing:.4px;color:#afc3ce;margin-bottom:9px}
 .node-label>span:first-child{color:#7794a4}
 .map-node code{font:15px var(--mono);color:#e3ebef;display:block;white-space:nowrap}
-.node-detail{font-size:9px;line-height:1.5;color:#a1b8c5;display:block;margin-top:8px}
+.node-detail{font-size:11px;line-height:1.5;color:#a1b8c5;display:block;margin-top:8px}
 .writable{border-color:#7ac2b1}
 .writable code{color:var(--cyan)}
 .hidden{background:repeating-linear-gradient(135deg,#ffffff03 0 1px,transparent 1px 6px)}
@@ -133,7 +133,7 @@ html[lang=ja] h2{font-size:34px;line-height:1.5;letter-spacing:-1.1px}
 html[lang=ja] .intro{font-size:15px;line-height:2}
 html[lang=ja] .eyebrow{letter-spacing:1px}
 html[lang=ja] .map-node code{font-size:14px}
-html[lang=ja] .node-detail{font-size:9px}
+html[lang=ja] .node-detail{font-size:11px}
 
 @media(min-width:1600px){.hero{padding-block:100px}
 }
@@ -201,21 +201,21 @@ h1{font-size:54px;letter-spacing:-2.7px;line-height:1.06;margin-bottom:22px}
 .hero-meta span{margin-inline:5px}
 .figure-head{font-size:8px;letter-spacing:.7px;margin-bottom:10px}
 .host-zone{padding:15px 12px}
-.zone-label{font-size:8px;letter-spacing:.4px}
-.host-note{font-size:9px;margin:7px 0 18px}
+.zone-label{font-size:9px;letter-spacing:.4px}
+.host-note{font-size:11px;margin:7px 0 18px}
 .map-grid{column-gap:14px}
 .map-node{padding:10px 8px}
-.node-label{font-size:7px;letter-spacing:0;gap:5px;margin-bottom:8px;min-height:12px}
+.node-label{font-size:9px;letter-spacing:0;gap:5px;margin-bottom:8px;min-height:25px;align-items:flex-start;line-height:1.45}
 .map-node code{font-size:12px}
-.node-detail{font-size:8px;line-height:1.6;min-height:26px;margin-top:6px}
+.node-detail{font-size:10px;line-height:1.6;min-height:32px;margin-top:6px}
 .command-zone{margin:26px 13px;padding:14px 12px 10px}
 .command-zone:before,.command-zone:after{height:26px}
 .command-zone:before{top:-27px}
 .command-zone:after{bottom:-27px}
 .command-zone>code{font-size:20px}
-.command-label{font-size:7px;letter-spacing:.65px}
-.command-foot{font-size:7px;margin-top:12px;padding-top:8px}
-figcaption{font-size:9px;gap:9px;padding-top:11px}
+.command-label{font-size:9px;letter-spacing:.2px}
+.command-foot{font-size:9px;margin-top:12px;padding-top:8px}
+figcaption{font-size:11px;gap:9px;padding-top:11px}
 .technical-strip{font-size:8px;letter-spacing:.55px;gap:16px 10px;padding-block:21px}
 .technical-strip>span{width:calc(50% - 5px)}
 .section{padding-block:49px}
@@ -256,61 +256,28 @@ pre{font-size:11px}
 html[lang=ja] h1{font-size:39px;letter-spacing:-2px;line-height:1.4}
 html[lang=ja] h2{font-size:27px;line-height:1.5}
 html[lang=ja] .intro{font-size:13px;line-height:1.9}
-html[lang=ja] .node-label{font-size:7px}
-html[lang=ja] .node-detail{font-size:8px}
-html[lang=ja] .map-node code{font-size:11px}
+html[lang=ja] .node-label{font-size:9px}
+html[lang=ja] .node-detail{font-size:10px}
+html[lang=ja] .map-node code{font-size:12px}
 }
 
 @media(max-width:350px){.wrap{width:calc(100% - 32px)}
 h1{font-size:47px}
 .button{font-size:10px;gap:10px;padding-inline:11px}
 .map-node code{font-size:10px}
-.node-label{font-size:6px;gap:3px}
-.node-detail{font-size:7px}
+.node-label{font-size:8px;gap:3px}
+.node-detail{font-size:10px}
 .command-zone{margin-inline:7px}
 .command-zone>code{font-size:17px}
 .hero-meta{font-size:9px}
 .footer>div{margin-left:0}
 .host-zone{padding-inline:10px}
+.command-foot{font-size:8px}
+html[lang=ja] .node-label{font-size:8px}
 html[lang=ja] h1{font-size:34px}
 html[lang=ja] .map-node code{font-size:10px}
-html[lang=ja] .node-detail{font-size:7px}
+html[lang=ja] .node-detail{font-size:10px}
 }
 
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}
-}
-
-
-.node-label{font-size:10px}
-
-.node-detail{font-size:11px}
-
-html[lang=ja] .node-detail{font-size:11px}
-
-@media(max-width:540px){
-  .node-label,html[lang=ja] .node-label{font-size:9px;align-items:flex-start;min-height:25px;line-height:1.45}
-
-  .node-detail,html[lang=ja] .node-detail{font-size:10px;min-height:32px}
-
-  .map-node code,html[lang=ja] .map-node code{font-size:12px}
-
-  .command-label{font-size:9px;letter-spacing:.2px}
-
-  .command-foot{font-size:9px}
-
-  .host-note{font-size:11px}
-
-  .zone-label{font-size:9px}
-
-  figcaption{font-size:11px}
-
-}
-
-@media(max-width:350px){
-  .map-node code,html[lang=ja] .map-node code{font-size:10px}
-
-  .node-label,html[lang=ja] .node-label{font-size:8px}
-
-  .command-foot{font-size:8px}
-
 }

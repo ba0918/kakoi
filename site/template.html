@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="kakoi — a policy-defined boundary around your CLI. A lightweight command runner for Linux and WSL2.">
+<meta name="source-commit" content="{{ commit }}">
+<title data-i18n="title">{{ copy.title | safe }}</title>
+<link rel="stylesheet" href="style.css"><script src="language-preference.js" defer></script><script src="messages.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="skip_to_content">{{ copy.skip_to_content | safe }}</a>
+<div class="blueprint">
+<header class="wrap header">
+<a href="#" class="brand" aria-label="kakoi home"><span class="mark" aria-hidden="true">k</span>kakoi<span class="version">v{{ version }}</span></a>
+<nav aria-label="Main navigation">
+<a class="nav-docs" href="https://github.com/ba0918/kakoi/blob/main/docs/getting-started.md" data-i18n="docs">{{ copy.docs | safe }}</a>
+<a class="nav-github" href="https://github.com/ba0918/kakoi">GitHub ↗</a>
+<div class="languages" role="group" aria-label="Language / 言語">
+<button type="button" data-language="en" aria-label="English" aria-pressed="true">EN</button>
+<button type="button" data-language="ja" aria-label="日本語" aria-pressed="false">日本語</button>
+</div></nav></header>
+<section class="wrap hero" id="main" aria-labelledby="hero-title">
+<div class="hero-copy">
+<p class="eyebrow"><span class="status-dot"></span><span data-i18n="your_cli_your_boundary">{{ copy.your_cli_your_boundary | safe }}</span></p>
+<h1 id="hero-title"><span data-i18n="define_the_boundary">{{ copy.define_the_boundary | safe }}</span><span class="accent" data-i18n="run_your_cli">{{ copy.run_your_cli | safe }}</span></h1>
+<p class="intro" data-i18n="hero_intro">{{ copy.hero_intro | safe }}</p>
+<div class="actions">
+<a class="button primary" href="#start"><span data-i18n="cli_get_started">{{ copy.cli_get_started | safe }}</span><span aria-hidden="true">↗</span></a>
+<a class="button secondary" href="#rust"><span data-i18n="embed_in_rust">{{ copy.embed_in_rust | safe }}</span><span aria-hidden="true">↓</span></a>
+</div><p class="hero-meta">Linux x86_64 <span>／</span> WSL2 <span>／</span> MIT</p></div>
+<figure class="boundary" aria-labelledby="boundary-caption">
+<div class="figure-head"><span>01 / <span data-i18n="policy_map">{{ copy.policy_map | safe }}</span></span><span class="scale">HOST MODES</span></div>
+<div class="host-zone">
+<div class="zone-label"><span data-i18n="host_filesystem">{{ copy.host_filesystem | safe }}</span><span>+</span></div>
+<p class="host-note" data-i18n="map_host_note">{{ copy.map_host_note | safe }}</p>
+<div class="map-grid">
+<div class="map-node writable"><div class="node-label"><span>01</span><span data-i18n="read_write">{{ copy.read_write | safe }}</span></div><code>${worktree}</code><span class="node-detail" data-i18n="changes_reach_the_host">{{ copy.changes_reach_the_host | safe }}</span></div>
+<div class="map-node hidden"><div class="node-label"><span>02</span><span data-i18n="hide_contents">{{ copy.hide_contents | safe }}</span></div><code>~/.ssh</code><span class="node-detail" data-i18n="appears_empty_inside">{{ copy.appears_empty_inside | safe }}</span></div>
+<div class="command-zone"><span class="command-label" data-i18n="policy_shaped_execution">{{ copy.policy_shaped_execution | safe }}</span><code><span class="prompt">$</span> kakoi -- codex</code><div class="command-foot"><span>bubblewrap</span><span data-i18n="wrapped_command">{{ copy.wrapped_command | safe }}</span></div></div>
+<div class="map-node environment"><div class="node-label"><span>03</span><span data-i18n="remove_variables">{{ copy.remove_variables | safe }}</span></div><code>*_TOKEN</code><span class="node-detail" data-i18n="excluded_with_unset">{{ copy.excluded_with_unset | safe }}</span></div>
+<div class="map-node network"><div class="node-label"><span>04</span><span data-i18n="shared_network">{{ copy.shared_network | safe }}</span></div><code>mode = "host"</code><span class="node-detail" data-i18n="no_network_filtering_by_default">{{ copy.no_network_filtering_by_default | safe }}</span></div>
+</div></div>
+<figcaption id="boundary-caption"><span class="figure-cross" aria-hidden="true">+</span><span data-i18n="map_caption">{{ copy.map_caption | safe }}</span></figcaption></figure>
+</section>
+<div class="wrap technical-strip"><span data-i18n="a_small_toml_policy">{{ copy.a_small_toml_policy | safe }}</span><span data-i18n="no_daemon">{{ copy.no_daemon | safe }}</span><span data-i18n="no_image">{{ copy.no_image | safe }}</span><span data-i18n="your_command_s_exit_code">{{ copy.your_command_s_exit_code | safe }}</span></div>
+</div>
+<main>
+<div class="light-surface">
+<section class="wrap section start" id="start" aria-labelledby="start-title">
+<div class="section-copy"><p class="eyebrow">01 / <span data-i18n="start_with_the_cli">{{ copy.start_with_the_cli | safe }}</span></p>
+<h2 id="start-title" data-i18n="one_boundary_your_usual_command">{{ copy.one_boundary_your_usual_command | safe }}</h2>
+<p data-i18n="start_intro">{{ copy.start_intro | safe }}</p>
+<p class="fine" data-i18n="start_requirements">{{ copy.start_requirements | safe }}</p>
+<a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/getting-started.md" data-i18n="read_the_cli_guide">{{ copy.read_the_cli_guide | safe }}</a></div>
+<div class="terminal"><div class="terminal-bar"><span>TERMINAL</span><span>01 → 03</span></div>
+<div class="terminal-body">
+<div class="step"><span class="step-number">01</span><div><p data-i18n="install_with_mise">{{ copy.install_with_mise | safe }}</p><code>mise use -g github:ba0918/kakoi</code></div></div>
+<div class="step"><span class="step-number">02</span><div><p data-i18n="inspect_without_running">{{ copy.inspect_without_running | safe }}</p><code>cd ~/work/project<br>kakoi --print-plan -- codex</code></div></div>
+<div class="step"><span class="step-number">03</span><div><p data-i18n="run_on_the_built_in_default">{{ copy.run_on_the_built_in_default | safe }}</p><code>kakoi -- codex</code></div></div>
+</div><div class="terminal-note" data-i18n="terminal_note">{{ copy.terminal_note | safe }}</div></div>
+</section>
+<section class="wrap section controls" id="controls" aria-labelledby="controls-title">
+<div class="section-heading"><div><p class="eyebrow">02 / <span data-i18n="shape_the_boundary">{{ copy.shape_the_boundary | safe }}</span></p><h2 id="controls-title" data-i18n="make_access_explicit">{{ copy.make_access_explicit | safe }}</h2></div><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/policy.md" data-i18n="write_a_policy">{{ copy.write_a_policy | safe }}</a></div>
+<div class="control-table">
+<article class="control-row"><div class="control-title"><span>01</span><h3 data-i18n="visible_files">{{ copy.visible_files | safe }}</h3></div><p data-i18n="visible_files_description">{{ copy.visible_files_description | safe }}</p><code>ro   = ["~/reference"]<br>hide = ["~/.ssh"]</code></article>
+<article class="control-row"><div class="control-title"><span>02</span><h3 data-i18n="writable_paths">{{ copy.writable_paths | safe }}</h3></div><p data-i18n="writable_paths_description">{{ copy.writable_paths_description | safe }}</p><code>rw = ["${worktree}"]<br>rw-copy = ["~/.gitconfig"]</code></article>
+<article class="control-row"><div class="control-title"><span>03</span><h3 data-i18n="environment">{{ copy.environment | safe }}</h3></div><p data-i18n="environment_description">{{ copy.environment_description | safe }}</p><code>[env]<br>unset = ["*_TOKEN"]</code></article>
+<article class="control-row"><div class="control-title"><span>04</span><h3 data-i18n="network_access">{{ copy.network_access | safe }}</h3></div><p data-i18n="network_description">{{ copy.network_description | safe }}</p><code>[network]<br>mode = "none"</code></article>
+</div>
+<p class="snippet-note" data-i18n="snippet_note">{{ copy.snippet_note | safe }}</p>
+<div class="optional-modes"><div><p class="eyebrow" data-i18n="opt_in_not_the_default">{{ copy.opt_in_not_the_default | safe }}</p><h3 data-i18n="need_a_smaller_boundary">{{ copy.need_a_smaller_boundary | safe }}</h3></div>
+<p><strong>mounts.mode = "listed"</strong><span data-i18n="listed_description">{{ copy.listed_description | safe }}</span><a href="https://github.com/ba0918/kakoi/blob/main/examples/profile/listed.toml" data-i18n="listed_example">{{ copy.listed_example | safe }}</a></p>
+<p><strong>network.mode = "filtered"</strong><span data-i18n="filtered_description">{{ copy.filtered_description | safe }}</span><a href="https://github.com/ba0918/kakoi/blob/main/docs/policy.md#network" data-i18n="filtered_guide">{{ copy.filtered_guide | safe }}</a></p></div>
+</section></div>
+<section class="rust-surface" id="rust" aria-labelledby="rust-title"><div class="wrap section rust">
+<div><p class="eyebrow">03 / <span data-i18n="for_rust_applications">{{ copy.for_rust_applications | safe }}</span></p>
+<h2 id="rust-title" data-i18n="the_same_boundary_inside_your_application">{{ copy.the_same_boundary_inside_your_application | safe }}</h2>
+<p data-i18n="rust_intro">{{ copy.rust_intro | safe }}</p>
+<div class="rust-links"><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/guide/maintainer/library-api.md" data-i18n="api_guide_japanese">{{ copy.api_guide_japanese | safe }}</a><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/examples/library-sync/src/basic.rs" data-i18n="sync_rust_example">{{ copy.sync_rust_example | safe }}</a></div></div>
+<div class="rust-detail"><div class="experimental">EXPERIMENTAL <span>PATH DEPENDENCY</span></div>
+<div class="cargo-label">Cargo.toml</div>
+<pre><code>[dependencies]
+kakoi-runtime = { path = "../kakoi/crates/kakoi-runtime" }</code></pre>
+<p class="fine" data-i18n="rust_dispatch_note">{{ copy.rust_dispatch_note | safe }}</p>
+<p class="fine" data-i18n="rust_requirements">{{ copy.rust_requirements | safe }}</p></div>
+</div></section>
+<div class="light-surface">
+<section class="wrap section limits" aria-labelledby="limits-title">
+<div><p class="eyebrow">04 / <span data-i18n="know_the_limits">{{ copy.know_the_limits | safe }}</span></p><h2 id="limits-title" data-i18n="a_boundary_you_can_reason_about">{{ copy.a_boundary_you_can_reason_about | safe }}</h2><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/security.md" data-i18n="security_model_known_gaps">{{ copy.security_model_known_gaps | safe }}</a></div>
+<div class="limits-list">
+<div><span class="limit-symbol">↳</span><p><strong data-i18n="built_for_linux_x86_64_and_wsl2">{{ copy.built_for_linux_x86_64_and_wsl2 | safe }}</strong><span data-i18n="platform_limits_description">{{ copy.platform_limits_description | safe }}</span></p></div>
+<div><span class="limit-symbol">≠</span><p><strong data-i18n="not_a_replacement_for_a_container_or_vm">{{ copy.not_a_replacement_for_a_container_or_vm | safe }}</strong><span data-i18n="host_trust_description">{{ copy.host_trust_description | safe }}</span></p></div>
+<div><span class="limit-symbol">!</span><p><strong data-i18n="command_guards_are_guardrails_against_mistakes">{{ copy.command_guards_are_guardrails_against_mistakes | safe }}</strong><span data-i18n="guard_limits_description">{{ copy.guard_limits_description | safe }}</span></p></div>
+</div></section>
+</div></main>
+<div class="light-surface"><footer class="wrap footer"><a class="brand" href="#"><span class="mark" aria-hidden="true">k</span>kakoi</a><span class="footer-note" data-i18n="small_policy_explicit_boundaries">{{ copy.small_policy_explicit_boundaries | safe }}</span><div><a href="https://github.com/ba0918/kakoi/blob/main/README.md" data-i18n="docs_footer">{{ copy.docs_footer | safe }}</a><a href="https://github.com/ba0918/kakoi">GitHub ↗</a><span>MIT</span></div></footer></div>
+</body></html>
