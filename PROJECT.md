@@ -116,7 +116,8 @@ it must be on `PATH` for the hook to run. `kotowari check` runs unguarded, so `k
 `jq` must be on `PATH` too: a commit stops on any error except the test-side ones, and a push
 stops unless the check exits 0 (the comment in `lefthook.yml` lists which kinds are test-side
 and why). A commit that stages a file under `site/` also runs
-`npx --yes oxfmt@0.70.0 --check site`, so Node.js with `npx` must be on `PATH` for it. Install
+`site/node_modules/.bin/oxfmt --check site`; install it once per clone from the lockfile with
+`npm ci --prefix site --ignore-scripts` (Node.js `^20.19.0 || >=22.12.0`). Install
 the hook once per clone:
 
 ```text
