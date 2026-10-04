@@ -2,79 +2,69 @@
   "version": 1,
   "entries": [
     {
-      "id": "lp-maintenance-independent-review",
-      "base": "d66744fd12e1d9b2f077741473a8a1e780b26369",
+      "id": "lp-formatting-independent-review",
+      "base": "5843305968450d2d4ae8868f6829904c3da2d2b5",
       "role": "reviewer",
       "files": [
         {
           "path": ".github/workflows/pages.yml",
-          "before": "sha256:7632c141784e9ad4bf52d33c4a4565b23a65e4e4e328aa589f5d753291102dd6",
-          "after": "sha256:2f107172fb459d796ce83c26fe02f3f7ded96135753d632889cef36d3a12ae5a"
+          "before": "sha256:2f107172fb459d796ce83c26fe02f3f7ded96135753d632889cef36d3a12ae5a",
+          "after": "sha256:936b428052420b60848a16a9554ecb8546378a1f2393e59cbb0861b1589aed2d"
         },
         {
-          "path": ".gitignore",
-          "before": "sha256:3cf6c696708345237515750b0a86f8d9cced4635a2d4135549eb0719cc58c6f7",
-          "after": "sha256:e8c7793dbfa1c57c27d4fb0cef788cead3fdc13d94d7c792867c70da4514078e"
+          "path": "PROJECT.md",
+          "before": "sha256:35d6f99bd710d3e4a25ae5f4c01afad304e6e43e24c2b81749398b6e0f57a8ce",
+          "after": "sha256:562bfa719085fe6694ce11d951c7d108ca94c60765196d7da7314adba28deaba"
         },
         {
-          "path": "site/app.js",
-          "before": "sha256:ee2882ac66de8a686114d6ef6892a6159f87473c3601511209fa3a6d87020389",
-          "after": "sha256:a58ca4bbffac8f4ac1652d0f6efd0a295cd368c68d24b15d028411620ce233bd"
+          "path": "lefthook.yml",
+          "before": "sha256:3b149ec59180210a00370148a8d3e6dd3ee145587209f0c21eff31ab6257cc5f",
+          "after": "sha256:b67c1695880d7052ad3be3fc5419929015a01edc5a9a9d9f071668d413b30f5a"
         },
         {
-          "path": "site/index.html",
-          "before": "sha256:e08f16cae7b6785583bba643e09bba39e14668f46d5c95b76e8c3cb3e9a027cd",
-          "after": null
-        },
-        {
-          "path": "site/style.css",
-          "before": "sha256:4d13a408034de0e65faf067045e7a666f314c2a1c3587e0212deaacbb03852f7",
-          "after": "sha256:31456c3d8c86169df3e132303e708c4287d627d22bc44950d8c099446ef47a1b"
+          "path": "site/.oxfmtrc.json",
+          "before": null,
+          "after": "sha256:258a61a64dcc4e378832d9c9d7e6892c17d142f9c6adf1c0c4e53abc833a9414"
         },
         {
           "path": "site/README.md",
-          "before": null,
-          "after": "sha256:0962c998f829134d3ea8031488019eb672e8464641e1916078f0cbf4ef5fadba"
+          "before": "sha256:0962c998f829134d3ea8031488019eb672e8464641e1916078f0cbf4ef5fadba",
+          "after": "sha256:19e9706132ab7d0db1f34a4589208a8505106f4435d43186c51edd3292564222"
+        },
+        {
+          "path": "site/app.js",
+          "before": "sha256:a58ca4bbffac8f4ac1652d0f6efd0a295cd368c68d24b15d028411620ce233bd",
+          "after": "sha256:9e615ef29bca78e11de8edeb72b8f3c68f1fd9e9649b3214022abd6dc45c89c8"
         },
         {
           "path": "site/build.py",
-          "before": null,
-          "after": "sha256:a830c275a8a1e0ecc5a91a4af781c27581190d234577769bcbc12f3d2b54a401"
+          "before": "sha256:a830c275a8a1e0ecc5a91a4af781c27581190d234577769bcbc12f3d2b54a401",
+          "after": "sha256:289c1217dbdbb6d71679a95f8e28ec101c2d6ca265fbe965ef7216006b4f4a96"
         },
         {
           "path": "site/check.py",
-          "before": null,
-          "after": "sha256:9bed96ea68942768e53d4b3e241b0f4d94e97b579b7d73d105b28657cd0d22c0"
+          "before": "sha256:9bed96ea68942768e53d4b3e241b0f4d94e97b579b7d73d105b28657cd0d22c0",
+          "after": "sha256:b5ec520234e24dab5e6d9b3caa895fb77d45c1b8e98a1ef3b8cb053e1308a1e3"
         },
         {
           "path": "site/language-preference.js",
-          "before": null,
-          "after": "sha256:38a2059031b847ae000d7bae501ed1b76b255f4a1b2925e879a65a61e5d7cd47"
+          "before": "sha256:38a2059031b847ae000d7bae501ed1b76b255f4a1b2925e879a65a61e5d7cd47",
+          "after": "sha256:34132ae72970e0c482dd4669d4a505a2e4acd34f8becf9eb8f0dbb4b04b6c330"
         },
         {
           "path": "site/language-preference.test.cjs",
-          "before": null,
-          "after": "sha256:1320494648c56fc98a4518a8f3ff762c1bfac62b07b07266954a828fb50eaa9a"
+          "before": "sha256:1320494648c56fc98a4518a8f3ff762c1bfac62b07b07266954a828fb50eaa9a",
+          "after": "sha256:9f78995e7a1f858e0a98692780aefdb1d9532c63feaa7519f37de2e7d52f621b"
         },
         {
-          "path": "site/messages.json",
-          "before": null,
-          "after": "sha256:1dfe5c600e6c63839a3c306dcee314714bc89c180e72e33253e75878671d997a"
-        },
-        {
-          "path": "site/requirements.txt",
-          "before": null,
-          "after": "sha256:c91fc52c155b198c0af0d9852e0109f221fcc12a606de132c1a45122e830a569"
+          "path": "site/style.css",
+          "before": "sha256:31456c3d8c86169df3e132303e708c4287d627d22bc44950d8c099446ef47a1b",
+          "after": "sha256:d608d4f8a7bcbfd41b6bab6f3136ec9c2df0b3f98a4ed6c5d64195ddbb0e63ce"
         },
         {
           "path": "site/template.html",
-          "before": null,
-          "after": "sha256:55b8056c231483b8b9f721d055ec658f239d5c0238aaff3c69d2d859e5a51c37"
-        },
-        {
-          "path": "site/test_build.py",
-          "before": null,
-          "after": "sha256:a77cd5aa79f43f0b7c79591c2659a867b7615771ccdaf5b7a666bd8033c3ad93"
+          "before": "sha256:55b8056c231483b8b9f721d055ec658f239d5c0238aaff3c69d2d859e5a51c37",
+          "after": "sha256:75ca8c58bf72024b0652ee1b62c09d73ec9bf36a5b977b64d6d5b337147223f0"
         }
       ],
       "ir": [
@@ -84,7 +74,7 @@
         }
       ],
       "conclusion": "new",
-      "reason": "共有値の優先、旧値の互換読取、初期読取の非保存、明示切替時だけの保存を、追加REQ-site-104と引用先A1の各条件に照合した。101〜103の元本文はGitの比較baseから変更されていない。辞書とテンプレートへの移動、CSS上書き統合、ビルドと検証の分離はA2の保守性判断に収まり、6画面の本文・リンク・全画素一致、保存拒否を含む言語操作、版とcommitを含む再生成物のバイト一致を独立再実行で確認した。workflowの公開条件と保護は差分上維持され、配信物はHTML/CSS/JavaScriptのみである。14対象のmodeとblobから識別値を再計算し実装者記録と一致した。これはローカル候補の独立判断であり、公開済み結果や未作成の最終commitの統合ゲート成功は主張しない。",
+      "reason": "base 5843305 と head 0f516ef を git archive で別々に展開し、GITHUB_SHA を同じ値に固定して build.py を実行した。messages.js はバイト一致。index.html は html.parser の字句列で比べ、空白だけのテキストを除くと開始・終了タグ、属性、テキスト、pre の中身の 587 字句がすべて一致した。空白の有無が変わった 172 箇所はすべてタグ境界で、親が flex・grid か、h1>span のような block 要素か、空白が行頭・行末に落ちる位置であり、表示に出ない。両方の生成物を 1700・1440・1024・390・320px と日英で全画面撮影した 10 枚は PNG がバイト一致した（日英の画像は互いに異なり、撮影自体は有効）。style.css は空白と引用符と先頭の 0 と !important 前の空白と属性値の引用符を正規化すると、メディアクエリを含む 276 規則が一致した。app.js と language-preference.js は esbuild で縮約した結果がバイト一致した。test.cjs は局所変数 legacy の抽出、build.py と check.py は中間変数の抽出だけで、AST と縮約結果から等価と判断した。test_build.py は変更されていない。base と head の両方で test_build.py（node --test 5 件を含む）と check.py が通った。oxfmt 0.70.0 の --check site は head で 0 終了し、対象は template.html を除く 7 ファイルだった。設定を外すと 5 ファイルで違反になり、崩した行を足すと 1 で終了したので、site/.oxfmtrc.json が読まれ、違反を検出できる。lefthook 2.1.14 で site-format は site/app.js と site/template.html を指定したとき起動し、src/lib.rs では起動しなかった。PROJECT.md と site/README.md の説明と一致する。pages.yml の追加は依存の導入とビルドの間の 1 ステップだけで、起動条件、権限、環境、upload の path は変わらず、生成物も同じ 5 ファイルなので REQ-site-102 と P1 を保つ。REQ-site-101・103・104 の表示、版、言語選択も上の比較で変わらない。整形検査は公開物を変えない開発時の運用上の制約で、既存の test_build.py や check.py の実行も IR の要求にはなっていない。そのため IR を変えずに A2 として判断記録に置き、missing_spec の recorded とするのが契約に合うと判断し、conclusion を new とした。未確認: Pages の新ステップは main に入るまで CI で走らないため、ubuntu-24.04 で npx が使えることはローカルでの実行結果から推測した。",
       "requirements": [
         "REQ-site-101",
         "REQ-site-102",
@@ -92,8 +82,9 @@
         "REQ-site-104"
       ],
       "decisions": [
-        "docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A1",
-        "docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A2"
+        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A1",
+        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A2",
+        "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#P1"
       ],
       "handoff": null,
       "gaps": [
@@ -101,7 +92,7 @@
           "category": "missing_spec",
           "disposition": "recorded",
           "refs": [
-            "docs/decision/brainstorm/2026-10-04-landing-page-maintenance.md#A1"
+            "docs/decision/brainstorm/2026-10-04-landing-page-formatting.md#A2"
           ]
         }
       ]

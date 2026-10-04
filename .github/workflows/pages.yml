@@ -40,6 +40,9 @@ jobs:
       - name: Install site dependencies
         run: python3 -m pip install -r site/requirements.txt
 
+      - name: Check the site formatting
+        run: npx --yes oxfmt@0.70.0 --check site
+
       - name: Build and check the static site
         run: |
           python3 site/test_build.py

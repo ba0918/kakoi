@@ -115,7 +115,9 @@ command is wrapped in `run-if-present`, installed with `mise` as `github:ba0918/
 it must be on `PATH` for the hook to run. `kotowari check` runs unguarded, so `kotowari` and
 `jq` must be on `PATH` too: a commit stops on any error except the test-side ones, and a push
 stops unless the check exits 0 (the comment in `lefthook.yml` lists which kinds are test-side
-and why). Install the hook once per clone:
+and why). A commit that stages a file under `site/` also runs
+`npx --yes oxfmt@0.70.0 --check site`, so Node.js with `npx` must be on `PATH` for it. Install
+the hook once per clone:
 
 ```text
 lefthook install

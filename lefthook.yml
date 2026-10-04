@@ -17,6 +17,9 @@ pre-commit:
     clippy:
       glob: "{*.rs,*Cargo.toml,Cargo.lock}"
       run: run-if-present path Cargo.toml -- cargo clippy --workspace --all-targets --locked -- -D warnings
+    site-format:
+      glob: "site/**"
+      run: npx --yes oxfmt@0.70.0 --check site
     kotowari-check:
       run: |
         out=$(kotowari check --format json); code=$?

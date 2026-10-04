@@ -34,7 +34,8 @@ def build(out, commit):
                   version=cargo['workspace']['package']['version'], commit=commit)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'index.html').write_text(page, encoding='utf-8')
-    (out / 'messages.js').write_text('const messages = ' + json.dumps(messages, ensure_ascii=False) + ';\n', encoding='utf-8')
+    messages_js = 'const messages = ' + json.dumps(messages, ensure_ascii=False) + ';\n'
+    (out / 'messages.js').write_text(messages_js, encoding='utf-8')
     for asset in ('style.css', 'app.js', 'language-preference.js'):
         shutil.copyfile(SITE / asset, out / asset)
     print(f'Built {out / "index.html"}')

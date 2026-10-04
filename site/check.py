@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check the built landing page, translations, local links and language contract."""
+
 import argparse
 import json
 import subprocess
@@ -43,7 +44,8 @@ def check(out):
     page.feed(text)
     if page.translations:
         source = out / 'messages.js' if (out / 'messages.js').exists() else SITE / 'language.js'
-        messages, _ = json.JSONDecoder().raw_decode(source.read_text(encoding='utf-8').split('const messages = ', 1)[1])
+        messages_json = source.read_text(encoding='utf-8').split('const messages = ', 1)[1]
+        messages, _ = json.JSONDecoder().raw_decode(messages_json)
         if messages['en'].keys() != messages['ja'].keys():
             raise ValueError('English and Japanese translation keys differ')
         for language in ('en', 'ja'):
@@ -70,5 +72,6 @@ def check(out):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--out', type=Path, default=SITE.parent / '_site' if (SITE / 'build.py').exists() else SITE)
+    default_out = SITE.parent / '_site' if (SITE / 'build.py').exists() else SITE
+    parser.add_argument('--out', type=Path, default=default_out)
     check(parser.parse_args().out)
