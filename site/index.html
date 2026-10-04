@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="kakoi — a policy-defined boundary around your CLI. A lightweight command runner for Linux and WSL2.">
+<meta name="source-commit" content="__KAKOI_COMMIT__">
+<title>kakoi — Define the boundary. Run your CLI.</title>
+<link rel="stylesheet" href="style.css"><script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main" data-ja="本文へ移動">Skip to content</a>
+<div class="blueprint">
+<header class="wrap header">
+<a href="#" class="brand" aria-label="kakoi home"><span class="mark" aria-hidden="true">k</span>kakoi<span class="version">v__KAKOI_VERSION__</span></a>
+<nav aria-label="Main navigation">
+<a class="nav-docs" href="https://github.com/ba0918/kakoi/blob/main/docs/getting-started.md" data-ja="Docs ↗（英語）">Docs ↗</a>
+<a class="nav-github" href="https://github.com/ba0918/kakoi">GitHub ↗</a>
+<div class="languages" role="group" aria-label="Language / 言語">
+<button type="button" data-language="en" aria-label="English" aria-pressed="true">EN</button>
+<button type="button" data-language="ja" aria-label="日本語" aria-pressed="false">日本語</button>
+</div></nav></header>
+<section class="wrap hero" id="main" aria-labelledby="hero-title">
+<div class="hero-copy">
+<p class="eyebrow"><span class="status-dot"></span><span data-ja="CLIの外側に、あなたの境界を。">YOUR CLI. YOUR BOUNDARY.</span></p>
+<h1 id="hero-title"><span data-ja="境界を決める。">Define the<br>boundary.</span><span class="accent" data-ja="CLIを動かす。">Run your CLI.</span></h1>
+<p class="intro" data-ja="エージェントに、仕事に必要な範囲を。kakoiはCLIを外側から包み、ファイル・環境変数・通信をポリシーで制御します。">Give your agent room to work.<br>kakoi wraps your CLI from the outside, with a policy for files, environment, and network access.</p>
+<div class="actions">
+<a class="button primary" href="#start"><span data-ja="CLIではじめる">CLI Get started</span><span aria-hidden="true">↗</span></a>
+<a class="button secondary" href="#rust"><span data-ja="Rustに組み込む">Embed in Rust</span><span aria-hidden="true">↓</span></a>
+</div><p class="hero-meta">Linux x86_64 <span>／</span> WSL2 <span>／</span> MIT</p></div>
+<figure class="boundary" aria-labelledby="boundary-caption">
+<div class="figure-head"><span>01 / <span data-ja="ポリシーの見取り図">POLICY MAP</span></span><span class="scale">HOST MODES</span></div>
+<div class="host-zone">
+<div class="zone-label"><span data-ja="ホストのファイルシステム">HOST FILESYSTEM</span><span>+</span></div>
+<p class="host-note" data-ja="指定外の場所は、基本的に読み取り専用で見える。">Unspecified paths remain visible, read-only.</p>
+<div class="map-grid">
+<div class="map-node writable"><div class="node-label"><span>01</span><span data-ja="書き込みを許可">READ + WRITE</span></div><code>${worktree}</code><span class="node-detail" data-ja="変更はホストに残る">Changes reach the host</span></div>
+<div class="map-node hidden"><div class="node-label"><span>02</span><span data-ja="内容を隠す">HIDE CONTENTS</span></div><code>~/.ssh</code><span class="node-detail" data-ja="中身のない場所として見える">Appears empty inside</span></div>
+<div class="command-zone"><span class="command-label" data-ja="ポリシーに沿って実行">POLICY-SHAPED EXECUTION</span><code><span class="prompt">$</span> kakoi -- codex</code><div class="command-foot"><span>bubblewrap</span><span data-ja="コマンドを包む">wrapped command</span></div></div>
+<div class="map-node environment"><div class="node-label"><span>03</span><span data-ja="環境変数を除外">REMOVE VARIABLES</span></div><code>*_TOKEN</code><span class="node-detail" data-ja="unsetで引き継がない">Excluded with unset</span></div>
+<div class="map-node network"><div class="node-label"><span>04</span><span data-ja="ホストの通信を共有">SHARED NETWORK</span></div><code>mode = "host"</code><span class="node-detail" data-ja="通信制限は既定で無効">No network filtering by default</span></div>
+</div></div>
+<figcaption id="boundary-caption"><span class="figure-cross" aria-hidden="true">+</span><span data-ja="図はポリシーの一例です。許可した場所だけが見える、という既定の動作ではありません。">Illustrative policy. The default does not limit visibility to only the paths you allow.</span></figcaption></figure>
+</section>
+<div class="wrap technical-strip"><span data-ja="小さなTOMLポリシー">A SMALL TOML POLICY</span><span data-ja="デーモン不要">NO DAEMON</span><span data-ja="イメージ不要">NO IMAGE</span><span data-ja="終了コードをそのまま返す">YOUR COMMAND’S EXIT CODE</span></div>
+</div>
+<main>
+<div class="light-surface">
+<section class="wrap section start" id="start" aria-labelledby="start-title">
+<div class="section-copy"><p class="eyebrow">01 / <span data-ja="まずはCLIから">START WITH THE CLI</span></p>
+<h2 id="start-title" data-ja="いつものコマンドに、<br>境界をひとつ。">One boundary.<br>Your usual command.</h2>
+<p data-ja="インストールしたら、ワークツリーで起動。まず計画を表示して、何が見え、どこに書けるかを確認できます。">Install, move into your worktree, and run. Inspect the plan first to see what will be mounted, hidden, and set.</p>
+<p class="fine" data-ja="要件：Linux x86_64 / WSL2、bwrap 0.9.0以上、非rootユーザー、利用可能なユーザー名前空間。">Requires Linux x86_64 / WSL2, bwrap 0.9.0+, a non-root user, and available user namespaces.</p>
+<a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/getting-started.md" data-ja="CLI導入ガイド（英語） ↗">Read the CLI guide ↗</a></div>
+<div class="terminal"><div class="terminal-bar"><span>TERMINAL</span><span>01 → 03</span></div>
+<div class="terminal-body">
+<div class="step"><span class="step-number">01</span><div><p data-ja="miseでインストール">Install with mise</p><code>mise use -g github:ba0918/kakoi</code></div></div>
+<div class="step"><span class="step-number">02</span><div><p data-ja="実行せずに計画を確認">Inspect without running</p><code>cd ~/work/project<br>kakoi --print-plan -- codex</code></div></div>
+<div class="step"><span class="step-number">03</span><div><p data-ja="組み込みの既定で起動">Run on the built-in default</p><code>kakoi -- codex</code></div></div>
+</div><div class="terminal-note" data-ja="この例の通信モードはhost。組み込みの既定はWSL2向けです。">Network mode here is host. The built-in default is written for WSL2.</div></div>
+</section>
+<section class="wrap section controls" id="controls" aria-labelledby="controls-title">
+<div class="section-heading"><div><p class="eyebrow">02 / <span data-ja="境界の設計">SHAPE THE BOUNDARY</span></p><h2 id="controls-title" data-ja="何を渡すかを、明示する。">Make access explicit.</h2></div><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/policy.md" data-ja="ポリシーを書く（英語） ↗">Write a policy ↗</a></div>
+<div class="control-table">
+<article class="control-row"><div class="control-title"><span>01</span><h3 data-ja="見えるファイル">Visible files</h3></div><p data-ja="roで読み取り専用、hideで中身を隠す。hostモードでは指定外も読み取り専用で見えます。">Use ro for read-only access and hide to conceal contents. In host mode, unspecified paths remain visible, read-only.</p><code>ro   = ["~/reference"]<br>hide = ["~/.ssh"]</code></article>
+<article class="control-row"><div class="control-title"><span>02</span><h3 data-ja="書き込み先">Writable paths</h3></div><p data-ja="rwの変更はホストに残る。rw-copyは隔離内のコピーに書き込み、終了時に破棄します。">Writes to rw paths reach the host. Use rw-copy for a writable copy whose changes disappear when the command ends.</p><code>rw = ["${worktree}"]<br>rw-copy = ["~/.gitconfig"]</code></article>
+<article class="control-row"><div class="control-title"><span>03</span><h3 data-ja="環境変数">Environment</h3></div><p data-ja="引き継ぐ変数を絞る。unsetで除外、clearで初期化し、必要な変数だけをpassで渡せます。">Shape what is inherited. Remove variables with unset, or start with clear and pass only the variables you need.</p><code>[env]<br>unset = ["*_TOKEN"]</code></article>
+<article class="control-row"><div class="control-title"><span>04</span><h3 data-ja="通信範囲">Network access</h3></div><p data-ja="既定のhostはホストと通信を共有。noneで切り離し、filteredでは宛先・プロトコル・ポートを指定します。">The default host mode shares networking. Choose none to disconnect, or filtered to name destinations, protocols, and ports.</p><code>[network]<br>mode = "none"</code></article>
+</div>
+<p class="snippet-note" data-ja="各コードは部分例です。ひとつの完成したポリシーファイルではありません。">Each snippet is a policy fragment, not a complete policy file.</p>
+<div class="optional-modes"><div><p class="eyebrow" data-ja="選択する機能 / 既定ではありません">OPT-IN / NOT THE DEFAULT</p><h3 data-ja="もっと範囲を絞るなら。">Need a smaller boundary?</h3></div>
+<p><strong>mounts.mode = "listed"</strong><span data-ja="ベースと列挙した場所を表示。host通信との併用にはLinux 6.12以上 / Landlock ABI 6が必要です。">Shows the base plus listed paths. With host networking, requires Linux 6.12+ / Landlock ABI 6.</span><a href="https://github.com/ba0918/kakoi/blob/main/examples/profile/listed.toml" data-ja="listedの例 ↗">Listed example ↗</a></p>
+<p><strong>network.mode = "filtered"</strong><span data-ja="許可する通信先を明示。pasta、nftables、/dev/net/tunと環境要件の確認が必要です。">Explicitly allow destinations. Requires pasta, nftables, /dev/net/tun, and environment checks.</span><a href="https://github.com/ba0918/kakoi/blob/main/docs/policy.md#network" data-ja="filteredのガイド（英語） ↗">Filtered guide ↗</a></p></div>
+</section></div>
+<section class="rust-surface" id="rust" aria-labelledby="rust-title"><div class="wrap section rust">
+<div><p class="eyebrow">03 / <span data-ja="Rustへの組み込み">FOR RUST APPLICATIONS</span></p>
+<h2 id="rust-title" data-ja="アプリの中から、<br>隔離を起動する。">The same boundary.<br>Inside your application.</h2>
+<p data-ja="kakoi-runtimeで準備・起動・停止・結果取得を。ポリシーの検証だけならkakoi-policyを使えます。">Prepare, spawn, stop, and collect results with kakoi-runtime. Use kakoi-policy on its own for policy validation.</p>
+<div class="rust-links"><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/guide/maintainer/library-api.md" data-ja="APIガイド（日本語） ↗">API guide · Japanese ↗</a><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/examples/library-sync/src/basic.rs" data-ja="同期実行のRust実例 ↗">Sync Rust example ↗</a></div></div>
+<div class="rust-detail"><div class="experimental">EXPERIMENTAL <span>PATH DEPENDENCY</span></div>
+<div class="cargo-label">Cargo.toml</div>
+<pre><code>[dependencies]
+kakoi-runtime = { path = "../kakoi/crates/kakoi-runtime" }</code></pre>
+<p class="fine" data-ja="crates.ioでは未配布。同期mainの先頭でdispatch_helper()を呼び、補助役を振り分けてからアプリや非同期ランタイムを初期化してください。">Not distributed on crates.io. Call dispatch_helper() at the start of synchronous main, before application or async runtime initialization.</p>
+<p class="fine" data-ja="組み込みには読み取り可能な自身の実行ファイルと、bwrapのbind-fd / ro-bind-fd機能が必要です。">Embedding requires a readable self-executable and bwrap’s bind-fd / ro-bind-fd features.</p></div>
+</div></section>
+<div class="light-surface">
+<section class="wrap section limits" aria-labelledby="limits-title">
+<div><p class="eyebrow">04 / <span data-ja="対応環境と限界">KNOW THE LIMITS</span></p><h2 id="limits-title" data-ja="境界を知って、使う。">A boundary you<br>can reason about.</h2><a class="text-link" href="https://github.com/ba0918/kakoi/blob/main/docs/security.md" data-ja="安全性と既知の制限（英語） ↗">Security model & known gaps ↗</a></div>
+<div class="limits-list">
+<div><span class="limit-symbol">↳</span><p><strong data-ja="Linux x86_64とWSL2に対応。">Built for Linux x86_64 and WSL2.</strong><span data-ja="macOS・Windowsネイティブ・aarch64には未対応。Ubuntu 24.04以降はユーザー名前空間の許可を確認してください。">No native macOS, native Windows, or aarch64 support. Check user namespace permissions on Ubuntu 24.04 and later.</span></p></div>
+<div><span class="limit-symbol">≠</span><p><strong data-ja="コンテナやVMの代替ではありません。">Not a replacement for a container or VM.</strong><span data-ja="ホストを信頼し、カーネルを共有します。資源制限はなく、悪意あるプログラムを安全に実行できる保証はありません。">It trusts the host and shares its kernel. There are no resource limits, and no guarantee that malicious programs are safe to run.</span></p></div>
+<div><span class="limit-symbol">!</span><p><strong data-ja="command guardsは誤操作を防ぐ補助です。">Command guards are guardrails against mistakes.</strong><span data-ja="強固な隔離境界ではありません。許可した通信先や、ホストで後から使う書き込み領域の内容は、利用者による確認が必要です。">They are not a strong isolation boundary. Review allowed destinations and writable content that you will later use on the host.</span></p></div>
+</div></section>
+</div></main>
+<div class="light-surface"><footer class="wrap footer"><a class="brand" href="#"><span class="mark" aria-hidden="true">k</span>kakoi</a><span class="footer-note" data-ja="小さなポリシー。明示した境界。">Small policy. Explicit boundaries.</span><div><a href="https://github.com/ba0918/kakoi/blob/main/README.md" data-ja="Docs（英語） ↗">Docs ↗</a><a href="https://github.com/ba0918/kakoi">GitHub ↗</a><span>MIT</span></div></footer></div>
+</body></html>

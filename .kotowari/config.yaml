@@ -21,6 +21,7 @@ changes:
     - "tests/**"
     - "examples/**"
     - "skills/**"
+    - "site/**"
     - "tools/**"
     - "Cargo.toml"
     - "Cargo.lock"
