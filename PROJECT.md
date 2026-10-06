@@ -141,74 +141,12 @@ when, is in the routing table of `AGENTS.md`.
 - The tests kotowari reads are set in `.kotowari/config.yaml` (root integration tests and
   runtime source unit tests). If a change moves tests elsewhere, update that file too.
 - Mark a test only with the requirements it actually verifies.
-
-### Change review
-
-`changes.files` covers implementation, tests and fixtures, examples, distributed skills,
-validation tools, build configuration, hooks, CI, and agent operating instructions.
-`changes.exclude` names generated outputs; lockfiles remain in scope. The selected config,
-IR, decision records, and change records are automatically outside change enumeration.
-The operating requirements are in [change-review.md](docs/ir/change-review.md).
-
-The caller fixes the approved scope, worktree, phase, full base ID and full head ID from
-the branch or CI event, never from a record. For a branch targeting main, fetch main and
-derive the branch-wide comparison:
-
-```sh
-git fetch origin main
-head=$(git rev-parse HEAD)
-base=$(git merge-base origin/main "$head")
-```
-
-Keep these IDs with the review request. For a different target, substitute that target
-branch. For direct integration, explicitly agree the comparison base before review.
-Do not substitute HEAD's parent or infer a new branch's base from an empty push event.
-An absent or unreadable history stops the check; fetch the missing history rather than
-falling back to working-tree content.
-
-The implementer writes `.kotowari/changes/implementation.yaml`. A reviewer separate from
-implementation checks the grounds, IR meaning and delegated scope, then writes
-`.kotowari/changes/review.yaml` for the same base, changed bytes and all implementer-related
-IR. Each file contains only the current comparison. No dated histories or README belong
-there; Git keeps history. `.ignore` hides these files from ordinary exploration, not Git.
-Read named files explicitly or use `rg --no-ignore` when reconciling.
-
-File identities are SHA-256 of the six-character Git mode, a NUL byte and the blob bytes.
-Related IR identities are SHA-256 of the entire raw IR file. Hash the selected snapshot,
-not an unstaged working-tree substitute. Record shape and decision references follow
-the installed kotowari changes contract.
-
-An optional self-check of explicitly staged implementation and its record is:
-
-```sh
-kotowari changes --base HEAD --staged --phase implementation --format json
-```
-
-This is not a gate and cannot replace independent review. Intermediate commits need no
-change records, and neither lefthook hook runs `changes`. Before integration, stage and
-commit both final records with the reviewed candidate, pin its full head ID again, and run:
-
-```sh
-kotowari check --format json
-kotowari changes --base "$base" --head "$head" --phase review --format json
-```
-
-Both commands must exit 0. A machine pass does not prove independent review or replace
-the product checks above. Deferred changes cannot pass final review. A `status` complete
-value is not final change conformance.
-
-After code, related IR or decision-meaning changes, rebase, cherry-pick, or parallel
-integration, delete both invalidated final records and reconcile each affected entry in
-full. Reauthor both roles after independent review, commit, pin the new head, and rerun
-the relevant tests and both commands. Another base's records do not cover this comparison.
-
-The PR-only `Kotowari` workflow checks the event's actual head, not GitHub's synthetic
-merge commit, against the merge-base of the event's base and head after fetching history.
-It runs the same two commands. Existing push CI does not run `changes`, because its
-before/after pair can differ from the reviewed branch base. Direct pushes therefore need
-the explicit local final review above; no push comparison fallback is provided.
-CI installs kotowari 0.3.0 with its archive digest. Use that version locally for the same
-result and reverify the gate when updating it.
+- Before integration, a reviewer separate from the implementer reads the change against the
+  IR it touches. A passing `kotowari check` does not replace that review or the product checks
+  above.
+- The PR-only `Kotowari` workflow runs `kotowari check --format json` on the PR's actual head,
+  not GitHub's synthetic merge commit. CI installs kotowari 0.3.0 with its archive digest; use
+  that version locally for the same result and reverify the check when updating it.
 
 ## Project constraints
 
