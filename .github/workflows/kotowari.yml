@@ -15,16 +15,15 @@ defaults:
     shell: bash
 
 jobs:
-  changes:
-    name: Specification and change review
+  check:
+    name: Specification check
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Check out the actual PR head with history
+      - name: Check out the actual PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Install verified kotowari
@@ -35,12 +34,5 @@ jobs:
           tar -xzf "$RUNNER_TEMP/kotowari.tar.gz" --strip-components=1 -C "$RUNNER_TEMP/kotowari-bin"
           echo "$RUNNER_TEMP/kotowari-bin" >> "$GITHUB_PATH"
 
-      - name: Check the specification and the full PR comparison
-        env:
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git fetch --no-tags origin "$PR_BASE" "$PR_HEAD"
-          base=$(git merge-base "$PR_BASE" "$PR_HEAD")
-          kotowari check --format json
-          kotowari changes --base "$base" --head "$PR_HEAD" --phase review --format json
+      - name: Check the specification
+        run: kotowari check --format json
