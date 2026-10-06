@@ -13,18 +13,26 @@
 - A1 対象の実装、テストとfixture、配布スキル、example、検証ツール、ビルド設定、hook、CI、運用指示の変更には、比較元を固定した実装者と独立レビュアーの記録を用いる。
   - why: テストの期待値だけでなく製品や検証経路の変更も判断に含め、生成物だけを明示的に除外するため。
   - decided_by: 利用者の導入依頼の範囲で実装担当が具体化。
+  - superseded_by: [2026-10-06 の A1](./2026-10-06-drop-change-conformance.md#A1)
 - A2 最終照合は呼出し側が決めたブランチ全体の比較元とheadで行う。PR CIはイベントのbaseとheadのmerge-baseを比較元とし、実際のheadを検査する。
   - why: 記録の自己申告や合成merge commitを比較元・対象にすると、承認対象と検査対象が異なるため。
   - decided_by: 利用者の導入依頼の範囲で実装担当が具体化。
+  - superseded_by: [2026-10-06 の A1](./2026-10-06-drop-change-conformance.md#A1)
 - A3 hookにはchangesを追加しない。CIのchangesゲートはpull_requestだけに置き、直接pushの統合前には明示的な比較元を使ったローカル最終照合を行う。
   - why: 中間コミットは最終記録を必要とせず、pushイベントの比較元はPRやローカル記録の比較元と一致するとは限らないため。既存push CIとrelease処理は変更しない。
   - decided_by: 呼出し側のCI導入の委譲範囲で実装担当が具体化。hookにchangesを追加しない方針はkotowariスキルのchanges参照に基づく。
+  - superseded_by: [2026-10-06 の A1](./2026-10-06-drop-change-conformance.md#A1)
 - A4 現在の比較の記録だけをimplementation.yamlと独立作成のreview.yamlに保持し、対象内容、IR、判断の意味や比較元が変わったら両記録を無効化して作り直す。
   - why: 過去の判断が変更後の内容を承認したように読まれることを防ぐため。履歴はGitに残る。
   - decided_by: 実装担当。kotowariスキルのchanges参照が定める独立レビューと固定ファイルの導入規約に基づき、呼出し側の委譲範囲で採用。
+  - superseded_by: [2026-10-06 の A1](./2026-10-06-drop-change-conformance.md#A1)
 
 ## Delegated
 
 - D1 実装担当は設定、CI、運用指示と実装者記録を作成し、レビュアー記録は別のレビュー担当が作成する。コミット、push、公開はこの実装の委譲に含めない。
   - why: 実装者が自己承認せず、独立レビューと最終処理を呼出し側に残すため。
   - decided_by: 呼出し側。利用者の導入依頼を実装担当と独立レビュー担当に分担し、この段階のコミット、push、公開を委譲しなかった。
+
+## Revisions
+
+- 2026-10-06 A1〜A4を[2026-10-06 の A1](./2026-10-06-drop-change-conformance.md#A1)で置き換えた。kotowari 0.5.0が`kotowari changes`と変更の記録を削除したため、変更照合の運用をやめた。D1の委譲は完了した作業で、置き換えの対象ではない

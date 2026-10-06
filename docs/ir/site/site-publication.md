@@ -22,11 +22,11 @@ Pagesはmain上のサイト、公開workflow、Cargo.tomlの変更とmain上の�
 
 ### REQ-site-103: 版と公開対象の同一性
 - kind: invariant
-- source: docs/decision/brainstorm/2026-10-04-landing-page.md#A3
+- source: docs/decision/brainstorm/2026-10-04-landing-page.md#A3, docs/decision/brainstorm/2026-10-06-drop-change-conformance.md#A1
 - verification: review
-- how_to_verify: 生成された版表示をCargo.tomlと比べ、公開HTMLのcommitメタデータ、Pages runのheadとremote commitを比較する。サイトがchanges.filesに含まれ、両役の記録と最終照合があることを確認する。
+- how_to_verify: 生成された版表示をCargo.tomlと比べ、公開HTMLのcommitメタデータ、Pages runのheadとremote commitを比較する。
 
-LPの版表示はCargo.tomlから生成する。公開HTMLに対象commitを記録する。サイトの変更は既存の実装者と独立レビュアーによる変更照合の対象とする。
+LPの版表示はCargo.tomlから生成する。公開HTMLに対象commitを記録する。
 
 ### REQ-site-104: 同一originでの言語選択
 - kind: invariant
