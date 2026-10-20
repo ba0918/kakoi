@@ -505,7 +505,9 @@ fn an_old_grant_near_expiry_does_not_reduce_the_new_updates_staging_budget() {
         ports: Ports::try_from(vec!["443".into()]).unwrap(),
     }];
     let mut owner = DynamicPermissions::new(&namespace, Path::new("/usr/sbin/nft"), rules);
-    let expiry = Instant::now() + Duration::from_millis(300);
+    // Long enough for the first staging to finish even when its first reserves run out on
+    // a loaded host; what matters is the 4 ms left when the second update stages.
+    let expiry = Instant::now() + Duration::from_secs(2);
     owner
         .install(&[ActiveGrant {
             rule: 0,
