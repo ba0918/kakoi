@@ -158,7 +158,9 @@ fn stalled_and_trickling_servers_cannot_extend_the_absolute_deadline() {
         stream.read_exact(&mut length).unwrap();
         let mut request = vec![0; u16::from_be_bytes(length) as usize];
         stream.read_exact(&mut request).unwrap();
-        for byte in [0, 100, 0, 0, 0, 0] {
+        // A 100-byte answer, one byte every 40 ms: four seconds in all, unless the
+        // client gives up and closes first.
+        for byte in [0, 100].into_iter().chain([0; 100]) {
             if stream.write_all(&[byte]).is_err() {
                 break;
             }
@@ -175,7 +177,7 @@ fn stalled_and_trickling_servers_cannot_extend_the_absolute_deadline() {
     .err()
     .unwrap();
     assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
-    assert!(start.elapsed() < Duration::from_millis(500));
+    assert!(start.elapsed() < Duration::from_secs(2));
     server.join().unwrap();
 }
 
@@ -472,9 +474,11 @@ fn a_stalled_tls_handshake_obeys_the_resolution_deadline() {
     use kakoi_net::dns_transport::TlsClient;
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let peer = listener.local_addr().unwrap();
+    let (done, finished) = std::sync::mpsc::channel::<()>();
+    // The connection is held, with no handshake, until the client has given up.
     let server = thread::spawn(move || {
         let (_stream, _) = listener.accept().unwrap();
-        thread::sleep(Duration::from_millis(300));
+        let _ = finished.recv_timeout(Duration::from_secs(10));
     });
     let client = TlsClient::from_root_certificates([]).unwrap();
     let start = Instant::now();
@@ -488,6 +492,7 @@ fn a_stalled_tls_handshake_obeys_the_resolution_deadline() {
         .err()
         .unwrap();
     assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
-    assert!(start.elapsed() < Duration::from_millis(250));
+    assert!(start.elapsed() < Duration::from_secs(2));
+    done.send(()).unwrap();
     server.join().unwrap();
 }
