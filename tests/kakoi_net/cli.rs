@@ -436,20 +436,21 @@ fn a_repeated_sigterm_keeps_the_first_deadline() {
 }
 
 // The main command has ended with its result, and the grace of 6 seconds
-// runs; a SIGTERM a second in changes neither the result nor the deadline.
+// runs; a SIGTERM 3 seconds in changes neither the result nor the deadline
+// (a grace started again by it would end at 9).
 // @kotowari[REQ-104, EX-225, EX-226]
 #[test]
 fn a_sigterm_after_the_main_exit_keeps_the_result_and_the_deadline() {
     let filtered = Filtered::new("\n[process]\nshutdown-grace-seconds = 6\n");
     for result in [0, 7] {
         let (mut child, exited) = started(&filtered, &stubborn(1, Some(result)));
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(3));
         sigterm(&child);
         let (code, at) = ended(&mut child);
         let after = at - exited;
         assert_eq!(code, result);
         assert!(
-            (Duration::from_millis(4500)..Duration::from_millis(8500)).contains(&after),
+            (Duration::from_millis(4500)..Duration::from_secs(8)).contains(&after),
             "{after:?}"
         );
     }
