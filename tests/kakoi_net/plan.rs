@@ -137,6 +137,33 @@ fn inactive_network_settings_warn_without_starting_network_tools() {
     );
     assert!(String::from_utf8_lossy(&output.stderr).contains("unused"));
     assert!(String::from_utf8_lossy(&output.stdout).contains("allow tcp example.com ports 443"));
+    // A host run with the same settings starts neither tool.
+    let tools = home.path().join("tools");
+    for name in ["pasta", "nft"] {
+        home.write_executable(
+            format!("tools/{name}"),
+            "#!/bin/sh\nprintf called > \"$0.called\"\nexit 99\n",
+        );
+    }
+    let mut paths = vec![tools.clone()];
+    paths.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let output = binary(home.path())
+        .env("PATH", std::env::join_paths(paths).unwrap())
+        .args(["--workspace"])
+        .arg(&work)
+        .args(["--", "/usr/bin/true"])
+        .current_dir(&work)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!tools.join("pasta.called").exists());
+    assert!(!tools.join("nft.called").exists());
 }
 
 // @kotowari[REQ-013, REQ-394, EX-183]
