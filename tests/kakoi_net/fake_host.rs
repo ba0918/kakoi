@@ -403,6 +403,18 @@ impl FakeHost {
         )
     }
 
+    /// A host whose remote service is TCP 8080 of 11.0.0.5, which its kakoi may reach,
+    /// and whose kakoi publishes [`TCP_V4`]; `rest` follows in the profile.
+    pub(crate) fn with_remote_service(rest: &str) -> Self {
+        Self::new(
+            &format!(
+                "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
+                 {TCP_V4}{rest}"
+            ),
+            &["11.0.0.5/32"],
+        )
+    }
+
     /// As [`Self::new`], but the managed resolver follows the host's
     /// `/etc/resolv.conf`, which the script sets with its `resolv` helper.
     pub(crate) fn following_host_dns(network: &str, remote: &[&'static str]) -> Self {

@@ -1,13 +1,7 @@
-use crate::fake_host::{FakeHost, CONTROL, SERVICES, TCP_V4};
+use crate::fake_host::{FakeHost, CONTROL, SERVICES};
 
 fn host() -> FakeHost {
-    FakeHost::new(
-        &format!(
-            "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
-             {TCP_V4}\n[process]\nshutdown-grace-seconds = 300\n"
-        ),
-        &["11.0.0.5/32"],
-    )
+    FakeHost::with_remote_service("\n[process]\nshutdown-grace-seconds = 300\n")
 }
 
 /// Host-side helpers: a kakoi running [`SERVICES`] with its published TCP

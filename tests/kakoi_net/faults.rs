@@ -83,10 +83,12 @@ assert finish(process) == 0
     );
 }
 
-/// A process the main command leaves behind. It serves the published port,
-/// and on the grace's termination request reports whether it can still reach
-/// the remote service, then waits for a line on its input before it ends.
-const LEFT_BEHIND: &str = r#"
+/// A process that serves the published port with `reply`, and on a termination request
+/// reports whether it can still reach the remote service, then ends with 0 once a line
+/// arrives on its input.
+fn serving(reply: &str) -> String {
+    format!(
+        r#"
 import os, signal, threading, time
 server = socket.socket()
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -97,7 +99,7 @@ def serve():
     while True:
         connection, _ = server.accept()
         with connection:
-            connection.sendall(b'left-behind')
+            connection.sendall(b'{reply}')
 threading.Thread(target=serve, daemon=True).start()
 
 def terminate(*_):
@@ -108,19 +110,16 @@ signal.signal(signal.SIGTERM, terminate)
 print('ready', exchange('11.0.0.5', 8080, 'tcp', PERMITTED), flush=True)
 while True:
     time.sleep(1)
-"#;
+"#
+    )
+}
 
 // @kotowari[EX-112, EX-114, EX-115, EX-118, EX-121]
 #[test]
 fn block_precedes_cleanup_grace() {
-    let host = FakeHost::new(
-        &format!(
-            "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
-             {TCP_V4}\n[process]\nshutdown-grace-seconds = 300\n"
-        ),
-        &["11.0.0.5/32"],
-    );
-    let child = format!("{CLIENT}{LEFT_BEHIND}");
+    let host = FakeHost::with_remote_service("\n[process]\nshutdown-grace-seconds = 300\n");
+    // The main command leaves this process behind.
+    let child = format!("{CLIENT}{}", serving("left-behind"));
     let main = format!(
         "import subprocess, sys\nsubprocess.Popen([sys.executable, '-c', {child:?}])\nsys.stdin.readline()\nsys.exit(7)\n"
     );
@@ -155,48 +154,17 @@ print('released', held('127.0.0.1', 18000, 'tcp'), 'pasta left', len(pastas()))
     );
 }
 
-/// A main command that serves the published port and, on the termination
-/// request, reports whether it can still reach the remote service, then ends
-/// with 0 once a line arrives on its input.
-const TERMINATED: &str = r#"
-import os, signal, threading, time
-server = socket.socket()
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server.bind(('127.0.0.1', 8000))
-server.listen()
-
-def serve():
-    while True:
-        connection, _ = server.accept()
-        with connection:
-            connection.sendall(b'main')
-threading.Thread(target=serve, daemon=True).start()
-
-def terminate(*_):
-    print('terminating', exchange('11.0.0.5', 8080, 'tcp', REFUSED).startswith('failed'), flush=True)
-    os.read(0, 16)
-    os._exit(0)
-signal.signal(signal.SIGTERM, terminate)
-print('ready', exchange('11.0.0.5', 8080, 'tcp', PERMITTED), flush=True)
-while True:
-    time.sleep(1)
-"#;
-
 // @kotowari[EX-219, EX-221]
 #[test]
 fn sigterm_blocks_before_asking_the_main_command_to_end() {
-    let host = FakeHost::new(
-        &format!(
-            "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
-             {TCP_V4}\n[process]\nshutdown-grace-seconds = 300\n"
-        ),
-        &["11.0.0.5/32"],
-    );
+    let host = FakeHost::with_remote_service("\n[process]\nshutdown-grace-seconds = 300\n");
+    // The main command itself.
+    let terminated = serving("main");
     let output = host.run(&format!(
         r#"{CONTROL}
 import signal, time
 serve('11.0.0.5', 8080, 'tcp', 'static')
-process = kakoi({TERMINATED:?}, stdin=subprocess.PIPE)
+process = kakoi({terminated:?}, stdin=subprocess.PIPE)
 until(process, 'published')
 print(line(process.stdout).strip(), exchange('127.0.0.1', 18000, 'tcp', PERMITTED))
 before = len(received)
@@ -226,13 +194,7 @@ print('released', held('127.0.0.1', 18000, 'tcp'), 'pasta left', len(pastas()))
 // @kotowari[REQ-144]
 #[test]
 fn notification_backpressure_does_not_block_control() {
-    let host = FakeHost::new(
-        &format!(
-            "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
-             {TCP_V4}"
-        ),
-        &["11.0.0.5/32"],
-    );
+    let host = FakeHost::with_remote_service("");
     let output = host.run(&format!(
         r#"{CONTROL}
 {BREAK}
