@@ -261,18 +261,56 @@ fn encode_network(network: &Network) -> Value {
         json!(network.allow_nested_filtered),
     );
     if network.settings_present() {
-        fields.insert("publish".into(), Value::Array(network.publish.iter().map(|entry| json!({ "mode": "fixed", "protocol": entry.protocol, "port": entry.port, "host-port": entry.host_port, "target-family": entry.family, "host-family": entry.family })).collect()));
-        fields.insert("allow".into(), Value::Array(network.allow.iter().map(|entry| {
-            let destination = match &entry.destination {
-                kakoi_policy::Destination::Dns(pattern) => json!({"dns": pattern.to_string()}),
-                kakoi_policy::Destination::Address { network, host_interface } => json!({"cidr": network.to_string(), "host-interface": host_interface}),
-                kakoi_policy::Destination::HostLoopback(family) => json!({"host-loopback": family}),
-            };
-            json!({"destination": destination, "protocol": entry.protocol, "ports": entry.ports.to_string().split(',').map(str::trim).collect::<Vec<_>>()})
-        }).collect()));
-        fields.insert("dns-upstream".into(), Value::Array(network.dns_upstream.iter().map(|upstream| json!({"transport": if upstream.tls_name().is_some() { "tls" } else { "plain" }, "ip": upstream.address.to_string(), "port": upstream.port(), "tls-name": upstream.tls_name()})).collect()));
+        fields.insert(
+            "publish".into(),
+            Value::Array(network.publish.iter().map(encode_publication).collect()),
+        );
+        fields.insert(
+            "allow".into(),
+            Value::Array(network.allow.iter().map(encode_allow).collect()),
+        );
+        fields.insert(
+            "dns-upstream".into(),
+            Value::Array(network.dns_upstream.iter().map(encode_upstream).collect()),
+        );
     }
     value
+}
+
+fn encode_publication(entry: &kakoi_policy::FixedPublication) -> Value {
+    json!({
+        "mode": "fixed",
+        "protocol": entry.protocol,
+        "port": entry.port,
+        "host-port": entry.host_port,
+        "target-family": entry.family,
+        "host-family": entry.family,
+    })
+}
+
+fn encode_allow(entry: &kakoi_policy::Allow) -> Value {
+    let destination = match &entry.destination {
+        kakoi_policy::Destination::Dns(pattern) => json!({"dns": pattern.to_string()}),
+        kakoi_policy::Destination::Address {
+            network,
+            host_interface,
+        } => json!({"cidr": network.to_string(), "host-interface": host_interface}),
+        kakoi_policy::Destination::HostLoopback(family) => json!({"host-loopback": family}),
+    };
+    json!({
+        "destination": destination,
+        "protocol": entry.protocol,
+        "ports": entry.ports.to_string().split(',').map(str::trim).collect::<Vec<_>>(),
+    })
+}
+
+fn encode_upstream(upstream: &kakoi_policy::DnsUpstream) -> Value {
+    json!({
+        "transport": if upstream.tls_name().is_some() { "tls" } else { "plain" },
+        "ip": upstream.address.to_string(),
+        "port": upstream.port(),
+        "tls-name": upstream.tls_name(),
+    })
 }
 
 #[cfg(test)]
