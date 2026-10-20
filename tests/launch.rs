@@ -611,8 +611,19 @@ fn a_command_on_path_inside_an_rw_item_is_started_without_a_placement_check() {
 // @kotowari[REQ-287, EX-523]
 #[test]
 fn two_concurrent_launches_both_pass_their_status_through() {
+    // The runs meet in the workspace: the second ends only once the first is running, and
+    // the first only once the test releases it after the second has ended, so the two
+    // overlap and the end of one does not stop the other. Each wait is bounded by 30 s.
     let (home, workspace) = home_with_workspace();
-    let start = |code: i32| {
+    let running = workspace.join("first-running");
+    let release = workspace.join("release");
+    let wait_for = |path: &Path| {
+        format!(
+            "i=0; while [ ! -e '{}' ] && [ $i -lt 3000 ]; do sleep 0.01; i=$((i+1)); done",
+            path.display()
+        )
+    };
+    let start = |script: String| {
         binary(home.path())
             .args([
                 "--workspace",
@@ -620,17 +631,26 @@ fn two_concurrent_launches_both_pass_their_status_through() {
                 "--",
                 "/bin/sh",
                 "-c",
-                &format!("sleep 0.3; exit {code}"),
+                &script,
             ])
             .spawn()
             .unwrap()
     };
 
-    let mut first = start(5);
-    let mut second = start(6);
+    let mut first = start(format!(
+        "touch '{}'; {}; exit 5",
+        running.display(),
+        wait_for(&release)
+    ));
+    let mut second = start(format!("{}; exit 6", wait_for(&running)));
 
-    assert_eq!(first.wait().unwrap().code(), Some(5));
     assert_eq!(second.wait().unwrap().code(), Some(6));
+    assert!(
+        running.exists(),
+        "the second run ended before the first ran"
+    );
+    std::fs::write(&release, "").unwrap();
+    assert_eq!(first.wait().unwrap().code(), Some(5));
 }
 
 // @kotowari[REQ-173]
