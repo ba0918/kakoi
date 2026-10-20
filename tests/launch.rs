@@ -1437,6 +1437,29 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     );
 }
 
+// @kotowari[REQ-168, REQ-311]
+#[test]
+fn an_rw_copy_source_over_the_byte_limit_is_a_path_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    let big = home.write("conf/big", "");
+    // Sparse: the test writes nothing, and the run reads one byte more than the limit.
+    std::fs::File::options()
+        .write(true)
+        .open(&big)
+        .unwrap()
+        .set_len(kakoi_runtime::cli::copies::BYTE_LIMIT + 1)
+        .unwrap();
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let output = run_script(&home, &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains("~/conf"), "{diagnostic}");
+}
+
 // @kotowari[REQ-172]
 #[test]
 fn a_narrower_rw_inside_an_rw_copy_directory_still_reaches_the_host() {
