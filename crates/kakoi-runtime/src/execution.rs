@@ -428,13 +428,13 @@ pub(crate) fn run_worker(
         if kakoi_linux::supervisor_signals::take_shutdown_requested() && !stopping {
             reason = strongest_reason(reason, ExitReason::StopRequested);
             stopping = true;
-            events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
-            network_cleanup = close_network(&mut network, &mut network_diagnostics);
-            if network_cleanup == NetworkCleanup::Unconfirmed {
-                let _ = child.0.kill();
-            } else {
-                let _ = ipc::send(&init_control, &Control::Stop, &[]);
-            }
+            network_cleanup = begin_stop(
+                &mut network,
+                &mut network_diagnostics,
+                &mut child,
+                &init_control,
+                &mut events,
+            );
         }
         if !stopping {
             if let Some(session) = &mut network {
@@ -453,21 +453,7 @@ pub(crate) fn run_worker(
         if let Some(session) = &mut network {
             while let Some((notification, missed)) = session.take_state_notification() {
                 events.next = events.next.saturating_add(missed);
-                events.emit(crate::RunEventKind::Network {
-                    state: notification.state.map(|state| match state {
-                        kakoi_net::notification::NetworkState::Running => {
-                            crate::NetworkEventState::Running
-                        }
-                        kakoi_net::notification::NetworkState::Isolated => {
-                            crate::NetworkEventState::Isolated
-                        }
-                        kakoi_net::notification::NetworkState::Unsafe => {
-                            crate::NetworkEventState::Unsafe
-                        }
-                    }),
-                    detail: notification.detail.to_string(),
-                    truncated: false,
-                });
+                events.emit(network_event(notification));
             }
         }
         let init_ready = poll(&init_control, 20).map_err(prepare_failure)?;
@@ -476,13 +462,13 @@ pub(crate) fn run_worker(
             reason = strongest_reason(reason, ExitReason::OwnerLost);
             if !stopping {
                 stopping = true;
-                events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
-                network_cleanup = close_network(&mut network, &mut network_diagnostics);
-                if network_cleanup == NetworkCleanup::Unconfirmed {
-                    let _ = child.0.kill();
-                } else {
-                    let _ = ipc::send(&init_control, &Control::Stop, &[]);
-                }
+                network_cleanup = begin_stop(
+                    &mut network,
+                    &mut network_diagnostics,
+                    &mut child,
+                    &init_control,
+                    &mut events,
+                );
             }
         }
         if !control_lost && poll(control, 0).map_err(prepare_failure)? {
@@ -496,13 +482,13 @@ pub(crate) fn run_worker(
             reason = strongest_reason(reason, observed);
             if !stopping {
                 stopping = true;
-                events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
-                network_cleanup = close_network(&mut network, &mut network_diagnostics);
-                if network_cleanup == NetworkCleanup::Unconfirmed {
-                    let _ = child.0.kill();
-                } else {
-                    let _ = ipc::send(&init_control, &Control::Stop, &[]);
-                }
+                network_cleanup = begin_stop(
+                    &mut network,
+                    &mut network_diagnostics,
+                    &mut child,
+                    &init_control,
+                    &mut events,
+                );
             }
         }
         if init_ready {
@@ -808,6 +794,38 @@ fn open_network(
     error.diagnostics.extend(diagnostics);
     error.phase = Phase::Execution;
     Err(error)
+}
+
+/// Starts stopping the run: says so, cuts the network first, then asks init to stop, or
+/// kills the isolation when the cut cannot be confirmed.
+fn begin_stop(
+    network: &mut Option<kakoi_net::session::Session>,
+    diagnostics: &mut Vec<DiagnosticRecord>,
+    child: &mut ChildGuard,
+    init_control: &UnixStream,
+    events: &mut crate::events::Sender,
+) -> NetworkCleanup {
+    events.emit(crate::RunEventKind::Status(crate::RunStatus::Stopping));
+    let cleanup = close_network(network, diagnostics);
+    if cleanup == NetworkCleanup::Unconfirmed {
+        let _ = child.0.kill();
+    } else {
+        let _ = ipc::send(init_control, &Control::Stop, &[]);
+    }
+    cleanup
+}
+
+/// The run event for one notification of the network session.
+fn network_event(notification: kakoi_net::notification::Notification) -> crate::RunEventKind {
+    crate::RunEventKind::Network {
+        state: notification.state.map(|state| match state {
+            kakoi_net::notification::NetworkState::Running => crate::NetworkEventState::Running,
+            kakoi_net::notification::NetworkState::Isolated => crate::NetworkEventState::Isolated,
+            kakoi_net::notification::NetworkState::Unsafe => crate::NetworkEventState::Unsafe,
+        }),
+        detail: notification.detail.to_string(),
+        truncated: false,
+    }
 }
 
 fn close_network(
