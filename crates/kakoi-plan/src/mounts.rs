@@ -672,11 +672,11 @@ fn scan_items(
                     ro.real.display()
                 ),
             }),
-            None => {
-                scanned
-                    .hidden
-                    .extend(hidden(&hit.found_at, ItemOrigin::Scan, hit.target.clone()))
-            }
+            None => scanned.hidden.extend(generated_hide(
+                &hit.found_at,
+                ItemOrigin::Scan,
+                hit.target.clone(),
+            )),
         }
     }
     Ok(scanned)
@@ -718,7 +718,7 @@ fn hide_mounts_items(
             {
                 continue;
             }
-            generated.extend(hidden(
+            generated.extend(generated_hide(
                 &mount.target,
                 ItemOrigin::HideMounts,
                 facts.entry(&mount.target),
@@ -740,7 +740,7 @@ fn secret_items(
     // A secret file that does not exist is the warning of section 9, not a hide.
     for (name, path) in &expanded.secrets {
         if let Some(path) = path.path() {
-            generated.extend(hidden(
+            generated.extend(generated_hide(
                 path,
                 ItemOrigin::SecretFile(name.clone()),
                 facts.entry(path),
@@ -749,7 +749,7 @@ fn secret_items(
     }
     if let Some(config_dir) = &variables.config_dir {
         let config_secrets = config_dir.join("secrets");
-        generated.extend(hidden(
+        generated.extend(generated_hide(
             &config_secrets,
             ItemOrigin::ConfigSecrets,
             facts.entry(&config_secrets),
@@ -769,7 +769,7 @@ struct Candidate {
 }
 
 /// A generated `hide` on what exists at `written`; nothing when nothing exists.
-fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<ResolvedItem> {
+fn generated_hide(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<ResolvedItem> {
     let (real, kind) = real_and_kind(entry)?;
     Some(ResolvedItem {
         directive: Directive::Hide,
@@ -778,6 +778,20 @@ fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<Resolv
         origin,
         written: written.display().to_string(),
     })
+}
+
+/// The last of `items` (they are in the order they are applied) whose real path is `path`
+/// or one of its ancestors: the item in force at `path` inside the isolation.
+pub(crate) fn covering_item<'a>(
+    items: &'a [ResolvedItem],
+    path: &Path,
+) -> Option<&'a ResolvedItem> {
+    items.iter().rfind(|item| path.starts_with(&item.real))
+}
+
+/// Whether the item in force at `path` hides it.
+pub(crate) fn hidden(path: &Path, items: &[ResolvedItem]) -> bool {
+    covering_item(items, path).is_some_and(|item| item.directive == Directive::Hide)
 }
 
 /// The real path of what exists and whether it is a directory; nothing when nothing exists.

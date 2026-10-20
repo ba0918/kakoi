@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::guard::GuardRule;
-use crate::layers::{Directive, GuardEntry, LayerOrigin};
-use crate::mounts::ResolvedItem;
+use crate::layers::{GuardEntry, LayerOrigin};
+use crate::mounts::{hidden, ResolvedItem};
 
 /// The kakoi-only tmpfs the guards and the relocated programs are placed in,
 /// under the tmpfs bwrap makes for `/dev` so that it covers nothing of the host.
@@ -284,16 +284,6 @@ fn check(
         return Err("the program found on PATH is kakoi itself");
     }
     Ok((candidate.clone(), real.clone()))
-}
-
-/// Whether the last mount item that covers `path` (the item's path or one of its
-/// ancestors) hides it.
-pub(crate) fn hidden(path: &Path, mounts: &[ResolvedItem]) -> bool {
-    mounts
-        .iter()
-        .rev()
-        .find(|item| path.starts_with(&item.real))
-        .is_some_and(|item| item.directive == Directive::Hide)
 }
 
 /// Where `real` is relocated, the same place for every program that resolves to it.

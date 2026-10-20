@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::environment::{HomeDirectory, RealEntry};
-use crate::guard_placement::{hidden, GuardTable, GUARD_LOCATION};
+use crate::guard_placement::{GuardTable, GUARD_LOCATION};
 use crate::layers::Policy;
 use crate::listed::ListedRoot;
-use crate::mounts::{expand, valueless_reason, Expansion, MountFacts, ResolvedItem};
+use crate::mounts::{expand, hidden, valueless_reason, Expansion, MountFacts, ResolvedItem};
 use crate::variables::Variables;
 
 /// The kakoi-only tmpfs the isolation's first process and its list are placed in, under
