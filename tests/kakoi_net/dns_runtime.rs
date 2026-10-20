@@ -1,14 +1,10 @@
+use crate::dns_fixture::{a_answer, dns_rule, filtered_namespace, local_upstream, name};
 use kakoi_net::{
     dns_runtime::{DnsRuntime, DnsRuntimeConfig},
-    filter,
-    namespace::NetworkNamespace,
     nft,
     scope::AddressContext,
 };
-use kakoi_runtime::cli::{
-    network::{Allow, Destination, NetworkLimits, Protocol},
-    policy::parse_policy,
-};
+use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
 use std::{
     net::UdpSocket,
     path::Path,
@@ -20,40 +16,15 @@ use std::{
 #[test]
 fn runtime_stop_interrupts_pending_dns_and_kernel_fault_stops_further_work() {
     for mode in ["stop", "kernel"] {
-        let ns = Arc::new(NetworkNamespace::create().unwrap());
-        assert!(ns
-            .command("/usr/sbin/ip")
-            .unwrap()
-            .args(["link", "set", "lo", "up"])
-            .status()
-            .unwrap()
-            .success());
-        nft::apply(
-            &ns,
-            Path::new("/usr/sbin/nft"),
-            &filter::compile_static(&[], 120).unwrap(),
-            Instant::now() + Duration::from_secs(2),
-        )
-        .unwrap();
+        let ns = filtered_namespace();
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         socket.set_nonblocking(true).unwrap();
-        let config = parse_policy(
-            &format!(
-                "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-                socket.local_addr().unwrap().port()
-            ),
-            Path::new("dns.toml"),
-        )
-        .unwrap();
+        let upstreams = local_upstream(socket.local_addr().unwrap().port());
         let mut runtime = DnsRuntime::new(
             Arc::clone(&ns),
             DnsRuntimeConfig {
-                policy: vec![Allow {
-                    destination: Destination::Dns("api.example.com".parse().unwrap()),
-                    protocol: Protocol::Tcp,
-                    ports: vec!["443".into()].try_into().unwrap(),
-                }],
-                upstreams: config.network.dns_upstream,
+                policy: vec![dns_rule("api.example.com")],
+                upstreams,
                 limits: NetworkLimits {
                     dns_resolution_timeout_seconds: 30,
                     dns_server_timeout_seconds: 30,
@@ -67,7 +38,6 @@ fn runtime_stop_interrupts_pending_dns_and_kernel_fault_stops_further_work() {
                 },
                 trust: None,
                 scope: AddressContext::default(),
-                generation: 0,
                 host_dns: None,
             },
             |_| None,
@@ -79,7 +49,7 @@ s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x01',('127.0.0.53',53))
 "#]).status().unwrap().success());
         let deadline = Instant::now() + Duration::from_secs(2);
-        let (mut answer, peer) = loop {
+        let (question, peer) = loop {
             runtime.poll(Instant::now()).unwrap();
             let mut bytes = [0; 512];
             match socket.recv_from(&mut bytes) {
@@ -92,10 +62,9 @@ s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x
         if mode == "stop" {
             runtime.stop();
         } else {
-            answer[2] |= 0x80;
-            answer[7] = 1;
-            answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-            socket.send_to(&answer, peer).unwrap();
+            socket
+                .send_to(&a_answer(&question, 30, [1, 1, 1, 1]), peer)
+                .unwrap();
         }
         let deadline = Instant::now() + Duration::from_secs(1);
         let mut fault = false;
@@ -130,40 +99,15 @@ s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x
 // @kotowari[REQ-134, EX-301]
 #[test]
 fn the_runtime_holds_a_failed_resolution_without_asking_again() {
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.set_nonblocking(true).unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            socket.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(socket.local_addr().unwrap().port());
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns("api.example.com".parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
-            upstreams: config.network.dns_upstream,
+            policy: vec![dns_rule("api.example.com")],
+            upstreams,
             limits: NetworkLimits {
                 dns_failure_cache_seconds: 60,
                 ..NetworkLimits::default()
@@ -171,7 +115,6 @@ fn the_runtime_holds_a_failed_resolution_without_asking_again() {
             nft: "/usr/sbin/nft".into(),
             trust: None,
             scope: AddressContext::default(),
-            generation: 0,
             host_dns: None,
         },
         |_| None,
@@ -238,21 +181,24 @@ fn resolve(
     limits: NetworkLimits,
     names: &[&str],
 ) -> (Vec<(u8, u16)>, Vec<Vec<String>>) {
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let (answers, asked) = resolve_recording(upstreams, limits, names);
+    let names = asked
+        .into_iter()
+        .map(|questions| questions.into_iter().map(|(name, _)| name).collect())
+        .collect();
+    (answers, names)
+}
+
+/// The questions one upstream received: each name, and when it arrived.
+type Received = Vec<(String, Instant)>;
+
+/// [`resolve`], with when each upstream received each question.
+fn resolve_recording(
+    upstreams: &[Upstream],
+    limits: NetworkLimits,
+    names: &[&str],
+) -> (Vec<(u8, u16)>, Vec<Received>) {
+    let ns = filtered_namespace();
     let sockets: Vec<_> = upstreams
         .iter()
         .map(|_| {
@@ -274,17 +220,12 @@ fn resolve(
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns("*.example.com".parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
+            policy: vec![dns_rule("*.example.com")],
             upstreams: config.network.dns_upstream,
             limits,
             nft: "/usr/sbin/nft".into(),
             trust: None,
             scope: AddressContext::default(),
-            generation: 0,
             host_dns: None,
         },
         |_| None,
@@ -323,6 +264,7 @@ for index, name in enumerate(sys.argv[1:]):
             let Ok((size, peer)) = socket.recv_from(&mut bytes) else {
                 continue;
             };
+            let received = Instant::now();
             let query = &bytes[..size];
             let mut at = 12;
             let mut labels = Vec::new();
@@ -331,7 +273,7 @@ for index, name in enumerate(sys.argv[1:]):
                 labels.push(String::from_utf8_lossy(&query[at + 1..at + 1 + length]).into_owned());
                 at += 1 + length;
             }
-            asked[index].push(labels.join("."));
+            asked[index].push((labels.join("."), received));
             let mut answer = query.to_vec();
             answer[2] |= 0x80;
             match behaviour {
@@ -463,14 +405,14 @@ fn later_candidates_answer_within_one_query_count() {
 // @kotowari[EX-252]
 #[test]
 fn the_default_wait_for_a_candidate_is_two_seconds() {
-    let start = Instant::now();
-    let (answers, _) = resolve(
+    let (answers, asked) = resolve_recording(
         &[Upstream::Silent, Upstream::Answers],
         NetworkLimits::default(),
         &["a.example.com"],
     );
     assert_eq!(answers, [(0, 1)]);
-    assert!(start.elapsed() >= Duration::from_millis(1900));
+    let waited = asked[1][0].1 - asked[0][0].1;
+    assert!(waited >= Duration::from_millis(1900), "{waited:?}");
 }
 
 /// One upstream reply: the RCODE, the answer records (type, TTL, data) owned
@@ -491,16 +433,6 @@ impl Reply {
     }
 }
 
-fn encode_name(name: &str) -> Vec<u8> {
-    let mut wire = Vec::new();
-    for label in name.split('.') {
-        wire.push(label.len() as u8);
-        wire.extend(label.as_bytes());
-    }
-    wire.push(0);
-    wire
-}
-
 /// What happened to each question, in order: its RCODE and record count, and
 /// the kakoi_policy table afterwards.
 struct Resolved {
@@ -518,45 +450,19 @@ fn resolve_questions(
     upstream: impl Fn(&str, u16) -> Option<Reply>,
     questions: &[(&str, u16, u64)],
 ) -> Resolved {
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.set_nonblocking(true).unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}\n",
-            socket.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(socket.local_addr().unwrap().port());
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns(pattern.parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
-            upstreams: config.network.dns_upstream,
+            policy: vec![dns_rule(pattern)],
+            upstreams,
             limits,
             nft: "/usr/sbin/nft".into(),
             trust: None,
             scope: AddressContext::default(),
-            generation: 0,
             host_dns: None,
         },
         |_| None,
@@ -666,7 +572,7 @@ fn a_record(address: [u8; 4]) -> (u16, u32, Vec<u8>) {
 }
 
 fn alias(target: &str) -> (u16, u32, Vec<u8>) {
-    (5, 30, encode_name(target))
+    (5, 30, name(target))
 }
 
 /// `c0.example.com` is an alias of `c1.example.com`, and so on down to
@@ -784,8 +690,9 @@ fn a_and_aaaa_are_separate_resolutions() {
         &[("c0.example.com", 1, 0), ("c0.example.com", 28, 0)],
     );
     assert_eq!(resolved.answers, [(0, 4), (0, 4)]);
-    // The A resolution times out at 3 seconds; the AAAA one, asked a second
-    // later and answered at 3.5 seconds, still has its own time.
+    // The A resolution times out at 3 seconds; the AAAA one, asked two seconds
+    // later and answered no earlier than 3.5 seconds, still has its own time,
+    // with 1.5 seconds of it left for the answer to be adopted.
     let resolved = resolve_questions(
         "*.example.com",
         NetworkLimits {
@@ -805,10 +712,10 @@ fn a_and_aaaa_are_separate_resolutions() {
                         .octets()
                         .to_vec(),
                 )],
-                delay: Duration::from_millis(2500),
+                delay: Duration::from_millis(1500),
             })
         },
-        &[("api.example.com", 1, 0), ("api.example.com", 28, 1000)],
+        &[("api.example.com", 1, 0), ("api.example.com", 28, 2000)],
     );
     assert_eq!(resolved.answers, [(2, 0), (0, 1)]);
 }

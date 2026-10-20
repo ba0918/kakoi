@@ -4,7 +4,7 @@ use std::thread::{self, JoinHandle};
 pub(super) struct Rebuild {
     pub attempt: Attempt,
     handle: JoinHandle<Rebuilt>,
-    cancellation: crate::dns_workers::Cancellation,
+    cancellation: crate::cancellation::Cancellation,
 }
 pub(super) struct Rebuilt {
     pub transport: Transport,
@@ -20,7 +20,7 @@ impl Rebuild {
         attempt: Attempt,
         mut retired_guards: Vec<String>,
     ) -> io::Result<Self> {
-        let cancellation = crate::dns_workers::Cancellation::new();
+        let cancellation = crate::cancellation::Cancellation::new();
         let cancel = cancellation.clone();
         let handle = thread::Builder::new()
             .name("kakoi-rebuild".into())
@@ -40,7 +40,7 @@ impl Rebuild {
                             &cleanup,
                             attempt
                                 .deadline()
-                                .min(Instant::now() + Duration::from_secs(2)),
+                                .min(Instant::now() + crate::nft::COMMAND_BUDGET),
                             &cancel,
                         )?;
                         retired_guards.clear();
@@ -52,7 +52,7 @@ impl Rebuild {
                         &format!("delete table inet kakoi_policy\n{script}"),
                         attempt
                             .deadline()
-                            .min(Instant::now() + Duration::from_secs(2)),
+                            .min(Instant::now() + crate::nft::COMMAND_BUDGET),
                         &cancel,
                     )?;
                     if cancel.is_cancelled() || Instant::now() >= attempt.deadline() {

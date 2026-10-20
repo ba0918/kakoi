@@ -1,6 +1,6 @@
 //! Pure isolation planning from supplied policy and host facts.
 
-pub use kakoi_policy::{diagnostic, guard, layers, network, policy, wildcard};
+use kakoi_policy::{diagnostic, guard, layers, network, policy, wildcard};
 
 pub mod command;
 pub mod command_limits;

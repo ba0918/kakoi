@@ -1,3 +1,4 @@
+use crate::dns_fixture::{name, query as query_name};
 use kakoi_net::dns::AddressProgress;
 use kakoi_net::dns::{DnsError, Question, ResponseDisposition};
 use kakoi_net::scope::DnsAdmission;
@@ -5,24 +6,6 @@ use std::time::{Duration, Instant};
 
 fn query(kind: u16) -> Vec<u8> {
     query_name("api.example.com", kind)
-}
-
-fn name(name: &str) -> Vec<u8> {
-    let mut wire = Vec::new();
-    for label in name.split('.') {
-        wire.push(label.len() as u8);
-        wire.extend(label.as_bytes());
-    }
-    wire.push(0);
-    wire
-}
-
-fn query_name(owner: &str, kind: u16) -> Vec<u8> {
-    let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    wire.extend(name(owner));
-    wire.extend(kind.to_be_bytes());
-    wire.extend([0, 1]);
-    wire
 }
 
 fn answer(wire: &mut Vec<u8>, owner: &str, kind: u16, ttl: u32, data: &[u8]) {
@@ -76,10 +59,6 @@ fn cname_candidates_exclude_unrelated_answers_and_keep_deadlines_across_response
     assert_eq!(addresses.len(), 1);
     assert_eq!(addresses[0].address.to_string(), "1.1.1.1");
     assert_eq!(addresses[0].deadline, start + Duration::from_secs(2));
-    assert_eq!(
-        addresses[0].cache_deadline,
-        start + Duration::from_millis(1500)
-    );
 }
 
 // @kotowari[REQ-014, REQ-389]
@@ -102,7 +81,6 @@ fn zero_ttl_grace_never_extends_a_positive_deadline_in_the_same_answer_set() {
     assert_eq!(addresses.len(), 2);
     for address in addresses {
         assert_eq!(address.deadline, start + Duration::from_secs(1));
-        assert_eq!(address.cache_deadline, start);
     }
 }
 
@@ -441,10 +419,6 @@ fn resolution_follows_cname_with_one_budget_and_ages_the_assembled_answer() {
     assert_eq!(resolved.candidates.len(), 1);
     assert_eq!(
         resolved.candidates[0].deadline,
-        start + Duration::from_secs(10)
-    );
-    assert_eq!(
-        resolved.candidates[0].cache_deadline,
         start + Duration::from_secs(10)
     );
     let original = Question::parse(&query(1)).unwrap();

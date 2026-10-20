@@ -1,5 +1,5 @@
 use super::{DnsError, EnforcedDnsError};
-use crate::{dns_workers::Cancellation, dynamic::DynamicPermissions, leases::ActiveGrant};
+use crate::{cancellation::Cancellation, dynamic::DynamicPermissions, leases::ActiveGrant};
 use kakoi_policy::network::Allow;
 use std::{
     io,

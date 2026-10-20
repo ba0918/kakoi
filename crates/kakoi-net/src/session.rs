@@ -65,7 +65,7 @@ impl Session {
             transport.controller_namespace(),
             &config.nft,
             &script,
-            Instant::now() + Duration::from_secs(2),
+            Instant::now() + crate::nft::COMMAND_BUDGET,
         )?;
         let namespace = transport.controller_namespace_handle();
         let route: Arc<Route> = Arc::new(route);
@@ -101,9 +101,6 @@ impl Session {
     /// Pull one bounded line without performing output I/O in the control loop.
     pub fn take_notification(&mut self) -> Option<Arc<str>> {
         self.notifications.pop()
-    }
-    pub fn take_notification_with_loss(&mut self) -> Option<(Arc<str>, u64)> {
-        self.notifications.pop_with_loss()
     }
     pub fn take_state_notification(&mut self) -> Option<(crate::notification::Notification, u64)> {
         self.notifications.pop_record()
@@ -182,7 +179,6 @@ impl Session {
         self.transport
             .as_mut()
             .expect("live transport")
-            .gate_mut()
             .renew_for(HEALTH_WINDOW_MS)?;
         self.verify()?;
         self.next_health = Instant::now() + HEALTH_INTERVAL;
@@ -190,7 +186,7 @@ impl Session {
     }
     fn fail(&mut self, cause: io::Error) -> io::Error {
         let recover = self.state == SessionState::Running;
-        let error = match self.close_until(Instant::now() + Duration::from_secs(2)) {
+        let error = match self.close_until(Instant::now() + crate::nft::COMMAND_BUDGET) {
             Ok(()) => {
                 self.automatic = recover;
                 if recover {
@@ -288,12 +284,11 @@ impl Session {
                 self.transport
                     .as_mut()
                     .expect("returned transport")
-                    .gate_mut()
                     .reopen_until(
                         HEALTH_WINDOW_MS,
                         attempt
                             .deadline()
-                            .min(Instant::now() + Duration::from_secs(2)),
+                            .min(Instant::now() + crate::nft::COMMAND_BUDGET),
                     )?;
                 self.verify()
             })();
@@ -314,7 +309,7 @@ impl Session {
             Ok(())
         } else {
             let retry = self.automatic;
-            if let Err(error) = self.close_until(Instant::now() + Duration::from_secs(2)) {
+            if let Err(error) = self.close_until(Instant::now() + crate::nft::COMMAND_BUDGET) {
                 self.report_failure(&error);
                 return Err(error);
             }
@@ -363,7 +358,7 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + crate::nft::COMMAND_BUDGET;
         let _ = self.close_until(deadline);
         // A cancelled rebuild still owns a transport; joining it ends that
         // transport here instead of in a detached worker. A worker stuck past the

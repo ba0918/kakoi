@@ -238,14 +238,7 @@ pub fn listed_root(
         .collect();
     directories.sort_by(|a, b| byte_order(a, b));
     directories.dedup();
-    let places = base
-        .iter()
-        .map(PathBuf::as_path)
-        .chain(shown)
-        .chain(resolver.as_deref())
-        .chain(filtered_resolver.as_deref())
-        .map(Path::to_path_buf)
-        .collect();
+    let places = places.into_iter().map(Path::to_path_buf).collect();
     (
         ListedRoot {
             directories,

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use kakoi_runtime::cli::diagnostic::Kind;
+use kakoi_runtime::cli::diagnostic::{escape_control, Kind};
 use kakoi_runtime::cli::policy::{
     parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath, Variable,
 };
@@ -267,6 +267,22 @@ fn a_control_character_in_a_variable_name_is_escaped_in_the_diagnostic() {
         !rendered.bytes().any(|byte| byte < 0x20 || byte == 0x7f),
         "{rendered:?}"
     );
+}
+
+// How each control character is written is left to the implementation; that every one
+// is written as something visible, and that the Unicode separators are not, is not.
+// @kotowari[REQ-289]
+#[test]
+fn control_characters_are_written_visibly_and_unicode_separators_are_kept() {
+    for character in ('\u{0}'..='\u{1f}').chain(['\u{7f}']) {
+        let escaped = escape_control(&format!("a{character}b"));
+        assert!(
+            escaped.len() > 2 && !escaped.chars().any(|other| other.is_ascii_control()),
+            "{character:?}: {escaped:?}"
+        );
+    }
+    let separators = "a\u{2028}b\u{2029}c\u{85}d";
+    assert_eq!(escape_control(separators), separators);
 }
 
 // @kotowari[REQ-467, REQ-474, REQ-151]

@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 mod common;
 #[allow(dead_code)]
@@ -7,22 +8,20 @@ mod common;
 mod fake_host;
 #[path = "library_api/filtered.rs"]
 mod filtered;
+#[path = "library_api/retained_mounts.rs"]
+mod retained_mounts;
+
+use common::{output_report, TempDir};
 
 // @kotowari[REQ-library-201]
 #[test]
 fn worker_terminal_signals_are_protected_before_elf_initializers() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let dir = fixture_dir();
     dir.write("home/.keep", "");
     let record = dir.path().join("workspace/interrupt-record");
-    let output = Command::new(consumer())
-        .arg("--self-test-prepare-fault")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
+    let output = fixture_command(&dir, "--self-test-prepare-fault")
         .env("KAKOI_TEST_PREPARE_FAULT", "interrupt")
         .env("KAKOI_TEST_CONTROL_RECORD", &record)
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -32,8 +31,7 @@ fn worker_terminal_signals_are_protected_before_elf_initializers() {
 // @kotowari[REQ-library-201, REQ-library-202, REQ-library-301]
 #[test]
 fn terminal_interrupt_keeps_supervision_alive_and_target_signals_default() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let dir = fixture_dir();
     dir.write("home/.keep", "");
     let script = r#"
 import os, signal, subprocess, sys
@@ -78,8 +76,7 @@ fn startup_transfers_large_valid_requests_without_a_timeout() {
 #[test]
 fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
     use std::os::unix::fs::PermissionsExt;
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let dir = fixture_dir();
     dir.write("home/.keep", "");
     dir.write("workspace/unreadable", "private value");
     std::fs::set_permissions(
@@ -87,12 +84,7 @@ fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
         std::fs::Permissions::from_mode(0o000),
     )
     .unwrap();
-    let output = Command::new(consumer())
-        .arg("--self-test-secret-permission")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-secret-permission")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -102,8 +94,7 @@ fn secret_permission_errors_retain_the_os_cause_without_string_parsing() {
 #[test]
 fn copy_file_and_directory_permission_errors_retain_the_os_cause() {
     use std::os::unix::fs::PermissionsExt;
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let dir = fixture_dir();
     dir.write("home/.keep", "");
     dir.write("workspace/unreadable", "private value");
     dir.write("workspace/unreadable-tree/entry", "private value");
@@ -114,12 +105,7 @@ fn copy_file_and_directory_permission_errors_retain_the_os_cause() {
         )
         .unwrap();
     }
-    let output = Command::new(consumer())
-        .arg("--self-test-copy-permission")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-copy-permission")
         .output()
         .unwrap();
     std::fs::set_permissions(
@@ -133,17 +119,14 @@ fn copy_file_and_directory_permission_errors_retain_the_os_cause() {
 // @kotowari[REQ-library-104]
 #[test]
 fn command_names_matching_mount_options_are_values_not_operations() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let dir = fixture_dir();
     dir.write("home/.keep", "");
     for name in ["ordinary", "--bind", "--ro-bind", "--dev-bind", "--tmpfs"] {
         let destination = dir.path().join("tools").join(name);
         std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
         std::fs::copy("/bin/true", destination).unwrap();
     }
-    let output = Command::new(consumer())
-        .arg("--self-test-option-command")
-        .env_clear()
+    let output = fixture_command(&dir, "--self-test-option-command")
         .env(
             "PATH",
             format!(
@@ -152,8 +135,6 @@ fn command_names_matching_mount_options_are_values_not_operations() {
                 std::env::var("PATH").unwrap()
             ),
         )
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -202,9 +183,8 @@ fn standalone_async_consumer_moves_pipe_ownership_and_reads_and_writes_nonblocki
 // @kotowari[REQ-library-303, REQ-library-304, EX-library-306, EX-library-309]
 #[test]
 fn caller_created_terminal_descriptors_and_inheritance_remain_terminals() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.keep", "");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     let script = r#"
 import os, subprocess, sys, termios, tty
 master, slave = os.openpty()
@@ -254,26 +234,19 @@ fn natural_main_completion_reports_stopping_while_descendant_cleanup_is_pending(
 // @kotowari[REQ-library-206, REQ-library-402, EX-library-211, EX-library-212]
 #[test]
 fn nested_api_creates_a_new_isolation_preserves_outer_guards_and_never_falls_back_to_exec() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write("workspace/secret", "outer secret");
     dir.write_executable("workspace/tools/tool", "#!/bin/sh\nprintf unguarded\n");
-    let real = Command::new("/bin/sh")
-        .args(["-c", "command -v bwrap"])
-        .output()
-        .unwrap();
-    let real = String::from_utf8(real.stdout).unwrap();
+    let real = real_bwrap();
     dir.write_executable(
         "workspace/failing/bwrap",
         format!(
             "#!/bin/sh\nif [ \"$1\" = --help ]; then exec {} --help; fi\nexit 1\n",
-            real.trim()
+            real
         ),
     );
-    let output = Command::new(consumer())
-        .arg("--self-test-api-nested")
-        .env_clear()
+    let output = fixture_command(&dir, "--self-test-api-nested")
         .env(
             "PATH",
             format!(
@@ -282,15 +255,10 @@ fn nested_api_creates_a_new_isolation_preserves_outer_guards_and_never_falls_bac
                 std::env::var("PATH").unwrap()
             ),
         )
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
 }
-#[path = "library_api/retained_mounts.rs"]
-mod retained_mounts;
-use common::{output_report, TempDir};
 
 // @kotowari[REQ-library-410, REQ-288, EX-library-417]
 #[test]
@@ -301,20 +269,14 @@ fn consumer_itself_is_subject_to_its_requested_guard() {
 // @kotowari[REQ-library-408, REQ-library-409, REQ-449, REQ-475, EX-library-412, EX-library-416]
 #[test]
 fn listed_allows_each_copied_guard_but_not_the_original_consumer() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write("workspace/secret", "private");
     dir.write("runtime/sentinel", "keep");
     dir.write_executable("workspace/tools/tool", "#!/bin/sh\nexit 7\n");
     dir.write_executable("workspace/tools/tool2", "#!/bin/sh\nexit 8\n");
-    let output = Command::new(consumer())
-        .arg("--self-test-listed-copies")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
+    let output = fixture_command(&dir, "--self-test-listed-copies")
         .env("XDG_RUNTIME_DIR", dir.path().join("runtime"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -332,22 +294,15 @@ fn listed_allows_each_copied_guard_but_not_the_original_consumer() {
 // @kotowari[REQ-library-106, REQ-library-408]
 #[test]
 fn changed_generated_guard_table_fails_before_releasing_the_target() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write_executable(
         "workspace/tools/tool",
         "#!/bin/sh\nprintf ran > target-ran\n",
     );
-    let real = Command::new("/bin/sh")
-        .args(["-c", "command -v bwrap"])
-        .output()
-        .unwrap();
-    let real = String::from_utf8(real.stdout).unwrap();
-    dir.write_executable("wrapper/bwrap", format!("#!/usr/bin/python3\nimport os,sys,json\na=sys.argv[1:]\nfor i,v in enumerate(a):\n if v=='/dev/kakoi-guard/table' and a[i-2]=='--ro-bind-data':\n  t=json.loads(os.read(int(a[i-1]),1000000)); [e.update(rules=[]) for e in t['entries']]; f=os.memfd_create('replacement',0); os.write(f,json.dumps(t).encode()); os.lseek(f,0,0); a[i-1]=str(f)\nos.execv({:?},[{:?}]+a)\n",real.trim(),real.trim()));
-    let output = Command::new(consumer())
-        .arg("--self-test-changed-table")
-        .env_clear()
+    let real = real_bwrap();
+    dir.write_executable("wrapper/bwrap", format!("#!/usr/bin/python3\nimport os,sys,json\na=sys.argv[1:]\nfor i,v in enumerate(a):\n if v=='/dev/kakoi-guard/table' and a[i-2]=='--ro-bind-data':\n  t=json.loads(os.read(int(a[i-1]),1000000)); [e.update(rules=[]) for e in t['entries']]; f=os.memfd_create('replacement',0); os.write(f,json.dumps(t).encode()); os.lseek(f,0,0); a[i-1]=str(f)\nos.execv({:?},[{:?}]+a)\n",real,real));
+    let output = fixture_command(&dir, "--self-test-changed-table")
         .env(
             "PATH",
             format!(
@@ -356,8 +311,6 @@ fn changed_generated_guard_table_fails_before_releasing_the_target() {
                 std::env::var("PATH").unwrap()
             ),
         )
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -366,9 +319,8 @@ fn changed_generated_guard_table_fails_before_releasing_the_target() {
 // @kotowari[REQ-library-408, REQ-453, EX-library-413]
 #[test]
 fn role_and_per_copy_identity_reject_missing_tables_and_match_deleted_suffixes() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     for (name, exit) in [
         ("tool", 7),
         ("tool2", 8),
@@ -384,12 +336,7 @@ fn role_and_per_copy_identity_reject_missing_tables_and_match_deleted_suffixes()
         "workspace/dispatch.py",
         include_str!("fixtures/library-api/guard_dispatch.py"),
     );
-    let output = Command::new(consumer())
-        .arg("--self-test-dispatch-failures")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-dispatch-failures")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -398,18 +345,12 @@ fn role_and_per_copy_identity_reject_missing_tables_and_match_deleted_suffixes()
 // @kotowari[REQ-library-408, REQ-475]
 #[test]
 fn probe_initializers_descendants_are_reaped_before_target_release() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     for name in ["tool", "tool2"] {
         dir.write_executable(format!("workspace/tools/{name}"), "#!/bin/sh\nexit 0\n");
     }
-    let output = Command::new(consumer())
-        .arg("--self-test-probe-descendants")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-probe-descendants")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -418,9 +359,8 @@ fn probe_initializers_descendants_are_reaped_before_target_release() {
 // @kotowari[REQ-library-406, EX-library-408, EX-library-409]
 #[test]
 fn dynamically_linked_helper_dependencies_are_not_implicitly_published() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/library-sync-dynamic");
     let build = Command::new(env!("CARGO"))
         .args([
@@ -458,22 +398,15 @@ fn dynamically_linked_helper_dependencies_are_not_implicitly_published() {
 // @kotowari[REQ-library-408, EX-library-414]
 #[test]
 fn guard_execution_denial_fails_before_target_release_without_disk_fallback() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write_executable(
         "workspace/tools/tool",
         "#!/bin/sh\nprintf ran > target-ran\n",
     );
-    let real = Command::new("/bin/sh")
-        .args(["-c", "command -v bwrap"])
-        .output()
-        .unwrap();
-    let real = String::from_utf8(real.stdout).unwrap();
-    dir.write_executable("wrapper/bwrap",format!("#!/usr/bin/python3\nimport os,sys\na=sys.argv[1:]\nfor i,v in enumerate(a):\n if v=='/dev/kakoi-guard/bin/tool' and a[i-2]=='--ro-bind-data':\n  assert a[i-4]=='--perms'; a[i-3]='0444'\nos.execv({:?},[{:?}]+a)\n",real.trim(),real.trim()));
-    let output = Command::new(consumer())
-        .arg("--self-test-denied-guard")
-        .env_clear()
+    let real = real_bwrap();
+    dir.write_executable("wrapper/bwrap",format!("#!/usr/bin/python3\nimport os,sys\na=sys.argv[1:]\nfor i,v in enumerate(a):\n if v=='/dev/kakoi-guard/bin/tool' and a[i-2]=='--ro-bind-data':\n  assert a[i-4]=='--perms'; a[i-3]='0444'\nos.execv({:?},[{:?}]+a)\n",real,real));
+    let output = fixture_command(&dir, "--self-test-denied-guard")
         .env(
             "PATH",
             format!(
@@ -482,8 +415,6 @@ fn guard_execution_denial_fails_before_target_release_without_disk_fallback() {
                 std::env::var("PATH").unwrap()
             ),
         )
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -492,18 +423,12 @@ fn guard_execution_denial_fails_before_target_release_without_disk_fallback() {
 // @kotowari[REQ-library-106]
 #[test]
 fn generated_data_checks_transfer_more_than_one_descriptor_batch() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     for n in 0..17 {
         dir.write(format!("workspace/hide-{n}"), "hidden");
     }
-    let output = Command::new(consumer())
-        .arg("--self-test-data-batches")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-data-batches")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -512,17 +437,9 @@ fn generated_data_checks_transfer_more_than_one_descriptor_batch() {
 // @kotowari[REQ-library-301, REQ-library-303, EX-library-303]
 #[test]
 fn host_and_none_launch_report_exit_and_pipe_output_and_reap_descendants() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
-    let output = Command::new(consumer())
-        .arg("--self-test-spawn")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
-        .output()
-        .unwrap();
+    let output = fixture_command(&dir, "--self-test-spawn").output().unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
 }
 
@@ -589,9 +506,8 @@ fn requested_shared_files_are_prepared_at_spawn_but_not_at_prepare() {
 // @kotowari[REQ-library-106, EX-library-111, REQ-library-402, EX-library-419]
 #[test]
 fn public_descriptor_mounts_keep_live_content_and_devices_nodev_and_validate_identity() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write("workspace/device", "");
     let output = Command::new("unshare")
         .args(["--user", "--map-root-user", "--mount", "--pid", "--fork", "--mount-proc", "/bin/sh", "-c",
@@ -629,9 +545,8 @@ fn supervision_and_reaping_continue_while_the_caller_runs_unrelated_children() {
 // @kotowari[REQ-library-301]
 #[test]
 fn command_death_before_exec_does_not_turn_error_pipe_eof_into_start_success() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     let output = Command::new("python3")
         .arg(
             Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -650,9 +565,8 @@ fn command_death_before_exec_does_not_turn_error_pipe_eof_into_start_success() {
 // @kotowari[REQ-library-201, REQ-library-301]
 #[test]
 fn caller_waitpid_reaping_the_worker_is_reported_as_unconfirmed() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     let output = Command::new("python3")
         .arg(
             Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -672,27 +586,9 @@ fn caller_waitpid_reaping_the_worker_is_reported_as_unconfirmed() {
 #[test]
 fn owner_process_death_terminates_the_private_isolation_without_drop() {
     use std::io::{BufRead, BufReader};
-    use std::time::{Duration, Instant};
-    fn descendants(pid: u32, found: &mut Vec<u32>) {
-        let children =
-            std::fs::read_to_string(format!("/proc/{pid}/task/{pid}/children")).unwrap_or_default();
-        for child in children
-            .split_whitespace()
-            .map(|s| s.parse::<u32>().unwrap())
-        {
-            found.push(child);
-            descendants(child, found);
-        }
-    }
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
-    let mut child = Command::new(consumer())
-        .arg("--self-test-owner")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let mut child = fixture_command(&dir, "--self-test-owner")
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
@@ -701,30 +597,15 @@ fn owner_process_death_terminates_the_private_isolation_without_drop() {
         .read_line(&mut line)
         .unwrap();
     assert_eq!(line, "owner-ready\n");
-    let mut owned = Vec::new();
-    descendants(child.id(), &mut owned);
+    let owned = descendants(child.id());
     assert!(owned.len() >= 3, "worker, bwrap and init were not observed");
     child.kill().unwrap();
     child.wait().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let live = owned
-            .iter()
-            .filter(|pid| {
-                std::fs::read_to_string(format!("/proc/{pid}/status"))
-                    .is_ok_and(|status| !status.lines().any(|line| line.starts_with("State:\tZ")))
-            })
-            .copied()
-            .collect::<Vec<_>>();
-        if live.is_empty() {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "owned processes survived: {live:?}"
-        );
-        std::thread::yield_now();
-    }
+    let survived = survivors(&owned);
+    assert!(
+        survived.is_empty(),
+        "owned processes survived: {survived:?}"
+    );
 }
 
 // @kotowari[REQ-library-203]
@@ -737,29 +618,11 @@ fn owner_death_during_init_startup_does_not_leave_a_blocked_isolation() {
 fn startup_owner_death(mode: &str) {
     use std::io::{BufRead, BufReader};
     use std::os::unix::process::CommandExt;
-    use std::time::{Duration, Instant};
-    fn descendants(pid: u32, found: &mut Vec<u32>) {
-        let children =
-            std::fs::read_to_string(format!("/proc/{pid}/task/{pid}/children")).unwrap_or_default();
-        for child in children
-            .split_whitespace()
-            .map(|s| s.parse::<u32>().unwrap())
-        {
-            found.push(child);
-            descendants(child, found);
-        }
-    }
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    let mut child = Command::new(consumer())
-        .arg(mode)
+    let mut child = fixture_command(&dir, mode)
         .process_group(0)
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
         .env("KAKOI_TEST_STARTUP_FAULT", "stop")
-        .current_dir(dir.path().join("workspace"))
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
@@ -768,32 +631,17 @@ fn startup_owner_death(mode: &str) {
         .read_line(&mut line)
         .unwrap();
     assert_eq!(line, "init-startup\n");
-    let mut owned = Vec::new();
-    descendants(child.id(), &mut owned);
+    let owned = descendants(child.id());
     assert!(owned.len() >= 3, "worker, bwrap and init were not observed");
     child.kill().unwrap();
     child.wait().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let live = owned
-            .iter()
-            .filter(|pid| {
-                std::fs::read_to_string(format!("/proc/{pid}/status"))
-                    .is_ok_and(|status| !status.lines().any(|line| line.starts_with("State:\tZ")))
-            })
-            .copied()
-            .collect::<Vec<_>>();
-        if live.is_empty() {
-            break;
+    let survived = survivors(&owned);
+    if !survived.is_empty() {
+        // Only the fixture's private process group is terminated on a failed oracle.
+        unsafe {
+            libc::kill(-(child.id() as i32), libc::SIGKILL);
         }
-        if Instant::now() >= deadline {
-            // Only the fixture's private process group is terminated on a failed oracle.
-            unsafe {
-                libc::kill(-(child.id() as i32), libc::SIGKILL);
-            }
-            panic!("startup processes survived: {live:?}");
-        }
-        std::thread::yield_now();
+        panic!("startup processes survived: {survived:?}");
     }
 }
 
@@ -804,36 +652,88 @@ fn final_mount_checks_accept_intentional_hides_child_overlays_and_copies() {
 }
 
 fn run_fixture(argument: &str) {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write_executable("workspace/bad-exec", "#!/missing-loader\n");
-    let output = Command::new(consumer())
+    let output = fixture_command(&dir, argument).output().unwrap();
+    assert!(output.status.success(), "{}", output_report(&output));
+}
+
+/// A directory for one run of the consumer: `workspace` is a Git worktree and `home`
+/// is the test's to fill.
+fn fixture_dir() -> TempDir {
+    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
+    dir
+}
+
+/// The consumer with `argument`, in `dir`'s workspace with `dir`'s home, and of the
+/// test's environment only `PATH`.
+fn fixture_command(dir: &TempDir, argument: &str) -> Command {
+    let mut command = Command::new(consumer());
+    command
         .arg(argument)
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap())
         .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+        .current_dir(dir.path().join("workspace"));
+    command
+}
+
+/// The host's bwrap, as the test's `PATH` finds it.
+fn real_bwrap() -> String {
+    let output = Command::new("/bin/sh")
+        .args(["-c", "command -v bwrap"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+/// `pid`'s descendants now, each before its own.
+fn descendants(pid: u32) -> Vec<u32> {
+    let children =
+        std::fs::read_to_string(format!("/proc/{pid}/task/{pid}/children")).unwrap_or_default();
+    let mut found = Vec::new();
+    for child in children
+        .split_whitespace()
+        .map(|s| s.parse::<u32>().unwrap())
+    {
+        found.push(child);
+        found.extend(descendants(child));
+    }
+    found
+}
+
+/// Those of `pids` still running, neither gone nor zombies, once all are or 10 seconds
+/// have passed.
+fn survivors(pids: &[u32]) -> Vec<u32> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let live = pids
+            .iter()
+            .filter(|pid| {
+                std::fs::read_to_string(format!("/proc/{pid}/status"))
+                    .is_ok_and(|status| !status.lines().any(|line| line.starts_with("State:\tZ")))
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        if live.is_empty() || Instant::now() >= deadline {
+            return live;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 // @kotowari[REQ-library-104]
 #[test]
 fn command_names_use_the_effective_path_while_bwrap_uses_the_host_path() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write_executable("workspace/requested-tools/tool", "#!/bin/sh\nexit 0\n");
     dir.write_executable("workspace/policy-tools/tool", "#!/bin/sh\nexit 1\n");
     dir.write_executable("workspace/prepended-tools/tool", "#!/bin/sh\nexit 2\n");
-    let output = Command::new(consumer())
-        .arg("--self-test-command-path")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-command-path")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -842,32 +742,22 @@ fn command_names_use_the_effective_path_while_bwrap_uses_the_host_path() {
 // @kotowari[REQ-446, REQ-library-104, EX-library-112, EX-library-404]
 #[test]
 fn named_command_follows_the_guard_placed_on_the_isolated_path() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write_executable("workspace/requested-tools/tool", "#!/bin/sh\nexit 0\n");
     dir.write_executable("workspace/policy-tools/tool", "#!/bin/sh\nexit 1\n");
     dir.write_executable("workspace/prepended-tools/tool", "#!/bin/sh\nexit 2\n");
     dir.write_executable("workspace/policy-tools/bwrap", "#!/bin/sh\nexit 99\n");
-    let real = Command::new("/bin/sh")
-        .args(["-c", "command -v bwrap"])
-        .output()
-        .unwrap();
-    assert!(real.status.success());
+    let real = real_bwrap();
     dir.write_executable(
         "workspace/requested-tools/bwrap",
         format!(
             "#!/bin/sh\nprintf used > {:?}\nexec {} \"$@\"\n",
             dir.path().join("workspace/bwrap-used"),
-            String::from_utf8(real.stdout).unwrap().trim()
+            real
         ),
     );
-    let output = Command::new(consumer())
-        .arg("--self-test-command-guard-path")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-command-guard-path")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -877,7 +767,14 @@ fn named_command_follows_the_guard_placed_on_the_isolated_path() {
     );
 }
 
+// Built once per test binary: every test runs the same consumer, and a build per test
+// made the parallel tests queue on one target directory's lock.
 fn consumer() -> std::path::PathBuf {
+    static CONSUMER: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    CONSUMER.get_or_init(build_consumer).clone()
+}
+
+fn build_consumer() -> std::path::PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("target/library-sync-consumer");
     let mut command = Command::new(env!("CARGO"));
@@ -902,19 +799,11 @@ fn consumer() -> std::path::PathBuf {
 // @kotowari[REQ-library-403]
 #[test]
 fn preparation_reaps_a_worker_killed_or_disconnected_before_the_handshake() {
-    use std::time::{Duration, Instant};
-    let executable = consumer();
     for fault in ["stop", "close"] {
-        let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+        let dir = fixture_dir();
         dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-        dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
-        let mut child = Command::new(&executable)
-            .arg("--self-test-prepare-fault")
-            .env_clear()
-            .env("PATH", std::env::var_os("PATH").unwrap())
-            .env("HOME", dir.path().join("home"))
+        let mut child = fixture_command(&dir, "--self-test-prepare-fault")
             .env("KAKOI_TEST_PREPARE_FAULT", fault)
-            .current_dir(dir.path().join("workspace"))
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -946,7 +835,7 @@ fn preparation_reaps_a_worker_killed_or_disconnected_before_the_handshake() {
                     child.kill().unwrap();
                     panic!("worker did not reach the ELF initialization barrier");
                 }
-                std::thread::yield_now();
+                std::thread::sleep(Duration::from_millis(1));
             }
         }
         let output = child.wait_with_output().unwrap();
@@ -961,15 +850,9 @@ fn preparation_reaps_a_worker_killed_or_disconnected_before_the_handshake() {
 // @kotowari[REQ-library-403]
 #[test]
 fn repeated_preparation_releases_descriptors_and_reaps_each_worker() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
-    let output = Command::new(consumer())
-        .arg("--self-test-repeat")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
-        .current_dir(dir.path().join("workspace"))
+    let output = fixture_command(&dir, "--self-test-repeat")
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -1024,20 +907,14 @@ fn run_owners_are_send_but_cannot_be_cloned_modified_or_reused_from_a_consumer()
 // @kotowari[REQ-library-104, REQ-library-101, EX-library-102]
 #[test]
 fn explicit_context_preserves_os_bytes_and_configuration_uses_its_paths() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write(
         "home/.config/kakoi/profile/explicit.toml",
         "[network]\nmode='host'\n",
     );
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write("workspace/policy.toml", "[network]\nmode='none'\n");
-    let output = Command::new(consumer())
-        .arg("--self-test-input")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
+    let output = fixture_command(&dir, "--self-test-input")
         .env("XDG_CONFIG_HOME", dir.path().join("home/.config"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -1048,12 +925,11 @@ fn explicit_context_preserves_os_bytes_and_configuration_uses_its_paths() {
 fn memory_preparation_reexecutes_the_consumer_without_loading_profiles_or_running_the_command() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write(
         "home/.config/kakoi/profile/default.toml",
         "invalid profile that must not be read",
     );
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     let path = dir
         .path()
         .join("workspace")
@@ -1061,13 +937,8 @@ fn memory_preparation_reexecutes_the_consumer_without_loading_profiles_or_runnin
     std::fs::write(&path, "#!/bin/sh\ntouch command-ran\n").unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let output = Command::new(consumer())
-        .arg("--self-test-prepare")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
+    let output = fixture_command(&dir, "--self-test-prepare")
         .env("XDG_CONFIG_HOME", dir.path().join("home/.config"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -1077,16 +948,10 @@ fn memory_preparation_reexecutes_the_consumer_without_loading_profiles_or_runnin
 // @kotowari[REQ-library-301]
 #[test]
 fn preparation_distinguishes_invalid_input_from_missing_host_tools_and_reaps_failures() {
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
-    let output = Command::new(consumer())
-        .arg("--self-test-prepare-errors")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
+    let output = fixture_command(&dir, "--self-test-prepare-errors")
         .env("XDG_CONFIG_HOME", dir.path().join("home/.config"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));
@@ -1115,18 +980,12 @@ fn launch_transfers_only_requested_fds_and_reaps_without_changing_caller_signals
     assert!(compile.status.success(), "{}", output_report(&compile));
     let ordinary = Command::new(fixture).output().unwrap();
     assert!(ordinary.status.success(), "{}", output_report(&ordinary));
-    let dir = TempDir::under(Path::new(env!("CARGO_TARGET_TMPDIR")));
+    let dir = fixture_dir();
     dir.write("home/.config/kakoi/profile/default.toml", "invalid profile");
-    dir.write("workspace/.git/HEAD", "ref: refs/heads/test\n");
     dir.write("workspace/stdio-source", "input");
     dir.write("workspace/unrequested", "private input");
-    let output = Command::new(consumer())
-        .arg("--self-test-fds")
-        .env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap())
-        .env("HOME", dir.path().join("home"))
+    let output = fixture_command(&dir, "--self-test-fds")
         .env("XDG_CONFIG_HOME", dir.path().join("home/.config"))
-        .current_dir(dir.path().join("workspace"))
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", output_report(&output));

@@ -2,6 +2,7 @@
 //! Configuration validation belongs to `kakoi-policy`, and pure planning to `kakoi-plan`.
 
 pub mod application;
+pub mod cancellation;
 mod child_output;
 pub mod dns;
 pub mod dns_adoption;

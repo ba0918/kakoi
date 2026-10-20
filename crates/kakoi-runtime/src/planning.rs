@@ -16,7 +16,7 @@ use crate::command_limits::{
 };
 use crate::copy_facts::read_copy_sources;
 use crate::diagnostic::Diagnostic;
-use crate::environment::{HostEnvironment, RealEntry};
+use crate::environment::{HomeDirectory, HostEnvironment, RealEntry};
 use crate::executables::{file_id, first_executable, named};
 use crate::guard_placement::{
     name_hidden, place_guards, real_program, GuardPlan, GuardTable, NameFact, PlacedGuard,
@@ -34,8 +34,9 @@ use crate::policy::{ListMode, NetworkMode};
 use crate::secret_facts::read_secret_files;
 use crate::shared_files;
 use crate::variables::derive_variables;
-use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
+use crate::workspace_facts::{collect_workspace_facts, probe_path};
 pub use kakoi_linux::command_location::locate_command;
+use kakoi_linux::real_paths::real_entry;
 
 /// What a run asks for once the command line is interpreted and its paths are anchored:
 /// where the written layers come from, the `--workspace` path as given (made absolute)
@@ -68,9 +69,7 @@ pub struct Request {
 
 /// Runs stages 4 to 9 for `request` and returns the plan.
 pub fn plan_for(request: &Request) -> Result<Plan, Diagnostic> {
-    let env = HostEnvironment::from_variables(&request.host);
-    let home = env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
-    let config_dir = env.config_dir(&home);
+    let (home, config_dir) = home_and_config_dir(&request.host)?;
     let layers = load_layers(&request.layers, &config_dir)?;
     let policy = merge(&layers)?;
     plan_with_context(request, &layers, &policy, home, config_dir, true)
@@ -81,10 +80,20 @@ pub(crate) fn plan_with_policy(
     layers: &[crate::layers::Layer],
     policy: &Policy,
 ) -> Result<Plan, Diagnostic> {
-    let env = HostEnvironment::from_variables(&request.host);
+    let (home, config_dir) = home_and_config_dir(&request.host)?;
+    plan_with_context(request, layers, policy, home, config_dir, false)
+}
+
+/// The home directory the host's `HOME` names, checked against what is really there,
+/// and the configuration directory under it or under `XDG_CONFIG_HOME` (specification
+/// section 13, stage 4: the `env` diagnostic).
+pub fn home_and_config_dir(
+    host: &BTreeMap<OsString, OsString>,
+) -> Result<(HomeDirectory, PathBuf), Diagnostic> {
+    let env = HostEnvironment::from_variables(host);
     let home = env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
     let config_dir = env.config_dir(&home);
-    plan_with_context(request, layers, policy, home, config_dir, false)
+    Ok((home, config_dir))
 }
 
 fn plan_with_context(
@@ -270,7 +279,7 @@ fn command_limits(
     let executable = request
         .executable
         .as_deref()
-        .and_then(crate::mount_facts::real_path)
+        .and_then(kakoi_linux::real_paths::real_path)
         .ok_or_else(|| {
             Diagnostic::bwrap(
                 "the executable of kakoi itself, which the isolation's first process is, \
@@ -352,8 +361,8 @@ fn plan_guards(
             (program.clone(), names)
         })
         .collect();
-    let kakoi = executable.and_then(crate::mount_facts::real_path);
-    let guards = place_guards(
+    let kakoi = executable.and_then(kakoi_linux::real_paths::real_path);
+    let mut guards = place_guards(
         &policy.guards,
         path.is_some(),
         &facts,
@@ -361,7 +370,6 @@ fn plan_guards(
         kakoi.as_deref().filter(|_| exclude_self),
         kakoi.as_deref().filter(|_| exclude_self).and_then(file_id),
     );
-    let mut guards = guards;
     guards.executable = kakoi.clone();
     if !guards.placed.is_empty() && kakoi.is_none() {
         return Err(Diagnostic::bwrap(

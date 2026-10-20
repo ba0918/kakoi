@@ -458,7 +458,6 @@ pub fn word_matches(pattern: &str, word: &str) -> bool {
 pub fn regular_expression(pattern: &str) -> Option<Result<Regex, regex::Error>> {
     let inner = pattern
         .strip_prefix('/')
-        .and_then(|rest| rest.strip_suffix('/'))
-        .filter(|_| pattern.len() >= 2)?;
+        .and_then(|rest| rest.strip_suffix('/'))?;
     Some(Regex::new(inner).and_then(|_| Regex::new(&format!(r"\A(?:{inner})\z"))))
 }

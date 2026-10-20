@@ -7,9 +7,7 @@ use std::{
 };
 
 fn query() -> Vec<u8> {
-    let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    wire.extend(b"\x03api\x07example\x03com\0\0\x01\0\x01");
-    wire
+    crate::dns_fixture::query("api.example.com", 1)
 }
 
 fn signed_query() -> Vec<u8> {
@@ -158,7 +156,9 @@ fn stalled_and_trickling_servers_cannot_extend_the_absolute_deadline() {
         stream.read_exact(&mut length).unwrap();
         let mut request = vec![0; u16::from_be_bytes(length) as usize];
         stream.read_exact(&mut request).unwrap();
-        for byte in [0, 100, 0, 0, 0, 0] {
+        // A 100-byte answer, one byte every 40 ms: four seconds in all, unless the
+        // client gives up and closes first.
+        for byte in [0, 100].into_iter().chain([0; 100]) {
             if stream.write_all(&[byte]).is_err() {
                 break;
             }
@@ -175,7 +175,7 @@ fn stalled_and_trickling_servers_cannot_extend_the_absolute_deadline() {
     .err()
     .unwrap();
     assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
-    assert!(start.elapsed() < Duration::from_millis(500));
+    assert!(start.elapsed() < Duration::from_secs(2));
     server.join().unwrap();
 }
 
@@ -234,13 +234,18 @@ fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
     for maximum in [1, 2] {
         let (tcp, udp) = crate::common::tcp_and_udp_on_one_port();
         let peer = tcp.local_addr().unwrap();
+        let (served, unserved) = if maximum == 2 {
+            (Some(tcp), None)
+        } else {
+            (None, Some(tcp))
+        };
         let server = thread::spawn(move || {
             udp.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
             let mut buffer = [0; 512];
             let (size, client) = udp.recv_from(&mut buffer).unwrap();
             buffer[2] |= 0x82;
             udp.send_to(&buffer[..size], client).unwrap();
-            if maximum == 2 {
+            if let Some(tcp) = served {
                 let (mut stream, _) = tcp.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
@@ -252,13 +257,6 @@ fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
                 request[2] |= 0x80;
                 stream.write_all(&length).unwrap();
                 stream.write_all(&request).unwrap();
-            } else {
-                thread::sleep(Duration::from_millis(100));
-                tcp.set_nonblocking(true).unwrap();
-                assert!(
-                    tcp.accept().is_err(),
-                    "TCP started without a query reservation"
-                );
             }
         });
         let limits = NetworkLimits {
@@ -268,6 +266,15 @@ fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
         let mut budget = ResolutionBudget::new(Instant::now(), &limits).unwrap();
         let result = exchange_plain_candidates(&query(), &[peer], &mut budget);
         assert_eq!(result.is_ok(), maximum == 2);
+        if let Some(tcp) = unserved {
+            // A connection the call made is waiting in the backlog by the time it returns,
+            // however late in the call it was made.
+            tcp.set_nonblocking(true).unwrap();
+            assert!(
+                tcp.accept().is_err(),
+                "TCP started without a query reservation"
+            );
+        }
         server.join().unwrap();
     }
 }
@@ -472,9 +479,11 @@ fn a_stalled_tls_handshake_obeys_the_resolution_deadline() {
     use kakoi_net::dns_transport::TlsClient;
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let peer = listener.local_addr().unwrap();
+    let (done, finished) = std::sync::mpsc::channel::<()>();
+    // The connection is held, with no handshake, until the client has given up.
     let server = thread::spawn(move || {
         let (_stream, _) = listener.accept().unwrap();
-        thread::sleep(Duration::from_millis(300));
+        let _ = finished.recv_timeout(Duration::from_secs(10));
     });
     let client = TlsClient::from_root_certificates([]).unwrap();
     let start = Instant::now();
@@ -488,6 +497,7 @@ fn a_stalled_tls_handshake_obeys_the_resolution_deadline() {
         .err()
         .unwrap();
     assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
-    assert!(start.elapsed() < Duration::from_millis(250));
+    assert!(start.elapsed() < Duration::from_secs(2));
+    done.send(()).unwrap();
     server.join().unwrap();
 }

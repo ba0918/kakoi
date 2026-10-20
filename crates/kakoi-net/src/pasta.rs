@@ -73,6 +73,79 @@ pub struct Pasta {
     _target: Arc<NetworkNamespace>,
 }
 
+/// What pasta is told for `stage`: run in the foreground and report its PID for
+/// readiness, join the namespaces of `target_pid`, and forward exactly the fixed
+/// `publications`, already merged.
+fn arguments(
+    stage: PastaStage,
+    target_pid: libc::pid_t,
+    publications: &[FixedPublication],
+) -> Vec<String> {
+    let mut arguments: Vec<String> = [
+        FOREGROUND,
+        PID,
+        "/proc/self/fd/1",
+        CONFIG_NET,
+        // Only errors: the rest describes the host's network, which a
+        // failed start would otherwise repeat in its diagnostic.
+        QUIET,
+        HOST_LO_TO_NS_LO,
+        "-T",
+        "none",
+        "-U",
+        "none",
+    ]
+    .map(String::from)
+    .into();
+    arguments.extend([
+        USERNS.to_string(),
+        format!("/proc/{target_pid}/ns/user"),
+        NETNS.to_string(),
+        format!("/proc/{target_pid}/ns/net"),
+    ]);
+    // Neither stage reads the gateway as the host: the inner stage would take it
+    // to the middle namespace's loopback. Only the outer stage maps the
+    // dedicated addresses to the host's loopback.
+    arguments.push(NO_MAP_GW.to_string());
+    match stage {
+        PastaStage::Outer => arguments.extend([
+            "-I".to_string(),
+            TRANSIT_INTERFACE.to_string(),
+            MAP_HOST_LOOPBACK.to_string(),
+            HOST_LOOPBACK_V4.to_string(),
+            MAP_HOST_LOOPBACK.to_string(),
+            HOST_LOOPBACK_V6.to_string(),
+        ]),
+        PastaStage::Inner => {
+            arguments.extend(["-i", TRANSIT_INTERFACE, "-I", "app0"].map(String::from))
+        }
+    }
+    for (protocol, flag) in [(Protocol::Tcp, "-t"), (Protocol::Udp, "-u")] {
+        let matching: Vec<_> = publications
+            .iter()
+            .filter(|entry| entry.protocol == protocol)
+            .collect();
+        if matching.is_empty() {
+            arguments.extend([flag, "none"].map(String::from));
+        }
+        for entry in matching {
+            let address = match entry.family {
+                IpFamily::Ipv4 => "127.0.0.1",
+                IpFamily::Ipv6 => "::1",
+            };
+            let inside = match stage {
+                PastaStage::Outer => entry.host_port,
+                PastaStage::Inner => entry.port,
+            };
+            arguments.extend([
+                flag.to_string(),
+                format!("{address}/{}:{inside}", entry.host_port),
+            ]);
+        }
+    }
+    arguments
+}
+
 impl Pasta {
     pub fn start(
         executable: &Path,
@@ -100,7 +173,7 @@ impl Pasta {
         stage: PastaStage,
         publications: &[FixedPublication],
         timeout: Duration,
-        cancellation: Option<&crate::dns_workers::Cancellation>,
+        cancellation: Option<&crate::cancellation::Cancellation>,
     ) -> io::Result<Self> {
         let publications = merge_publications(publications.iter().copied())
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
@@ -113,65 +186,7 @@ impl Pasta {
                 command
             }
         };
-        let target_pid = target.keeper_pid();
-        command.args([
-            FOREGROUND,
-            PID,
-            "/proc/self/fd/1",
-            CONFIG_NET,
-            // Only errors: the rest describes the host's network, which a
-            // failed start would otherwise repeat in its diagnostic.
-            QUIET,
-            HOST_LO_TO_NS_LO,
-            "-T",
-            "none",
-            "-U",
-            "none",
-        ]);
-        command
-            .arg(USERNS)
-            .arg(format!("/proc/{target_pid}/ns/user"))
-            .arg(NETNS)
-            .arg(format!("/proc/{target_pid}/ns/net"));
-        // Neither stage reads the gateway as the host: the inner stage would take it
-        // to the middle namespace's loopback. Only the outer stage maps the
-        // dedicated addresses to the host's loopback.
-        command.arg(NO_MAP_GW);
-        match stage {
-            PastaStage::Outer => {
-                command.args(["-I", TRANSIT_INTERFACE]);
-                command
-                    .arg(MAP_HOST_LOOPBACK)
-                    .arg(HOST_LOOPBACK_V4.to_string())
-                    .arg(MAP_HOST_LOOPBACK)
-                    .arg(HOST_LOOPBACK_V6.to_string());
-            }
-            PastaStage::Inner => {
-                command.args(["-i", TRANSIT_INTERFACE, "-I", "app0"]);
-            }
-        }
-        for (protocol, flag) in [(Protocol::Tcp, "-t"), (Protocol::Udp, "-u")] {
-            let matching: Vec<_> = publications
-                .iter()
-                .filter(|entry| entry.protocol == protocol)
-                .collect();
-            if matching.is_empty() {
-                command.args([flag, "none"]);
-            }
-            for entry in matching {
-                let address = match entry.family {
-                    IpFamily::Ipv4 => "127.0.0.1",
-                    IpFamily::Ipv6 => "::1",
-                };
-                let inside = match stage {
-                    PastaStage::Outer => entry.host_port,
-                    PastaStage::Inner => entry.port,
-                };
-                command
-                    .arg(flag)
-                    .arg(format!("{address}/{}:{inside}", entry.host_port));
-            }
-        }
+        command.args(arguments(stage, target.keeper_pid(), &publications));
         let mut child = command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -250,7 +265,7 @@ impl Pasta {
     fn await_ready(
         &mut self,
         deadline: Instant,
-        cancellation: Option<&crate::dns_workers::Cancellation>,
+        cancellation: Option<&crate::cancellation::Cancellation>,
     ) -> Result<(), Failure> {
         let mut received = Vec::new();
         // An exiting pasta may close its end of the pipe before its exit is

@@ -11,7 +11,7 @@ use kakoi_runtime::cli::layers::{
     load_layers, merge, Directive, Layer, LayerOrigin, LayerSelection, MountItem,
 };
 use kakoi_runtime::cli::policy::{parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath};
-use kakoi_runtime::cli::workspace_facts::real_entry;
+use kakoi_runtime::cli::real_paths::real_entry;
 
 fn profile(text: &str) -> Layer {
     Layer {

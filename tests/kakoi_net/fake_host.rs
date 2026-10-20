@@ -51,6 +51,122 @@ PERMITTED = 20
 REFUSED = 3
 "#;
 
+/// A fixed publication of the application's TCP 8000 at the host's 18000.
+pub(crate) const TCP_V4: &str =
+    "\n[[network.publish]]\nmode = 'fixed'\nprotocol = 'tcp'\nport = 8000\nhost-port = 18000\n";
+
+/// The application's services, started and stopped by commands on its standard
+/// input (`tcp start`, `udp stop`, ...) and each acknowledged with `done`. A
+/// service answers with its name and how many times it has been started.
+/// `fill stderr` leaves a process that fills standard error,
+/// `resolve NAME` answers with the name's IPv4 address, and
+/// `remote ADDRESS permitted|refused` with an exchange with ADDRESS's TCP 8080.
+pub(crate) const SERVICES: &str = r#"
+import select, subprocess, sys, threading
+endpoints = {'tcp': ('127.0.0.1', 8000), 'udp': ('::1', 8000), 'other': ('127.0.0.1', 8001)}
+running, starts = {}, {}
+
+def start(name):
+    address, port = endpoints[name]
+    kind = socket.SOCK_DGRAM if name == 'udp' else socket.SOCK_STREAM
+    server = socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET, kind)
+    # A restarted service binds again while its last connection lingers.
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind((address, port))
+    if kind == socket.SOCK_STREAM:
+        server.listen()
+    starts[name] = starts.get(name, 0) + 1
+    reply = f'inside-{name}-{starts[name]}'.encode()
+    stop = threading.Event()
+
+    def loop():
+        while not stop.is_set():
+            if not select.select([server], [], [], .05)[0]:
+                continue
+            if kind == socket.SOCK_STREAM:
+                connection, _ = server.accept()
+                with connection:
+                    connection.sendall(reply)
+            else:
+                _, peer = server.recvfrom(64)
+                server.sendto(reply, peer)
+        server.close()
+    # Services still running when the input ends do not keep the application.
+    thread = threading.Thread(target=loop, daemon=True)
+    thread.start()
+    running[name] = (stop, thread)
+
+for command in sys.stdin:
+    name, action, *rest = command.split()
+    if name == 'fill':
+        # Another process of the application writes much more to standard
+        # error than a pipe holds, and waits there for a reader.
+        subprocess.Popen([sys.executable, '-c', 'import sys; sys.stderr.write("x" * 1000000)'])
+        print('done', flush=True)
+    elif name == 'resolve':
+        print(socket.getaddrinfo(action, 8080, socket.AF_INET, socket.SOCK_STREAM)[0][4][0], flush=True)
+    elif name == 'remote':
+        print(exchange(action, 8080, 'tcp', PERMITTED if rest == ['permitted'] else REFUSED), flush=True)
+    elif action == 'start':
+        start(name)
+        print('done', flush=True)
+    else:
+        stop, thread = running.pop(name)
+        stop.set()
+        thread.join()
+        print('done', flush=True)
+"#;
+
+/// Host-side helpers for a kakoi that runs [`SERVICES`].
+pub(crate) const CONTROL: &str = r#"
+import errno
+
+def ask(process, text):
+    """The application's answer to the command `text`."""
+    process.stdin.write((text + '\n').encode())
+    process.stdin.flush()
+    return line(process.stdout).strip()
+
+def command(process, text):
+    assert ask(process, text) == 'done'
+
+def until(process, text):
+    """Reads kakoi's standard error up to the next notice containing `text`."""
+    passed = ''
+    while True:
+        notice = line(process.stderr)
+        assert notice, f'kakoi ended before a notice with {text}, after {passed!r}'
+        if text in notice:
+            return notice
+        passed += notice
+
+def held(address, port, kind):
+    """Whether the host's endpoint is taken, observed by binding it."""
+    family = socket.AF_INET6 if ':' in address else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM if kind == 'tcp' else socket.SOCK_DGRAM) as probe:
+        if kind == 'tcp':
+            # A listener still refuses the bind; the closed connections that
+            # linger after an exchange do not.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind((address, port))
+            return 'free'
+        except OSError as error:
+            assert error.errno == errno.EADDRINUSE, error
+            return 'held'
+
+def notices(process, count):
+    """The next `count` publication notices on kakoi's standard error."""
+    found, passed = [], ''
+    while len(found) < count:
+        text = line(process.stderr)
+        assert text, f'kakoi ended before its notices, after {passed!r}'
+        passed += text
+        if 'published' in text:
+            found.append(text)
+    return ''.join(sorted(found))
+"#;
+
 /// The namespace's process 1 reaps orphans as a host's init does, so that an
 /// ended process leaves no entry in `/proc`; the script runs in its child.
 const INIT: &str = r#"
@@ -284,6 +400,18 @@ impl FakeHost {
                 "{network}\n[[network.dns-upstream]]\ntransport = 'plain'\nip = '127.0.0.1'\nport = 53\n"
             ),
             remote,
+        )
+    }
+
+    /// A host whose remote service is TCP 8080 of 11.0.0.5, which its kakoi may reach,
+    /// and whose kakoi publishes [`TCP_V4`]; `rest` follows in the profile.
+    pub(crate) fn with_remote_service(rest: &str) -> Self {
+        Self::new(
+            &format!(
+                "\n[[network.allow]]\ndestination = {{ ip = '11.0.0.5' }}\nprotocol = 'tcp'\nports = ['8080']\n\
+                 {TCP_V4}{rest}"
+            ),
+            &["11.0.0.5/32"],
         )
     }
 

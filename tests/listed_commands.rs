@@ -8,7 +8,7 @@ use std::process::Output;
 
 mod common;
 
-use common::{assert_diagnostic, binary, output_report, TempDir};
+use common::{assert_diagnostic, assert_success, binary, output_report, stdout, TempDir};
 use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind};
 use kakoi_runtime::cli::layers::LayerSelection;
 use kakoi_runtime::cli::planning::{plan_for, Request};
@@ -113,14 +113,6 @@ impl Scene {
             landlock_abi: abi,
         }
     }
-}
-
-fn assert_success(output: &Output) {
-    assert_eq!(output.status.code(), Some(0), "{}", output_report(output));
-}
-
-fn stdout(output: &Output) -> String {
-    String::from_utf8(output.stdout.clone()).unwrap()
 }
 
 /// Starts `/usr/bin/id` from the shell and says whether it ran.

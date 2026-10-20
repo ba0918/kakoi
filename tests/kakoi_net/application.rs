@@ -1,10 +1,7 @@
 use crate::common::{home_with_workspace, RW_WORKSPACE};
+use crate::dns_fixture::{a_answer, dns_rule, filtered_namespace, local_upstream};
+use crate::supervisor::plan_in;
 use kakoi_net::{application, namespace::NetworkNamespace};
-use kakoi_runtime::cli::{
-    layers::LayerSelection,
-    planning::{plan_for, Request},
-};
-use std::collections::BTreeMap;
 
 // @kotowari[REQ-060, REQ-150]
 #[test]
@@ -23,13 +20,6 @@ fn application_shares_the_controlled_network_without_its_authority_or_descriptor
         .unwrap()
         .success());
     let net = std::fs::read_link(format!("/proc/{}/ns/net", namespace.keeper_pid())).unwrap();
-    let mut host = BTreeMap::new();
-    host.insert("HOME".into(), home.path().as_os_str().to_owned());
-    host.insert(
-        "XDG_CONFIG_HOME".into(),
-        home.path().join(".config").into_os_string(),
-    );
-    host.insert("PATH".into(), "/usr/bin:/bin:/usr/sbin".into());
     let script = r#"
 import os, socket, subprocess, sys
 assert open('/etc/resolv.conf').read() == 'nameserver 127.0.0.53\n'
@@ -65,15 +55,11 @@ else:
 open('app-write', 'w').write('ok')
 print('isolated')
 "#;
-    let plan = plan_for(&Request {
-        layers: LayerSelection {
-            profile: "default".into(),
-            policy_file: None,
-            rw: vec![],
-            hide: vec![],
-        },
-        workspace: Some(workspace.clone()),
-        command: vec![
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin:/usr/sbin",
+        vec![
             "/usr/bin/python3".into(),
             "-c".into(),
             script.into(),
@@ -81,16 +67,8 @@ print('isolated')
             unsafe { libc::getuid() }.to_string().into(),
             unsafe { libc::getgid() }.to_string().into(),
         ],
-        current_dir: workspace.clone(),
-        host,
-        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
-        nested: false,
-        applied: true,
-        outer_guard: false,
-        outer_table: None,
-        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
-    })
-    .unwrap();
+        kakoi_runtime::cli::landlock::abi_version(),
+    );
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
     let mut launch = application::prepare(&plan, &namespace).unwrap();
     let output = launch.command.output().unwrap();
@@ -120,16 +98,11 @@ print('isolated')
 fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig},
-        filter, nft,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{
-        network::{Allow, Destination, NetworkLimits, Protocol},
-        policy::parse_policy,
-    };
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::{
         net::UdpSocket,
-        path::Path,
         process::Stdio,
         sync::Arc,
         time::{Duration, Instant},
@@ -139,68 +112,33 @@ fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
         ".config/kakoi/profile/default.toml",
         format!("{RW_WORKSPACE}\n[network]\nmode='filtered'\n"),
     );
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
     upstream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            upstream.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(upstream.local_addr().unwrap().port());
     let server = std::thread::spawn(move || {
         let mut bytes = [0; 512];
         let (size, peer) = upstream.recv_from(&mut bytes).unwrap();
-        let mut answer = bytes[..size].to_vec();
-        answer[2] |= 0x80;
-        answer[7] = 1;
-        answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-        upstream.send_to(&answer, peer).unwrap();
+        upstream
+            .send_to(&a_answer(&bytes[..size], 30, [1, 1, 1, 1]), peer)
+            .unwrap();
     });
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns("api.example.com".parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
-            upstreams: config.network.dns_upstream,
+            policy: vec![dns_rule("api.example.com")],
+            upstreams,
             limits: NetworkLimits::default(),
             trust: None,
             nft: "/usr/sbin/nft".into(),
             scope: AddressContext::default(),
-            generation: 0,
             host_dns: None,
         },
         |_| None,
     )
     .unwrap();
-    let mut host = BTreeMap::new();
-    host.insert("HOME".into(), home.path().as_os_str().to_owned());
-    host.insert(
-        "XDG_CONFIG_HOME".into(),
-        home.path().join(".config").into_os_string(),
-    );
-    host.insert("PATH".into(), "/usr/bin:/bin".into());
     let script = r#"
 import socket
 assert socket.gethostbyname('api.example.com') == '1.1.1.1'
@@ -212,25 +150,13 @@ else:
     raise AssertionError('unlisted DNS name resolved')
 print('managed-dns')
 "#;
-    let plan = plan_for(&Request {
-        layers: LayerSelection {
-            profile: "default".into(),
-            policy_file: None,
-            rw: vec![],
-            hide: vec![],
-        },
-        workspace: Some(workspace.clone()),
-        command: vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
-        current_dir: workspace,
-        host,
-        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
-        nested: false,
-        applied: true,
-        outer_guard: false,
-        outer_table: None,
-        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
-    })
-    .unwrap();
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin",
+        vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
+        kakoi_runtime::cli::landlock::abi_version(),
+    );
     let mut launch = application::prepare(&plan, &ns).unwrap();
     let mut child = launch
         .command
@@ -283,32 +209,13 @@ fn filtered_run_with_landlock(
         format!("{RW_WORKSPACE}{mounts}\n[network]\nmode='filtered'\n"),
     );
     let namespace = NetworkNamespace::create().unwrap();
-    let mut host = BTreeMap::new();
-    host.insert("HOME".into(), home.path().as_os_str().to_owned());
-    host.insert(
-        "XDG_CONFIG_HOME".into(),
-        home.path().join(".config").into_os_string(),
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin:/usr/sbin",
+        vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
+        abi,
     );
-    host.insert("PATH".into(), "/usr/bin:/bin:/usr/sbin".into());
-    let plan = plan_for(&Request {
-        layers: LayerSelection {
-            profile: "default".into(),
-            policy_file: None,
-            rw: vec![],
-            hide: vec![],
-        },
-        workspace: Some(workspace.clone()),
-        command: vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
-        current_dir: workspace.clone(),
-        host,
-        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
-        nested: false,
-        applied: true,
-        outer_guard: false,
-        outer_table: None,
-        landlock_abi: abi,
-    })
-    .unwrap();
     let arguments = plan
         .arguments
         .iter()

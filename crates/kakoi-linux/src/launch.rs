@@ -80,7 +80,7 @@ pub fn assemble(plan: &Plan) -> Result<BwrapCommand, Diagnostic> {
             "filtered launch requires a prepared kakoi-net session",
         ));
     }
-    assemble_with_prefix(plan, &[])
+    assemble_with_arguments(plan, &[], &plan.arguments)
 }
 
 /// Descriptor-based launch assembly for the library worker. The caller must
@@ -113,16 +113,7 @@ pub fn assemble_retained_network(
             "expected filtered plan",
         ));
     }
-    assemble_retained_arguments(
-        plan,
-        mounts,
-        &[
-            "--uid".into(),
-            uid.to_string().into(),
-            "--gid".into(),
-            gid.to_string().into(),
-        ],
-    )
+    assemble_retained_arguments(plan, mounts, &identity(uid, gid))
 }
 
 fn assemble_retained_arguments(
@@ -149,17 +140,6 @@ fn assemble_retained_arguments(
         crate::retained_mounts::descriptor_arguments(&plan.arguments, mounts)?;
     assemble_with_owned_arguments(plan, prefix, &arguments, descriptors)
         .map_err(|cause| io::Error::other(cause.to_string()))
-}
-
-/// Assembly entry for the network executor, which must enter the prepared user
-/// and network namespaces before executing bwrap. This function performs no
-/// namespace operation and does not establish or verify network permissions.
-pub fn assemble_for_network_executor(
-    plan: &Plan,
-    uid: u32,
-    gid: u32,
-) -> Result<BwrapCommand, Diagnostic> {
-    assemble_network(plan, uid, gid, None, None)
 }
 
 /// A supervisor replaces only the command tail; mount choices stay in the plan.
@@ -225,20 +205,17 @@ pub fn assemble_network(
         arguments.push(Argument::Literal(given));
         arguments.extend(command);
     }
-    assemble_with_arguments(
-        plan,
-        &[
-            "--uid".into(),
-            uid.to_string().into(),
-            "--gid".into(),
-            gid.to_string().into(),
-        ],
-        &arguments,
-    )
+    assemble_with_arguments(plan, &identity(uid, gid), &arguments)
 }
 
-fn assemble_with_prefix(plan: &Plan, prefix: &[OsString]) -> Result<BwrapCommand, Diagnostic> {
-    assemble_with_arguments(plan, prefix, &plan.arguments)
+/// The identity a filtered launch maps inside, ahead of the plan's arguments.
+fn identity(uid: u32, gid: u32) -> [OsString; 4] {
+    [
+        "--uid".into(),
+        uid.to_string().into(),
+        "--gid".into(),
+        gid.to_string().into(),
+    ]
 }
 
 fn assemble_with_arguments(
@@ -330,23 +307,10 @@ fn numbered_arguments(
     for argument in arguments {
         let text = match argument {
             Argument::Literal(text) => text.clone(),
-            Argument::EmptyFile => {
-                let fd = memory_file("kakoi-empty", &[])?;
-                let number = OsString::from(fd.as_raw_fd().to_string());
-                descriptors.push(fd);
-                number
-            }
-            Argument::Seccomp => {
-                let fd = memory_file("kakoi-seccomp", &filter_bytes())?;
-                let number = OsString::from(fd.as_raw_fd().to_string());
-                descriptors.push(fd);
-                number
-            }
+            Argument::EmptyFile => kept(memory_file("kakoi-empty", &[])?, descriptors),
+            Argument::Seccomp => kept(memory_file("kakoi-seccomp", &filter_bytes())?, descriptors),
             Argument::CopiedFile(content) => {
-                let fd = memory_file("kakoi-copy", content.bytes())?;
-                let number = OsString::from(fd.as_raw_fd().to_string());
-                descriptors.push(fd);
-                number
+                kept(memory_file("kakoi-copy", content.bytes())?, descriptors)
             }
             Argument::SharedFile { path, .. } => path.clone().into_os_string(),
         };
@@ -355,9 +319,16 @@ fn numbered_arguments(
     Ok(numbered)
 }
 
+/// Keeps `fd` for the exec and gives the number bwrap reads it by.
+fn kept(fd: OwnedFd, descriptors: &mut Vec<OwnedFd>) -> OsString {
+    let number = OsString::from(fd.as_raw_fd().to_string());
+    descriptors.push(fd);
+    number
+}
+
 /// A file in memory holding `content`, positioned at its start. It is created
-/// close-on-exec; only the `bwrap` command it was made for clears the flag.
-/// Holds transport bytes in a sealed, rewindable memory file, never a host file.
+/// close-on-exec; only the `bwrap` command it was made for clears the flag. The bytes
+/// never pass through a file on the host. The file is not sealed.
 pub fn memory_file(name: &str, content: &[u8]) -> io::Result<OwnedFd> {
     let name = CString::new(name).expect("the name has no NUL");
     // SAFETY: `memfd_create` reads the NUL-terminated name and creates a descriptor

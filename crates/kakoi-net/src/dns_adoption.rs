@@ -1,7 +1,7 @@
 //! One kernel permission owner, separate from the controller's health loop.
 use crate::{
+    cancellation::Cancellation,
     dns::{DnsError, EnforcedDnsError, PreparedAnswer, ResolutionId},
-    dns_workers::Cancellation,
     dynamic::DynamicPermissions,
     namespace::NetworkNamespace,
 };

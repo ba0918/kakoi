@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `kakoi_runtime::planning` is no longer part of the embedding API. Its functions take and
+  return types the API does not export, so no embedding package could use them.
+
 ## [0.7.0] - 2026-10-03
 
 ### Added

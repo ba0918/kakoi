@@ -165,11 +165,14 @@ impl From<PolicyInput> for PolicyFile {
 
 /// A validated policy. No mutable fields or unchecked deserialization are exposed.
 #[derive(Clone)]
-pub struct Policy(crate::layers::Policy, Vec<Layer>);
+pub struct Policy {
+    merged: crate::layers::Policy,
+    layers: Vec<Layer>,
+}
 
 impl PartialEq for Policy {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        self.merged == other.merged
     }
 }
 impl Eq for Policy {}
@@ -201,32 +204,32 @@ impl Policy {
         for layer in &mut layers {
             validate_policy(&mut layer.policy, Path::new("<layer>"))?;
         }
-        merge(&layers).map(|merged| Self(merged, layers))
+        merge(&layers).map(|merged| Self { merged, layers })
     }
 
     /// Read-only internal representation for the planning layers.
     #[doc(hidden)]
     pub fn as_merged(&self) -> &crate::layers::Policy {
-        &self.0
+        &self.merged
     }
 
     /// Validated source layers for same-binary internal transport and planning.
     #[doc(hidden)]
     pub fn source_layers(&self) -> &[Layer] {
-        &self.1
+        &self.layers
     }
 
     pub fn mounts_mode(&self) -> ListMode {
-        self.0.mounts_mode
+        self.merged.mounts_mode
     }
     pub fn network_mode(&self) -> NetworkMode {
-        self.0.network_mode
+        self.merged.network_mode
     }
     pub fn environment_mode(&self) -> EnvMode {
-        self.0.env_mode
+        self.merged.env_mode
     }
     pub fn commands_mode(&self) -> ListMode {
-        self.0.commands_mode
+        self.merged.commands_mode
     }
 }
 

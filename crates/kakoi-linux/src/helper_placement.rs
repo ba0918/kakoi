@@ -1,6 +1,7 @@
 //! bwrap placement of caller-selected helper images.
 
 use std::io;
+use std::path::Path;
 
 use crate::bwrap_arguments::operations;
 use crate::copies::FileContent;
@@ -96,15 +97,23 @@ fn shift_layout(layout: &mut LaunchLayout, from: usize, delta: isize) {
     }
 }
 
+/// Puts `image` at `path`, readable and executable by the isolation's user only, and makes
+/// it the isolation's first process in place of the command.
 pub fn place_init(plan: &mut Plan, image: FileContent, path: &str) {
-    plan.arguments
-        .truncate(plan.launch_layout.command_separator.unwrap());
+    let directory = Path::new(path)
+        .parent()
+        .expect("the init is placed inside a directory");
+    plan.arguments.truncate(
+        plan.launch_layout
+            .command_separator
+            .expect("a launch plan separates its command"),
+    );
     if let Some(index) = plan.launch_layout.argv0 {
         plan.arguments[index] = Argument::Literal(path.into());
     }
     plan.arguments.extend([
         Argument::Literal("--dir".into()),
-        Argument::Literal("/dev/kakoi-runtime".into()),
+        Argument::Literal(directory.as_os_str().into()),
         Argument::Literal("--perms".into()),
         Argument::Literal("0700".into()),
         Argument::Literal("--ro-bind-data".into()),

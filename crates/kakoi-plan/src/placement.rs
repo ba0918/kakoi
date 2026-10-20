@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use crate::diagnostic::{Diagnostic, Warning};
 use crate::environment::HomeDirectory;
 use crate::layers::{Directive, Layer, LayerOrigin};
-use crate::mounts::{byte_order, ExpandedPolicy, MountFacts, ResolvedItem, ResolvedMounts};
+use crate::mounts::{
+    byte_order, covering_item, ExpandedPolicy, MountFacts, ResolvedItem, ResolvedMounts,
+};
 use crate::policy::{PolicyPath, Variable};
 use crate::variables::Variables;
 
@@ -819,10 +821,7 @@ fn check_work_place(variables: &Variables, home: &HomeDirectory) -> Result<(), D
 /// directory is what bwrap would `--chdir` into; a `hide` there has nowhere to go
 /// (specification section 6.5).
 fn check_current_dir(items: &[ResolvedItem], current_dir: &Path) -> Result<(), Diagnostic> {
-    let last_over_cwd = items
-        .iter()
-        .rfind(|item| current_dir.starts_with(&item.real));
-    match last_over_cwd.filter(|item| item.directive == Directive::Hide) {
+    match covering_item(items, current_dir).filter(|item| item.directive == Directive::Hide) {
         Some(item) => Err(Diagnostic::path(format!(
             "the current directory {} is inside the `hide` item {}",
             current_dir.display(),

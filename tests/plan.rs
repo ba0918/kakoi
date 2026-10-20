@@ -8,7 +8,10 @@ use common::fixture::{
     command_line_layer, home, layers, merged, policy_file_layer, variables, variables_without_git,
     Facts, CONFIG_DIR, POLICY_FILE, PROFILE, WORKTREE,
 };
-use common::{assert_diagnostic, binary, output_report, TempDir};
+use common::{
+    assert_diagnostic, binary, directives_at, git, output_report, printed_plan, TempDir,
+    RW_WORKSPACE,
+};
 use kakoi_runtime::cli::command::{command_candidates, resolve_command};
 use kakoi_runtime::cli::copies::{CopySources, FileContent};
 use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind};
@@ -589,7 +592,7 @@ fn stage_seven_checks_stop_at_the_first_diagnostic_in_the_specified_order() {
 }
 
 /// A home for a binary test: an empty profile and a workspace directory under it.
-fn home_with_workspace() -> (TempDir, PathBuf) {
+fn home_with_empty_profile() -> (TempDir, PathBuf) {
     let home = TempDir::new();
     home.write(".config/kakoi/profile/default.toml", "");
     let workspace = home.path().join("ws");
@@ -600,7 +603,7 @@ fn home_with_workspace() -> (TempDir, PathBuf) {
 // @kotowari[REQ-307, EX-540]
 #[test]
 fn a_missing_bwrap_is_a_bwrap_diagnostic() {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     let empty_path = TempDir::new();
 
     let output = binary(home.path())
@@ -641,7 +644,7 @@ fn path_with_a_fake_bwrap() -> TempDir {
 // @kotowari[REQ-261]
 #[test]
 fn print_plan_without_a_command_skips_resolution() {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     let bin = path_with_a_fake_bwrap();
     let workspace = workspace.to_str().unwrap();
 
@@ -675,7 +678,7 @@ fn print_plan_without_a_command_skips_resolution() {
 /// `cache/link -> real`: no prefix of the given path resolves into `cache`, but the chain
 /// passes through a link that sits inside it.
 fn home_with_a_policy_file_behind_a_chain_of_links(profile: &str, policy_file: &str) -> TempDir {
-    let (home, _) = home_with_workspace();
+    let (home, _) = home_with_empty_profile();
     home.write(".config/kakoi/profile/default.toml", profile);
     home.write("real/pol/p.toml", policy_file);
     std::fs::create_dir(home.path().join("cache")).unwrap();
@@ -733,7 +736,7 @@ fn home_with_a_policy_file_behind_a_link_stepping_back_through(
     profile: &str,
     policy_file: &str,
 ) -> TempDir {
-    let (home, _) = home_with_workspace();
+    let (home, _) = home_with_empty_profile();
     home.write(".config/kakoi/profile/default.toml", profile);
     home.write("real/pol/p.toml", policy_file);
     std::fs::create_dir_all(home.path().join("cache")).unwrap();
@@ -813,7 +816,7 @@ fn a_link_stepping_back_through_a_directory_outside_writable_areas_is_accepted()
 /// and `cache/evil/http` a link to `target`. The next start resolves `~/cache/pip/http`
 /// to `target` through `cache`.
 fn home_with_a_rewired_cache(profile: &str, target: &str) -> TempDir {
-    let (home, _) = home_with_workspace();
+    let (home, _) = home_with_empty_profile();
     home.write(".config/kakoi/profile/default.toml", profile);
     std::fs::create_dir_all(home.path().join(target)).unwrap();
     std::fs::create_dir_all(home.path().join("cache/evil")).unwrap();
@@ -858,7 +861,7 @@ fn a_nested_item_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
 // @kotowari[REQ-159]
 #[test]
 fn a_nested_item_that_is_a_real_directory_is_accepted() {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     home.write(".config/kakoi/profile/default.toml", NESTED_RW);
     std::fs::create_dir_all(home.path().join("cache/pip/http")).unwrap();
 
@@ -884,7 +887,7 @@ fn a_nested_item_rewired_into_another_writable_item_is_accepted() {
 // @kotowari[REQ-159]
 #[test]
 fn a_workspace_rewired_to_outside_every_writable_item_is_a_path_diagnostic() {
-    let (home, _) = home_with_workspace();
+    let (home, _) = home_with_empty_profile();
     home.write(
         ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"~/cache\"]",
@@ -1080,7 +1083,7 @@ fn an_ro_reached_through_a_link_between_two_rw_items_stays_accepted_when_the_lin
     // `rw = ["~/a", "~/b"]` with `a/l -> b/x`: `ro ~/a/l/y` resolves through `a` and lands
     // in `b`; re-pointing `l` at a place that is no item makes nothing newly visible, so an
     // `ro` is not held to the root items (specification section 5.6).
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     home.write(
         ".config/kakoi/profile/default.toml",
         "[mounts]\nrw = [\"~/a\", \"~/b\"]\nro = [\"~/a/l/y\"]",
@@ -1113,7 +1116,7 @@ fn a_workspace_resolved_only_through_places_that_are_no_item_is_accepted() {
 #[test]
 fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
     for (name, directive) in [("hide", "hide"), ("rw-file", "rw-file")] {
-        let (home, workspace) = home_with_workspace();
+        let (home, workspace) = home_with_empty_profile();
         home.write(
             ".config/kakoi/profile/default.toml",
             format!("[mounts]\nrw = [\"~/cache\"]\n{directive} = [\"~/cache/x/state\"]"),
@@ -1148,7 +1151,7 @@ fn a_hide_or_rw_file_nested_under_an_rw_item_is_accepted_until_rewired() {
 // @kotowari[REQ-294]
 #[test]
 fn a_command_line_collision_beside_a_home_workspace_is_a_usage_diagnostic() {
-    let (home, _) = home_with_workspace();
+    let (home, _) = home_with_empty_profile();
     let collision = home.path().join("x");
 
     let output = binary(home.path())
@@ -1243,12 +1246,10 @@ fn a_missing_configuration_directory_leaves_config_dir_valueless() {
 
 /// A home whose profile is `profile`, with a workspace directory `ws` under it.
 fn home_with_profile(profile: &str) -> (TempDir, PathBuf) {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     home.write(".config/kakoi/profile/default.toml", profile);
     (home, workspace)
 }
-
-const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
 
 /// The binary started from `workspace` with `--workspace workspace`, `arguments` after it,
 /// and `--print-plan=json`.
@@ -1260,24 +1261,6 @@ fn plan_output(home: &TempDir, workspace: &Path, arguments: &[&str]) -> std::pro
         .arg("--print-plan=json")
         .output()
         .unwrap()
-}
-
-/// The JSON plan of a run that exited 0.
-fn plan_json(output: &std::process::Output) -> serde_json::Value {
-    let report = output_report(output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
-}
-
-/// The directives of the items `plan` mounts at `path`.
-fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
-    plan["mounts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["path"] == path.to_str().unwrap())
-        .map(|item| item["directive"].as_str().unwrap())
-        .collect()
 }
 
 // @kotowari[EX-350]
@@ -1292,7 +1275,7 @@ fn an_empty_policy_file_is_accepted() {
         &["--policy-file", empty.to_str().unwrap()],
     );
 
-    let plan = plan_json(&output);
+    let plan = printed_plan(&output);
     assert!(
         plan["policy_sources"]
             .as_array()
@@ -1344,28 +1327,12 @@ fn a_tilde_expands_to_the_real_path_of_home() {
         .output()
         .unwrap();
 
-    let plan = plan_json(&output);
+    let plan = printed_plan(&output);
     assert_eq!(
         directives_at(&plan, &cache.canonicalize().unwrap()),
         ["ro"],
         "{plan}"
     );
-}
-
-/// Runs git in `cwd` with no configuration but its own.
-fn git(cwd: &Path, arguments: &[&str]) {
-    let output = std::process::Command::new("git")
-        .current_dir(cwd)
-        .args(arguments)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_AUTHOR_NAME", "test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
-        .env("GIT_COMMITTER_NAME", "test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "git {arguments:?}: {output:?}");
 }
 
 // @kotowari[EX-353, EX-539]
@@ -1382,7 +1349,7 @@ fn a_linked_worktree_needs_a_regular_head_in_the_common_directory_but_not_its_co
     let common = main.join(".git").canonicalize().unwrap();
     let head = common.join("HEAD");
 
-    let as_made = plan_json(&plan_output(&home, &linked, &[]));
+    let as_made = printed_plan(&plan_output(&home, &linked, &[]));
     assert_eq!(
         as_made["variables"]["git_common_dir"],
         common.to_str().unwrap(),
@@ -1392,7 +1359,7 @@ fn a_linked_worktree_needs_a_regular_head_in_the_common_directory_but_not_its_co
     std::fs::set_permissions(&head, std::fs::Permissions::from_mode(0o000)).unwrap();
     let unreadable = plan_output(&home, &linked, &[]);
     std::fs::set_permissions(&head, std::fs::Permissions::from_mode(0o644)).unwrap();
-    let unreadable = plan_json(&unreadable);
+    let unreadable = printed_plan(&unreadable);
     assert_eq!(
         unreadable["variables"]["git_common_dir"],
         common.to_str().unwrap(),
@@ -1415,7 +1382,7 @@ fn an_item_with_a_valueless_variable_is_skipped_with_a_reason() {
     let (home, workspace) =
         home_with_profile("[mounts]\nrw = [\"${workspace}\", \"${git_common_dir}\"]\n");
 
-    let plan = plan_json(&plan_output(&home, &workspace, &[]));
+    let plan = printed_plan(&plan_output(&home, &workspace, &[]));
 
     assert_eq!(plan["variables"]["git_common_dir"], serde_json::Value::Null);
     let skipped = plan["skipped_mounts"]
@@ -1458,7 +1425,7 @@ fn a_variable_in_an_env_set_value_is_not_expanded() {
 // @kotowari[EX-357]
 #[test]
 fn a_broken_link_at_default_toml_is_a_policy_diagnostic_not_the_built_in_default() {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     let profile = home.path().join(".config/kakoi/profile/default.toml");
     std::fs::remove_file(&profile).unwrap();
     std::os::unix::fs::symlink(home.path().join("nowhere"), &profile).unwrap();
@@ -1476,7 +1443,7 @@ fn star_matches_a_name_with_a_leading_dot() {
     ));
     let env_file = home.write("ws/.env", "SECRET=x\n");
 
-    let plan = plan_json(&plan_output(&home, &workspace, &[]));
+    let plan = printed_plan(&plan_output(&home, &workspace, &[]));
 
     assert_eq!(
         directives_at(&plan, &env_file.canonicalize().unwrap()),
@@ -1513,7 +1480,7 @@ fn an_upper_layer_rw_replaces_a_lower_layer_hide_on_the_same_real_path() {
     std::fs::create_dir(&directory).unwrap();
     let policy_file = home.write("p.toml", "[mounts]\nrw = [\"~/d\"]\n");
 
-    let plan = plan_json(&plan_output(
+    let plan = printed_plan(&plan_output(
         &home,
         &workspace,
         &["--policy-file", policy_file.to_str().unwrap()],
@@ -1562,7 +1529,7 @@ fn pass_is_accepted_when_an_upper_layer_writes_clear_over_a_lower_inherit() {
         .output()
         .unwrap();
 
-    let plan = plan_json(&output);
+    let plan = printed_plan(&output);
     assert_eq!(plan["environment"]["FOO"], "passed", "{plan}");
 }
 
@@ -1655,7 +1622,7 @@ fn an_ro_through_a_link_inside_an_rw_over_another_ro_is_not_refused_for_it() {
 // @kotowari[EX-371]
 #[test]
 fn an_ro_through_a_link_inside_an_rw_into_a_hide_is_a_path_diagnostic() {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     std::fs::create_dir_all(home.path().join("h/sub")).unwrap();
     let link = workspace.join("link");
     std::os::unix::fs::symlink(home.path().join("h/sub"), &link).unwrap();
@@ -1736,7 +1703,7 @@ fn req_460_files_of_the_place_are_bound_read_only_and_fall_back_to_data() {
 /// The summary and the JSON plan of a home whose profile is `profile` with the workspace
 /// `rw`.
 fn summary_and_json(profile: &str) -> (String, serde_json::Value) {
-    let (home, workspace) = home_with_workspace();
+    let (home, workspace) = home_with_empty_profile();
     home.write(
         ".config/kakoi/profile/default.toml",
         format!("[mounts]\nrw = [\"${{workspace}}\"]\n{profile}"),

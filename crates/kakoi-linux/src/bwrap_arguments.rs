@@ -44,6 +44,22 @@ pub fn operations(arguments: &[Argument]) -> std::io::Result<Vec<(usize, &[Argum
     Ok(result)
 }
 
+/// Whether one of `operations` after the one at `index` mounts over `path`: a bind or a
+/// data file at `path` or one of its ancestors, or a tmpfs, `/proc`, or `/dev` there.
+pub fn covered_after(operations: &[(usize, &[Argument])], index: usize, path: &Path) -> bool {
+    operations.iter().any(|&(later, args)| {
+        later > index
+            && (matches!(args, [Argument::Literal(option), _, Argument::Literal(dest)]
+                if matches!(
+                    option.to_str(),
+                    Some("--bind" | "--ro-bind" | "--dev-bind" | "--ro-bind-data" | "--bind-data")
+                ) && path.starts_with(Path::new(dest)))
+                || matches!(args, [Argument::Literal(option), Argument::Literal(dest)]
+                    if matches!(option.to_str(), Some("--tmpfs" | "--proc" | "--dev"))
+                        && path.starts_with(Path::new(dest))))
+    })
+}
+
 fn put(
     provisions: &Provisions,
     file: SharedFile,

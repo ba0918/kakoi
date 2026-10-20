@@ -13,12 +13,18 @@ mod config;
 mod controllers;
 #[path = "kakoi_net/dns_adoption.rs"]
 mod dns_adoption;
+#[path = "kakoi_net/dns_engine.rs"]
+mod dns_engine;
+#[path = "kakoi_net/dns_fixture.rs"]
+mod dns_fixture;
 #[path = "kakoi_net/dns_front.rs"]
 mod dns_front;
 #[path = "kakoi_net/dns_gate.rs"]
 mod dns_gate;
 #[path = "kakoi_net/dns_name.rs"]
 mod dns_name;
+#[path = "kakoi_net/dns_requests.rs"]
+mod dns_requests;
 #[path = "kakoi_net/dns_response.rs"]
 mod dns_response;
 #[path = "kakoi_net/dns_runtime.rs"]
@@ -55,6 +61,8 @@ mod notification;
 mod outbound;
 #[path = "kakoi_net/pasta.rs"]
 mod pasta;
+#[path = "kakoi_net/pasta_diagnostics.rs"]
+mod pasta_diagnostics;
 #[path = "kakoi_net/plan.rs"]
 mod plan;
 #[path = "kakoi_net/ports.rs"]

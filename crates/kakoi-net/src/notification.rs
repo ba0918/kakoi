@@ -26,9 +26,9 @@ impl NetworkState {
 #[derive(Default)]
 pub struct Notifications {
     queue: VecDeque<Notification>,
-    // Shares the last queued line; when the queue is empty only this copy remains.
-    current: Option<Arc<str>>,
-    current_state: Option<NetworkState>,
+    // The last state with its line, which it shares with the queue; when the queue is
+    // empty only this copy remains.
+    current: Option<(Arc<str>, NetworkState)>,
     bytes: usize,
     omitted: u64,
     in_flight_bytes: usize,
@@ -41,11 +41,14 @@ impl Notifications {
     pub fn update(&mut self, state: NetworkState, reason: &str) {
         let line: Arc<str> =
             bounded_line(&format!("kakoi: network {}: ", state.label()), reason).into();
-        if self.current.as_deref() == Some(&line) {
+        if self
+            .current
+            .as_ref()
+            .is_some_and(|(current, _)| *current == line)
+        {
             return;
         }
-        self.current = Some(Arc::clone(&line));
-        self.current_state = Some(state);
+        self.current = Some((Arc::clone(&line), state));
         self.push(Notification {
             detail: line,
             state: Some(state),
@@ -79,7 +82,7 @@ impl Notifications {
     }
     pub fn retained_bytes(&self) -> usize {
         let buffered = if self.queue.is_empty() {
-            self.current.as_ref().map_or(0, |line| line.len())
+            self.current.as_ref().map_or(0, |(line, _)| line.len())
         } else {
             self.bytes
         };
@@ -122,7 +125,7 @@ impl Notifications {
             let omitted = self
                 .omitted
                 .saturating_add(self.queue.len().saturating_sub(1) as u64);
-            let summary = match self.current.as_deref() {
+            let summary = match self.current.as_ref().map(|(line, _)| &**line) {
                 Some(current) => bounded_line(
                     &format!("kakoi: {omitted} network notifications omitted; current "),
                     current
@@ -139,7 +142,7 @@ impl Notifications {
             return Some((
                 Notification {
                     detail: summary.into(),
-                    state: self.current_state,
+                    state: self.current.as_ref().map(|(_, state)| *state),
                 },
                 lost,
             ));

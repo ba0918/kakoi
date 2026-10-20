@@ -8,11 +8,11 @@ use libc::{seccomp_data, SECCOMP_RET_ALLOW, SECCOMP_RET_ERRNO, SECCOMP_RET_KILL_
 
 /// One instruction as `struct sock_filter` lays it out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Instruction {
-    pub code: u16,
-    pub jt: u8,
-    pub jf: u8,
-    pub k: u32,
+struct Instruction {
+    code: u16,
+    jt: u8,
+    jf: u8,
+    k: u32,
 }
 
 const fn load(offset: usize) -> Instruction {
@@ -61,7 +61,7 @@ const X32_SYSCALL_BIT: u32 = 0x4000_0000;
 const ARGUMENT_1_LOW_WORD: usize = offset_of!(seccomp_data, args) + 8;
 
 /// The filter. Jump offsets count the instructions to skip.
-pub const FILTER: [Instruction; 11] = [
+const FILTER: [Instruction; 11] = [
     load(offset_of!(seccomp_data, arch)),
     jump_if_equal(AUDIT_ARCH_X86_64, 1, 0),
     ret(SECCOMP_RET_KILL_PROCESS),

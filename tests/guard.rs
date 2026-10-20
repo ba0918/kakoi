@@ -8,7 +8,10 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 
-use common::{assert_diagnostic, home_with_workspace, output_report, run, TempDir};
+use common::{
+    assert_denied, assert_diagnostic, home_with_workspace, output_report, run, TempDir, GIT_PUSH,
+    GIT_PUSH_DENIED,
+};
 use kakoi_runtime::cli::guard::{evaluate, GuardRule};
 use kakoi_runtime::cli::layers::{merge, Layer, LayerOrigin};
 use kakoi_runtime::cli::policy::parse_policy;
@@ -525,9 +528,6 @@ impl Scene {
     }
 }
 
-const GIT_PUSH: &str =
-    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
-
 /// The entries of `key` (`guards` or `skipped_guards`) for `program`.
 fn entries<'a>(
     plan: &'a serde_json::Value,
@@ -1011,18 +1011,6 @@ fn run_script(scene: &Scene, policy: &Path, script: &str) -> Output {
     scene.run(policy, &["--", "/bin/sh", "-c", script])
 }
 
-/// Exit 126, nothing on standard output, and one line on standard error that is `line`.
-fn assert_denied(output: &Output, line: &str) {
-    let report = output_report(output);
-    assert_eq!(output.status.code(), Some(126), "{report}");
-    assert!(output.stdout.is_empty(), "{report}");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        format!("{line}\n"),
-        "{report}"
-    );
-}
-
 /// `program` found on `PATH` inside the isolation is its guard.
 fn assert_guarded(scene: &Scene, policy: &Path, program: &str) {
     let plan = scene.json_plan(policy, &[]);
@@ -1041,8 +1029,6 @@ fn assert_passed(output: &Output, stdout: &str) {
     assert_eq!(String::from_utf8_lossy(&output.stdout), stdout, "{report}");
     assert!(output.stderr.is_empty(), "{report}");
 }
-
-const GIT_PUSH_DENIED: &str = "kakoi: guard: git push: push は人が行う";
 
 // @kotowari[EX-964, REQ-446, REQ-450]
 #[test]

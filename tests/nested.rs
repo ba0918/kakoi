@@ -7,17 +7,12 @@ use std::process::Output;
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, run_inside, TempDir, KAKOI,
-    RW_WORKSPACE,
+    assert_denied, assert_diagnostic, binary, home_with_workspace, output_report, profile,
+    run_inside, TempDir, GIT_PUSH, GIT_PUSH_DENIED, KAKOI, RW_WORKSPACE,
 };
 
 /// The name of the nesting mark inside an isolation.
 const MARK: &str = "/dev/kakoi-isolated";
-
-/// Overwrites the `default` profile of `home` with `text`.
-fn profile(home: &TempDir, text: &str) {
-    home.write(".config/kakoi/profile/default.toml", text);
-}
 
 /// Standard error as lines.
 fn stderr_lines(output: &Output) -> Vec<String> {
@@ -123,30 +118,6 @@ fn req_284_a_nested_launch_warns_and_runs_the_command_without_bwrap() {
     assert_eq!(lines.len(), 2, "{report}");
     assert!(lines[0].starts_with("kakoi: warning: "), "{report}");
     assert_eq!(lines[1], "err", "{report}");
-}
-
-// @kotowari[REQ-284]
-#[test]
-fn req_284_a_nested_launch_leaves_the_environment_unchanged() {
-    let (home, workspace) = home_with_workspace();
-
-    // The same environment is printed once by `env` itself and once through kakoi.
-    let output = run_inside(
-        home.path(),
-        &workspace,
-        &format!(
-            "/usr/bin/env MARKER='kept as is' PATH=/nonexistent /usr/bin/env; echo ---; \
-             exec /usr/bin/env MARKER='kept as is' PATH=/nonexistent {KAKOI} -- /usr/bin/env"
-        ),
-    );
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
-    let (expected, inside) = stdout.split_once("---\n").unwrap();
-    let set = |text: &str| text.lines().map(str::to_string).collect::<BTreeSet<_>>();
-    assert!(expected.contains("MARKER=kept as is\n"), "{report}");
-    assert_eq!(set(inside), set(expected), "{report}");
 }
 
 // @kotowari[REQ-261, REQ-290]
@@ -285,20 +256,21 @@ fn req_293_a_nested_launch_goes_from_the_grammar_to_the_command() {
     assert_eq!(output.stdout, b"ran\n", "{}", output_report(&output));
 }
 
-// @kotowari[EX-520]
+// @kotowari[EX-520, REQ-284]
 #[test]
 fn ex_520_a_nested_launch_execs_the_command_itself_with_the_environment_as_received() {
     let (home, workspace) = home_with_workspace();
 
     // The shell prints its own process ID and the environment `env` hands on; kakoi then
     // replaces the same process, and the command prints its process ID and the
-    // environment it was started with (not its own, to which it adds `PWD`).
+    // environment it was started with (not its own, to which it adds `PWD`). `PATH` names
+    // nothing: a nested launch needs no `bwrap`.
     let output = run_inside(
         home.path(),
         &workspace,
         &format!(
-            "echo $$; /usr/bin/env MARKER='kept as is' /usr/bin/env; echo ---; \
-             exec /usr/bin/env MARKER='kept as is' {KAKOI} -- \
+            "echo $$; /usr/bin/env MARKER='kept as is' PATH=/nonexistent /usr/bin/env; echo ---; \
+             exec /usr/bin/env MARKER='kept as is' PATH=/nonexistent {KAKOI} -- \
              /bin/sh -c 'echo $$; /usr/bin/tr \"\\0\" \"\\n\" < /proc/$$/environ'"
         ),
     );
@@ -323,16 +295,8 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     let (home, workspace) = home_with_workspace();
     let ws = workspace.display();
 
-    // A nested plan reads the policy too: a named profile that is not there is a
-    // diagnostic, not a plan.
-    let without_a_profile = run_inside(
-        home.path(),
-        &workspace,
-        &format!("exec {KAKOI} --workspace {ws} --profile strict --print-plan"),
-    );
-    assert_diagnostic(&without_a_profile, 125, "policy");
-
-    // The full form: the nested plan carries what marks it as nested, which the plain plan
+    // That a nested plan reads the policy is ex_521's, and the JSON form's `nested` key
+    // ex_888's. The full form: the nested plan carries what marks it as nested, which the plain plan
     // does not. The nested run is handed the environment the plain one gets, so that the
     // final environment the full form shows is no difference between them.
     let plain = binary(home.path())
@@ -360,7 +324,7 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
         .collect();
     assert!(!marking.is_empty(), "{report}");
 
-    // The summary carries the same marking, and the JSON form the `nested` key.
+    // The summary carries the same marking.
     let summary = run_inside(
         home.path(),
         &workspace,
@@ -373,16 +337,6 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
         assert!(summary.lines().any(|summary| summary == *line), "{report}");
     }
     assert!(summary.contains("\n  rw      ~/ws\n"), "{report}");
-
-    let json = run_inside(
-        home.path(),
-        &workspace,
-        &format!("exec {KAKOI} --workspace {ws} --print-plan=json"),
-    );
-    let report = output_report(&json);
-    assert_eq!(json.status.code(), Some(0), "{report}");
-    let plan: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
-    assert_eq!(plan["nested"], true, "{report}");
 }
 
 // @kotowari[EX-501]
@@ -994,9 +948,6 @@ fn req_315_the_tun_device_follows_the_mark() {
 
 // The outer run's command guards inside a nested isolation.
 
-const GIT_PUSH: &str =
-    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
-
 /// Runs `script` inside the isolation of `home`'s profile with `outer` added, where it
 /// starts a nested isolation of the profile with `inner` added, and in that the shell
 /// command `inner_script`.
@@ -1034,14 +985,7 @@ fn ex_899_the_outer_guard_still_denies_inside_a_nested_isolation() {
         "-- /bin/sh -c 'git push origin main'",
     );
 
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(126), "{report}");
-    assert!(output.stdout.is_empty(), "{report}");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        "kakoi: guard: git push: push は人が行う\n",
-        "{report}"
-    );
+    assert_denied(&output, GIT_PUSH_DENIED);
 }
 
 /// Runs `git push` by name in a nested isolation whose own policy is `inner`, under an
@@ -1061,14 +1005,7 @@ fn outer_guard_denies_push_under(inner: &str) {
         "-- /bin/sh -c 'git push origin main'",
     );
 
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(126), "{report}");
-    assert!(output.stdout.is_empty(), "{report}");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        "kakoi: guard: git push: push は人が行う\n",
-        "{report}"
-    );
+    assert_denied(&output, GIT_PUSH_DENIED);
 }
 
 // @kotowari[REQ-465]
@@ -1169,7 +1106,7 @@ fn assert_version_then_denied_push(output: &Output) {
     assert_eq!(output.stdout, git_version(), "{report}");
     assert_eq!(
         String::from_utf8_lossy(&output.stderr),
-        "kakoi: guard: git push: push は人が行う\n",
+        format!("{GIT_PUSH_DENIED}\n"),
         "{report}"
     );
 }

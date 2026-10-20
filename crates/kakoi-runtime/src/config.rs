@@ -2,9 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::environment::{HostEnvironment, RealEntry};
 use crate::input::HostContext;
-use crate::workspace_facts::real_entry;
 use crate::Policy;
 
 pub use kakoi_policy::layers::{LayerSelection as Selection, PolicySource as Source};
@@ -17,14 +15,7 @@ pub struct LoadedPolicy {
 }
 
 pub fn load(selection: &Selection, context: &HostContext) -> Result<LoadedPolicy, ConfigError> {
-    let environment = HostEnvironment::from_variables(context.environment());
-    let home = environment.home_directory(
-        &environment
-            .home
-            .as_deref()
-            .map_or(RealEntry::Missing, real_entry),
-    )?;
-    let config_dir = environment.config_dir(&home);
+    let (_, config_dir) = crate::planning::home_and_config_dir(context.environment())?;
     let anchor = |path: &PathBuf| {
         if path.is_absolute() {
             path.clone()

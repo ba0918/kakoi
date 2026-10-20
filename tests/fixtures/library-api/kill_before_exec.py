@@ -23,6 +23,11 @@ trace(0x4200, pid, 2 | 4 | 16)  # fork, vfork, exec; private descendants only
 trace(7, pid)
 killed = False
 exit_code = None
+# A new child's first stop can be reported before its parent's fork event. Such a child
+# is held stopped until the event says whose it is: resumed at once, the child of init
+# would run, and could exec, before the kill below.
+announced = set()
+held = set()
 while True:
     try:
         pid, status = os.waitpid(-1, 0x40000000)  # __WALL for traced descendants
@@ -35,10 +40,15 @@ while True:
     if not os.WIFSTOPPED(status):
         continue
     event = status >> 16
+    stopped = os.WSTOPSIG(status)
+    if event == 0 and stopped == signal.SIGSTOP and pid != child.pid and pid not in announced:
+        held.add(pid)
+        continue
     if event in (1, 2):
         born = ctypes.c_ulong()
         if libc.ptrace(0x4201, pid, None, ctypes.cast(ctypes.byref(born), ctypes.c_void_p)) < 0:
             raise OSError(ctypes.get_errno(), "get fork event")
+        announced.add(born.value)
         with open(f"/proc/{pid}/status", encoding="utf-8") as info:
             namespace_pids = next(
                 line.split()[1:] for line in info if line.startswith("NSpid:")
@@ -49,7 +59,10 @@ while True:
             assert not killed
             os.kill(born.value, signal.SIGKILL)
             killed = True
-    stopped = os.WSTOPSIG(status)
+            held.discard(born.value)
+        elif born.value in held:
+            held.discard(born.value)
+            trace(7, born.value)
     trace(7, pid, 0 if stopped in (signal.SIGSTOP, signal.SIGTRAP) else stopped)
 assert killed, "the init's actual command fork was not observed"
 assert exit_code == 0, f"consumer exit: {exit_code}"

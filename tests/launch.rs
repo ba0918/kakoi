@@ -9,9 +9,9 @@ use std::process::{Command, Output};
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, run,
-    run_command_from_deleted_dir, run_command_with_soft_fd_limit, run_from_deleted_dir, TempDir,
-    RW_WORKSPACE,
+    assert_diagnostic, binary, directives_at, home_with_workspace, output_report, printed_plan,
+    profile, run, run_command_from_deleted_dir, run_command_with_soft_fd_limit,
+    run_from_deleted_dir, run_inside, TempDir, RW_WORKSPACE,
 };
 
 // @kotowari[REQ-291, REQ-library-402, EX-library-403]
@@ -37,28 +37,6 @@ fn a_command_exit_code_passes_through() {
         assert_eq!(output.stdout, b"out\n", "{report}");
         assert_eq!(output.stderr, b"err\n", "{report}");
     }
-}
-
-/// Overwrites the `default` profile of `home` with `text`.
-fn profile(home: &TempDir, text: &str) {
-    home.write(".config/kakoi/profile/default.toml", text);
-}
-
-/// Runs `script` with `/bin/sh -c` inside the isolation of `home`'s profile, with the
-/// workspace at `workspace`, which is also the current directory.
-fn run_script(home: &TempDir, workspace: &Path, script: &str) -> Output {
-    binary(home.path())
-        .current_dir(workspace)
-        .args([
-            "--workspace",
-            workspace.to_str().unwrap(),
-            "--",
-            "/bin/sh",
-            "-c",
-            script,
-        ])
-        .output()
-        .unwrap()
 }
 
 /// Exit 0 and no diagnostic or warning from `kakoi` itself; returns standard
@@ -156,31 +134,6 @@ fn adjacent_stages_yield_the_earlier_diagnostic() {
     assert_diagnostic(&output, 125, "bwrap");
 }
 
-// @kotowari[REQ-310]
-#[test]
-fn a_fifo_policy_file_ends_in_a_diagnostic_from_the_binary() {
-    let (home, workspace) = home_with_workspace();
-    let fifo = home.path().join("policy.fifo");
-    let c_path = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
-    // SAFETY: `mkfifo` reads the NUL-terminated path and touches nothing else.
-    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
-
-    // Nothing ever writes to the FIFO: a blocking open would never return.
-    let output = run(
-        home.path(),
-        [
-            "--workspace",
-            workspace.to_str().unwrap(),
-            "--policy-file",
-            fifo.to_str().unwrap(),
-            "--",
-            "/bin/true",
-        ],
-    );
-
-    assert_diagnostic(&output, 125, "policy");
-}
-
 // @kotowari[REQ-311, EX-544]
 #[test]
 fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
@@ -211,7 +164,7 @@ fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
 fn a_command_signal_passes_through_as_128_plus_s() {
     let (home, workspace) = home_with_workspace();
 
-    let output = run_script(&home, &workspace, "kill -TERM $$");
+    let output = run_inside(home.path(), &workspace, "kill -TERM $$");
 
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(128 + libc::SIGTERM), "{report}");
@@ -340,8 +293,9 @@ fn home_with_many_env_files(count: usize) -> (TempDir, PathBuf) {
         &home,
         &format!("{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env*\"]\n"),
     );
+    // Not empty: a hidden file reads empty, so its content tells the two apart.
     for index in 0..count {
-        home.write(format!("ws/.env.{index}"), "");
+        home.write(format!("ws/.env.{index}"), "secret");
     }
     (home, workspace)
 }
@@ -367,18 +321,6 @@ fn run_script_under_soft_limit_1024(home: &TempDir, workspace: &Path, script: &s
 
 // @kotowari[REQ-309]
 #[test]
-fn a_scan_of_more_hidden_files_than_the_soft_limit_still_launches() {
-    // Specification section 14: every hidden file needs a descriptor; with 1100 of them
-    // and a soft limit of 1024, the start raises the soft limit to the hard limit first.
-    let (home, workspace) = home_with_many_env_files(1100);
-
-    let output = run_script_under_soft_limit_1024(&home, &workspace, "test ! -s .env.0");
-
-    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
-}
-
-// @kotowari[REQ-309]
-#[test]
 fn the_isolated_process_inherits_the_raised_soft_limit() {
     // The limit is raised whether or not it is needed, so the same input gives the same
     // result: inside, the soft limit equals the hard limit.
@@ -390,7 +332,26 @@ fn the_isolated_process_inherits_the_raised_soft_limit() {
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "{}", output_report(&output));
     assert_eq!(lines[0], lines[1], "{}", output_report(&output));
-    assert_ne!(lines[0], "1024", "{}", output_report(&output));
+    // Lowering the soft limit to 1024 keeps the hard limit this process has, whatever it is.
+    assert_eq!(
+        lines[1],
+        open_files_hard_limit().to_string(),
+        "{}",
+        output_report(&output)
+    );
+}
+
+/// This process's hard limit on open files.
+fn open_files_hard_limit() -> libc::rlim_t {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    assert_eq!(
+        unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) },
+        0
+    );
+    limit.rlim_max
 }
 
 // A `bwrap` that passes the lookup on PATH but cannot be executed fails while kakoi is
@@ -611,8 +572,21 @@ fn a_command_on_path_inside_an_rw_item_is_started_without_a_placement_check() {
 // @kotowari[REQ-287, EX-523]
 #[test]
 fn two_concurrent_launches_both_pass_their_status_through() {
+    // The runs meet in the workspace: the second ends only once the first is running, and
+    // the first only once the test releases it after the second has ended, so the two
+    // overlap and the end of one does not stop the other. Each wait is bounded by 30 s, and
+    // a run whose wait runs out ends with 98 instead of its own status.
     let (home, workspace) = home_with_workspace();
-    let start = |code: i32| {
+    let running = workspace.join("first-running");
+    let release = workspace.join("release");
+    let wait_for = |path: &Path| {
+        format!(
+            "i=0; while [ ! -e '{0}' ] && [ $i -lt 3000 ]; do sleep 0.01; i=$((i+1)); done; \
+             [ -e '{0}' ] || exit 98",
+            path.display()
+        )
+    };
+    let start = |script: String| {
         binary(home.path())
             .args([
                 "--workspace",
@@ -620,17 +594,26 @@ fn two_concurrent_launches_both_pass_their_status_through() {
                 "--",
                 "/bin/sh",
                 "-c",
-                &format!("sleep 0.3; exit {code}"),
+                &script,
             ])
             .spawn()
             .unwrap()
     };
 
-    let mut first = start(5);
-    let mut second = start(6);
+    let mut first = start(format!(
+        "touch '{}'; {}; exit 5",
+        running.display(),
+        wait_for(&release)
+    ));
+    let mut second = start(format!("{}; exit 6", wait_for(&running)));
 
-    assert_eq!(first.wait().unwrap().code(), Some(5));
     assert_eq!(second.wait().unwrap().code(), Some(6));
+    assert!(
+        first.try_wait().unwrap().is_none(),
+        "the first run ended before the second"
+    );
+    std::fs::write(&release, "").unwrap();
+    assert_eq!(first.wait().unwrap().code(), Some(5));
 }
 
 // @kotowari[REQ-173]
@@ -644,7 +627,7 @@ fn a_worktree_at_home_exits_125() {
         .unwrap();
     assert!(status.success());
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     assert_diagnostic(&output, 125, "path");
 }
@@ -719,7 +702,7 @@ fn a_launch_leaves_the_host_tree_unchanged() {
     );
     let before = tree_snapshot(home.path());
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     assert_ran_clean(&output);
     assert_eq!(tree_snapshot(home.path()), before);
@@ -741,8 +724,8 @@ fn a_hidden_ancestor_does_not_hide_the_rw_worktree() {
         ),
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "test ! -e ../other && echo written > from-inside && cat from-inside",
     );
@@ -765,11 +748,11 @@ fn an_ro_file_inside_an_rw_directory_is_read_only() {
         "[mounts]\nrw = [\"${workspace}\", \"~/.codex\"]\nro = [\"~/.codex/AGENTS.md\"]\n",
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "if echo changed > ~/.codex/AGENTS.md; then echo agents-writable; fi; \
-         echo other > ~/.codex/other && echo other-written",
+     echo other > ~/.codex/other && echo other-written",
     );
 
     assert_eq!(assert_ran_clean(&output), "other-written\n");
@@ -799,8 +782,8 @@ fn a_scanned_env_file_reads_empty() {
         ),
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "wc -c < .env; wc -c < sub/.env.local; cat sub/keep.txt",
     );
@@ -827,8 +810,8 @@ fn the_shared_tmp_subdirectory_is_visible_inside_an_empty_tmp() {
     std::fs::create_dir(&workspace).unwrap();
     profile(&home, &format!("{RW_WORKSPACE}hide = [\"/tmp\"]\n"));
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         &format!(
             "test ! -e {} && ls /tmp && echo shared > shared.txt",
@@ -858,8 +841,8 @@ fn a_scanned_file_under_an_rw_cache_reads_empty() {
          [[mounts.scan]]\nroot = \"~/.cache\"\nnames = [\".env\"]\n",
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "wc -c < ~/.cache/x/.env; echo new > ~/.cache/x/other && cat ~/.cache/x/other",
     );
@@ -877,12 +860,12 @@ fn rename_onto_an_rw_file_fails_but_in_place_writes_work() {
         "[mounts]\nrw = [\"${workspace}\", \"~/d\"]\nrw-file = [\"~/d/state.json\"]\n",
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "echo replaced > ~/d/state.json.tmp; \
-         if mv ~/d/state.json.tmp ~/d/state.json 2>/dev/null; then echo renamed; fi; \
-         printf 'appended\\n' >> ~/d/state.json && echo in-place",
+     if mv ~/d/state.json.tmp ~/d/state.json 2>/dev/null; then echo renamed; fi; \
+     printf 'appended\\n' >> ~/d/state.json && echo in-place",
     );
 
     assert_eq!(assert_ran_clean(&output), "in-place\n");
@@ -906,13 +889,13 @@ fn a_host_socket_visible_read_only_is_connectable() {
         std::io::Write::write_all(&mut stream, &buffer).unwrap();
     });
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         &format!(
             "/usr/bin/python3 -c \"\
-             import socket; s = socket.socket(socket.AF_UNIX); \
-             s.connect('{}'); s.sendall(b'hello'); print(s.recv(5).decode())\"",
+         import socket; s = socket.socket(socket.AF_UNIX); \
+         s.connect('{}'); s.sendall(b'hello'); print(s.recv(5).decode())\"",
             socket_path.display()
         ),
     );
@@ -931,13 +914,13 @@ fn network_none_has_no_route() {
     );
 
     // 192.0.2.1 is TEST-NET-1: never routed, so nothing is contacted even by mistake.
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "/usr/bin/python3 -c \"\
-         import socket, errno; s = socket.socket(); s.settimeout(5)\n\
-         try:\n    s.connect(('192.0.2.1', 80)); print('connected')\n\
-         except OSError as e:\n    print(e.errno == errno.ENETUNREACH)\"",
+     import socket, errno; s = socket.socket(); s.settimeout(5)\n\
+     try:\n    s.connect(('192.0.2.1', 80)); print('connected')\n\
+     except OSError as e:\n    print(e.errno == errno.ENETUNREACH)\"",
     );
 
     assert_eq!(assert_ran_clean(&output), "True\n");
@@ -1060,8 +1043,8 @@ fn raw_syscall_script(number: u64, arguments: &str) -> String {
 fn tiocsti_is_denied_with_eperm() {
     let (home, workspace) = home_with_workspace();
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         &raw_syscall_script(
             libc::SYS_ioctl as u64,
@@ -1086,8 +1069,8 @@ fn tiocsti_with_high_bits_is_denied_with_eperm() {
     #[allow(clippy::unnecessary_cast)]
     let request = libc::TIOCSTI as u64 | (1u64 << 32);
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         &raw_syscall_script(
             libc::SYS_ioctl as u64,
@@ -1104,8 +1087,8 @@ fn an_x32_syscall_kills_the_process() {
     let (home, workspace) = home_with_workspace();
     let x32_getpid = 0x4000_0000_u64 | libc::SYS_getpid as u64;
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         &raw_syscall_script(x32_getpid, "0, ctypes.c_ulong(0), None"),
     );
@@ -1113,39 +1096,6 @@ fn an_x32_syscall_kills_the_process() {
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(128 + libc::SIGSYS), "{report}");
     assert!(output.stdout.is_empty(), "{report}");
-}
-
-// @kotowari[REQ-284]
-#[test]
-fn a_nested_launch_runs_under_the_outer_boundary() {
-    let (home, workspace) = home_with_workspace();
-    home.write("box/file", "hidden outside\n");
-    profile(
-        &home,
-        &format!(
-            "{RW_WORKSPACE}hide = [\"{}\"]\n",
-            home.path().join("box").display()
-        ),
-    );
-
-    // The inner `kakoi` is the same binary, started from inside the isolation
-    // with the environment the outer one assembled (`KAKOI=1` included).
-    let output = run_script(
-        &home,
-        &workspace,
-        &format!(
-            "{} -- /bin/sh -c 'test ! -e {} && echo inner-ok'",
-            env!("CARGO_BIN_EXE_kakoi"),
-            home.path().join("box/file").display()
-        ),
-    );
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    assert_eq!(output.stdout, b"inner-ok\n", "{report}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert_eq!(stderr.lines().count(), 1, "{report}");
-    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
 }
 
 // `rw-copy`: the isolation starts from the host's content, writes it freely, and the host
@@ -1177,12 +1127,12 @@ fn an_rw_copy_file_is_written_inside_and_the_host_file_is_untouched() {
     );
     let before = tree_snapshot(home.path());
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "cat ~/conf/settings.json; \
-         printf '{\"from\":\"inside\"}\\n' > ~/conf/settings.json && echo written; \
-         cat ~/conf/settings.json",
+     printf '{\"from\":\"inside\"}\\n' > ~/conf/settings.json && echo written; \
+     cat ~/conf/settings.json",
     );
 
     // The host's content is what the isolation starts from, the write succeeds, and
@@ -1214,15 +1164,15 @@ fn an_rw_copy_directory_carries_the_host_tree_and_keeps_every_change_inside() {
     );
     let before = tree_snapshot(home.path());
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "cat ~/conf/keep.txt ~/conf/sub/deep.txt; \
-         ~/conf/run-me; \
-         test -d ~/conf/empty && echo empty-is-there; \
-         echo new > ~/conf/made.txt && cat ~/conf/made.txt; \
-         echo changed > ~/conf/keep.txt && cat ~/conf/keep.txt; \
-         printf '#!/bin/sh\\necho made-inside\\n' > ~/conf/mine && chmod +x ~/conf/mine && ~/conf/mine",
+     ~/conf/run-me; \
+     test -d ~/conf/empty && echo empty-is-there; \
+     echo new > ~/conf/made.txt && cat ~/conf/made.txt; \
+     echo changed > ~/conf/keep.txt && cat ~/conf/keep.txt; \
+     printf '#!/bin/sh\\necho made-inside\\n' > ~/conf/mine && chmod +x ~/conf/mine && ~/conf/mine",
     );
 
     assert_eq!(
@@ -1253,7 +1203,7 @@ fn an_rw_copy_directory_keeps_the_mode_of_the_directory_itself() {
         &home,
         "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
     );
-    let output = run_script(&home, &workspace, "stat -c %a ~/conf ~/conf/sub");
+    let output = run_inside(home.path(), &workspace, "stat -c %a ~/conf ~/conf/sub");
     assert_eq!(assert_ran_clean(&output), "700\n750\n");
 }
 
@@ -1271,11 +1221,11 @@ fn an_rw_copy_directory_reproduces_a_symbolic_link_as_a_link() {
     );
     let before = tree_snapshot(home.path());
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "test -L ~/conf/alias.txt && echo still-a-link; \
-         readlink ~/conf/alias.txt; cat ~/conf/alias.txt",
+     readlink ~/conf/alias.txt; cat ~/conf/alias.txt",
     );
 
     assert_eq!(
@@ -1310,7 +1260,7 @@ fn an_entry_an_rw_copy_cannot_reproduce_is_reported_in_the_plan_and_left_out() {
             "/bin/true",
         ],
     );
-    let output = run_script(&home, &workspace, "cat ~/conf/keep.txt; ls ~/conf");
+    let output = run_inside(home.path(), &workspace, "cat ~/conf/keep.txt; ls ~/conf");
 
     let report = output_report(&plan);
     let text = String::from_utf8(plan.stdout).unwrap();
@@ -1376,7 +1326,11 @@ fn an_rw_copy_of_a_path_that_does_not_exist_is_skipped_like_any_other_item() {
             "/bin/true",
         ],
     );
-    let output = run_script(&home, &workspace, "test ! -e ~/missing && echo not-there");
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        "test ! -e ~/missing && echo not-there",
+    );
 
     let report = output_report(&plan);
     assert!(
@@ -1403,14 +1357,14 @@ fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_p
         "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/pipe\"]\n",
     );
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     let diagnostic = assert_diagnostic(&output, 125, "path");
     assert!(diagnostic.contains("~/pipe"), "{diagnostic}");
     assert!(diagnostic.contains("not a regular file"), "{diagnostic}");
 }
 
-// @kotowari[REQ-168, REQ-404, EX-761]
+// @kotowari[REQ-168, REQ-404, EX-761, EX-339]
 #[test]
 fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is
@@ -1424,7 +1378,7 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
         "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
     );
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     let diagnostic = assert_diagnostic(&output, 125, "path");
     assert!(diagnostic.contains("~/conf"), "{diagnostic}");
@@ -1435,6 +1389,29 @@ fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
         )),
         "{diagnostic}"
     );
+}
+
+// @kotowari[REQ-168, REQ-311]
+#[test]
+fn an_rw_copy_source_over_the_byte_limit_is_a_path_diagnostic() {
+    let (home, workspace) = home_with_workspace();
+    let big = home.write("conf/big", "");
+    // Sparse: the test writes nothing, and the run reads one byte more than the limit.
+    std::fs::File::options()
+        .write(true)
+        .open(&big)
+        .unwrap()
+        .set_len(kakoi_runtime::cli::copies::BYTE_LIMIT + 1)
+        .unwrap();
+    profile(
+        &home,
+        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
+    );
+
+    let output = run_inside(home.path(), &workspace, "exit 0");
+
+    let diagnostic = assert_diagnostic(&output, 125, "path");
+    assert!(diagnostic.contains("~/conf"), "{diagnostic}");
 }
 
 // @kotowari[REQ-172]
@@ -1450,8 +1427,8 @@ fn a_narrower_rw_inside_an_rw_copy_directory_still_reaches_the_host() {
         "[mounts]\nrw = [\"${workspace}\", \"~/conf/state\"]\nrw-copy = [\"~/conf\"]\n",
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "echo inside > ~/conf/settings.json; echo inside > ~/conf/state/db; echo done",
     );
@@ -1480,11 +1457,11 @@ fn a_policy_file_inside_an_rw_copy_area_launches_and_the_host_profile_is_untouch
     );
     profile(&home, &written);
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "echo '[mounts]' > ~/.config/kakoi/profile/default.toml && echo rewritten; \
-         cat ~/.config/kakoi/profile/default.toml",
+     cat ~/.config/kakoi/profile/default.toml",
     );
 
     assert_eq!(assert_ran_clean(&output), "rewritten\n[mounts]\n");
@@ -1573,15 +1550,15 @@ fn a_copied_file_is_a_mount_point_but_an_entry_of_a_copied_directory_is_not() {
     );
     let before = tree_snapshot(home.path());
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "printf 'x\\n' > ~/d/t1; \
-         if mv ~/d/t1 ~/cfg.toml 2>/dev/null; then echo file-renamed; fi; \
-         if rm ~/cfg.toml 2>/dev/null; then echo file-removed; fi; \
-         printf 'appended\\n' >> ~/cfg.toml && echo file-appended; \
-         printf 'y\\n' > ~/d/t2 && mv ~/d/t2 ~/d/inner.toml && echo entry-renamed; \
-         rm ~/d/inner.toml && echo entry-removed",
+     if mv ~/d/t1 ~/cfg.toml 2>/dev/null; then echo file-renamed; fi; \
+     if rm ~/cfg.toml 2>/dev/null; then echo file-removed; fi; \
+     printf 'appended\\n' >> ~/cfg.toml && echo file-appended; \
+     printf 'y\\n' > ~/d/t2 && mv ~/d/t2 ~/d/inner.toml && echo entry-renamed; \
+     rm ~/d/inner.toml && echo entry-removed",
     );
 
     assert_eq!(
@@ -1723,7 +1700,7 @@ fn a_secret_loses_only_one_trailing_line_feed() {
         &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
     );
 
-    let output = run_script(&home, &workspace, "printf '[%s]' \"$TOKEN\"");
+    let output = run_inside(home.path(), &workspace, "printf '[%s]' \"$TOKEN\"");
 
     assert_eq!(assert_ran_clean(&output), "[v\n]");
 }
@@ -1738,7 +1715,7 @@ fn a_secret_of_65537_bytes_is_a_secret_diagnostic() {
         &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"${{config_dir}}/secrets/token\"\n"),
     );
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     assert_diagnostic(&output, 125, "secret");
 }
@@ -1757,7 +1734,7 @@ fn a_non_numeric_git_config_count_from_a_secret_is_an_env_diagnostic_without_its
         ),
     );
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     let diagnostic = assert_diagnostic(&output, 125, "env");
     assert!(!diagnostic.contains(value), "{diagnostic}");
@@ -1842,20 +1819,7 @@ fn json_plan(home: &TempDir, workspace: &Path) -> serde_json::Value {
         ])
         .output()
         .unwrap();
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
-}
-
-/// The items of `plan` mounted at `path`, as their directives.
-fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
-    plan["mounts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["path"] == path.to_str().unwrap())
-        .map(|item| item["directive"].as_str().unwrap())
-        .collect()
+    printed_plan(&output)
 }
 
 /// The position of the item mounted at `path` in the mount order of `plan`.
@@ -1875,7 +1839,11 @@ fn an_rw_directory_is_written_through_to_the_host() {
     std::fs::create_dir(home.path().join("data")).unwrap();
     profile(&home, "[mounts]\nrw = [\"${workspace}\", \"~/data\"]\n");
 
-    let output = run_script(&home, &workspace, "echo inside > ~/data/made && echo done");
+    let output = run_inside(
+        home.path(),
+        &workspace,
+        "echo inside > ~/data/made && echo done",
+    );
 
     assert_eq!(assert_ran_clean(&output), "done\n");
     assert_eq!(
@@ -1894,7 +1862,7 @@ fn rw_on_a_regular_file_is_a_path_diagnostic_pointing_to_rw_file() {
         "[mounts]\nrw = [\"${workspace}\", \"~/state.json\"]\n",
     );
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     let diagnostic = assert_diagnostic(&output, 125, "path");
     assert!(diagnostic.contains("rw-file"), "{diagnostic}");
@@ -1910,8 +1878,8 @@ fn a_file_in_an_rw_copy_directory_is_renamed_inside_only() {
         "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
     );
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "mv ~/conf/before ~/conf/after && test ! -e ~/conf/before && cat ~/conf/after",
     );
@@ -1922,23 +1890,6 @@ fn a_file_in_an_rw_copy_directory_is_renamed_inside_only() {
         "host\n"
     );
     assert!(home.path().join("conf/after").symlink_metadata().is_err());
-}
-
-// @kotowari[EX-339]
-#[test]
-fn an_rw_copy_of_more_than_4096_entries_is_a_path_diagnostic() {
-    let (home, workspace) = home_with_workspace();
-    for index in 0..4097 {
-        home.write(format!("conf/f{index}"), "x\n");
-    }
-    profile(
-        &home,
-        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
-    );
-
-    let output = run_script(&home, &workspace, "exit 0");
-
-    assert_diagnostic(&output, 125, "path");
 }
 
 // @kotowari[EX-340]
@@ -1967,7 +1918,7 @@ fn a_hide_whose_target_does_not_exist_is_skipped_with_a_reason_and_not_created()
     profile(&home, &format!("{RW_WORKSPACE}hide = [\"~/missing\"]\n"));
 
     let plan = json_plan(&home, &workspace);
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     let skipped = plan["skipped_mounts"].as_array().unwrap();
     let entry = skipped
@@ -2005,6 +1956,9 @@ fn a_scanned_link_to_a_directory_is_not_hidden() {
     let target = home.path().join("target");
     std::fs::create_dir(&target).unwrap();
     std::os::unix::fs::symlink(&target, workspace.join(".env")).unwrap();
+    // A regular file of the same name, so that the scan is seen hiding what it should.
+    std::fs::create_dir(workspace.join("sub")).unwrap();
+    std::fs::write(workspace.join("sub/.env"), "").unwrap();
     profile(
         &home,
         &format!("{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env\"]\n"),
@@ -2018,7 +1972,11 @@ fn a_scanned_link_to_a_directory_is_not_hidden() {
         .iter()
         .filter(|item| item["directive"] == "hide")
         .collect();
-    assert!(hidden.is_empty(), "{plan}");
+    assert_eq!(hidden.len(), 1, "{plan}");
+    assert!(
+        hidden[0]["path"].as_str().unwrap().ends_with("/sub/.env"),
+        "{plan}"
+    );
 }
 
 // @kotowari[EX-344]
@@ -2056,7 +2014,7 @@ fn a_scan_root_under_an_rw_the_generation_will_hide_is_checked_against_the_rw() 
         ),
     );
 
-    let output = run_script(&home, &workspace, "exit 0");
+    let output = run_inside(home.path(), &workspace, "exit 0");
 
     let diagnostic = assert_diagnostic(&output, 125, "path");
     assert!(diagnostic.contains(root.to_str().unwrap()), "{diagnostic}");
@@ -2114,7 +2072,7 @@ fn a_work_place_under_rw_copy_only_warns_and_starts() {
     let (home, workspace) = home_with_workspace();
     profile(&home, "[mounts]\nrw-copy = [\"${workspace}\"]\n");
 
-    let output = run_script(&home, &workspace, "echo ran");
+    let output = run_inside(home.path(), &workspace, "echo ran");
 
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(0), "{report}");
@@ -2158,7 +2116,7 @@ fn an_i386_system_call_ends_the_whole_process() {
         output_report(&on_the_host)
     );
 
-    let output = run_script(&home, &workspace, "exec /usr/bin/python3 i386.py");
+    let output = run_inside(home.path(), &workspace, "exec /usr/bin/python3 i386.py");
 
     let report = output_report(&output);
     assert_eq!(output.status.code(), Some(128 + libc::SIGSYS), "{report}");
@@ -2170,12 +2128,12 @@ fn an_i386_system_call_ends_the_whole_process() {
 fn a_terminal_size_ioctl_is_allowed() {
     let (home, workspace) = home_with_workspace();
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         "/usr/bin/python3 -c \"\
-         import os, fcntl, termios; controller, terminal = os.openpty(); \
-         fcntl.ioctl(terminal, termios.TIOCGWINSZ, bytes(8)); print('allowed')\"",
+     import os, fcntl, termios; controller, terminal = os.openpty(); \
+     fcntl.ioctl(terminal, termios.TIOCGWINSZ, bytes(8)); print('allowed')\"",
     );
 
     assert_eq!(assert_ran_clean(&output), "allowed\n");
@@ -2293,12 +2251,19 @@ fn the_full_plan_shows_descriptors_as_symbols_not_numbers() {
     }
 }
 
-// @kotowari[EX-542]
+// Specification section 14: every hidden file needs a descriptor; with 1100 of them and
+// a soft limit of 1024, the start raises the soft limit to the hard limit first, the
+// files are hidden, and the command inherits the raised limit.
+// @kotowari[REQ-309, EX-542]
 #[test]
 fn more_hidden_files_than_the_soft_limit_start_and_the_command_gets_the_raised_limit() {
     let (home, workspace) = home_with_many_env_files(1100);
 
-    let output = run_script_under_soft_limit_1024(&home, &workspace, "ulimit -Sn; ulimit -Hn");
+    let output = run_script_under_soft_limit_1024(
+        &home,
+        &workspace,
+        "test ! -s .env.0 && ulimit -Sn && ulimit -Hn",
+    );
 
     let stdout = assert_ran_clean(&output);
     let lines: Vec<&str> = stdout.lines().collect();
@@ -2310,7 +2275,7 @@ fn more_hidden_files_than_the_soft_limit_start_and_the_command_gets_the_raised_l
     assert!(soft > 1024, "{}", output_report(&output));
 }
 
-// @kotowari[EX-543]
+// @kotowari[REQ-310, EX-543]
 #[test]
 fn a_fifo_policy_file_is_a_policy_diagnostic_without_waiting() {
     let (home, workspace) = home_with_workspace();
@@ -2357,7 +2322,7 @@ fn a_secret_file_behind_a_link_gives_the_value_of_its_target() {
         &format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/secret-link\"\n"),
     );
 
-    let output = run_script(&home, &workspace, "printf '[%s]' \"$TOKEN\"");
+    let output = run_inside(home.path(), &workspace, "printf '[%s]' \"$TOKEN\"");
 
     assert_eq!(assert_ran_clean(&output), "[from-the-target]");
 }
@@ -2560,13 +2525,13 @@ fn network_host_reaches_a_listener_on_the_host_loopback() {
         std::io::Write::write_all(&mut stream, &buffer).unwrap();
     });
 
-    let output = run_script(
-        &home,
+    let output = run_inside(
+        home.path(),
         &workspace,
         &format!(
             "/usr/bin/python3 -c \"\
-             import socket; s = socket.create_connection(('127.0.0.1', {port}), timeout=5); \
-             s.sendall(b'hello'); print(s.recv(5).decode())\""
+         import socket; s = socket.create_connection(('127.0.0.1', {port}), timeout=5); \
+         s.sendall(b'hello'); print(s.recv(5).decode())\""
         ),
     );
 

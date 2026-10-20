@@ -47,6 +47,9 @@ struct Peer {
 
 pub struct DnsFront {
     sockets: DnsSockets,
+    // One buffer for every datagram received: the front is polled every few
+    // milliseconds, and a fresh 64 KiB buffer per poll is zeroed for nothing.
+    datagram: Box<[u8]>,
     peers: BTreeMap<u64, Peer>,
     order: VecDeque<u64>,
     next_id: u64,
@@ -77,6 +80,7 @@ impl DnsFront {
         }
         Ok(Self {
             sockets,
+            datagram: vec![0; u16::MAX as usize].into_boxed_slice(),
             peers: BTreeMap::new(),
             order: VecDeque::new(),
             next_id: 0,
@@ -118,9 +122,14 @@ impl DnsFront {
         second: bool,
         incoming: &mut Vec<IncomingQuery>,
     ) -> io::Result<()> {
-        let mut datagram = [0; u16::MAX as usize];
+        let socket = if second {
+            &self.sockets.second_udp
+        } else {
+            &self.sockets.udp
+        };
+        let datagram = &mut self.datagram;
         for _ in 0..32 {
-            match self.udp(second).recv_from(&mut datagram) {
+            match socket.recv_from(datagram) {
                 Ok((size, peer)) => {
                     let wire = datagram[..size].to_vec();
                     let limit = Message::from_vec(&wire)

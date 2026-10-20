@@ -73,10 +73,9 @@ impl<'ns> DynamicPermissions<'ns> {
                 Ok(()) => {
                     return Ok(PreparedGrants {
                         owner: self,
-                        leases: Some(attempt.leases),
+                        leases: attempt.leases,
                         sets: attempt.sets,
                         activation: attempt.activation,
-                        activated: false,
                     })
                 }
                 Err(Staging::Fault(error)) => {
@@ -262,7 +261,7 @@ fn discard_sets(namespace: &NetworkNamespace, executable: &Path, script: &str) -
         namespace,
         executable,
         script,
-        Instant::now() + Duration::from_secs(2),
+        Instant::now() + crate::nft::COMMAND_BUDGET,
     )
 }
 
@@ -315,10 +314,11 @@ fn verify_expirations(json: &[u8], sets: &[(String, Vec<IpAddr>)]) -> io::Result
 /// cannot race staging/activation or cause a set name to be reused.
 pub struct PreparedGrants<'owner, 'ns> {
     owner: &'owner mut DynamicPermissions<'ns>,
-    leases: Option<LeaseBook>,
+    leases: LeaseBook,
+    // Handed to the owner on activation, so that dropping an activated staging
+    // finds nothing left to remove.
     sets: Vec<String>,
     activation: String,
-    activated: bool,
 }
 
 impl PreparedGrants<'_, '_> {
@@ -327,14 +327,13 @@ impl PreparedGrants<'_, '_> {
             self.owner.namespace,
             self.owner.nft,
             &self.activation,
-            Instant::now() + Duration::from_secs(2),
+            Instant::now() + crate::nft::COMMAND_BUDGET,
         ) {
             // The kernel may have committed despite losing the acknowledgement.
             self.owner.failed = true;
             return Err(error);
         }
-        self.activated = true;
-        self.owner.leases = self.leases.take().expect("single activation");
+        self.owner.leases = std::mem::take(&mut self.leases);
         let previous = std::mem::replace(&mut self.owner.sets, std::mem::take(&mut self.sets));
         if let Err(error) = remove_sets(self.owner.namespace, self.owner.nft, &previous) {
             self.owner.failed = true;
@@ -346,8 +345,7 @@ impl PreparedGrants<'_, '_> {
 
 impl Drop for PreparedGrants<'_, '_> {
     fn drop(&mut self) {
-        if !self.activated
-            && !self.owner.failed
+        if !self.owner.failed
             && remove_sets(self.owner.namespace, self.owner.nft, &self.sets).is_err()
         {
             self.owner.failed = true;
@@ -367,7 +365,7 @@ fn remove_sets(namespace: &NetworkNamespace, executable: &Path, sets: &[String])
         namespace,
         executable,
         &script,
-        Instant::now() + Duration::from_secs(2),
+        Instant::now() + crate::nft::COMMAND_BUDGET,
     )
 }
 

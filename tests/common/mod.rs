@@ -134,6 +134,55 @@ pub fn output_report(output: &Output) -> String {
     )
 }
 
+/// Exit 0, or a failed assertion that quotes everything the binary left behind.
+pub fn assert_success(output: &Output) {
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(output));
+}
+
+/// Standard output as text.
+pub fn stdout(output: &Output) -> String {
+    String::from_utf8(output.stdout.clone()).unwrap()
+}
+
+/// The plan the binary printed with `--print-plan=json`, after checking it exited 0.
+pub fn printed_plan(output: &Output) -> serde_json::Value {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
+}
+
+/// The directives of the items `plan` mounts at `path`.
+pub fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
+    plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["path"] == path.to_str().unwrap())
+        .map(|item| item["directive"].as_str().unwrap())
+        .collect()
+}
+
+/// Runs git in `cwd` with the developer's own configuration shut out.
+pub fn git(cwd: &Path, arguments: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(cwd)
+        .args(["-c", "protocol.file.allow=always"])
+        .args(arguments)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+        .env("GIT_COMMITTER_NAME", "test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// Exit `code`, nothing on standard output, and one diagnostic line on standard error of the
 /// form `kakoi: <kind>: <description>`. Returns the line so a test can check the
 /// description.
@@ -151,6 +200,25 @@ pub fn assert_diagnostic(output: &Output, code: i32, kind: &str) -> String {
     diagnostic
 }
 
+/// A command guard that denies `git push`.
+pub const GIT_PUSH: &str =
+    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
+
+/// The line on standard error for a `git push` that [`GIT_PUSH`] denies.
+pub const GIT_PUSH_DENIED: &str = "kakoi: guard: git push: push は人が行う";
+
+/// Exit 126, nothing on standard output, and one line on standard error that is `line`.
+pub fn assert_denied(output: &Output, line: &str) {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!("{line}\n"),
+        "{report}"
+    );
+}
+
 /// The profile of a binary test that reaches the plan without a warning: the workspace is
 /// `rw` (specification section 6.5).
 pub const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";
@@ -163,6 +231,11 @@ pub fn home_with_workspace() -> (TempDir, PathBuf) {
     let workspace = home.path().join("ws");
     fs::create_dir(&workspace).unwrap();
     (home, workspace)
+}
+
+/// Overwrites the `default` profile of `home` with `text`.
+pub fn profile(home: &TempDir, text: &str) {
+    home.write(".config/kakoi/profile/default.toml", text);
 }
 
 /// A fresh directory, removed when dropped.

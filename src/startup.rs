@@ -8,13 +8,11 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::cli::{self, Example, Invocation, Nesting, Parsed};
+use crate::cli::{self, Example, Nesting, Parsed, PlanForm};
 use kakoi_runtime::cli::diagnostic::{Diagnostic, Warning};
-use kakoi_runtime::cli::environment::{HostEnvironment, RealEntry};
 use kakoi_runtime::cli::guard_placement::{GUARD_ROOT, GUARD_TABLE};
 use kakoi_runtime::cli::plan::{Plan, NESTING_MARK};
-use kakoi_runtime::cli::planning::{locate_command, plan_for, Request};
-use kakoi_runtime::cli::workspace_facts::real_entry;
+use kakoi_runtime::cli::planning::{home_and_config_dir, locate_command, plan_for, Request};
 
 /// What the start-up ends with: text to print (the usage or the version), a nested run
 /// that goes straight to the command, or everything the start needs.
@@ -48,11 +46,10 @@ pub struct Nested {
     pub arguments: Vec<OsString>,
 }
 
-/// The results of stages 3 to 9.
+/// The results of stages 3 to 9: the plan, and whether it is only to be shown.
 #[derive(Debug)]
 pub struct Prepared {
-    pub invocation: Invocation,
-    pub current_dir: PathBuf,
+    pub print_plan: Option<PlanForm>,
     pub plan: Plan,
 }
 
@@ -71,11 +68,9 @@ where
         // stage 2), because a machine without `bwrap`, and a shell inside an isolation,
         // can still put the configuration in place.
         Parsed::Init(name, example) => {
-            let env = HostEnvironment::from_variables(&host);
-            let home =
-                env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
+            let (_, config_dir) = home_and_config_dir(&host)?;
             return Ok(Outcome::Init(InitRequest {
-                config_dir: env.config_dir(&home),
+                config_dir,
                 name,
                 example,
             }));
@@ -106,11 +101,12 @@ where
     // Only kakoi makes `/dev`, so what is there was placed by the run around this one
     // (specification REQ-465).
     let outer_guard = nested && applied && Path::new(GUARD_ROOT).symlink_metadata().is_ok();
+    let print_plan = invocation.print_plan;
     let plan = plan_for(&Request {
         layers: invocation.layer_selection(),
-        workspace: invocation.workspace.clone(),
-        command: invocation.command.clone(),
-        current_dir: current_dir.clone(),
+        workspace: invocation.workspace,
+        command: invocation.command,
+        current_dir,
         host,
         executable: std::env::current_exe().ok(),
         nested,
@@ -121,11 +117,7 @@ where
             .flatten(),
         landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
     })?;
-    Ok(Outcome::Prepared(Box::new(Prepared {
-        invocation,
-        current_dir,
-        plan,
-    })))
+    Ok(Outcome::Prepared(Box::new(Prepared { print_plan, plan })))
 }
 
 /// Whether the nesting mark is there: only an isolation of kakoi puts it, read-only, and

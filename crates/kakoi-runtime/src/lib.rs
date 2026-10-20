@@ -13,7 +13,7 @@ use kakoi_policy::{diagnostic, policy};
 #[doc(hidden)]
 pub mod cli;
 pub mod layers;
-pub mod planning;
+mod planning;
 
 pub mod config;
 mod input;

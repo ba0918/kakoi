@@ -23,7 +23,7 @@ pub fn named(candidates: &[PathBuf]) -> Vec<NameFact> {
         .iter()
         .filter(|candidate| std::fs::symlink_metadata(candidate).is_ok())
         .map(|candidate| {
-            let real = crate::mount_facts::real_path(candidate);
+            let real = crate::real_paths::real_path(candidate);
             // Looked at through `real` rather than `candidate`, so that the answer agrees
             // with the real path found: asking the kernel to walk the chain again gave
             // "not a program" now and then for a chain of exactly 40 links (seen on CI).
@@ -50,12 +50,12 @@ fn followed_links(path: &Path) -> Vec<PathBuf> {
             Err(_) => return Vec::new(),
         }
     };
-    crate::mount_facts::traverse(&absolute).links
+    crate::real_paths::traverse(&absolute).links
 }
 
 /// `path` with the links of its directory resolved and its own name kept.
 fn resolved_name(path: &Path) -> Option<PathBuf> {
-    let directory = crate::mount_facts::real_path(path.parent()?)?;
+    let directory = crate::real_paths::real_path(path.parent()?)?;
     Some(directory.join(path.file_name()?))
 }
 

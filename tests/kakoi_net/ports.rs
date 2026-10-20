@@ -55,3 +55,27 @@ fn port_input_rejects_ambiguous_empty_or_invalid_ranges() {
         assert!(parse(&[item]).is_err(), "{item}");
     }
 }
+
+// Whether an explicit IP permission covers a DNS rule's ports (an internal address
+// answered for a name) turns on two port sets sharing at least one port.
+// @kotowari[REQ-043]
+#[test]
+fn port_sets_overlap_exactly_when_they_share_a_port() {
+    for (left, right, expected) in [
+        (&["1-10"][..], &["10-20"][..], true),
+        (&["1-10"], &["11-20"], false),
+        (&["11-20"], &["1-10"], false),
+        (&["443"], &["443"], true),
+        (&["1-3", "5-7", "9-11"], &["4", "8", "12"], false),
+        (&["1-3", "5-7", "9-11"], &["4", "8", "11-12"], true),
+        (&["4", "8", "12"], &["1-3", "5-7", "9-11"], false),
+        (&["100-200"], &["1", "2", "3", "150"], true),
+        (&["*"], &["65535"], true),
+    ] {
+        assert_eq!(
+            parse(left).unwrap().overlaps(&parse(right).unwrap()),
+            expected,
+            "{left:?} {right:?}"
+        );
+    }
+}

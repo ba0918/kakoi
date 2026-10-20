@@ -9,6 +9,7 @@ use crate::{
 use kakoi_policy::network::FixedPublication;
 use std::{
     io,
+    num::NonZeroU16,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -16,8 +17,7 @@ use std::{
 
 pub struct Transport {
     // Field order keeps namespace keepers alive until their pasta processes stop.
-    inner: Option<Pasta>,
-    outer: Option<Pasta>,
+    forwarders: Option<Forwarders>,
     app: Arc<NetworkNamespace>,
     gate: HealthGate,
     closed_confirmed: bool,
@@ -51,8 +51,7 @@ impl Transport {
             startup_timeout,
         )?;
         Ok(Self {
-            inner: Some(inner),
-            outer: Some(outer),
+            forwarders: Some(Forwarders { inner, outer }),
             app,
             gate,
             closed_confirmed: false,
@@ -74,9 +73,22 @@ impl Transport {
         &self.gate
     }
 
-    pub(crate) fn gate_mut(&mut self) -> &mut HealthGate {
+    /// Extends the health lease. A closure flushes the lease that this refills, so a
+    /// closure confirmed earlier no longer stands in full and is made again next time.
+    pub(crate) fn renew_for(&mut self, milliseconds: NonZeroU16) -> io::Result<()> {
         self.closed_confirmed = false;
-        &mut self.gate
+        self.gate.renew_for(milliseconds)
+    }
+
+    /// Opens transit again after the controllers and the policy were validated; the
+    /// next closure is made again.
+    pub(crate) fn reopen_until(
+        &mut self,
+        milliseconds: NonZeroU16,
+        deadline: Instant,
+    ) -> io::Result<()> {
+        self.closed_confirmed = false;
+        self.gate.reopen_until(milliseconds, deadline)
     }
 
     pub(crate) fn close_until(&mut self, deadline: Instant) -> io::Result<()> {
@@ -88,10 +100,10 @@ impl Transport {
     }
 
     pub fn is_running(&mut self) -> io::Result<bool> {
-        let (Some(inner), Some(outer)) = (&mut self.inner, &mut self.outer) else {
+        let Some(forwarders) = &mut self.forwarders else {
             return Ok(false);
         };
-        Ok(inner.is_running()? && outer.is_running()?)
+        Ok(forwarders.inner.is_running()? && forwarders.outer.is_running()?)
     }
 
     /// Replace forwarders behind the latched guard, retaining both namespace
@@ -103,11 +115,10 @@ impl Transport {
     pub(crate) fn restart_controlled(
         &mut self,
         deadline: Instant,
-        cancellation: Option<&crate::dns_workers::Cancellation>,
+        cancellation: Option<&crate::cancellation::Cancellation>,
     ) -> io::Result<()> {
         self.close_until(deadline)?;
-        self.inner.take();
-        self.outer.take();
+        self.forwarders.take();
         let remaining = || {
             if cancellation.is_some_and(|cancel| cancel.is_cancelled()) {
                 return Err(io::Error::new(
@@ -144,15 +155,21 @@ impl Transport {
             cancellation,
         )?;
         remaining()?;
-        self.outer = Some(outer);
-        self.inner = Some(inner);
+        self.forwarders = Some(Forwarders { inner, outer });
         Ok(())
     }
+}
+
+/// The two pasta processes, present together or not at all. The inner one, whose
+/// namespace is inside the outer one's, stops first.
+struct Forwarders {
+    inner: Pasta,
+    outer: Pasta,
 }
 
 impl Drop for Transport {
     fn drop(&mut self) {
         // Process teardown follows even if the explicit close cannot be confirmed.
-        let _ = self.close_until(Instant::now() + Duration::from_secs(2));
+        let _ = self.close_until(Instant::now() + crate::nft::COMMAND_BUDGET);
     }
 }

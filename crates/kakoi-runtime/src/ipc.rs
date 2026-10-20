@@ -6,8 +6,8 @@ use std::os::unix::net::UnixStream;
 
 use serde::{de::DeserializeOwned, Serialize};
 
-const MAX_MESSAGE: usize = 16 * 1024 * 1024;
-const MAX_FDS: usize = 16;
+pub(crate) const MAX_MESSAGE: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_FDS: usize = 16;
 
 fn invalid(detail: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, detail)

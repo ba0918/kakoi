@@ -1,11 +1,9 @@
 //! Application privilege boundary inside an already controlled network namespace.
 
 use crate::{init, namespace::NetworkNamespace};
-use kakoi_linux::{
-    diagnostic::Diagnostic,
-    launch::{self, BwrapCommand},
-    plan::Plan,
-};
+use kakoi_linux::launch::{self, BwrapCommand};
+use kakoi_plan::plan::Plan;
+use kakoi_policy::diagnostic::Diagnostic;
 use std::{os::fd::RawFd, time::Duration};
 
 /// Connects the library's descriptor-mounted init to the same network boundary
@@ -15,10 +13,8 @@ pub fn prepare_retained(
     mounts: &[kakoi_linux::retained_mounts::RetainedMount],
     namespace: &NetworkNamespace,
 ) -> std::io::Result<BwrapCommand> {
-    let mut bwrap =
-        launch::assemble_retained_network(plan, mounts, unsafe { libc::getuid() }, unsafe {
-            libc::getgid()
-        })?;
+    let (uid, gid) = identity();
+    let mut bwrap = launch::assemble_retained_network(plan, mounts, uid, gid)?;
     namespace.enter_before_exec(&mut bwrap.command)?;
     Ok(bwrap)
 }
@@ -26,12 +22,7 @@ pub fn prepare_retained(
 /// The supervisor must install and verify network enforcement before spawning the
 /// returned command. This prepares the privilege boundary, not a network policy.
 pub fn prepare(plan: &Plan, namespace: &NetworkNamespace) -> Result<BwrapCommand, Diagnostic> {
-    let uid = unsafe { libc::getuid() };
-    let gid = unsafe { libc::getgid() };
-    let target = launch::network_resolver_target(plan)?;
-    let mut bwrap = launch::assemble_network(plan, uid, gid, target.as_deref(), None)?;
-    enter(&mut bwrap, namespace)?;
-    Ok(bwrap)
+    assemble(plan, namespace, None)
 }
 
 /// How the isolation's process 1 is started: descriptor numbers as they will be
@@ -62,22 +53,29 @@ pub(crate) fn prepare_supervised(
         .map(Into::into)
         .into(),
     };
-    let target = launch::network_resolver_target(plan)?;
-    let mut bwrap = launch::assemble_network(
-        plan,
-        unsafe { libc::getuid() },
-        unsafe { libc::getgid() },
-        target.as_deref(),
-        Some(&supervisor),
-    )?;
-    enter(&mut bwrap, namespace)?;
-    Ok(bwrap)
+    assemble(plan, namespace, Some(&supervisor))
 }
 
-fn enter(bwrap: &mut BwrapCommand, namespace: &NetworkNamespace) -> Result<(), Diagnostic> {
+/// The plan's bwrap command under the caller's identity, with the managed resolver in
+/// place, entering `namespace` before it executes.
+fn assemble(
+    plan: &Plan,
+    namespace: &NetworkNamespace,
+    supervisor: Option<&launch::ProcessSupervisor>,
+) -> Result<BwrapCommand, Diagnostic> {
+    let (uid, gid) = identity();
+    let target = launch::network_resolver_target(plan)?;
+    let mut bwrap = launch::assemble_network(plan, uid, gid, target.as_deref(), supervisor)?;
     namespace
         .enter_before_exec(&mut bwrap.command)
         .map_err(|error| {
             Diagnostic::bwrap(format!("prepare application network namespace: {error}"))
-        })
+        })?;
+    Ok(bwrap)
+}
+
+/// The caller's user and group, which the isolation maps inside.
+fn identity() -> (libc::uid_t, libc::gid_t) {
+    // SAFETY: getuid and getgid only read the calling process's identity; they cannot fail.
+    unsafe { (libc::getuid(), libc::getgid()) }
 }

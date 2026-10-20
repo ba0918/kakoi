@@ -94,6 +94,7 @@ print(code, repr(out), err.startswith('kakoi: bwrap: '), len(err.splitlines()))
 
 mod following {
     use crate::common::TempDir;
+    use crate::dns_fixture::{dns_rule, loopback_namespace};
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig, HostDns},
         filter,
@@ -102,7 +103,7 @@ mod following {
         resolution::UpstreamWait,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::network::{Allow, Destination, DnsUpstream, NetworkLimits, Protocol};
+    use kakoi_runtime::cli::network::{DnsUpstream, NetworkLimits};
     use std::{
         io::Read,
         net::UdpSocket,
@@ -181,14 +182,7 @@ mod following {
         if let Some(change) = change {
             std::fs::write(file, change).unwrap();
         }
-        let ns = Arc::new(NetworkNamespace::create().unwrap());
-        assert!(ns
-            .command("/usr/sbin/ip")
-            .unwrap()
-            .args(["link", "set", "lo", "up"])
-            .status()
-            .unwrap()
-            .success());
+        let ns = loopback_namespace();
         nft::apply(
             &ns,
             Path::new("/usr/sbin/nft"),
@@ -205,17 +199,12 @@ mod following {
         let runtime = DnsRuntime::new(
             Arc::clone(&ns),
             DnsRuntimeConfig {
-                policy: vec![Allow {
-                    destination: Destination::Dns("api.example.com".parse().unwrap()),
-                    protocol: Protocol::Tcp,
-                    ports: vec!["443".into()].try_into().unwrap(),
-                }],
+                policy: vec![dns_rule("api.example.com")],
                 upstreams: fixture_parse(&read).unwrap(),
                 limits,
                 nft: nft_program.into(),
                 trust: None,
                 scope: AddressContext::default(),
-                generation: 0,
                 host_dns: Some(host_dns),
             },
             |_| None,
@@ -257,12 +246,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
     }
 
     fn answer(query: &[u8], address: [u8; 4]) -> Vec<u8> {
-        let mut answer = query.to_vec();
-        answer[2] |= 0x80;
-        answer[7] = 1;
-        answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4]);
-        answer.extend(address);
-        answer
+        crate::dns_fixture::a_answer(query, 30, address)
     }
 
     fn finish(mut child: Child, runtime: &mut DnsRuntime) -> String {
@@ -542,27 +526,39 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         }
     }
 
+    // A new configuration that cannot be read (the file is gone) and one that is read
+    // but names no upstream both fail the question.
     // @kotowari[EX-239, EX-240]
     #[test]
-    fn an_unreadable_new_host_dns_fails_queries_without_falling_back() {
-        let temp = TempDir::new();
-        let (old, old_port) = upstream();
-        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
-        let (ns, mut runtime) = runtime(&file);
-        std::fs::write(&file, "nothing usable\n").unwrap();
-        // Let the change be noticed before the application asks.
-        let noticed = Instant::now() + Duration::from_secs(3);
-        while Instant::now() < noticed {
-            runtime.poll(Instant::now()).unwrap();
-            std::thread::sleep(Duration::from_millis(10));
+    fn an_unreadable_or_unusable_new_host_dns_fails_queries_without_falling_back() {
+        for unreadable in [true, false] {
+            let temp = TempDir::new();
+            let (old, old_port) = upstream();
+            let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+            let (ns, mut runtime) = runtime(&file);
+            if unreadable {
+                std::fs::remove_file(&file).unwrap();
+            } else {
+                std::fs::write(&file, "nothing usable\n").unwrap();
+            }
+            // Let the change be noticed before the application asks.
+            let noticed = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < noticed {
+                runtime.poll(Instant::now()).unwrap();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let app = client(&ns);
+            assert_eq!(
+                finish(app, &mut runtime),
+                "2 -\n",
+                "unreadable: {unreadable}"
+            );
+            let mut bytes = [0; 512];
+            assert!(
+                old.recv_from(&mut bytes).is_err(),
+                "the old upstream was used as a fallback (unreadable: {unreadable})"
+            );
         }
-        let app = client(&ns);
-        assert_eq!(finish(app, &mut runtime), "2 -\n");
-        let mut bytes = [0; 512];
-        assert!(
-            old.recv_from(&mut bytes).is_err(),
-            "the old upstream was used as a fallback"
-        );
     }
 
     // The query sent before the change counts. With two allowed, the redo

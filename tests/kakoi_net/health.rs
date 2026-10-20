@@ -6,7 +6,25 @@ pub(super) fn assert_loopback(namespace: &NetworkNamespace, expected: bool) {
     assert_loopback_command(namespace.command("/usr/bin/python3").unwrap(), expected);
 }
 
-pub(super) fn assert_loopback_command(mut command: std::process::Command, expected: bool) {
+pub(super) fn assert_loopback_command(command: std::process::Command, expected: bool) {
+    assert_eq!(
+        loopback_exchanges(command),
+        if expected {
+            "yes\nyes\nyes\nyes\n"
+        } else {
+            "no\nno\nno\nno\n"
+        }
+    );
+}
+
+/// Whether every loopback exchange `command`, a Python, tries fails.
+pub(super) fn loopback_blocked(command: std::process::Command) -> bool {
+    loopback_exchanges(command) == "no\nno\nno\nno\n"
+}
+
+/// What each of the four loopback exchanges (TCP and UDP over IPv4 and IPv6) did, one
+/// `yes` or `no` per line, tried by `command`, a Python.
+fn loopback_exchanges(mut command: std::process::Command) -> String {
     let output = command
         .args([
             "-c",
@@ -45,15 +63,7 @@ for af, address in [(socket.AF_INET, '127.0.0.1'), (socket.AF_INET6, '::1')]:
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let actual = String::from_utf8(output.stdout).unwrap();
-    assert_eq!(
-        actual,
-        if expected {
-            "yes\nyes\nyes\nyes\n"
-        } else {
-            "no\nno\nno\nno\n"
-        }
-    );
+    String::from_utf8(output.stdout).unwrap()
 }
 
 // @kotowari[REQ-057, REQ-058]

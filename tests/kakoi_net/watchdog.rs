@@ -14,15 +14,17 @@ fn independent_watchdog_latches_transit_closed_after_heartbeats_stop() {
     let app = NetworkNamespace::create().unwrap();
     let mut gate = HealthGate::create("/usr/sbin/nft").unwrap();
     gate.renew_for(NonZeroU16::new(10000).unwrap()).unwrap();
-    let mut watchdog = gate.watchdog(Duration::from_millis(400)).unwrap();
+    // Heartbeats every 100 ms keep it healthy past its timeout, with time to spare: an
+    // acknowledgement late by most of the timeout on a loaded host is still in time.
+    let mut watchdog = gate.watchdog(Duration::from_secs(2)).unwrap();
     let pid = watchdog.pid();
-    for _ in 0..6 {
+    for _ in 0..25 {
         watchdog.heartbeat().unwrap();
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(watchdog.poll().unwrap(), WatchdogState::Healthy);
     }
     assert_loopback(gate.namespace(), true);
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(10);
     while watchdog.poll().unwrap() != WatchdogState::Closed {
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(5));
@@ -72,7 +74,13 @@ fn controller_process_loss_is_independently_blocked() {
         loop {
             match watchdog.poll().unwrap() {
                 WatchdogState::Closed => break,
-                WatchdogState::Healthy => watchdog.heartbeat().unwrap(),
+                // The stop can land between this poll and the heartbeat. The
+                // watchdog that closed transit meanwhile refuses the heartbeat,
+                // and the next poll reports the closure.
+                WatchdogState::Healthy => match watchdog.heartbeat() {
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+                    result => result.unwrap(),
+                },
                 WatchdogState::Unresponsive => {}
             }
             std::thread::sleep(Duration::from_millis(20));

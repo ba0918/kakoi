@@ -11,7 +11,7 @@ use std::process::Output;
 mod common;
 
 use common::fixture::{home, layers, merged, variables, Facts, CONFIG_DIR, WORKTREE};
-use common::{binary, output_report, TempDir};
+use common::{assert_success, binary, output_report, stdout, TempDir};
 use kakoi_runtime::cli::copies::CopySources;
 use kakoi_runtime::cli::diagnostic::Diagnostic;
 use kakoi_runtime::cli::guard_placement::GuardPlan;
@@ -114,14 +114,6 @@ impl Scene {
         common::write_executable(&shim.join(name), format!("#!/bin/sh\necho shim {name}\n"));
         shim
     }
-}
-
-fn assert_success(output: &Output) {
-    assert_eq!(output.status.code(), Some(0), "{}", output_report(output));
-}
-
-fn stdout(output: &Output) -> String {
-    String::from_utf8(output.stdout.clone()).unwrap()
 }
 
 /// The sockets directly in "/run" and one level below, as the host has them.
@@ -253,7 +245,8 @@ fn ex_911_a_written_rw_place_can_be_written_and_the_host_keeps_it() {
 #[test]
 fn ex_912_the_isolation_has_an_empty_tmp_of_its_own() {
     let scene = Scene::new(&[], "");
-    let host_file = TempDir::new();
+    // Under the host's own /tmp whatever TMPDIR says, so that the host's /tmp is not empty.
+    let host_file = TempDir::under(Path::new("/tmp"));
     let made = format!("kakoi-listed-made-{}", std::process::id());
 
     let output = scene.run(&format!(
@@ -269,7 +262,7 @@ fn ex_912_the_isolation_has_an_empty_tmp_of_its_own() {
 // @kotowari[EX-913]
 #[test]
 fn ex_913_a_place_under_tmp_written_rw_is_shared_with_the_host() {
-    let shared = TempDir::new();
+    let shared = TempDir::under(Path::new("/tmp"));
     let shared_path = shared.path().to_str().unwrap();
     let scene = Scene::new(&[shared_path], "");
 

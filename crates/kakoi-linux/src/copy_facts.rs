@@ -10,7 +10,7 @@
 use std::fs::{self, OpenOptions};
 use std::io::Read;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::copies::{
     CopiedEntry, CopySource, CopySources, FileContent, NotCopied, BYTE_LIMIT, ENTRY_LIMIT,
@@ -38,7 +38,6 @@ pub fn read_copy_sources(items: &[ResolvedItem]) -> Result<CopySources, Diagnost
                 read_directory(
                     &item.real,
                     Path::new(""),
-                    item,
                     &mut budget,
                     &mut entries,
                     &mut collected.not_copied,
@@ -49,7 +48,7 @@ pub fn read_copy_sources(items: &[ResolvedItem]) -> Result<CopySources, Diagnost
                 }
             }
             EntryKind::NotDirectory => {
-                let (mode, content) = read_file(&item.real, item, &mut budget)?;
+                let (mode, content) = read_file(&item.real, &mut budget)?;
                 CopySource::File { mode, content }
             }
         };
@@ -59,20 +58,18 @@ pub fn read_copy_sources(items: &[ResolvedItem]) -> Result<CopySources, Diagnost
 }
 
 /// What one item may still take: the entries and the bytes left of its limits.
-struct Budget {
+struct Budget<'a> {
+    item: &'a ResolvedItem,
     entries: usize,
     bytes: u64,
-    written: String,
-    real: PathBuf,
 }
 
-impl Budget {
-    fn new(item: &ResolvedItem) -> Self {
+impl<'a> Budget<'a> {
+    fn new(item: &'a ResolvedItem) -> Self {
         Self {
+            item,
             entries: ENTRY_LIMIT,
             bytes: BYTE_LIMIT,
-            written: item.written.clone(),
-            real: item.real.clone(),
         }
     }
 
@@ -83,8 +80,8 @@ impl Budget {
             Diagnostic::path(format!(
                 "the `rw-copy` item `{}` at {} holds more than {ENTRY_LIMIT} entries; \
                  name something smaller, or use `ro` to show it without copying it",
-                self.written,
-                self.real.display()
+                self.item.written,
+                self.item.real.display()
             ))
         })?;
         Ok(())
@@ -102,8 +99,8 @@ impl Budget {
             Diagnostic::path(format!(
                 "the `rw-copy` item `{}` at {} holds more than {BYTE_LIMIT} bytes (reached at \
                  {}); name something smaller, or use `ro` to show it without copying it",
-                self.written,
-                self.real.display(),
+                self.item.written,
+                self.item.real.display(),
                 path.display()
             ))
         })?;
@@ -118,16 +115,16 @@ impl Budget {
 fn read_directory(
     directory: &Path,
     relative: &Path,
-    item: &ResolvedItem,
     budget: &mut Budget,
     entries: &mut Vec<CopiedEntry>,
     not_copied: &mut Vec<NotCopied>,
 ) -> Result<(), Diagnostic> {
+    let item = budget.item;
     let read = fs::read_dir(directory).map_err(|error| unreadable(item, directory, error))?;
     let mut found: Vec<_> = read
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| unreadable(item, directory, error))?;
-    found.sort_by_key(std::fs::DirEntry::file_name);
+    found.sort_by_cached_key(std::fs::DirEntry::file_name);
     for entry in found {
         let path = entry.path();
         let relative = relative.join(entry.file_name());
@@ -143,9 +140,9 @@ fn read_directory(
                 relative: relative.clone(),
                 mode: mode_of(&metadata),
             });
-            read_directory(&path, &relative, item, budget, entries, not_copied)?;
+            read_directory(&path, &relative, budget, entries, not_copied)?;
         } else if kind.is_file() {
-            let (mode, content) = read_file(&path, item, budget)?;
+            let (mode, content) = read_file(&path, budget)?;
             entries.push(CopiedEntry::File {
                 relative,
                 mode,
@@ -169,11 +166,8 @@ fn read_directory(
 /// path itself, so nothing put there between the resolution and here stops the start-up or
 /// leads the read somewhere else. One byte more than the budget allows is read, so a file
 /// over the limit is refused rather than silently cut short.
-fn read_file(
-    path: &Path,
-    item: &ResolvedItem,
-    budget: &mut Budget,
-) -> Result<(u32, FileContent), Diagnostic> {
+fn read_file(path: &Path, budget: &mut Budget) -> Result<(u32, FileContent), Diagnostic> {
+    let item = budget.item;
     let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)

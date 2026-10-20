@@ -426,9 +426,7 @@ pub fn skipped_paths(expanded: &ExpandedPolicy, facts: &MountFacts) -> Vec<Skipp
     values
         .filter_map(|(role, written, expansion)| {
             let reason = match expansion {
-                Expansion::Valueless(variable) => {
-                    format!("`${{{}}}` has no value", variable.name())
-                }
+                Expansion::Valueless(variable) => valueless_reason(*variable),
                 Expansion::Path(path) if facts.entry(path) == RealEntry::Missing => {
                     "does not exist".to_string()
                 }
@@ -482,7 +480,7 @@ pub fn resolve_written(
                     directive: item.directive,
                     written: item.written.to_string(),
                     origin: item.origin.clone(),
-                    reason: format!("`${{{}}}` has no value", variable.name()),
+                    reason: valueless_reason(*variable),
                 });
                 continue;
             }
@@ -492,7 +490,7 @@ pub fn resolve_written(
         let candidate = Candidate {
             directive: item.directive,
             written: item.written.to_string(),
-            origin: ItemOrigin::Written(item.origin.clone()),
+            origin: item.origin.clone(),
             key: entry.path().unwrap_or(path).to_path_buf(),
             entry,
         };
@@ -528,27 +526,20 @@ pub fn resolve_written(
         return Err(diagnostic);
     }
     for candidate in merged {
-        let (real, kind) = match candidate.entry {
-            RealEntry::Missing => {
-                let ItemOrigin::Written(origin) = candidate.origin else {
-                    unreachable!("the written items are all written");
-                };
-                resolved.skipped.push(SkippedItem {
-                    directive: candidate.directive,
-                    written: candidate.written,
-                    origin,
-                    reason: "does not exist".to_string(),
-                });
-                continue;
-            }
-            RealEntry::Directory(real) => (real, EntryKind::Directory),
-            RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
+        let Some((real, kind)) = real_and_kind(candidate.entry) else {
+            resolved.skipped.push(SkippedItem {
+                directive: candidate.directive,
+                written: candidate.written,
+                origin: candidate.origin,
+                reason: "does not exist".to_string(),
+            });
+            continue;
         };
         resolved.items.push(ResolvedItem {
             directive: candidate.directive,
             real,
             kind,
-            origin: candidate.origin,
+            origin: ItemOrigin::Written(candidate.origin),
             written: candidate.written,
         });
     }
@@ -654,23 +645,22 @@ fn scan_items(
             .collect();
         // Any swappable `ro` around the target stops the run, even inside one that cannot be
         // swapped: the swappable one is what the next start could be made to re-point.
-        let into_ro = containing_ro
+        if let Some(ro) = containing_ro
             .iter()
             .find(|ro| swappable_ro.contains(&ro.real))
-            .or(containing_ro.first());
-        match into_ro {
-            Some(ro) if swappable_ro.contains(&ro.real) => {
-                return Err(Diagnostic::path(format!(
-                    "the scan found the symbolic link {} pointing at {}, inside the `ro` item \
-                     `{}` at {}, whose resolution passes through a writable item, so the link \
-                     and the item could be re-pointed from inside the isolation and the next \
-                     start made to empty another file",
-                    hit.found_at.display(),
-                    real.display(),
-                    ro.written,
-                    ro.real.display()
-                )));
-            }
+        {
+            return Err(Diagnostic::path(format!(
+                "the scan found the symbolic link {} pointing at {}, inside the `ro` item \
+                 `{}` at {}, whose resolution passes through a writable item, so the link \
+                 and the item could be re-pointed from inside the isolation and the next \
+                 start made to empty another file",
+                hit.found_at.display(),
+                real.display(),
+                ro.written,
+                ro.real.display()
+            )));
+        }
+        match containing_ro.first() {
             Some(ro) => scanned.left_visible.push(LeftVisible {
                 link: hit.found_at.clone(),
                 reason: format!(
@@ -681,11 +671,11 @@ fn scan_items(
                     ro.real.display()
                 ),
             }),
-            None => {
-                scanned
-                    .hidden
-                    .extend(hidden(&hit.found_at, ItemOrigin::Scan, hit.target.clone()))
-            }
+            None => scanned.hidden.extend(generated_hide(
+                &hit.found_at,
+                ItemOrigin::Scan,
+                hit.target.clone(),
+            )),
         }
     }
     Ok(scanned)
@@ -727,7 +717,7 @@ fn hide_mounts_items(
             {
                 continue;
             }
-            generated.extend(hidden(
+            generated.extend(generated_hide(
                 &mount.target,
                 ItemOrigin::HideMounts,
                 facts.entry(&mount.target),
@@ -749,7 +739,7 @@ fn secret_items(
     // A secret file that does not exist is the warning of section 9, not a hide.
     for (name, path) in &expanded.secrets {
         if let Some(path) = path.path() {
-            generated.extend(hidden(
+            generated.extend(generated_hide(
                 path,
                 ItemOrigin::SecretFile(name.clone()),
                 facts.entry(path),
@@ -758,7 +748,7 @@ fn secret_items(
     }
     if let Some(config_dir) = &variables.config_dir {
         let config_secrets = config_dir.join("secrets");
-        generated.extend(hidden(
+        generated.extend(generated_hide(
             &config_secrets,
             ItemOrigin::ConfigSecrets,
             facts.entry(&config_secrets),
@@ -772,18 +762,14 @@ fn secret_items(
 struct Candidate {
     directive: Directive,
     written: String,
-    origin: ItemOrigin,
+    origin: LayerOrigin,
     key: PathBuf,
     entry: RealEntry,
 }
 
 /// A generated `hide` on what exists at `written`; nothing when nothing exists.
-fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<ResolvedItem> {
-    let (real, kind) = match entry {
-        RealEntry::Missing => return None,
-        RealEntry::Directory(real) => (real, EntryKind::Directory),
-        RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
-    };
+fn generated_hide(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<ResolvedItem> {
+    let (real, kind) = real_and_kind(entry)?;
     Some(ResolvedItem {
         directive: Directive::Hide,
         real,
@@ -791,6 +777,34 @@ fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<Resolv
         origin,
         written: written.display().to_string(),
     })
+}
+
+/// The last of `items` (they are in the order they are applied) whose real path is `path`
+/// or one of its ancestors: the item in force at `path` inside the isolation.
+pub(crate) fn covering_item<'a>(
+    items: &'a [ResolvedItem],
+    path: &Path,
+) -> Option<&'a ResolvedItem> {
+    items.iter().rfind(|item| path.starts_with(&item.real))
+}
+
+/// Whether the item in force at `path` hides it.
+pub(crate) fn hidden(path: &Path, items: &[ResolvedItem]) -> bool {
+    covering_item(items, path).is_some_and(|item| item.directive == Directive::Hide)
+}
+
+/// The real path of what exists and whether it is a directory; nothing when nothing exists.
+fn real_and_kind(entry: RealEntry) -> Option<(PathBuf, EntryKind)> {
+    match entry {
+        RealEntry::Missing => None,
+        RealEntry::Directory(real) => Some((real, EntryKind::Directory)),
+        RealEntry::NotDirectory(real) => Some((real, EntryKind::NotDirectory)),
+    }
+}
+
+/// Why a path whose variable has no value is skipped.
+pub(crate) fn valueless_reason(variable: Variable) -> String {
+    format!("`${{{}}}` has no value", variable.name())
 }
 
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).

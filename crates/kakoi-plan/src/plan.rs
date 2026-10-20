@@ -81,7 +81,13 @@ pub fn resolve_isolation(inputs: &Inputs, facts: &IsolationFacts) -> Result<Isol
         inputs.current_dir,
         &facts.mounts,
     );
-    let (generating, skipped_generators) = generating_policy(inputs, &facts.mounts)?;
+    // The same choice the outer layer made with `generating_policy`, from the written
+    // items already resolved above.
+    let (generating, skipped_generators) = if inputs.policy.mounts_mode == ListMode::Listed {
+        listed_generators(inputs, &facts.mounts, &before_generation)
+    } else {
+        (inputs.expanded.clone(), Vec::new())
+    };
     let mut mounts = generate(
         before_generation,
         &generating,
@@ -170,6 +176,16 @@ pub fn generating_policy(
         return Ok((inputs.expanded.clone(), Vec::new()));
     }
     let written = resolve_written(inputs.expanded, facts)?;
+    Ok(listed_generators(inputs, facts, &written))
+}
+
+/// The generators the "listed" mount mode keeps: those whose places it shows, given the
+/// written items as resolved.
+fn listed_generators(
+    inputs: &Inputs,
+    facts: &MountFacts,
+    written: &ResolvedMounts,
+) -> (ExpandedPolicy, Vec<SkippedPath>) {
     let (root, _) = listed_root(
         inputs.policy.mounts_system,
         inputs.policy.network_mode,
@@ -177,7 +193,7 @@ pub fn generating_policy(
         inputs.expanded,
         facts,
     );
-    Ok(shown_generators(inputs.expanded, facts, &root))
+    shown_generators(inputs.expanded, facts, &root)
 }
 
 fn check_current_dir_shown(current_dir: &Path, root: &ListedRoot) -> Result<(), Diagnostic> {

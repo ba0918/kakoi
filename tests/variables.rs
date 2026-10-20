@@ -3,23 +3,15 @@ use std::process::Command;
 
 mod common;
 
-use common::TempDir;
+use common::fixture::home;
+use common::{git, TempDir};
 use kakoi_runtime::cli::diagnostic::Kind;
-use kakoi_runtime::cli::environment::{HomeDirectory, HostEnvironment, PathState, RealEntry};
+use kakoi_runtime::cli::environment::{HostEnvironment, PathState, RealEntry};
+use kakoi_runtime::cli::real_paths::real_entry;
 use kakoi_runtime::cli::variables::{
     derive_variables, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
-use kakoi_runtime::cli::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
-
-/// The checked home directory `/home/u`.
-fn home() -> HomeDirectory {
-    HostEnvironment {
-        home: Some(PathBuf::from("/home/u")),
-        xdg_config_home: None,
-    }
-    .home_directory(&RealEntry::Directory(PathBuf::from("/home/u")))
-    .unwrap()
-}
+use kakoi_runtime::cli::workspace_facts::{collect_workspace_facts, probe_path};
 
 /// The configuration directory under that home, as found on disk.
 fn config_dir() -> PathState {
@@ -464,27 +456,6 @@ fn the_config_dir_follows_xdg_config_home() {
     assert_eq!(
         variables.config_dir.as_deref(),
         Some(Path::new("/real/xdg/kakoi"))
-    );
-}
-
-/// Runs git in `cwd` with the developer's own configuration shut out.
-fn git(cwd: &Path, arguments: &[&str]) {
-    let output = Command::new("git")
-        .current_dir(cwd)
-        .args(["-c", "protocol.file.allow=always"])
-        .args(arguments)
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_AUTHOR_NAME", "test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
-        .env("GIT_COMMITTER_NAME", "test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {arguments:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
     );
 }
 

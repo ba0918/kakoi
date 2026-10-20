@@ -13,9 +13,10 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, ExitCode};
 
-use crate::cli::command_limits::{AllowedList, ALLOWED_LIST, DYNAMIC_LINKER, FIRST_PROCESS};
-use crate::cli::diagnostic::{Diagnostic, Kind, Warning};
-use crate::cli::landlock::{open_path, restrict_execution};
+use crate::cli::report;
+use crate::command_limits::{AllowedList, ALLOWED_LIST, DYNAMIC_LINKER, FIRST_PROCESS};
+use crate::diagnostic::{Diagnostic, Kind, Warning};
+use crate::landlock::{open_path, restrict_execution};
 
 /// Acts as the first process when this executable was started from its place, and
 /// returns the exit code; `None` otherwise, and kakoi goes on as itself.
@@ -78,9 +79,4 @@ fn start(given: &OsString, path: &OsString, arguments: Vec<OsString>) -> ExitCod
         Kind::CommandNotExecutable,
         format!("{}: {error}", Path::new(path).display()),
     ))
-}
-
-fn report(diagnostic: Diagnostic) -> ExitCode {
-    let _ = writeln!(std::io::stderr(), "{diagnostic}");
-    ExitCode::from(diagnostic.exit_code() as u8)
 }
