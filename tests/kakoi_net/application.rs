@@ -1,11 +1,7 @@
 use crate::common::{home_with_workspace, RW_WORKSPACE};
 use crate::dns_fixture::{a_answer, dns_rule, filtered_namespace, local_upstream};
+use crate::supervisor::plan_in;
 use kakoi_net::{application, namespace::NetworkNamespace};
-use kakoi_runtime::cli::{
-    layers::LayerSelection,
-    planning::{plan_for, Request},
-};
-use std::collections::BTreeMap;
 
 // @kotowari[REQ-060, REQ-150]
 #[test]
@@ -24,13 +20,6 @@ fn application_shares_the_controlled_network_without_its_authority_or_descriptor
         .unwrap()
         .success());
     let net = std::fs::read_link(format!("/proc/{}/ns/net", namespace.keeper_pid())).unwrap();
-    let mut host = BTreeMap::new();
-    host.insert("HOME".into(), home.path().as_os_str().to_owned());
-    host.insert(
-        "XDG_CONFIG_HOME".into(),
-        home.path().join(".config").into_os_string(),
-    );
-    host.insert("PATH".into(), "/usr/bin:/bin:/usr/sbin".into());
     let script = r#"
 import os, socket, subprocess, sys
 assert open('/etc/resolv.conf').read() == 'nameserver 127.0.0.53\n'
@@ -66,15 +55,11 @@ else:
 open('app-write', 'w').write('ok')
 print('isolated')
 "#;
-    let plan = plan_for(&Request {
-        layers: LayerSelection {
-            profile: "default".into(),
-            policy_file: None,
-            rw: vec![],
-            hide: vec![],
-        },
-        workspace: Some(workspace.clone()),
-        command: vec![
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin:/usr/sbin",
+        vec![
             "/usr/bin/python3".into(),
             "-c".into(),
             script.into(),
@@ -82,16 +67,8 @@ print('isolated')
             unsafe { libc::getuid() }.to_string().into(),
             unsafe { libc::getgid() }.to_string().into(),
         ],
-        current_dir: workspace.clone(),
-        host,
-        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
-        nested: false,
-        applied: true,
-        outer_guard: false,
-        outer_table: None,
-        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
-    })
-    .unwrap();
+        kakoi_runtime::cli::landlock::abi_version(),
+    );
     let host_resolver = std::fs::read("/etc/resolv.conf").unwrap();
     let mut launch = application::prepare(&plan, &namespace).unwrap();
     let output = launch.command.output().unwrap();
@@ -162,13 +139,6 @@ fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
         |_| None,
     )
     .unwrap();
-    let mut host = BTreeMap::new();
-    host.insert("HOME".into(), home.path().as_os_str().to_owned());
-    host.insert(
-        "XDG_CONFIG_HOME".into(),
-        home.path().join(".config").into_os_string(),
-    );
-    host.insert("PATH".into(), "/usr/bin:/bin".into());
     let script = r#"
 import socket
 assert socket.gethostbyname('api.example.com') == '1.1.1.1'
@@ -180,25 +150,13 @@ else:
     raise AssertionError('unlisted DNS name resolved')
 print('managed-dns')
 "#;
-    let plan = plan_for(&Request {
-        layers: LayerSelection {
-            profile: "default".into(),
-            policy_file: None,
-            rw: vec![],
-            hide: vec![],
-        },
-        workspace: Some(workspace.clone()),
-        command: vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
-        current_dir: workspace,
-        host,
-        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
-        nested: false,
-        applied: true,
-        outer_guard: false,
-        outer_table: None,
-        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
-    })
-    .unwrap();
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin",
+        vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
+        kakoi_runtime::cli::landlock::abi_version(),
+    );
     let mut launch = application::prepare(&plan, &ns).unwrap();
     let mut child = launch
         .command
@@ -251,32 +209,13 @@ fn filtered_run_with_landlock(
         format!("{RW_WORKSPACE}{mounts}\n[network]\nmode='filtered'\n"),
     );
     let namespace = NetworkNamespace::create().unwrap();
-    let mut host = BTreeMap::new();
-    host.insert("HOME".into(), home.path().as_os_str().to_owned());
-    host.insert(
-        "XDG_CONFIG_HOME".into(),
-        home.path().join(".config").into_os_string(),
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin:/usr/sbin",
+        vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
+        abi,
     );
-    host.insert("PATH".into(), "/usr/bin:/bin:/usr/sbin".into());
-    let plan = plan_for(&Request {
-        layers: LayerSelection {
-            profile: "default".into(),
-            policy_file: None,
-            rw: vec![],
-            hide: vec![],
-        },
-        workspace: Some(workspace.clone()),
-        command: vec!["/usr/bin/python3".into(), "-c".into(), script.into()],
-        current_dir: workspace.clone(),
-        host,
-        executable: Some(std::path::PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
-        nested: false,
-        applied: true,
-        outer_guard: false,
-        outer_table: None,
-        landlock_abi: abi,
-    })
-    .unwrap();
     let arguments = plan
         .arguments
         .iter()

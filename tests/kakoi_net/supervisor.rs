@@ -11,6 +11,7 @@ use kakoi_runtime::cli::{
 };
 use std::{
     collections::BTreeMap,
+    ffi::OsString,
     io::Read,
     path::{Path, PathBuf},
     process::Stdio,
@@ -28,33 +29,52 @@ pub(crate) fn filtered_plan(script: &str) -> (TempDir, PathBuf, Plan) {
         ".config/kakoi/profile/default.toml",
         format!("{RW_WORKSPACE}\n[network]\nmode='filtered'\n"),
     );
+    let plan = plan_in(
+        &home,
+        &workspace,
+        "/usr/bin:/bin",
+        vec!["python3".into(), "-c".into(), script.into()],
+        kakoi_runtime::cli::landlock::abi_version(),
+    );
+    (home, workspace, plan)
+}
+
+/// The plan of `home`'s `default` profile for `command`, run from `workspace` by the
+/// built binary, with the host's `HOME` and `XDG_CONFIG_HOME` in `home`, its `PATH`
+/// `path`, and `abi` standing for its Landlock ABI version.
+pub(crate) fn plan_in(
+    home: &TempDir,
+    workspace: &Path,
+    path: &str,
+    command: Vec<OsString>,
+    abi: Option<u32>,
+) -> Plan {
     let mut host = BTreeMap::new();
     host.insert("HOME".into(), home.path().as_os_str().to_owned());
     host.insert(
         "XDG_CONFIG_HOME".into(),
         home.path().join(".config").into_os_string(),
     );
-    host.insert("PATH".into(), "/usr/bin:/bin".into());
-    let plan = plan_for(&Request {
+    host.insert("PATH".into(), path.into());
+    plan_for(&Request {
         layers: LayerSelection {
             profile: "default".into(),
             policy_file: None,
             rw: vec![],
             hide: vec![],
         },
-        workspace: Some(workspace.clone()),
-        command: vec!["python3".into(), "-c".into(), script.into()],
-        current_dir: workspace.clone(),
+        workspace: Some(workspace.to_path_buf()),
+        command,
+        current_dir: workspace.to_path_buf(),
         host,
-        executable: Some(PathBuf::from(env!("CARGO_BIN_EXE_kakoi"))),
+        executable: Some(PathBuf::from(INIT)),
         nested: false,
         applied: true,
         outer_guard: false,
         outer_table: None,
-        landlock_abi: kakoi_runtime::cli::landlock::abi_version(),
+        landlock_abi: abi,
     })
-    .unwrap();
-    (home, workspace, plan)
+    .unwrap()
 }
 
 /// Standard output reaches end of file only when every process holding it is gone.
