@@ -9,9 +9,9 @@ use std::process::{Command, Output};
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, profile, run,
-    run_command_from_deleted_dir, run_command_with_soft_fd_limit, run_from_deleted_dir, run_inside,
-    TempDir, RW_WORKSPACE,
+    assert_diagnostic, binary, directives_at, home_with_workspace, output_report, printed_plan,
+    profile, run, run_command_from_deleted_dir, run_command_with_soft_fd_limit,
+    run_from_deleted_dir, run_inside, TempDir, RW_WORKSPACE,
 };
 
 // @kotowari[REQ-291, REQ-library-402, EX-library-403]
@@ -1797,20 +1797,7 @@ fn json_plan(home: &TempDir, workspace: &Path) -> serde_json::Value {
         ])
         .output()
         .unwrap();
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
-}
-
-/// The items of `plan` mounted at `path`, as their directives.
-fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
-    plan["mounts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["path"] == path.to_str().unwrap())
-        .map(|item| item["directive"].as_str().unwrap())
-        .collect()
+    printed_plan(&output)
 }
 
 /// The position of the item mounted at `path` in the mount order of `plan`.

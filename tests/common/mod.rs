@@ -134,6 +134,55 @@ pub fn output_report(output: &Output) -> String {
     )
 }
 
+/// Exit 0, or a failed assertion that quotes everything the binary left behind.
+pub fn assert_success(output: &Output) {
+    assert_eq!(output.status.code(), Some(0), "{}", output_report(output));
+}
+
+/// Standard output as text.
+pub fn stdout(output: &Output) -> String {
+    String::from_utf8(output.stdout.clone()).unwrap()
+}
+
+/// The plan the binary printed with `--print-plan=json`, after checking it exited 0.
+pub fn printed_plan(output: &Output) -> serde_json::Value {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(0), "{report}");
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
+}
+
+/// The directives of the items `plan` mounts at `path`.
+pub fn directives_at<'a>(plan: &'a serde_json::Value, path: &Path) -> Vec<&'a str> {
+    plan["mounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["path"] == path.to_str().unwrap())
+        .map(|item| item["directive"].as_str().unwrap())
+        .collect()
+}
+
+/// Runs git in `cwd` with the developer's own configuration shut out.
+pub fn git(cwd: &Path, arguments: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(cwd)
+        .args(["-c", "protocol.file.allow=always"])
+        .args(arguments)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+        .env("GIT_COMMITTER_NAME", "test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// Exit `code`, nothing on standard output, and one diagnostic line on standard error of the
 /// form `kakoi: <kind>: <description>`. Returns the line so a test can check the
 /// description.

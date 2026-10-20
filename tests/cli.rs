@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, run, run_from_deleted_dir,
-    TempDir, RW_WORKSPACE,
+    assert_diagnostic, binary, home_with_workspace, output_report, printed_plan, run,
+    run_from_deleted_dir, TempDir, RW_WORKSPACE,
 };
 use kakoi::cli::{interpret, Invocation, Nesting, Parsed, PlanForm};
 use kakoi_runtime::cli::diagnostic::Kind;
@@ -1449,13 +1449,6 @@ fn the_built_in_default_starts_without_a_warning() {
     assert!(output.stderr.is_empty(), "{report}");
 }
 
-/// The plan the binary prints with `--print-plan=json`, after checking it exited 0.
-fn json_plan(output: &std::process::Output) -> serde_json::Value {
-    let report = output_report(output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| panic!("{error}: {report}"))
-}
-
 // @kotowari[EX-491]
 #[test]
 fn init_with_a_name_that_climbs_out_of_profile_is_a_usage_diagnostic() {
@@ -1487,7 +1480,7 @@ fn repeated_rw_options_are_all_kept_in_the_order_given() {
             ],
         );
 
-        let plan = json_plan(&output);
+        let plan = printed_plan(&output);
         let from_the_command_line: Vec<&str> = plan["policy"]["mounts"]
             .as_array()
             .unwrap()
@@ -1545,7 +1538,7 @@ fn a_tilde_in_a_command_line_path_is_a_name_under_the_current_directory() {
         .output()
         .unwrap();
 
-    let plan = json_plan(&output);
+    let plan = printed_plan(&output);
     let report = output_report(&output);
     let hidden: Vec<&str> = plan["mounts"]
         .as_array()
@@ -1765,7 +1758,7 @@ fn home_with_a_copy_and_a_secret(copied: &str, secret: &str) -> (TempDir, PathBu
 fn a_json_plan_with_not_copied_and_copied_files_stays_at_format_version_1() {
     let (home, workspace) = home_with_a_copy_and_a_secret("content\n", "FAKE-TOKEN");
 
-    let plan = json_plan(&run(
+    let plan = printed_plan(&run(
         home.path(),
         [
             "--workspace",
@@ -1791,7 +1784,7 @@ fn a_json_plan_with_not_copied_and_copied_files_stays_at_format_version_1() {
 fn a_json_plan_without_a_command_has_a_null_command_and_the_four_variables() {
     let (home, workspace) = home_with_workspace();
 
-    let plan = json_plan(&run(
+    let plan = printed_plan(&run(
         home.path(),
         [
             "--workspace",
@@ -1832,7 +1825,7 @@ fn a_json_plan_shows_the_kind_and_length_of_descriptors_but_no_secret_or_copied_
         ],
     );
 
-    let plan = json_plan(&output);
+    let plan = printed_plan(&output);
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(!text.contains(secret), "{text}");
     assert!(!text.contains(copied.trim_end()), "{text}");
@@ -1862,7 +1855,7 @@ fn a_mount_from_a_secret_carries_its_origin_kind_and_name_in_json() {
         format!("{RW_WORKSPACE}[secrets]\nTOKEN = \"~/token\"\n"),
     );
 
-    let plan = json_plan(&run(
+    let plan = printed_plan(&run(
         home.path(),
         [
             "--workspace",

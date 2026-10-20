@@ -11,7 +11,7 @@ use std::process::Output;
 mod common;
 
 use common::fixture::{home, layers, merged, variables, Facts, CONFIG_DIR, WORKTREE};
-use common::{binary, output_report, TempDir};
+use common::{assert_success, binary, output_report, stdout, TempDir};
 use kakoi_runtime::cli::copies::CopySources;
 use kakoi_runtime::cli::diagnostic::Diagnostic;
 use kakoi_runtime::cli::guard_placement::GuardPlan;
@@ -114,14 +114,6 @@ impl Scene {
         common::write_executable(&shim.join(name), format!("#!/bin/sh\necho shim {name}\n"));
         shim
     }
-}
-
-fn assert_success(output: &Output) {
-    assert_eq!(output.status.code(), Some(0), "{}", output_report(output));
-}
-
-fn stdout(output: &Output) -> String {
-    String::from_utf8(output.stdout.clone()).unwrap()
 }
 
 /// The sockets directly in "/run" and one level below, as the host has them.
