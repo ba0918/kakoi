@@ -293,8 +293,9 @@ fn home_with_many_env_files(count: usize) -> (TempDir, PathBuf) {
         &home,
         &format!("{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env*\"]\n"),
     );
+    // Not empty: a hidden file reads empty, so its content tells the two apart.
     for index in 0..count {
-        home.write(format!("ws/.env.{index}"), "");
+        home.write(format!("ws/.env.{index}"), "secret");
     }
     (home, workspace)
 }
