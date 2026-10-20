@@ -7,7 +7,7 @@ use std::{
 };
 
 fn query() -> Vec<u8> {
-    crate::dns_wire::query("api.example.com", 1)
+    crate::dns_fixture::query("api.example.com", 1)
 }
 
 fn signed_query() -> Vec<u8> {

@@ -1,4 +1,4 @@
-use crate::dns_wire::a_answer;
+use crate::dns_fixture::{a_answer, dns_rule};
 use kakoi_net::{
     dns::{
         AcceptedRequest, DnsRequests, EnforcedDnsError, PreparedAnswer, ResolutionId,
@@ -11,7 +11,7 @@ use kakoi_net::{
     scope::AddressContext,
 };
 use kakoi_runtime::cli::{
-    network::{Allow, Destination, NetworkLimits, Protocol},
+    network::{Allow, NetworkLimits},
     policy::parse_policy,
 };
 use std::{
@@ -22,11 +22,7 @@ use std::{
 };
 
 fn rules() -> Vec<Allow> {
-    vec![Allow {
-        destination: Destination::Dns("*.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: vec!["443".into()].try_into().unwrap(),
-    }]
+    vec![dns_rule("*.example.com")]
 }
 fn candidate(requests: &mut DnsRequests<()>, name: u8) -> (ResolutionId, PreparedAnswer) {
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();

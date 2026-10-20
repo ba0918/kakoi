@@ -1,4 +1,16 @@
-//! DNS messages built by hand for the tests, independent of the product's own encoding.
+//! What the DNS tests build by hand: messages, independent of the product's own
+//! encoding, and the permission that authorizes names.
+
+use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
+
+/// Permission for TCP 443 of the names `pattern` matches.
+pub(crate) fn dns_rule(pattern: &str) -> Allow {
+    Allow {
+        destination: Destination::Dns(pattern.parse().unwrap()),
+        protocol: Protocol::Tcp,
+        ports: vec!["443".into()].try_into().unwrap(),
+    }
+}
 
 /// `owner` as uncompressed labels, ending with the root label.
 pub(crate) fn name(owner: &str) -> Vec<u8> {

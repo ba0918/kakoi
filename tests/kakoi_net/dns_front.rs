@@ -1,3 +1,4 @@
+use crate::dns_fixture::dns_rule;
 use kakoi_net::{
     dns_front::DnsFront,
     namespace::{DnsSockets, NetworkNamespace},
@@ -185,10 +186,7 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
         dns_runtime::{DnsRuntime, DnsRuntimeConfig},
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{
-        network::{Allow, Destination, NetworkLimits, Protocol},
-        policy::parse_policy,
-    };
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::{net::UdpSocket, thread};
     let namespace = Arc::new(NetworkNamespace::create().unwrap());
     assert!(namespace
@@ -234,11 +232,7 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
             std::io::ErrorKind::WouldBlock
         );
     });
-    let policy = vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: vec!["443".into()].try_into().unwrap(),
-    }];
+    let policy = vec![dns_rule("api.example.com")];
     kakoi_net::nft::apply(
         &namespace,
         std::path::Path::new("/usr/sbin/nft"),
@@ -320,7 +314,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, socket.create_conn
 #[test]
 fn service_returns_tcp_servfail_when_resolution_deadline_expires() {
     use kakoi_net::{dns::DnsRequests, dns_service::DnsService};
-    use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
+
     let namespace = Arc::new(NetworkNamespace::create().unwrap());
     assert!(namespace
         .command("/usr/sbin/ip")
@@ -335,11 +329,7 @@ fn service_returns_tcp_servfail_when_resolution_deadline_expires() {
         Duration::from_secs(1),
     )
     .unwrap();
-    let rules = vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: vec!["443".into()].try_into().unwrap(),
-    }];
+    let rules = vec![dns_rule("api.example.com")];
     let requests = DnsRequests::new(rules, 0, 1, 1, Duration::from_secs(1)).unwrap();
     let mut service = DnsService::new(front, requests);
     let mut client = namespace

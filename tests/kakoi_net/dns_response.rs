@@ -1,4 +1,4 @@
-use crate::dns_wire::{name, query as query_name};
+use crate::dns_fixture::{name, query as query_name};
 use kakoi_net::dns::AddressProgress;
 use kakoi_net::dns::{DnsError, Question, ResponseDisposition};
 use kakoi_net::scope::DnsAdmission;

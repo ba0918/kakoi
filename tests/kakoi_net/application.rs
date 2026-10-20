@@ -1,4 +1,5 @@
 use crate::common::{home_with_workspace, RW_WORKSPACE};
+use crate::dns_fixture::dns_rule;
 use kakoi_net::{application, namespace::NetworkNamespace};
 use kakoi_runtime::cli::{
     layers::LayerSelection,
@@ -123,10 +124,7 @@ fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
         filter, nft,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{
-        network::{Allow, Destination, NetworkLimits, Protocol},
-        policy::parse_policy,
-    };
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::{
         net::UdpSocket,
         path::Path,
@@ -178,11 +176,7 @@ fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns("api.example.com".parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
+            policy: vec![dns_rule("api.example.com")],
             upstreams: config.network.dns_upstream,
             limits: NetworkLimits::default(),
             trust: None,

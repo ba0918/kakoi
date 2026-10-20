@@ -1,22 +1,13 @@
-use crate::dns_wire::{a_answer, query};
+use crate::dns_fixture::{a_answer, dns_rule, query};
 use kakoi_net::dns::{DnsError, DnsGate};
-use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
-
-fn rule(pattern: &str) -> Allow {
-    Allow {
-        destination: Destination::Dns(pattern.parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: kakoi_runtime::cli::network::Ports::try_from(vec!["443".into()]).unwrap(),
-    }
-}
 
 // @kotowari[REQ-027, REQ-003, REQ-010, REQ-130, REQ-149, EX-273, EX-295, EX-044, EX-046, EX-231]
 #[test]
 fn only_authorized_names_reach_the_resolver_with_the_original_rule_indices() {
     let gate = DnsGate::new(vec![
-        rule("*.example.com"),
-        rule("API.Example.com"),
-        rule("例え.テスト"),
+        dns_rule("*.example.com"),
+        dns_rule("API.Example.com"),
+        dns_rule("例え.テスト"),
     ]);
     for (name, indices) in [
         ("API.example.com", vec![0, 1]),
@@ -59,7 +50,7 @@ fn only_authorized_names_reach_the_resolver_with_the_original_rule_indices() {
 // @kotowari[REQ-123, REQ-021]
 #[test]
 fn gate_distinguishes_policy_refusal_from_resolution_failure_and_rejects_wrong_answers() {
-    let gate = DnsGate::new(vec![rule("api.example.com")]);
+    let gate = DnsGate::new(vec![dns_rule("api.example.com")]);
     let wire = query("api.example.com", 1);
     for (error, code) in [
         (DnsError::PolicyDenied, 5),
@@ -209,7 +200,7 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
         )
         .unwrap();
         let resolver = UpstreamResolver::new(
-            vec![rule("api.example.com")],
+            vec![dns_rule("api.example.com")],
             policy.network.dns_upstream,
             NetworkLimits {
                 dns_zero_ttl_grace_milliseconds: 1000,
@@ -275,8 +266,14 @@ fn authorized_requests_share_work_and_return_individual_answers_without_resettin
     use kakoi_net::dns::{AcceptedRequest, DnsRequests};
     use std::time::{Duration, Instant};
     let now = Instant::now();
-    let mut requests =
-        DnsRequests::new(vec![rule("*.example.com")], 7, 1, 2, Duration::from_secs(1)).unwrap();
+    let mut requests = DnsRequests::new(
+        vec![dns_rule("*.example.com")],
+        7,
+        1,
+        2,
+        Duration::from_secs(1),
+    )
+    .unwrap();
     let first = query("api.example.com", 1);
     let AcceptedRequest::Start(task) = requests.accept(&first, 10, now).unwrap() else {
         panic!()
@@ -339,7 +336,7 @@ fn shared_resolution_rejects_wrong_or_late_answers_and_keeps_dns_conditions_sepa
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("api.example.com")],
+        vec![dns_rule("api.example.com")],
         0,
         4,
         2,
@@ -395,7 +392,7 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
         )
         .unwrap();
         UpstreamResolver::new(
-            vec![rule("api.example.com")],
+            vec![dns_rule("api.example.com")],
             policy.network.dns_upstream,
             NetworkLimits::default(),
             None,
@@ -431,7 +428,7 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
     silent.set_nonblocking(true).unwrap();
     let (live, bounded) = (resolver_for(&answering), resolver_for(&silent));
     let mut roomy = DnsRequests::new(
-        vec![rule("api.example.com")],
+        vec![dns_rule("api.example.com")],
         0,
         1,
         2,
@@ -439,7 +436,7 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
     )
     .unwrap();
     let mut tight = DnsRequests::new(
-        vec![rule("api.example.com")],
+        vec![dns_rule("api.example.com")],
         0,
         1,
         2,
@@ -525,7 +522,7 @@ fn a_failed_resolution_is_held_for_the_failure_cache_time() {
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("*.example.com")],
+        vec![dns_rule("*.example.com")],
         7,
         4,
         4,
@@ -576,7 +573,7 @@ fn a_valid_answer_is_reused_until_its_time_to_live_runs_out() {
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("*.example.com")],
+        vec![dns_rule("*.example.com")],
         7,
         4,
         4,
@@ -642,8 +639,14 @@ fn a_late_join_keeps_the_shared_deadline() {
     use kakoi_net::dns::{AcceptedRequest, DnsRequests};
     use std::time::{Duration, Instant};
     let now = Instant::now();
-    let mut requests =
-        DnsRequests::new(vec![rule("*.example.com")], 7, 4, 4, Duration::from_secs(2)).unwrap();
+    let mut requests = DnsRequests::new(
+        vec![dns_rule("*.example.com")],
+        7,
+        4,
+        4,
+        Duration::from_secs(2),
+    )
+    .unwrap();
     let question = query("api.example.com", 1);
     assert!(matches!(
         requests.accept(&question, 1, now).unwrap(),
@@ -676,8 +679,14 @@ fn each_question_of_one_application_is_a_waiter() {
     use std::time::{Duration, Instant};
     let now = Instant::now();
     // One recipient stands for one application's socket.
-    let mut requests =
-        DnsRequests::new(vec![rule("*.example.com")], 7, 4, 2, Duration::from_secs(2)).unwrap();
+    let mut requests = DnsRequests::new(
+        vec![dns_rule("*.example.com")],
+        7,
+        4,
+        2,
+        Duration::from_secs(2),
+    )
+    .unwrap();
     let question = query("api.example.com", 1);
     assert!(matches!(
         requests.accept(&question, 1, now).unwrap(),
@@ -701,10 +710,22 @@ fn environments_share_neither_slots_nor_resolutions() {
     use kakoi_net::dns::{AcceptedRequest, DnsRequests};
     use std::time::{Duration, Instant};
     let now = Instant::now();
-    let mut first =
-        DnsRequests::new(vec![rule("*.example.com")], 7, 1, 4, Duration::from_secs(2)).unwrap();
-    let mut second =
-        DnsRequests::new(vec![rule("*.example.com")], 7, 1, 4, Duration::from_secs(2)).unwrap();
+    let mut first = DnsRequests::new(
+        vec![dns_rule("*.example.com")],
+        7,
+        1,
+        4,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    let mut second = DnsRequests::new(
+        vec![dns_rule("*.example.com")],
+        7,
+        1,
+        4,
+        Duration::from_secs(2),
+    )
+    .unwrap();
     let question = query("api.example.com", 1);
     assert!(matches!(
         first.accept(&question, 1, now).unwrap(),
@@ -732,7 +753,7 @@ fn only_answers_under_the_current_settings_are_kept() {
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("*.example.com")],
+        vec![dns_rule("*.example.com")],
         7,
         4,
         4,
@@ -785,7 +806,7 @@ fn a_question_under_new_settings_joins_the_resolution_re_keyed_for_them() {
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("*.example.com")],
+        vec![dns_rule("*.example.com")],
         7,
         1,
         4,
@@ -813,7 +834,7 @@ fn a_running_new_settings_resolution_remains_joinable_after_an_older_retry_fails
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("*.example.com")],
+        vec![dns_rule("*.example.com")],
         7,
         2,
         4,
@@ -853,7 +874,7 @@ fn every_question_is_authorized_before_it_may_join_a_running_resolution() {
     use std::time::{Duration, Instant};
     let now = Instant::now();
     let mut requests = DnsRequests::new(
-        vec![rule("api.example.com")],
+        vec![dns_rule("api.example.com")],
         7,
         1,
         4,

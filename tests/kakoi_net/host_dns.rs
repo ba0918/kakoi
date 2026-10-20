@@ -94,6 +94,7 @@ print(code, repr(out), err.startswith('kakoi: bwrap: '), len(err.splitlines()))
 
 mod following {
     use crate::common::TempDir;
+    use crate::dns_fixture::dns_rule;
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig, HostDns},
         filter,
@@ -102,7 +103,7 @@ mod following {
         resolution::UpstreamWait,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::network::{Allow, Destination, DnsUpstream, NetworkLimits, Protocol};
+    use kakoi_runtime::cli::network::{DnsUpstream, NetworkLimits};
     use std::{
         io::Read,
         net::UdpSocket,
@@ -205,11 +206,7 @@ mod following {
         let runtime = DnsRuntime::new(
             Arc::clone(&ns),
             DnsRuntimeConfig {
-                policy: vec![Allow {
-                    destination: Destination::Dns("api.example.com".parse().unwrap()),
-                    protocol: Protocol::Tcp,
-                    ports: vec!["443".into()].try_into().unwrap(),
-                }],
+                policy: vec![dns_rule("api.example.com")],
                 upstreams: fixture_parse(&read).unwrap(),
                 limits,
                 nft: nft_program.into(),
@@ -256,7 +253,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
     }
 
     fn answer(query: &[u8], address: [u8; 4]) -> Vec<u8> {
-        crate::dns_wire::a_answer(query, 30, address)
+        crate::dns_fixture::a_answer(query, 30, address)
     }
 
     fn finish(mut child: Child, runtime: &mut DnsRuntime) -> String {

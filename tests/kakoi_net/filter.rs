@@ -1,4 +1,4 @@
-use crate::dns_wire::query;
+use crate::dns_fixture::{dns_rule, query};
 use kakoi_net::{
     filter::{self, FilterRule},
     namespace::NetworkNamespace,
@@ -395,7 +395,7 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
 #[test]
 fn a_late_staging_acknowledgement_never_activates_candidate_permissions() {
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
-    use kakoi_runtime::cli::network::{Allow, Destination};
+
     use std::fs;
     let namespace = NetworkNamespace::create().unwrap();
     nft::apply(
@@ -417,11 +417,7 @@ fn a_late_staging_acknowledgement_never_activates_candidate_permissions() {
             commits.display()
         ),
     );
-    let rules = vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: Ports::try_from(vec!["443".into()]).unwrap(),
-    }];
+    let rules = vec![dns_rule("api.example.com")];
     let mut owner = DynamicPermissions::new(&namespace, &executable, rules);
     let grant = ActiveGrant {
         rule: 0,
@@ -455,7 +451,7 @@ fn a_late_staging_acknowledgement_never_activates_candidate_permissions() {
 #[test]
 fn staging_rejects_elements_without_a_kernel_expiration() {
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
-    use kakoi_runtime::cli::network::{Allow, Destination};
+
     let namespace = NetworkNamespace::create().unwrap();
     nft::apply(
         &namespace,
@@ -467,11 +463,7 @@ fn staging_rejects_elements_without_a_kernel_expiration() {
     let temp = crate::common::TempDir::new();
     let executable = temp.path().join("zero-timeout-nft");
     crate::common::write_executable(&executable, "#!/bin/sh\ncase \"$1\" in\n-f) /usr/bin/sed -E 's/timeout [0-9]+ms/timeout 0s/g' | /usr/sbin/nft \"$@\" ;;\n*) exec /usr/sbin/nft \"$@\" ;;\nesac\n");
-    let rules = vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: Ports::try_from(vec!["443".into()]).unwrap(),
-    }];
+    let rules = vec![dns_rule("api.example.com")];
     let mut owner = DynamicPermissions::new(&namespace, &executable, rules);
     let result = owner.stage(&[ActiveGrant {
         rule: 0,
@@ -488,7 +480,7 @@ fn staging_rejects_elements_without_a_kernel_expiration() {
 #[test]
 fn an_old_grant_near_expiry_does_not_reduce_the_new_updates_staging_budget() {
     use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
-    use kakoi_runtime::cli::network::{Allow, Destination};
+
     let namespace = NetworkNamespace::create().unwrap();
     nft::apply(
         &namespace,
@@ -497,11 +489,7 @@ fn an_old_grant_near_expiry_does_not_reduce_the_new_updates_staging_budget() {
         Instant::now() + Duration::from_secs(2),
     )
     .unwrap();
-    let rules = vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: Ports::try_from(vec!["443".into()]).unwrap(),
-    }];
+    let rules = vec![dns_rule("api.example.com")];
     let mut owner = DynamicPermissions::new(&namespace, Path::new("/usr/sbin/nft"), rules);
     // Long enough for the first staging to finish even when its first reserves run out on
     // a loaded host; what matters is the 4 ms left when the second update stages.
@@ -544,16 +532,9 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
         leases::ActiveGrant,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{
-        network::{Allow, Destination, NetworkLimits},
-        policy::parse_policy,
-    };
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     let namespace = NetworkNamespace::create().unwrap();
-    let rules = vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: Ports::try_from(vec!["443".into()]).unwrap(),
-    }];
+    let rules = vec![dns_rule("api.example.com")];
     let mut permissions =
         DynamicPermissions::new(&namespace, Path::new("/bin/false"), rules.clone());
     assert!(permissions
@@ -605,10 +586,7 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
         dynamic::DynamicPermissions,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{
-        network::{Allow, Destination, NetworkLimits},
-        policy::parse_policy,
-    };
+    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
     use std::net::UdpSocket;
     for mode in ["cancel", "expiry", "mismatch", "kernel"] {
         let namespace = NetworkNamespace::create().unwrap();
@@ -629,11 +607,7 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
             .unwrap()
         };
         let before = inspect();
-        let rules = vec![Allow {
-            destination: Destination::Dns("api.example.com".parse().unwrap()),
-            protocol: Protocol::Tcp,
-            ports: vec!["443".into()].try_into().unwrap(),
-        }];
+        let rules = vec![dns_rule("api.example.com")];
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         socket
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -802,12 +776,7 @@ fn dns_owner_namespace() -> NetworkNamespace {
 }
 
 fn api_rule() -> Vec<kakoi_runtime::cli::network::Allow> {
-    use kakoi_runtime::cli::network::{Allow, Destination};
-    vec![Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: Ports::try_from(vec!["443".into()]).unwrap(),
-    }]
+    vec![dns_rule("api.example.com")]
 }
 
 // @kotowari[REQ-420, EX-804]

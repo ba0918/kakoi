@@ -1,4 +1,4 @@
-use crate::dns_wire::{a_answer, name};
+use crate::dns_fixture::{a_answer, dns_rule, name};
 use kakoi_net::{
     dns_runtime::{DnsRuntime, DnsRuntimeConfig},
     filter,
@@ -6,10 +6,7 @@ use kakoi_net::{
     nft,
     scope::AddressContext,
 };
-use kakoi_runtime::cli::{
-    network::{Allow, Destination, NetworkLimits, Protocol},
-    policy::parse_policy,
-};
+use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
 use std::{
     net::UdpSocket,
     path::Path,
@@ -49,11 +46,7 @@ fn runtime_stop_interrupts_pending_dns_and_kernel_fault_stops_further_work() {
         let mut runtime = DnsRuntime::new(
             Arc::clone(&ns),
             DnsRuntimeConfig {
-                policy: vec![Allow {
-                    destination: Destination::Dns("api.example.com".parse().unwrap()),
-                    protocol: Protocol::Tcp,
-                    ports: vec!["443".into()].try_into().unwrap(),
-                }],
+                policy: vec![dns_rule("api.example.com")],
                 upstreams: config.network.dns_upstream,
                 limits: NetworkLimits {
                     dns_resolution_timeout_seconds: 30,
@@ -157,11 +150,7 @@ fn the_runtime_holds_a_failed_resolution_without_asking_again() {
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns("api.example.com".parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
+            policy: vec![dns_rule("api.example.com")],
             upstreams: config.network.dns_upstream,
             limits: NetworkLimits {
                 dns_failure_cache_seconds: 60,
@@ -272,11 +261,7 @@ fn resolve(
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns("*.example.com".parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
+            policy: vec![dns_rule("*.example.com")],
             upstreams: config.network.dns_upstream,
             limits,
             nft: "/usr/sbin/nft".into(),
@@ -533,11 +518,7 @@ fn resolve_questions(
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
-            policy: vec![Allow {
-                destination: Destination::Dns(pattern.parse().unwrap()),
-                protocol: Protocol::Tcp,
-                ports: vec!["443".into()].try_into().unwrap(),
-            }],
+            policy: vec![dns_rule(pattern)],
             upstreams: config.network.dns_upstream,
             limits,
             nft: "/usr/sbin/nft".into(),

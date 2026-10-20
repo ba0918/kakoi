@@ -1,4 +1,4 @@
-use crate::{common::TempDir, health::assert_loopback_command};
+use crate::{common::TempDir, dns_fixture::dns_rule, health::assert_loopback_command};
 use kakoi_net::{
     dns_runtime::DnsRuntimeConfig,
     scope::AddressContext,
@@ -141,7 +141,6 @@ fn failed_session_policy_preparation_reaps_transport_without_opening_it() {
 // @kotowari[REQ-116, REQ-131, REQ-058, EX-053]
 #[test]
 fn session_services_dns_and_closes_before_draining_its_controllers() {
-    use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
     use std::{net::UdpSocket, process::Stdio};
     let directory = TempDir::new();
     let (transport, records) = transport(&directory);
@@ -152,11 +151,7 @@ fn session_services_dns_and_closes_before_draining_its_controllers() {
         "transport":"plain", "ip":"127.0.0.1", "port":upstream.local_addr().unwrap().port()
     }))
     .unwrap()];
-    dns.policy.push(Allow {
-        destination: Destination::Dns("api.example.com".parse().unwrap()),
-        protocol: Protocol::Tcp,
-        ports: vec!["443".into()].try_into().unwrap(),
-    });
+    dns.policy.push(dns_rule("api.example.com"));
     let mut session = Session::prepare(transport, dns, &[], |_| None).unwrap();
     crate::health::assert_loopback(session.namespace(), true);
     session.activate().unwrap();
