@@ -13,6 +13,8 @@ mod config;
 mod controllers;
 #[path = "kakoi_net/dns_adoption.rs"]
 mod dns_adoption;
+#[path = "kakoi_net/dns_engine.rs"]
+mod dns_engine;
 #[path = "kakoi_net/dns_fixture.rs"]
 mod dns_fixture;
 #[path = "kakoi_net/dns_front.rs"]
@@ -21,6 +23,8 @@ mod dns_front;
 mod dns_gate;
 #[path = "kakoi_net/dns_name.rs"]
 mod dns_name;
+#[path = "kakoi_net/dns_requests.rs"]
+mod dns_requests;
 #[path = "kakoi_net/dns_response.rs"]
 mod dns_response;
 #[path = "kakoi_net/dns_runtime.rs"]
