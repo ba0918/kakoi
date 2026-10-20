@@ -1,5 +1,5 @@
 use crate::common::{home_with_workspace, RW_WORKSPACE};
-use crate::dns_fixture::dns_rule;
+use crate::dns_fixture::{a_answer, dns_rule, filtered_namespace, local_upstream};
 use kakoi_net::{application, namespace::NetworkNamespace};
 use kakoi_runtime::cli::{
     layers::LayerSelection,
@@ -121,13 +121,11 @@ print('isolated')
 fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig},
-        filter, nft,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::{
         net::UdpSocket,
-        path::Path,
         process::Stdio,
         sync::Arc,
         time::{Duration, Instant},
@@ -137,47 +135,24 @@ fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
         ".config/kakoi/profile/default.toml",
         format!("{RW_WORKSPACE}\n[network]\nmode='filtered'\n"),
     );
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
     upstream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            upstream.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(upstream.local_addr().unwrap().port());
     let server = std::thread::spawn(move || {
         let mut bytes = [0; 512];
         let (size, peer) = upstream.recv_from(&mut bytes).unwrap();
-        let mut answer = bytes[..size].to_vec();
-        answer[2] |= 0x80;
-        answer[7] = 1;
-        answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-        upstream.send_to(&answer, peer).unwrap();
+        upstream
+            .send_to(&a_answer(&bytes[..size], 30, [1, 1, 1, 1]), peer)
+            .unwrap();
     });
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
             policy: vec![dns_rule("api.example.com")],
-            upstreams: config.network.dns_upstream,
+            upstreams,
             limits: NetworkLimits::default(),
             trust: None,
             nft: "/usr/sbin/nft".into(),

@@ -1,8 +1,5 @@
-use crate::dns_fixture::dns_rule;
-use kakoi_net::{
-    dns_front::DnsFront,
-    namespace::{DnsSockets, NetworkNamespace},
-};
+use crate::dns_fixture::{dns_rule, local_upstream, loopback_namespace};
+use kakoi_net::{dns_front::DnsFront, namespace::DnsSockets};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -11,14 +8,7 @@ use std::{
 // @kotowari[REQ-131, REQ-130]
 #[test]
 fn frontend_handles_udp_limits_and_fragmented_pipelined_tcp_without_blocking() {
-    let namespace = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(namespace
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
+    let namespace = loopback_namespace();
     let mut front = DnsFront::new(
         DnsSockets::bind(Arc::clone(&namespace)).unwrap(),
         4,
@@ -91,14 +81,7 @@ with socket.create_connection(('127.0.0.53', 53), timeout=2) as tcp:
 // @kotowari[REQ-131]
 #[test]
 fn tcp_capacity_and_expiration_do_not_block_udp_or_deliver_stale_replies() {
-    let namespace = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(namespace
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
+    let namespace = loopback_namespace();
     let mut front = DnsFront::new(
         DnsSockets::bind(Arc::clone(&namespace)).unwrap(),
         1,
@@ -186,28 +169,14 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
         dns_runtime::{DnsRuntime, DnsRuntimeConfig},
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::{net::UdpSocket, thread};
-    let namespace = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(namespace
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
+    let namespace = loopback_namespace();
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
-    let parsed = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            socket.local_addr().unwrap().port()
-        ),
-        std::path::Path::new("upstream.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(socket.local_addr().unwrap().port());
     let temp = crate::common::TempDir::new();
     let rejections_read = temp.path().join("rejections-read");
     let marker = rejections_read.clone();
@@ -244,7 +213,7 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
         Arc::clone(&namespace),
         DnsRuntimeConfig {
             policy,
-            upstreams: parsed.network.dns_upstream,
+            upstreams,
             limits: NetworkLimits {
                 dns_max_concurrent_resolutions: 1,
                 ..NetworkLimits::default()
@@ -315,14 +284,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, socket.create_conn
 fn service_returns_tcp_servfail_when_resolution_deadline_expires() {
     use kakoi_net::{dns::DnsRequests, dns_service::DnsService};
 
-    let namespace = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(namespace
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
+    let namespace = loopback_namespace();
     let front = DnsFront::new(
         DnsSockets::bind(Arc::clone(&namespace)).unwrap(),
         1,

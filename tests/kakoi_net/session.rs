@@ -1,4 +1,8 @@
-use crate::{common::TempDir, dns_fixture::dns_rule, health::assert_loopback_command};
+use crate::{
+    common::TempDir,
+    dns_fixture::{a_answer, dns_rule},
+    health::assert_loopback_command,
+};
 use kakoi_net::{
     dns_runtime::DnsRuntimeConfig,
     scope::AddressContext,
@@ -173,11 +177,9 @@ assert answer[-4:] == b'\x01\x01\x01\x01', answer
         match upstream.recv_from(&mut wire) {
             Ok((size, peer)) => {
                 queries += 1;
-                let mut answer = wire[..size].to_vec();
-                answer[2] |= 0x80;
-                answer[7] = 1;
-                answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-                upstream.send_to(&answer, peer).unwrap();
+                upstream
+                    .send_to(&a_answer(&wire[..size], 30, [1, 1, 1, 1]), peer)
+                    .unwrap();
             }
             Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock),
         }

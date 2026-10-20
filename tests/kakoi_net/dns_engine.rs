@@ -1,11 +1,11 @@
-use crate::dns_fixture::{dns_rule, query};
+use crate::dns_fixture::{dns_rule, local_upstream, query};
 use kakoi_net::dns::DnsError;
 
 // @kotowari[REQ-027, REQ-019, REQ-020, REQ-014, REQ-123, EX-030, EX-031, EX-045]
 #[test]
 fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
     use kakoi_net::{dns::UpstreamResolver, scope::AddressContext};
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::{
         net::UdpSocket,
         thread,
@@ -44,14 +44,10 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
                 socket.send_to(&response, client).unwrap();
             }
         });
-        let policy = parse_policy(
-            &format!("[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={port}"),
-            std::path::Path::new("upstream.toml"),
-        )
-        .unwrap();
+        let upstreams = local_upstream(port);
         let resolver = UpstreamResolver::new(
             vec![dns_rule("api.example.com")],
-            policy.network.dns_upstream,
+            upstreams,
             NetworkLimits {
                 dns_zero_ttl_grace_milliseconds: 1000,
                 ..NetworkLimits::default()
@@ -117,7 +113,7 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
         dns::{AcceptedRequest, DnsRequests, UpstreamResolver},
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::{
         net::UdpSocket,
         sync::{
@@ -127,17 +123,10 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
         time::{Duration, Instant},
     };
     let resolver_for = |socket: &UdpSocket| {
-        let policy = parse_policy(
-            &format!(
-                "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-                socket.local_addr().unwrap().port()
-            ),
-            std::path::Path::new("upstream.toml"),
-        )
-        .unwrap();
+        let upstreams = local_upstream(socket.local_addr().unwrap().port());
         UpstreamResolver::new(
             vec![dns_rule("api.example.com")],
-            policy.network.dns_upstream,
+            upstreams,
             NetworkLimits::default(),
             None,
         )

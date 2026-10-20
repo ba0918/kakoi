@@ -1,4 +1,4 @@
-use crate::dns_fixture::{dns_rule, query};
+use crate::dns_fixture::{a_answer, dns_rule, local_upstream, query};
 use kakoi_net::{
     filter::{self, FilterRule},
     namespace::NetworkNamespace,
@@ -313,7 +313,7 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
     sample(false, "198.18.0.3", "fd00:1::3"); // Referencing an expired set must never reinsert its elements.
 
     use kakoi_net::{dns::UpstreamResolver, scope::AddressContext};
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::net::UdpSocket;
     sample(false, "1.1.1.1", "2606:4700:4700::1111");
     let upstream = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -346,18 +346,8 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
             upstream.send_to(&reply, peer).unwrap();
         }
     });
-    let config = parse_policy(
-        &format!("[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={port}"),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
-    let resolver = UpstreamResolver::new(
-        rules,
-        config.network.dns_upstream,
-        NetworkLimits::default(),
-        None,
-    )
-    .unwrap();
+    let upstreams = local_upstream(port);
+    let resolver = UpstreamResolver::new(rules, upstreams, NetworkLimits::default(), None).unwrap();
     for kind in [1u16, 28u16] {
         let question = query("api.example.com", kind);
         let expired = resolver
@@ -532,7 +522,7 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
         leases::ActiveGrant,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     let namespace = NetworkNamespace::create().unwrap();
     let rules = vec![dns_rule("api.example.com")];
     let mut permissions =
@@ -546,20 +536,13 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
         .is_err());
     assert!(permissions.requires_reconciliation());
     let upstream = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            upstream.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(upstream.local_addr().unwrap().port());
     let limits = NetworkLimits {
         dns_resolution_timeout_seconds: 1,
         dns_server_timeout_seconds: 1,
         ..NetworkLimits::default()
     };
-    let resolver = UpstreamResolver::new(rules, config.network.dns_upstream, limits, None).unwrap();
+    let resolver = UpstreamResolver::new(rules, upstreams, limits, None).unwrap();
     let question = query("api.example.com", 1);
     assert!(matches!(
         resolver.resolve_enforced(
@@ -586,7 +569,7 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
         dynamic::DynamicPermissions,
         scope::AddressContext,
     };
-    use kakoi_runtime::cli::{network::NetworkLimits, policy::parse_policy};
+    use kakoi_runtime::cli::network::NetworkLimits;
     use std::net::UdpSocket;
     for mode in ["cancel", "expiry", "mismatch", "kernel"] {
         let namespace = NetworkNamespace::create().unwrap();
@@ -612,30 +595,17 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
         socket
             .set_read_timeout(Some(Duration::from_secs(2)))
             .unwrap();
-        let config = parse_policy(
-            &format!(
-                "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-                socket.local_addr().unwrap().port()
-            ),
-            Path::new("dns.toml"),
-        )
-        .unwrap();
+        let upstreams = local_upstream(socket.local_addr().unwrap().port());
         let upstream = std::thread::spawn(move || {
             let mut bytes = [0; 512];
             let (size, peer) = socket.recv_from(&mut bytes).unwrap();
-            let mut answer = bytes[..size].to_vec();
-            answer[2] |= 0x80;
-            answer[7] = 1;
-            answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-            socket.send_to(&answer, peer).unwrap();
+            socket
+                .send_to(&a_answer(&bytes[..size], 30, [1, 1, 1, 1]), peer)
+                .unwrap();
         });
-        let resolver = UpstreamResolver::new(
-            rules.clone(),
-            config.network.dns_upstream,
-            NetworkLimits::default(),
-            None,
-        )
-        .unwrap();
+        let resolver =
+            UpstreamResolver::new(rules.clone(), upstreams, NetworkLimits::default(), None)
+                .unwrap();
         let mut requests =
             DnsRequests::new(rules.clone(), 0, 1, 1, Duration::from_millis(500)).unwrap();
         let wire = query("api.example.com", 1);

@@ -1,8 +1,6 @@
-use crate::dns_fixture::{a_answer, dns_rule, name};
+use crate::dns_fixture::{a_answer, dns_rule, filtered_namespace, local_upstream, name};
 use kakoi_net::{
     dns_runtime::{DnsRuntime, DnsRuntimeConfig},
-    filter,
-    namespace::NetworkNamespace,
     nft,
     scope::AddressContext,
 };
@@ -18,36 +16,15 @@ use std::{
 #[test]
 fn runtime_stop_interrupts_pending_dns_and_kernel_fault_stops_further_work() {
     for mode in ["stop", "kernel"] {
-        let ns = Arc::new(NetworkNamespace::create().unwrap());
-        assert!(ns
-            .command("/usr/sbin/ip")
-            .unwrap()
-            .args(["link", "set", "lo", "up"])
-            .status()
-            .unwrap()
-            .success());
-        nft::apply(
-            &ns,
-            Path::new("/usr/sbin/nft"),
-            &filter::compile_static(&[], 120).unwrap(),
-            Instant::now() + Duration::from_secs(2),
-        )
-        .unwrap();
+        let ns = filtered_namespace();
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         socket.set_nonblocking(true).unwrap();
-        let config = parse_policy(
-            &format!(
-                "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-                socket.local_addr().unwrap().port()
-            ),
-            Path::new("dns.toml"),
-        )
-        .unwrap();
+        let upstreams = local_upstream(socket.local_addr().unwrap().port());
         let mut runtime = DnsRuntime::new(
             Arc::clone(&ns),
             DnsRuntimeConfig {
                 policy: vec![dns_rule("api.example.com")],
-                upstreams: config.network.dns_upstream,
+                upstreams,
                 limits: NetworkLimits {
                     dns_resolution_timeout_seconds: 30,
                     dns_server_timeout_seconds: 30,
@@ -122,36 +99,15 @@ s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x
 // @kotowari[REQ-134, EX-301]
 #[test]
 fn the_runtime_holds_a_failed_resolution_without_asking_again() {
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.set_nonblocking(true).unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            socket.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(socket.local_addr().unwrap().port());
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
             policy: vec![dns_rule("api.example.com")],
-            upstreams: config.network.dns_upstream,
+            upstreams,
             limits: NetworkLimits {
                 dns_failure_cache_seconds: 60,
                 ..NetworkLimits::default()
@@ -225,21 +181,7 @@ fn resolve(
     limits: NetworkLimits,
     names: &[&str],
 ) -> (Vec<(u8, u16)>, Vec<Vec<String>>) {
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let sockets: Vec<_> = upstreams
         .iter()
         .map(|_| {
@@ -490,36 +432,15 @@ fn resolve_questions(
     upstream: impl Fn(&str, u16) -> Option<Reply>,
     questions: &[(&str, u16, u64)],
 ) -> Resolved {
-    let ns = Arc::new(NetworkNamespace::create().unwrap());
-    assert!(ns
-        .command("/usr/sbin/ip")
-        .unwrap()
-        .args(["link", "set", "lo", "up"])
-        .status()
-        .unwrap()
-        .success());
-    nft::apply(
-        &ns,
-        Path::new("/usr/sbin/nft"),
-        &filter::compile_static(&[], 120).unwrap(),
-        Instant::now() + Duration::from_secs(2),
-    )
-    .unwrap();
+    let ns = filtered_namespace();
     let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket.set_nonblocking(true).unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}\n",
-            socket.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(socket.local_addr().unwrap().port());
     let mut runtime = DnsRuntime::new(
         Arc::clone(&ns),
         DnsRuntimeConfig {
             policy: vec![dns_rule(pattern)],
-            upstreams: config.network.dns_upstream,
+            upstreams,
             limits,
             nft: "/usr/sbin/nft".into(),
             trust: None,

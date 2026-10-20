@@ -94,7 +94,7 @@ print(code, repr(out), err.startswith('kakoi: bwrap: '), len(err.splitlines()))
 
 mod following {
     use crate::common::TempDir;
-    use crate::dns_fixture::dns_rule;
+    use crate::dns_fixture::{dns_rule, loopback_namespace};
     use kakoi_net::{
         dns_runtime::{DnsRuntime, DnsRuntimeConfig, HostDns},
         filter,
@@ -182,14 +182,7 @@ mod following {
         if let Some(change) = change {
             std::fs::write(file, change).unwrap();
         }
-        let ns = Arc::new(NetworkNamespace::create().unwrap());
-        assert!(ns
-            .command("/usr/sbin/ip")
-            .unwrap()
-            .args(["link", "set", "lo", "up"])
-            .status()
-            .unwrap()
-            .success());
+        let ns = loopback_namespace();
         nft::apply(
             &ns,
             Path::new("/usr/sbin/nft"),

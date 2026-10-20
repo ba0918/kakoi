@@ -1,7 +1,16 @@
 //! What the DNS tests build by hand: messages, independent of the product's own
-//! encoding, and the permission that authorizes names.
+//! encoding, the permission that authorizes names, the upstream they are sent to, and
+//! the namespace DNS is served in.
 
-use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
+use kakoi_net::{filter, namespace::NetworkNamespace, nft};
+use kakoi_runtime::cli::network::{Allow, Destination, DnsUpstream, Protocol};
+use std::{
+    net::Ipv4Addr,
+    num::NonZeroU16,
+    path::Path,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 /// Permission for TCP 443 of the names `pattern` matches.
 pub(crate) fn dns_rule(pattern: &str) -> Allow {
@@ -43,4 +52,38 @@ pub(crate) fn a_answer(question: &[u8], ttl: u32, address: [u8; 4]) -> Vec<u8> {
     answer.extend([0, 4]);
     answer.extend(address);
     answer
+}
+
+/// The plain upstream at 127.0.0.1:`port`.
+pub(crate) fn local_upstream(port: u16) -> Vec<DnsUpstream> {
+    vec![DnsUpstream::plain(
+        Ipv4Addr::LOCALHOST.into(),
+        NonZeroU16::new(port).unwrap(),
+    )]
+}
+
+/// A network namespace of its own with loopback up.
+pub(crate) fn loopback_namespace() -> Arc<NetworkNamespace> {
+    let namespace = Arc::new(NetworkNamespace::create().unwrap());
+    assert!(namespace
+        .command("/usr/sbin/ip")
+        .unwrap()
+        .args(["link", "set", "lo", "up"])
+        .status()
+        .unwrap()
+        .success());
+    namespace
+}
+
+/// A [`loopback_namespace`] with the static filter of no allow rules applied.
+pub(crate) fn filtered_namespace() -> Arc<NetworkNamespace> {
+    let namespace = loopback_namespace();
+    nft::apply(
+        &namespace,
+        Path::new("/usr/sbin/nft"),
+        &filter::compile_static(&[], 120).unwrap(),
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    namespace
 }

@@ -1,4 +1,4 @@
-use crate::dns_fixture::{a_answer, dns_rule};
+use crate::dns_fixture::{a_answer, dns_rule, local_upstream};
 use kakoi_net::{
     dns::{
         AcceptedRequest, DnsRequests, EnforcedDnsError, PreparedAnswer, ResolutionId,
@@ -10,10 +10,7 @@ use kakoi_net::{
     nft,
     scope::AddressContext,
 };
-use kakoi_runtime::cli::{
-    network::{Allow, NetworkLimits},
-    policy::parse_policy,
-};
+use kakoi_runtime::cli::network::{Allow, NetworkLimits};
 use std::{
     net::UdpSocket,
     path::Path,
@@ -29,14 +26,7 @@ fn candidate(requests: &mut DnsRequests<()>, name: u8) -> (ResolutionId, Prepare
     socket
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
-    let config = parse_policy(
-        &format!(
-            "[[network.dns-upstream]]\ntransport='plain'\nip='127.0.0.1'\nport={}",
-            socket.local_addr().unwrap().port()
-        ),
-        Path::new("dns.toml"),
-    )
-    .unwrap();
+    let upstreams = local_upstream(socket.local_addr().unwrap().port());
     let upstream = std::thread::spawn(move || {
         let mut bytes = [0; 512];
         let (size, peer) = socket.recv_from(&mut bytes).unwrap();
@@ -44,13 +34,8 @@ fn candidate(requests: &mut DnsRequests<()>, name: u8) -> (ResolutionId, Prepare
             .send_to(&a_answer(&bytes[..size], 30, [1, 1, 1, 1]), peer)
             .unwrap();
     });
-    let resolver = UpstreamResolver::new(
-        rules(),
-        config.network.dns_upstream,
-        NetworkLimits::default(),
-        None,
-    )
-    .unwrap();
+    let resolver =
+        UpstreamResolver::new(rules(), upstreams, NetworkLimits::default(), None).unwrap();
     let mut wire = vec![name, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, name];
     wire.extend(b"\x07example\x03com\0\0\x01\0\x01");
     let AcceptedRequest::Start(task) = requests.accept(&wire, (), Instant::now()).unwrap() else {
