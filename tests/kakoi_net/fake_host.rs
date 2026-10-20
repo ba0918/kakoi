@@ -132,11 +132,13 @@ def command(process, text):
 
 def until(process, text):
     """Reads kakoi's standard error up to the next notice containing `text`."""
+    passed = ''
     while True:
         notice = line(process.stderr)
-        assert notice, f'kakoi ended before a notice with {text}'
+        assert notice, f'kakoi ended before a notice with {text}, after {passed!r}'
         if text in notice:
             return notice
+        passed += notice
 
 def held(address, port, kind):
     """Whether the host's endpoint is taken, observed by binding it."""
@@ -155,10 +157,11 @@ def held(address, port, kind):
 
 def notices(process, count):
     """The next `count` publication notices on kakoi's standard error."""
-    found = []
+    found, passed = [], ''
     while len(found) < count:
         text = line(process.stderr)
-        assert text, 'kakoi ended before its notices'
+        assert text, f'kakoi ended before its notices, after {passed!r}'
+        passed += text
         if 'published' in text:
             found.append(text)
     return ''.join(sorted(found))
