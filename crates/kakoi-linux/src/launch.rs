@@ -327,8 +327,8 @@ fn kept(fd: OwnedFd, descriptors: &mut Vec<OwnedFd>) -> OsString {
 }
 
 /// A file in memory holding `content`, positioned at its start. It is created
-/// close-on-exec; only the `bwrap` command it was made for clears the flag.
-/// Holds transport bytes in a sealed, rewindable memory file, never a host file.
+/// close-on-exec; only the `bwrap` command it was made for clears the flag. The bytes
+/// never pass through a file on the host. The file is not sealed.
 pub fn memory_file(name: &str, content: &[u8]) -> io::Result<OwnedFd> {
     let name = CString::new(name).expect("the name has no NUL");
     // SAFETY: `memfd_create` reads the NUL-terminated name and creates a descriptor
