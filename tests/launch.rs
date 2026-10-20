@@ -1430,7 +1430,7 @@ fn an_rw_copy_of_something_that_is_neither_a_directory_nor_a_regular_file_is_a_p
     assert!(diagnostic.contains("not a regular file"), "{diagnostic}");
 }
 
-// @kotowari[REQ-168, REQ-404, EX-761]
+// @kotowari[REQ-168, REQ-404, EX-761, EX-339]
 #[test]
 fn an_rw_copy_source_over_the_entry_limit_is_a_path_diagnostic() {
     // The content is held in memory twice over, so a source pointed at something large is
@@ -1965,23 +1965,6 @@ fn a_file_in_an_rw_copy_directory_is_renamed_inside_only() {
         "host\n"
     );
     assert!(home.path().join("conf/after").symlink_metadata().is_err());
-}
-
-// @kotowari[EX-339]
-#[test]
-fn an_rw_copy_of_more_than_4096_entries_is_a_path_diagnostic() {
-    let (home, workspace) = home_with_workspace();
-    for index in 0..4097 {
-        home.write(format!("conf/f{index}"), "x\n");
-    }
-    profile(
-        &home,
-        "[mounts]\nrw = [\"${workspace}\"]\nrw-copy = [\"~/conf\"]\n",
-    );
-
-    let output = run_script(&home, &workspace, "exit 0");
-
-    assert_diagnostic(&output, 125, "path");
 }
 
 // @kotowari[EX-340]
