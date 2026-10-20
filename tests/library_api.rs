@@ -877,7 +877,14 @@ fn named_command_follows_the_guard_placed_on_the_isolated_path() {
     );
 }
 
+// Built once per test binary: every test runs the same consumer, and a build per test
+// made the parallel tests queue on one target directory's lock.
 fn consumer() -> std::path::PathBuf {
+    static CONSUMER: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    CONSUMER.get_or_init(build_consumer).clone()
+}
+
+fn build_consumer() -> std::path::PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target = root.join("target/library-sync-consumer");
     let mut command = Command::new(env!("CARGO"));
