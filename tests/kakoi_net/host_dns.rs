@@ -541,27 +541,39 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
         }
     }
 
+    // A new configuration that cannot be read (the file is gone) and one that is read
+    // but names no upstream both fail the question.
     // @kotowari[EX-239, EX-240]
     #[test]
-    fn an_unreadable_new_host_dns_fails_queries_without_falling_back() {
-        let temp = TempDir::new();
-        let (old, old_port) = upstream();
-        let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
-        let (ns, mut runtime) = runtime(&file);
-        std::fs::write(&file, "nothing usable\n").unwrap();
-        // Let the change be noticed before the application asks.
-        let noticed = Instant::now() + Duration::from_secs(3);
-        while Instant::now() < noticed {
-            runtime.poll(Instant::now()).unwrap();
-            std::thread::sleep(Duration::from_millis(10));
+    fn an_unreadable_or_unusable_new_host_dns_fails_queries_without_falling_back() {
+        for unreadable in [true, false] {
+            let temp = TempDir::new();
+            let (old, old_port) = upstream();
+            let file = temp.write("resolv.conf", format!("upstream {old_port}\n"));
+            let (ns, mut runtime) = runtime(&file);
+            if unreadable {
+                std::fs::remove_file(&file).unwrap();
+            } else {
+                std::fs::write(&file, "nothing usable\n").unwrap();
+            }
+            // Let the change be noticed before the application asks.
+            let noticed = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < noticed {
+                runtime.poll(Instant::now()).unwrap();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let app = client(&ns);
+            assert_eq!(
+                finish(app, &mut runtime),
+                "2 -\n",
+                "unreadable: {unreadable}"
+            );
+            let mut bytes = [0; 512];
+            assert!(
+                old.recv_from(&mut bytes).is_err(),
+                "the old upstream was used as a fallback (unreadable: {unreadable})"
+            );
         }
-        let app = client(&ns);
-        assert_eq!(finish(app, &mut runtime), "2 -\n");
-        let mut bytes = [0; 512];
-        assert!(
-            old.recv_from(&mut bytes).is_err(),
-            "the old upstream was used as a fallback"
-        );
     }
 
     // The query sent before the change counts. With two allowed, the redo
