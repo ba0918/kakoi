@@ -127,7 +127,11 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
         UpstreamResolver::new(
             vec![dns_rule("api.example.com")],
             upstreams,
-            NetworkLimits::default(),
+            NetworkLimits {
+                dns_server_timeout_seconds: 30,
+                dns_resolution_timeout_seconds: 30,
+                ..NetworkLimits::default()
+            },
             None,
         )
         .unwrap()
@@ -156,7 +160,7 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
         })
     };
     // Never answers: only an admission deadline can end the wait before the
-    // per-server timeout of 2 seconds.
+    // per-server timeout of 30 seconds.
     let silent = UdpSocket::bind("127.0.0.1:0").unwrap();
     silent.set_nonblocking(true).unwrap();
     let (live, bounded) = (resolver_for(&answering), resolver_for(&silent));
@@ -216,9 +220,9 @@ fn admitted_deadline_limits_real_upstream_io_and_expired_work_sends_nothing() {
             )
             .unwrap();
         assert_eq!(response[3] & 15, 2);
-        // A reset deadline would wait for the 2 second server timeout instead.
+        // A reset deadline would wait for the 30 second server timeout instead.
         assert!(
-            now.elapsed() < Duration::from_millis(1500),
+            now.elapsed() < Duration::from_secs(10),
             "worker reset the admission deadline"
         );
         assert_eq!(
