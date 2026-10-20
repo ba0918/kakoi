@@ -300,16 +300,8 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
     let (home, workspace) = home_with_workspace();
     let ws = workspace.display();
 
-    // A nested plan reads the policy too: a named profile that is not there is a
-    // diagnostic, not a plan.
-    let without_a_profile = run_inside(
-        home.path(),
-        &workspace,
-        &format!("exec {KAKOI} --workspace {ws} --profile strict --print-plan"),
-    );
-    assert_diagnostic(&without_a_profile, 125, "policy");
-
-    // The full form: the nested plan carries what marks it as nested, which the plain plan
+    // That a nested plan reads the policy is ex_521's, and the JSON form's `nested` key
+    // ex_888's. The full form: the nested plan carries what marks it as nested, which the plain plan
     // does not. The nested run is handed the environment the plain one gets, so that the
     // final environment the full form shows is no difference between them.
     let plain = binary(home.path())
@@ -337,7 +329,7 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
         .collect();
     assert!(!marking.is_empty(), "{report}");
 
-    // The summary carries the same marking, and the JSON form the `nested` key.
+    // The summary carries the same marking.
     let summary = run_inside(
         home.path(),
         &workspace,
@@ -350,16 +342,6 @@ fn req_285_a_nested_print_plan_reads_the_policy_and_marks_the_plan_as_nested() {
         assert!(summary.lines().any(|summary| summary == *line), "{report}");
     }
     assert!(summary.contains("\n  rw      ~/ws\n"), "{report}");
-
-    let json = run_inside(
-        home.path(),
-        &workspace,
-        &format!("exec {KAKOI} --workspace {ws} --print-plan=json"),
-    );
-    let report = output_report(&json);
-    assert_eq!(json.status.code(), Some(0), "{report}");
-    let plan: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
-    assert_eq!(plan["nested"], true, "{report}");
 }
 
 // @kotowari[EX-501]
