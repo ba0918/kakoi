@@ -283,6 +283,12 @@ pub fn merge(layers: &[Layer]) -> Result<Policy, Diagnostic> {
                 origin: layer.origin.clone(),
             }));
     }
+    check_merged(policy)
+}
+
+/// The rules only the merged policy can break, checked in the order their diagnostics
+/// are reported. The written publications are replaced by their merged form.
+fn check_merged(mut policy: Policy) -> Result<Policy, Diagnostic> {
     if policy.mounts_mode != ListMode::Listed && !policy.mounts_system {
         return Err(Diagnostic::policy(
             "`mounts.system = false` has no effect while the merged `mounts.mode` is not `listed`",
