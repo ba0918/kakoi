@@ -367,18 +367,6 @@ fn run_script_under_soft_limit_1024(home: &TempDir, workspace: &Path, script: &s
 
 // @kotowari[REQ-309]
 #[test]
-fn a_scan_of_more_hidden_files_than_the_soft_limit_still_launches() {
-    // Specification section 14: every hidden file needs a descriptor; with 1100 of them
-    // and a soft limit of 1024, the start raises the soft limit to the hard limit first.
-    let (home, workspace) = home_with_many_env_files(1100);
-
-    let output = run_script_under_soft_limit_1024(&home, &workspace, "test ! -s .env.0");
-
-    assert_eq!(output.status.code(), Some(0), "{}", output_report(&output));
-}
-
-// @kotowari[REQ-309]
-#[test]
 fn the_isolated_process_inherits_the_raised_soft_limit() {
     // The limit is raised whether or not it is needed, so the same input gives the same
     // result: inside, the soft limit equals the hard limit.
@@ -2326,12 +2314,19 @@ fn the_full_plan_shows_descriptors_as_symbols_not_numbers() {
     }
 }
 
-// @kotowari[EX-542]
+// Specification section 14: every hidden file needs a descriptor; with 1100 of them and
+// a soft limit of 1024, the start raises the soft limit to the hard limit first, the
+// files are hidden, and the command inherits the raised limit.
+// @kotowari[REQ-309, EX-542]
 #[test]
 fn more_hidden_files_than_the_soft_limit_start_and_the_command_gets_the_raised_limit() {
     let (home, workspace) = home_with_many_env_files(1100);
 
-    let output = run_script_under_soft_limit_1024(&home, &workspace, "ulimit -Sn; ulimit -Hn");
+    let output = run_script_under_soft_limit_1024(
+        &home,
+        &workspace,
+        "test ! -s .env.0 && ulimit -Sn && ulimit -Hn",
+    );
 
     let stdout = assert_ran_clean(&output);
     let lines: Vec<&str> = stdout.lines().collect();
