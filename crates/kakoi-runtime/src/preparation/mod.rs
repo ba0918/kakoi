@@ -77,15 +77,8 @@ impl PreparedRun {
                     .unwrap()
                     .shutdown(std::net::Shutdown::Both);
                 let _ = self.control.shutdown(std::net::Shutdown::Both);
-                let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
-                while state.outcome.is_none() {
-                    state = self
-                        .shared
-                        .changed
-                        .wait(state)
-                        .unwrap_or_else(|e| e.into_inner());
-                }
-                if !state.worker_reaped {
+                let (_, worker_reaped) = self.shared.wait_finished();
+                if !worker_reaped {
                     error.cleanup = Cleanup::Unconfirmed;
                 }
                 Err(error)
@@ -105,11 +98,7 @@ impl PreparedRun {
                 let stdin = take(slots[0]).map(crate::PipeWriter);
                 let stdout = take(slots[1]).map(crate::PipeReader);
                 let stderr = take(slots[2]).map(crate::PipeReader);
-                let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
-                if state.status == crate::RunStatus::Starting {
-                    state.status = crate::RunStatus::Running;
-                }
-                drop(state);
+                self.shared.mark_running();
                 Ok(crate::Running {
                     shared: self.shared.clone(),
                     owner: self.owner.take().unwrap(),
@@ -188,9 +177,7 @@ fn reap(
         match ipc::recv::<crate::running::ResultUpdate>(&result_channel) {
             Ok((crate::running::ResultUpdate::Main(observed), fds)) if fds.is_empty() => {
                 main = observed;
-                let mut state = result_state.state.lock().unwrap_or_else(|e| e.into_inner());
-                state.status = crate::RunStatus::Stopping;
-                drop(state);
+                result_state.mark_stopping();
                 if let Err(cause) = ipc::send(&result_channel, &(), &[]) {
                     break Err(cause);
                 }
@@ -255,12 +242,7 @@ fn reap(
             os_error: None,
         });
     }
-    result_state
-        .state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .worker_reaped = matches!(waited, Some(Ok(_)));
-    result_state.finish(outcome);
+    result_state.finish(outcome, matches!(waited, Some(Ok(_))));
     result_state.events.close(event_count);
 }
 

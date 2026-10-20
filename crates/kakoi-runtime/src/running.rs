@@ -96,9 +96,9 @@ pub(crate) enum ResultUpdate {
     Finished(RunOutcome, u64),
 }
 pub(crate) struct State {
-    pub status: RunStatus,
-    pub outcome: Option<Arc<RunOutcome>>,
-    pub worker_reaped: bool,
+    status: RunStatus,
+    outcome: Option<Arc<RunOutcome>>,
+    worker_reaped: bool,
     stop_requested: bool,
     waiters: BTreeMap<u64, Waker>,
     next_waiter: u64,
@@ -125,8 +125,30 @@ impl Shared {
             control: Mutex::new(Some(control)),
         }
     }
-    pub fn finish(&self, outcome: RunOutcome) {
+    /// The worker started the command; a stop asked for meanwhile stays the status.
+    pub fn mark_running(&self) {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if state.status == RunStatus::Starting {
+            state.status = RunStatus::Running;
+        }
+    }
+    /// The main command ended and the run is winding down.
+    pub fn mark_stopping(&self) {
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).status = RunStatus::Stopping;
+    }
+    /// Waits for the outcome, and tells whether the run's own reaper reaped the worker.
+    pub fn wait_finished(&self) -> (Arc<RunOutcome>, bool) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(outcome) = &state.outcome {
+                return (outcome.clone(), state.worker_reaped);
+            }
+            state = self.changed.wait(state).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+    pub fn finish(&self, outcome: RunOutcome, worker_reaped: bool) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.worker_reaped = worker_reaped;
         state.status = RunStatus::Finished;
         state.outcome = Some(Arc::new(outcome));
         let waiters = std::mem::take(&mut state.waiters);
@@ -200,17 +222,7 @@ impl Running {
         self.shared.events.receiver()
     }
     pub fn wait(&self) -> Arc<RunOutcome> {
-        let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
-        loop {
-            if let Some(outcome) = &state.outcome {
-                return outcome.clone();
-            }
-            state = self
-                .shared
-                .changed
-                .wait(state)
-                .unwrap_or_else(|e| e.into_inner());
-        }
+        self.shared.wait_finished().0
     }
     pub fn wait_async(&self) -> impl Future<Output = Arc<RunOutcome>> + Send + '_ {
         Wait {
