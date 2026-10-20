@@ -54,10 +54,23 @@ pub struct HostDns {
     pub wait: fn(&[DnsUpstream]) -> UpstreamWait,
 }
 
+/// The host's DNS configuration being followed: where it is read from and how, and the
+/// contents the current upstreams came from.
 struct Following {
-    source: HostDns,
+    path: PathBuf,
+    parse: fn(&str) -> Result<Vec<DnsUpstream>, String>,
+    wait: fn(&[DnsUpstream]) -> UpstreamWait,
     text: Option<String>,
     next: Instant,
+}
+
+/// A question handed to a worker, kept to ask again under new settings with the same
+/// deadline and what is left of the same query count.
+#[derive(Clone)]
+struct Asked {
+    wire: Vec<u8>,
+    deadline: Instant,
+    queries: QueryAllowance,
 }
 
 pub struct DnsRuntime {
@@ -67,10 +80,8 @@ pub struct DnsRuntime {
     limits: NetworkLimits,
     trust: Option<TlsClient>,
     following: Option<Following>,
-    // Questions handed to a worker, kept to ask again under new settings with
-    // the same deadline and what is left of the same query count.
-    inflight: HashMap<ResolutionId, (Vec<u8>, Instant, QueryAllowance)>,
-    adopting: HashMap<ResolutionId, (Vec<u8>, Instant, QueryAllowance)>,
+    inflight: HashMap<ResolutionId, Asked>,
+    adopting: HashMap<ResolutionId, Asked>,
     // Workers whose settings were replaced; their results are never used.
     retired: HashSet<ResolutionId>,
     scope: Arc<AddressContext>,
@@ -122,8 +133,10 @@ impl DnsRuntime {
             .waiting(wait),
         );
         let following = config.host_dns.map(|source| Following {
-            text: source.text.clone(),
-            source,
+            path: source.path,
+            parse: source.parse,
+            wait: source.wait,
+            text: source.text,
             next: Instant::now() + FOLLOW_INTERVAL,
         });
         let policy = config.policy.clone();
@@ -173,16 +186,16 @@ impl DnsRuntime {
             return Ok(false);
         };
         following.next = now + FOLLOW_INTERVAL;
-        let text = std::fs::read_to_string(&following.source.path).ok();
+        let text = std::fs::read_to_string(&following.path).ok();
         if text == following.text {
             return Ok(true);
         }
         let upstreams = text
             .as_deref()
-            .and_then(|text| (following.source.parse)(text).ok())
+            .and_then(|text| (following.parse)(text).ok())
             .unwrap_or_default();
         following.text = text;
-        let wait = (following.source.wait)(&upstreams);
+        let wait = (following.wait)(&upstreams);
         self.resolver = Arc::new(
             UpstreamResolver::new(
                 self.policy.clone(),
@@ -199,25 +212,18 @@ impl DnsRuntime {
         Ok(true)
     }
 
-    fn dispatch(
-        &mut self,
-        id: ResolutionId,
-        wire: Vec<u8>,
-        deadline: Instant,
-        queries: QueryAllowance,
-        now: Instant,
-    ) -> io::Result<()> {
-        if now >= deadline {
+    fn dispatch(&mut self, id: ResolutionId, asked: Asked, now: Instant) -> io::Result<()> {
+        if now >= asked.deadline {
             return self.fail_query(id, now);
         }
         let resolver = Arc::clone(&self.resolver);
         let scope = Arc::clone(&self.scope);
         let route = Arc::clone(&self.route);
-        let shared = queries.clone();
+        let shared = asked.queries.clone();
         let task = crate::dns::ResolutionTask {
             id,
-            wire: wire.clone(),
-            deadline,
+            wire: asked.wire.clone(),
+            deadline: asked.deadline,
         };
         match self.workers.start(task, move |task, cancel| {
             resolver.prepare_sharing(
@@ -230,7 +236,7 @@ impl DnsRuntime {
             )
         }) {
             Ok(()) => {
-                self.inflight.insert(id, (wire, deadline, queries));
+                self.inflight.insert(id, asked);
                 Ok(())
             }
             Err((_, error)) if error.kind() == io::ErrorKind::BrokenPipe => Err(error),
@@ -259,9 +265,9 @@ impl DnsRuntime {
                 Err(EnforcedDnsError::Enforcement(error)) => return Err(error),
             };
             if self.retired.remove(&completed.id) && !self.stopping {
-                if let Some((wire, deadline, queries)) = task {
+                if let Some(asked) = task {
                     self.service.rekey(completed.id);
-                    self.dispatch(completed.id, wire, deadline, queries, now)?;
+                    self.dispatch(completed.id, asked, now)?;
                     continue;
                 }
             }
@@ -282,12 +288,12 @@ impl DnsRuntime {
             let task = self.inflight.remove(&completed.id);
             if self.retired.remove(&completed.id) && !self.stopping {
                 // Asked under replaced settings: ask again, within the same deadline.
-                if let (Some((wire, deadline, queries)), false) = (
+                if let (Some(asked), false) = (
                     task.clone(),
                     matches!(completed.result, WorkResult::Panicked),
                 ) {
                     self.service.rekey(completed.id);
-                    self.dispatch(completed.id, wire, deadline, queries, now)?;
+                    self.dispatch(completed.id, asked, now)?;
                     continue;
                 }
             }
@@ -322,8 +328,12 @@ impl DnsRuntime {
     fn admit_new(&mut self, now: Instant) -> io::Result<()> {
         if !self.stopping {
             for task in self.service.poll(now)? {
-                let queries = QueryAllowance::new(&self.limits);
-                self.dispatch(task.id, task.wire, task.deadline, queries, now)?;
+                let asked = Asked {
+                    wire: task.wire,
+                    deadline: task.deadline,
+                    queries: QueryAllowance::new(&self.limits),
+                };
+                self.dispatch(task.id, asked, now)?;
             }
         }
         Ok(())
