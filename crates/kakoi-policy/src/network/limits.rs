@@ -56,87 +56,70 @@ pub struct LimitOverrides {
 
 impl LimitOverrides {
     pub fn is_present(&self) -> bool {
-        self.udp_idle_timeout_seconds.is_some()
-            || self.dns_zero_ttl_grace_milliseconds.is_some()
-            || self.dns_server_timeout_seconds.is_some()
-            || self.dns_resolution_timeout_seconds.is_some()
-            || self.dns_max_cname_hops.is_some()
-            || self.dns_max_upstream_queries.is_some()
-            || self.dns_max_concurrent_resolutions.is_some()
-            || self.dns_max_waiters_per_resolution.is_some()
-            || self.dns_failure_cache_seconds.is_some()
-            || self.recovery_attempt_timeout_seconds.is_some()
+        *self != Self::default()
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self
-            .udp_idle_timeout_seconds
-            .is_some_and(|v| !(1..=MAX_UDP_IDLE_TIMEOUT_SECONDS).contains(&v))
-        {
-            return Err(format!(
-                "network.udp-idle-timeout-seconds must be in 1..={MAX_UDP_IDLE_TIMEOUT_SECONDS}"
-            ));
-        }
-        if self
-            .dns_zero_ttl_grace_milliseconds
-            .is_some_and(|v| !(100..=10000).contains(&v))
-        {
-            return Err("network.dns-zero-ttl-grace-milliseconds must be in 100..=10000".into());
-        }
-        if self
-            .dns_server_timeout_seconds
-            .is_some_and(|v| !(1..=300).contains(&v))
-        {
-            return Err("network.dns-server-timeout-seconds must be in 1..=300".into());
-        }
-        if self
-            .dns_resolution_timeout_seconds
-            .is_some_and(|v| !(1..=MAX_DNS_RESOLUTION_TIMEOUT_SECONDS).contains(&v))
-        {
-            return Err(format!(
-                "network.dns-resolution-timeout-seconds must be in 1..={MAX_DNS_RESOLUTION_TIMEOUT_SECONDS}"
-            ));
-        }
-        if self
-            .dns_max_cname_hops
-            .is_some_and(|v| !(1..=128).contains(&v))
-        {
-            return Err("network.dns-max-cname-hops must be in 1..=128".into());
-        }
-        if self
-            .dns_max_upstream_queries
-            .is_some_and(|v| !(1..=4096).contains(&v))
-        {
-            return Err("network.dns-max-upstream-queries must be in 1..=4096".into());
-        }
-        if self
-            .dns_max_concurrent_resolutions
-            .is_some_and(|v| !(1..=MAX_DNS_CONCURRENT_RESOLUTIONS).contains(&v))
-        {
-            return Err(format!(
-                "network.dns-max-concurrent-resolutions must be in 1..={MAX_DNS_CONCURRENT_RESOLUTIONS}"
-            ));
-        }
-        if self
-            .dns_max_waiters_per_resolution
-            .is_some_and(|v| !(1..=MAX_DNS_WAITERS_PER_RESOLUTION).contains(&v))
-        {
-            return Err(format!(
-                "network.dns-max-waiters-per-resolution must be in 1..={MAX_DNS_WAITERS_PER_RESOLUTION}"
-            ));
-        }
-        if self
-            .dns_failure_cache_seconds
-            .is_some_and(|v| !(1..=300).contains(&v))
-        {
-            return Err("network.dns-failure-cache-seconds must be in 1..=300".into());
-        }
-        if self
-            .recovery_attempt_timeout_seconds
-            .is_some_and(|v| !(1..=MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS).contains(&v))
-        {
-            return Err(format!(
-                "network.recovery-attempt-timeout-seconds must be in 1..={MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS}"
-            ));
+        let bounds = [
+            (
+                self.udp_idle_timeout_seconds,
+                "udp-idle-timeout-seconds",
+                1,
+                MAX_UDP_IDLE_TIMEOUT_SECONDS,
+            ),
+            (
+                self.dns_zero_ttl_grace_milliseconds,
+                "dns-zero-ttl-grace-milliseconds",
+                100,
+                10000,
+            ),
+            (
+                self.dns_server_timeout_seconds,
+                "dns-server-timeout-seconds",
+                1,
+                300,
+            ),
+            (
+                self.dns_resolution_timeout_seconds,
+                "dns-resolution-timeout-seconds",
+                1,
+                MAX_DNS_RESOLUTION_TIMEOUT_SECONDS,
+            ),
+            (self.dns_max_cname_hops, "dns-max-cname-hops", 1, 128),
+            (
+                self.dns_max_upstream_queries,
+                "dns-max-upstream-queries",
+                1,
+                4096,
+            ),
+            (
+                self.dns_max_concurrent_resolutions,
+                "dns-max-concurrent-resolutions",
+                1,
+                MAX_DNS_CONCURRENT_RESOLUTIONS,
+            ),
+            (
+                self.dns_max_waiters_per_resolution,
+                "dns-max-waiters-per-resolution",
+                1,
+                MAX_DNS_WAITERS_PER_RESOLUTION,
+            ),
+            (
+                self.dns_failure_cache_seconds,
+                "dns-failure-cache-seconds",
+                1,
+                300,
+            ),
+            (
+                self.recovery_attempt_timeout_seconds,
+                "recovery-attempt-timeout-seconds",
+                1,
+                MAX_RECOVERY_ATTEMPT_TIMEOUT_SECONDS,
+            ),
+        ];
+        for (value, key, min, max) in bounds {
+            if value.is_some_and(|value| !(min..=max).contains(&value)) {
+                return Err(format!("network.{key} must be in {min}..={max}"));
+            }
         }
         Ok(())
     }
