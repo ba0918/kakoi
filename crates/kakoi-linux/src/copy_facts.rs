@@ -124,7 +124,7 @@ fn read_directory(
     let mut found: Vec<_> = read
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| unreadable(item, directory, error))?;
-    found.sort_by_key(std::fs::DirEntry::file_name);
+    found.sort_by_cached_key(std::fs::DirEntry::file_name);
     for entry in found {
         let path = entry.path();
         let relative = relative.join(entry.file_name());

@@ -31,7 +31,7 @@ fn walk(
         return;
     };
     let mut entries: Vec<_> = entries.filter_map(Result::ok).collect();
-    entries.sort_by_key(|entry| entry.file_name());
+    entries.sort_by_cached_key(fs::DirEntry::file_name);
     for entry in entries {
         let name = entry.file_name();
         let name = name.as_bytes();
