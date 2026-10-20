@@ -724,8 +724,29 @@ fn recovery_removes_only_a_retired_watchdogs_guard_before_opening() {
     let (transport, records) = transport(&directory);
     let mut session = Session::prepare(transport, config("/usr/sbin/nft"), &[], |_| None).unwrap();
     session.activate().unwrap();
-    // Simulate a controller pause long enough for the independent monitor to close.
-    std::thread::sleep(Duration::from_millis(3200));
+    // Simulate a controller pause until the independent monitor has closed transit with a
+    // guard of its own, which only the recovery may remove.
+    let paused = Instant::now() + Duration::from_secs(30);
+    while !Command::new("/usr/bin/nsenter")
+        .args([
+            "--preserve-credentials",
+            &format!("--user=/proc/{}/ns/user", records[0].1),
+            &format!("--net=/proc/{}/ns/net", records[0].1),
+            "--",
+            "/usr/sbin/nft",
+            "list",
+            "table",
+            "inet",
+            "kakoi_guard",
+        ])
+        .output()
+        .unwrap()
+        .status
+        .success()
+    {
+        assert!(Instant::now() < paused, "the monitor never closed transit");
+        std::thread::sleep(Duration::from_millis(20));
+    }
     assert!(session.poll().is_err());
     assert_eq!(session.state(), SessionState::Isolated);
     assert_transit(records[0].1, false);
