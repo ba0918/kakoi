@@ -47,14 +47,15 @@ pub struct IoCause {
     pub os_error: Option<i32>,
 }
 
-/// Writes the control characters of `text` (0x00 to 0x1F and 0x7F) in a visible form: `\n`,
-/// `\r`, and `\t` for the usual three, `\xNN` for the rest. A value taken from the command
-/// line or a policy file then cannot split a line or reach the terminal as a control
-/// sequence (specification section 13). Unicode line separators are left as they are.
+/// Whether `character` is one of the control characters `escape_control` rewrites.
 pub fn is_control_character(character: char) -> bool {
     matches!(character, '\x00'..='\x1f' | '\x7f')
 }
 
+/// Writes the control characters of `text` (0x00 to 0x1F and 0x7F) in a visible form: `\n`,
+/// `\r`, and `\t` for the usual three, `\xNN` for the rest. A value taken from the command
+/// line or a policy file then cannot split a line or reach the terminal as a control
+/// sequence (specification section 13). Unicode line separators are left as they are.
 pub fn escape_control(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
