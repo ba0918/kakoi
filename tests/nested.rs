@@ -125,30 +125,6 @@ fn req_284_a_nested_launch_warns_and_runs_the_command_without_bwrap() {
     assert_eq!(lines[1], "err", "{report}");
 }
 
-// @kotowari[REQ-284]
-#[test]
-fn req_284_a_nested_launch_leaves_the_environment_unchanged() {
-    let (home, workspace) = home_with_workspace();
-
-    // The same environment is printed once by `env` itself and once through kakoi.
-    let output = run_inside(
-        home.path(),
-        &workspace,
-        &format!(
-            "/usr/bin/env MARKER='kept as is' PATH=/nonexistent /usr/bin/env; echo ---; \
-             exec /usr/bin/env MARKER='kept as is' PATH=/nonexistent {KAKOI} -- /usr/bin/env"
-        ),
-    );
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
-    let (expected, inside) = stdout.split_once("---\n").unwrap();
-    let set = |text: &str| text.lines().map(str::to_string).collect::<BTreeSet<_>>();
-    assert!(expected.contains("MARKER=kept as is\n"), "{report}");
-    assert_eq!(set(inside), set(expected), "{report}");
-}
-
 // @kotowari[REQ-261, REQ-290]
 #[test]
 fn req_261_a_nested_launch_resolves_the_command_on_the_host_path_and_exits_127_when_missing() {
@@ -285,20 +261,21 @@ fn req_293_a_nested_launch_goes_from_the_grammar_to_the_command() {
     assert_eq!(output.stdout, b"ran\n", "{}", output_report(&output));
 }
 
-// @kotowari[EX-520]
+// @kotowari[EX-520, REQ-284]
 #[test]
 fn ex_520_a_nested_launch_execs_the_command_itself_with_the_environment_as_received() {
     let (home, workspace) = home_with_workspace();
 
     // The shell prints its own process ID and the environment `env` hands on; kakoi then
     // replaces the same process, and the command prints its process ID and the
-    // environment it was started with (not its own, to which it adds `PWD`).
+    // environment it was started with (not its own, to which it adds `PWD`). `PATH` names
+    // nothing: a nested launch needs no `bwrap`.
     let output = run_inside(
         home.path(),
         &workspace,
         &format!(
-            "echo $$; /usr/bin/env MARKER='kept as is' /usr/bin/env; echo ---; \
-             exec /usr/bin/env MARKER='kept as is' {KAKOI} -- \
+            "echo $$; /usr/bin/env MARKER='kept as is' PATH=/nonexistent /usr/bin/env; echo ---; \
+             exec /usr/bin/env MARKER='kept as is' PATH=/nonexistent {KAKOI} -- \
              /bin/sh -c 'echo $$; /usr/bin/tr \"\\0\" \"\\n\" < /proc/$$/environ'"
         ),
     );
