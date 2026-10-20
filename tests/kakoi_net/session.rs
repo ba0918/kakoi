@@ -1,7 +1,7 @@
 use crate::{
     common::TempDir,
     dns_fixture::{a_answer, dns_rule, local_upstream},
-    health::assert_loopback_command,
+    health::{assert_loopback_command, loopback_blocked},
 };
 use kakoi_net::{
     dns_runtime::DnsRuntimeConfig,
@@ -69,6 +69,11 @@ pub(crate) fn config(nft: &str) -> DnsRuntimeConfig {
 }
 
 pub(crate) fn assert_transit(keeper: i32, expected: bool) {
+    assert_loopback_command(in_transit(keeper), expected);
+}
+
+/// A Python in the network namespace that `keeper` holds.
+fn in_transit(keeper: i32) -> Command {
     let mut command = Command::new("/usr/bin/nsenter");
     command.args([
         "--preserve-credentials",
@@ -77,7 +82,7 @@ pub(crate) fn assert_transit(keeper: i32, expected: bool) {
         "--",
         "/usr/bin/python3",
     ]);
-    assert_loopback_command(command, expected);
+    command
 }
 
 /// Polls `session` until it is drained, which must happen before `deadline`.
@@ -702,23 +707,7 @@ fn recovery_removes_only_a_retired_watchdogs_guard_before_opening() {
     // Simulate a controller pause until the independent monitor has closed transit with a
     // guard of its own, which only the recovery may remove.
     let paused = Instant::now() + Duration::from_secs(30);
-    while !Command::new("/usr/bin/nsenter")
-        .args([
-            "--preserve-credentials",
-            &format!("--user=/proc/{}/ns/user", records[0].1),
-            &format!("--net=/proc/{}/ns/net", records[0].1),
-            "--",
-            "/usr/sbin/nft",
-            "list",
-            "table",
-            "inet",
-            "kakoi_guard",
-        ])
-        .output()
-        .unwrap()
-        .status
-        .success()
-    {
+    while !loopback_blocked(in_transit(records[0].1)) {
         assert!(Instant::now() < paused, "the monitor never closed transit");
         std::thread::sleep(Duration::from_millis(20));
     }
