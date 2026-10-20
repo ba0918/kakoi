@@ -76,10 +76,6 @@ fn cname_candidates_exclude_unrelated_answers_and_keep_deadlines_across_response
     assert_eq!(addresses.len(), 1);
     assert_eq!(addresses[0].address.to_string(), "1.1.1.1");
     assert_eq!(addresses[0].deadline, start + Duration::from_secs(2));
-    assert_eq!(
-        addresses[0].cache_deadline,
-        start + Duration::from_millis(1500)
-    );
 }
 
 // @kotowari[REQ-014, REQ-389]
@@ -102,7 +98,6 @@ fn zero_ttl_grace_never_extends_a_positive_deadline_in_the_same_answer_set() {
     assert_eq!(addresses.len(), 2);
     for address in addresses {
         assert_eq!(address.deadline, start + Duration::from_secs(1));
-        assert_eq!(address.cache_deadline, start);
     }
 }
 
@@ -441,10 +436,6 @@ fn resolution_follows_cname_with_one_budget_and_ages_the_assembled_answer() {
     assert_eq!(resolved.candidates.len(), 1);
     assert_eq!(
         resolved.candidates[0].deadline,
-        start + Duration::from_secs(10)
-    );
-    assert_eq!(
-        resolved.candidates[0].cache_deadline,
         start + Duration::from_secs(10)
     );
     let original = Question::parse(&query(1)).unwrap();

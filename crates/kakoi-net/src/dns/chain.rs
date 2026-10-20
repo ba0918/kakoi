@@ -16,7 +16,6 @@ use std::{
 pub struct AddressCandidate {
     pub address: IpAddr,
     pub deadline: Instant,
-    pub cache_deadline: Instant,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -31,7 +30,6 @@ pub struct AddressChain {
     current: Name,
     kind: RecordType,
     aliases: CnameChain,
-    cache_deadline: Option<Instant>,
 }
 
 impl AddressChain {
@@ -45,7 +43,6 @@ impl AddressChain {
             current: query.name().clone(),
             kind: query.query_type(),
             aliases: CnameChain::new(&query.name().to_ascii(), max_hops).map_err(alias_error)?,
-            cache_deadline: None,
         })
     }
 
@@ -112,20 +109,12 @@ impl AddressChain {
                 {
                     return Err(DnsError::ConflictingAlias);
                 }
-                let ttl = aliases
-                    .iter()
-                    .map(|(_, ttl)| *ttl)
-                    .min()
-                    .expect("at least one alias");
                 let deadline =
                     earliest_deadline(aliases.iter().map(|(_, ttl)| *ttl), received, zero_grace)?
                         .expect("at least one alias");
-                let cache = record_deadline(received, ttl, Duration::ZERO)
-                    .ok_or(DnsError::LifetimeOverflow)?;
                 self.aliases
                     .follow(&target.to_ascii(), deadline)
                     .map_err(alias_error)?;
-                self.cache_deadline = Some(self.cache_deadline.map_or(cache, |old| old.min(cache)));
                 self.current = (*target).clone();
                 followed = true;
                 continue;
@@ -140,22 +129,14 @@ impl AddressChain {
                     _ => None,
                 })
                 .collect();
-            if let Some(ttl) = addresses.iter().map(|(_, ttl)| *ttl).min() {
-                let deadline = self.aliases.permission_deadline(
-                    earliest_deadline(addresses.iter().map(|(_, ttl)| *ttl), received, zero_grace)?
-                        .expect("at least one address"),
-                );
-                let cache = record_deadline(received, ttl, Duration::ZERO)
-                    .ok_or(DnsError::LifetimeOverflow)?;
-                let cache_deadline = self.cache_deadline.map_or(cache, |old| old.min(cache));
+            if let Some(earliest) =
+                earliest_deadline(addresses.iter().map(|(_, ttl)| *ttl), received, zero_grace)?
+            {
+                let deadline = self.aliases.permission_deadline(earliest);
                 return Ok(AddressProgress::Complete(
                     addresses
                         .into_iter()
-                        .map(|(address, _)| AddressCandidate {
-                            address,
-                            deadline,
-                            cache_deadline,
-                        })
+                        .map(|(address, _)| AddressCandidate { address, deadline })
                         .collect(),
                 ));
             }
