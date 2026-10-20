@@ -1029,6 +1029,27 @@ fn an_ro_written_through_a_writable_link_is_accepted_wherever_it_lands_outside_h
     }
 }
 
+// @kotowari[REQ-159]
+#[test]
+fn an_rw_copy_written_through_a_writable_link_is_accepted_wherever_it_lands_outside_hide_and_ro() {
+    // `rw-copy` is exempt from the root items as `ro` is; only the exposing pairs apply.
+    let profile = "[mounts]\nrw = [\"~/a\", \"~/b\"]\nrw-copy = [\"~/a/l/y\"]";
+
+    for (name, target) in [
+        ("into another rw", "/home/u/b/x"),
+        ("into no item", "/home/u/elsewhere/x"),
+    ] {
+        let result = check(
+            &layers(profile, None, &[], &[]),
+            &variables(),
+            a_l_pointing_at(host(), target),
+            WORKTREE,
+        );
+
+        assert!(result.is_ok(), "{name}: {result:?}");
+    }
+}
+
 // @kotowari[REQ-161]
 #[test]
 fn an_ro_written_through_a_writable_link_landing_inside_a_hide_is_rejected() {
