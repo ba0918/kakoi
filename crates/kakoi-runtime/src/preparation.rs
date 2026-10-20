@@ -28,7 +28,7 @@ pub(crate) fn remove_helper_environment(command: &mut Command) {
         OWNER,
         RESULT,
         EVENTS,
-        "KAKOI_RUNTIME_INIT_FD",
+        crate::execution::INIT_FD,
         crate::helper_image::PROBE,
     ] {
         command.env_remove(key);
@@ -476,7 +476,7 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     if serde_json::to_vec(&input)
         .map_err(|cause| error(Phase::Input, ErrorKind::Protocol, cause.to_string()))?
         .len()
-        > 16 * 1024 * 1024
+        > ipc::MAX_MESSAGE
     {
         return Err(error(
             Phase::Input,

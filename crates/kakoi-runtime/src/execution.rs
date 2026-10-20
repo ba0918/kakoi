@@ -24,7 +24,7 @@ use kakoi_plan::{
 use serde::{Deserialize, Serialize};
 
 const INIT: &str = "/dev/kakoi-runtime/init";
-const INIT_FD: &str = "KAKOI_RUNTIME_INIT_FD";
+pub(crate) const INIT_FD: &str = "KAKOI_RUNTIME_INIT_FD";
 
 #[derive(Serialize, Deserialize)]
 struct Check {
@@ -530,10 +530,12 @@ pub(crate) fn run_worker(
     let startup = (|| -> io::Result<InitReply> {
         let watches = [owner.as_raw_fd(), control.as_raw_fd()];
         ipc::send_watched(&init_control, &request, &[], &watches)?;
-        for (index, batch) in expected_data.chunks(16).enumerate() {
+        for (index, batch) in expected_data.chunks(ipc::MAX_FDS).enumerate() {
             ipc::send_watched(
                 &init_control,
-                &DataBatch { offset: index * 16 },
+                &DataBatch {
+                    offset: index * ipc::MAX_FDS,
+                },
                 batch,
                 &watches,
             )?;
