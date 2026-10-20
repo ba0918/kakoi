@@ -11,7 +11,7 @@ use common::TempDir;
 use kakoi_runtime::cli::diagnostic::{Diagnostic, Kind};
 use kakoi_runtime::cli::environment::{HostEnvironment, RealEntry};
 use kakoi_runtime::cli::layers::{Directive, Layer, LayerOrigin};
-use kakoi_runtime::cli::mount_facts::{collect_generator_facts, collect_mount_facts};
+use kakoi_runtime::cli::mount_facts::{collect_generator_facts, collect_path_facts};
 use kakoi_runtime::cli::mount_list::read_mount_list;
 use kakoi_runtime::cli::mounts::{
     candidates, expand_policy, generate, resolve_written, Candidates, Expansion, ItemOrigin, Mount,
@@ -1006,6 +1006,14 @@ fn the_candidate_paths_cover_every_expanded_path_and_the_prefixes_of_protected_o
             candidates.traversals
         );
     }
+}
+
+/// Both halves of the observation, in the order the runtime runs them around the
+/// resolution of the written items.
+fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
+    let mut facts = collect_path_facts(candidates);
+    collect_generator_facts(candidates, &mut facts);
+    facts
 }
 
 // @kotowari[REQ-197]

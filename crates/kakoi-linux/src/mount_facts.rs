@@ -17,15 +17,6 @@ use crate::workspace_facts::real_entry;
 /// allows a path lookup.
 const LINK_LIMIT: usize = 40;
 
-/// Looks up every candidate path, walks the resolution of every path whose traversal is
-/// asked for, walks every scan from its real root, and, when a `hide-mounts` asks for it,
-/// reads the mount list and looks up each mount target under its `under`.
-pub fn collect_mount_facts(candidates: &Candidates) -> MountFacts {
-    let mut facts = collect_path_facts(candidates);
-    collect_generator_facts(candidates, &mut facts);
-    facts
-}
-
 /// Looks up every candidate path and walks the resolution of every path whose traversal
 /// is asked for: the facts the resolution needs before it knows which scans and
 /// `hide-mounts` apply.
