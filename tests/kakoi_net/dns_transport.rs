@@ -234,13 +234,18 @@ fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
     for maximum in [1, 2] {
         let (tcp, udp) = crate::common::tcp_and_udp_on_one_port();
         let peer = tcp.local_addr().unwrap();
+        let (served, unserved) = if maximum == 2 {
+            (Some(tcp), None)
+        } else {
+            (None, Some(tcp))
+        };
         let server = thread::spawn(move || {
             udp.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
             let mut buffer = [0; 512];
             let (size, client) = udp.recv_from(&mut buffer).unwrap();
             buffer[2] |= 0x82;
             udp.send_to(&buffer[..size], client).unwrap();
-            if maximum == 2 {
+            if let Some(tcp) = served {
                 let (mut stream, _) = tcp.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
@@ -252,13 +257,6 @@ fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
                 request[2] |= 0x80;
                 stream.write_all(&length).unwrap();
                 stream.write_all(&request).unwrap();
-            } else {
-                thread::sleep(Duration::from_millis(100));
-                tcp.set_nonblocking(true).unwrap();
-                assert!(
-                    tcp.accept().is_err(),
-                    "TCP started without a query reservation"
-                );
             }
         });
         let limits = NetworkLimits {
@@ -268,6 +266,15 @@ fn truncated_udp_uses_tcp_only_with_another_query_reservation() {
         let mut budget = ResolutionBudget::new(Instant::now(), &limits).unwrap();
         let result = exchange_plain_candidates(&query(), &[peer], &mut budget);
         assert_eq!(result.is_ok(), maximum == 2);
+        if let Some(tcp) = unserved {
+            // A connection the call made is waiting in the backlog by the time it returns,
+            // however late in the call it was made.
+            tcp.set_nonblocking(true).unwrap();
+            assert!(
+                tcp.accept().is_err(),
+                "TCP started without a query reservation"
+            );
+        }
         server.join().unwrap();
     }
 }
