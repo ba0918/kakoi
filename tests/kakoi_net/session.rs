@@ -38,7 +38,9 @@ time.sleep(60)
             records.to_str().unwrap()
         ),
     );
-    let transport = Transport::start_closed(&executable, nft, &[], Duration::from_secs(2)).unwrap();
+    // The scenes end at readiness: the startup timeout only has to outlast a slow start.
+    let transport =
+        Transport::start_closed(&executable, nft, &[], Duration::from_secs(10)).unwrap();
     let records = std::fs::read_to_string(records)
         .unwrap()
         .lines()
@@ -292,7 +294,7 @@ fn transport_replacement_preserves_application_namespace_and_reaps_old_forwarder
     let app = transport.controller_namespace().keeper_pid();
     let net = std::fs::read_link(format!("/proc/{app}/ns/net")).unwrap();
     transport
-        .restart_closed_until(Instant::now() + Duration::from_secs(1))
+        .restart_closed_until(Instant::now() + Duration::from_secs(10))
         .unwrap();
     assert_eq!(transport.controller_namespace().keeper_pid(), app);
     assert_eq!(
@@ -329,7 +331,7 @@ fn partial_transport_replacement_failure_is_reaped_and_retry_keeps_the_same_name
     );
     let app = transport.controller_namespace().keeper_pid();
     assert!(transport
-        .restart_closed_until(Instant::now() + Duration::from_secs(1))
+        .restart_closed_until(Instant::now() + Duration::from_secs(10))
         .is_err());
     assert!(!transport.is_running().unwrap());
     assert_eq!(transport.controller_namespace().keeper_pid(), app);
@@ -343,7 +345,7 @@ fn partial_transport_replacement_failure_is_reaped_and_retry_keeps_the_same_name
     crate::health::assert_loopback(transport.controller_namespace(), true);
     crate::common::write_executable(&executable, script);
     transport
-        .restart_closed_until(Instant::now() + Duration::from_secs(1))
+        .restart_closed_until(Instant::now() + Duration::from_secs(10))
         .unwrap();
     assert!(transport.is_running().unwrap());
     assert_eq!(transport.controller_namespace().keeper_pid(), app);

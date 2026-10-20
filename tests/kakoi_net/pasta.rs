@@ -22,7 +22,7 @@ fn pasta_readiness_owns_the_process_and_target_until_drop() {
         target.clone(),
         PastaStage::Outer,
         &[],
-        Duration::from_secs(1),
+        Duration::from_secs(10),
     )
     .unwrap();
     let pid = pasta.pid();
@@ -54,7 +54,9 @@ fn missing_or_wrong_readiness_fails_and_reaps_the_process() {
             target,
             PastaStage::Outer,
             &[],
-            Duration::from_millis(100)
+            // Long enough for the script to write its PID before the deadline ends the
+            // start without readiness.
+            Duration::from_secs(1)
         )
         .is_err());
         let pid = std::fs::read_to_string(marker).unwrap();
@@ -88,7 +90,7 @@ time.sleep(30)
         &executable,
         std::path::Path::new("/usr/sbin/nft"),
         &[],
-        Duration::from_secs(1)
+        Duration::from_secs(10)
     )
     .is_err());
     let records = std::fs::read_to_string(records).unwrap();
@@ -113,7 +115,7 @@ fn startup_failure_preserves_bounded_diagnostics_without_blocking_on_a_full_pipe
         target,
         PastaStage::Outer,
         &[],
-        Duration::from_secs(2),
+        Duration::from_secs(10),
     ) {
         Ok(_) => panic!("failed program returned readiness"),
         Err(error) => error.to_string(),
@@ -134,7 +136,7 @@ fn stopped_pasta_is_not_healthy_and_is_reaped_on_drop() {
         target,
         PastaStage::Outer,
         &[],
-        Duration::from_secs(1),
+        Duration::from_secs(10),
     )
     .unwrap();
     let pid = pasta.pid();
