@@ -80,10 +80,6 @@ impl QueryAllowance {
         Self(Arc::new(AtomicU32::new(limits.dns_max_upstream_queries)))
     }
 
-    pub fn remaining(&self) -> u32 {
-        self.0.load(Ordering::SeqCst)
-    }
-
     fn take(&self) -> bool {
         // try_update is unavailable on the minimum supported Rust 1.88.
         #[allow(deprecated)]

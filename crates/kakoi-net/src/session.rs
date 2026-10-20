@@ -102,9 +102,6 @@ impl Session {
     pub fn take_notification(&mut self) -> Option<Arc<str>> {
         self.notifications.pop()
     }
-    pub fn take_notification_with_loss(&mut self) -> Option<(Arc<str>, u64)> {
-        self.notifications.pop_with_loss()
-    }
     pub fn take_state_notification(&mut self) -> Option<(crate::notification::Notification, u64)> {
         self.notifications.pop_record()
     }
