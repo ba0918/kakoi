@@ -492,7 +492,7 @@ pub fn resolve_written(
         let candidate = Candidate {
             directive: item.directive,
             written: item.written.to_string(),
-            origin: ItemOrigin::Written(item.origin.clone()),
+            origin: item.origin.clone(),
             key: entry.path().unwrap_or(path).to_path_buf(),
             entry,
         };
@@ -530,13 +530,10 @@ pub fn resolve_written(
     for candidate in merged {
         let (real, kind) = match candidate.entry {
             RealEntry::Missing => {
-                let ItemOrigin::Written(origin) = candidate.origin else {
-                    unreachable!("the written items are all written");
-                };
                 resolved.skipped.push(SkippedItem {
                     directive: candidate.directive,
                     written: candidate.written,
-                    origin,
+                    origin: candidate.origin,
                     reason: "does not exist".to_string(),
                 });
                 continue;
@@ -548,7 +545,7 @@ pub fn resolve_written(
             directive: candidate.directive,
             real,
             kind,
-            origin: candidate.origin,
+            origin: ItemOrigin::Written(candidate.origin),
             written: candidate.written,
         });
     }
@@ -772,7 +769,7 @@ fn secret_items(
 struct Candidate {
     directive: Directive,
     written: String,
-    origin: ItemOrigin,
+    origin: LayerOrigin,
     key: PathBuf,
     entry: RealEntry,
 }
