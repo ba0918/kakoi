@@ -24,8 +24,9 @@ extern "C" fn interrupt(signal: i32) {
     let fd = WRITER.load(Ordering::Relaxed);
     if fd >= 0 {
         // SAFETY: only async-signal-safe operations: errno is this thread's and is put
-        // back, and write(2) of one byte from a static buffer to a descriptor the guard
-        // keeps open while the handler is installed.
+        // back, and write(2) of one byte from a static buffer to the guard's writer. The
+        // handler stays installed after the guard is dropped; Guard::drop blocks these
+        // signals in its thread and resets WRITER to -1 before the descriptor closes.
         unsafe {
             let errno = libc::__errno_location();
             let saved = *errno;
