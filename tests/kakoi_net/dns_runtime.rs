@@ -181,6 +181,23 @@ fn resolve(
     limits: NetworkLimits,
     names: &[&str],
 ) -> (Vec<(u8, u16)>, Vec<Vec<String>>) {
+    let (answers, asked) = resolve_recording(upstreams, limits, names);
+    let names = asked
+        .into_iter()
+        .map(|questions| questions.into_iter().map(|(name, _)| name).collect())
+        .collect();
+    (answers, names)
+}
+
+/// The questions one upstream received: each name, and when it arrived.
+type Received = Vec<(String, Instant)>;
+
+/// [`resolve`], with when each upstream received each question.
+fn resolve_recording(
+    upstreams: &[Upstream],
+    limits: NetworkLimits,
+    names: &[&str],
+) -> (Vec<(u8, u16)>, Vec<Received>) {
     let ns = filtered_namespace();
     let sockets: Vec<_> = upstreams
         .iter()
@@ -247,6 +264,7 @@ for index, name in enumerate(sys.argv[1:]):
             let Ok((size, peer)) = socket.recv_from(&mut bytes) else {
                 continue;
             };
+            let received = Instant::now();
             let query = &bytes[..size];
             let mut at = 12;
             let mut labels = Vec::new();
@@ -255,7 +273,7 @@ for index, name in enumerate(sys.argv[1:]):
                 labels.push(String::from_utf8_lossy(&query[at + 1..at + 1 + length]).into_owned());
                 at += 1 + length;
             }
-            asked[index].push(labels.join("."));
+            asked[index].push((labels.join("."), received));
             let mut answer = query.to_vec();
             answer[2] |= 0x80;
             match behaviour {
@@ -387,14 +405,14 @@ fn later_candidates_answer_within_one_query_count() {
 // @kotowari[EX-252]
 #[test]
 fn the_default_wait_for_a_candidate_is_two_seconds() {
-    let start = Instant::now();
-    let (answers, _) = resolve(
+    let (answers, asked) = resolve_recording(
         &[Upstream::Silent, Upstream::Answers],
         NetworkLimits::default(),
         &["a.example.com"],
     );
     assert_eq!(answers, [(0, 1)]);
-    assert!(start.elapsed() >= Duration::from_millis(1900));
+    let waited = asked[1][0].1 - asked[0][0].1;
+    assert!(waited >= Duration::from_millis(1900), "{waited:?}");
 }
 
 /// One upstream reply: the RCODE, the answer records (type, TTL, data) owned
