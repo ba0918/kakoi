@@ -26,7 +26,14 @@ pub fn apply(
     script: &str,
     deadline: Instant,
 ) -> io::Result<()> {
-    run(namespace, executable, script, deadline, false, None).map(|_| ())
+    run(
+        namespace,
+        executable,
+        Request::Batch(script),
+        deadline,
+        None,
+    )
+    .map(|_| ())
 }
 
 pub(crate) fn apply_cancellable(
@@ -39,9 +46,8 @@ pub(crate) fn apply_cancellable(
     run(
         namespace,
         executable,
-        script,
+        Request::Batch(script),
         deadline,
-        false,
         Some(cancellation),
     )
     .map(|_| ())
@@ -52,10 +58,18 @@ pub(crate) fn apply_cancellable(
 pub fn inspect(
     namespace: &NetworkNamespace,
     executable: &Path,
-    script: &str,
+    table: &str,
     deadline: Instant,
 ) -> io::Result<Vec<u8>> {
-    run(namespace, executable, script, deadline, true, None)
+    run(namespace, executable, Request::List(table), deadline, None)
+}
+
+/// What one run of nft does: apply a batch given on its standard input, or list one
+/// inet table as JSON on its standard output.
+#[derive(Clone, Copy)]
+enum Request<'a> {
+    Batch(&'a str),
+    List(&'a str),
 }
 
 fn read_output(reader: &mut impl Read, output: &mut Vec<u8>) -> io::Result<()> {
@@ -80,11 +94,11 @@ fn read_output(reader: &mut impl Read, output: &mut Vec<u8>) -> io::Result<()> {
 fn run(
     namespace: &NetworkNamespace,
     executable: &Path,
-    script: &str,
+    request: Request,
     deadline: Instant,
-    capture: bool,
     cancellation: Option<&crate::dns_workers::Cancellation>,
 ) -> io::Result<Vec<u8>> {
+    let capture = matches!(request, Request::List(_));
     let check_cancel = || {
         if cancellation.is_some_and(|cancel| cancel.is_cancelled()) {
             Err(io::Error::new(
@@ -105,10 +119,9 @@ fn run(
     let mut process = OwnedChild(
         namespace
             .command(executable)?
-            .args(if capture {
-                vec!["-j", "list", "table", "inet", script]
-            } else {
-                vec!["-f", "-"]
+            .args(match request {
+                Request::List(table) => vec!["-j", "list", "table", "inet", table],
+                Request::Batch(_) => vec!["-f", "-"],
             })
             .stdin(Stdio::piped())
             .stdout(if capture {
@@ -137,10 +150,9 @@ fn run(
             .as_raw_fd(),
     )?;
     nonblocking(stderr.as_raw_fd())?;
-    let input_bytes = if capture {
-        b"".as_slice()
-    } else {
-        script.as_bytes()
+    let input_bytes = match request {
+        Request::Batch(script) => script.as_bytes(),
+        Request::List(_) => b"".as_slice(),
     };
     let mut offset = 0;
     let mut diagnostic = Vec::new();
