@@ -165,6 +165,141 @@ enum Response {
     Prepared(Box<DescriptionInput>),
     Failed(PrepareError),
 }
+/// The reaper of one run: it keeps the events the worker sends, waits for the worker's
+/// result, then lets go of the result and control channels, stops the event reader, and
+/// reaps the worker, in that order, before it settles the outcome.
+fn reap(
+    result_state: Arc<crate::running::Shared>,
+    reaper: Arc<Mutex<ChildOwner>>,
+    result_channel: UnixStream,
+    event_channel: UnixDatagram,
+    network: crate::NetworkCleanup,
+) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let done = Arc::new(AtomicBool::new(false));
+    let event_done = done.clone();
+    let history = result_state.events.clone();
+    let event_reader = std::thread::Builder::new()
+        .name("kakoi-events".into())
+        .spawn(move || read_events(&event_channel, &history, &event_done));
+    let mut main = crate::MainOutcome::Unknown;
+    let mut event_count = None;
+    let received = loop {
+        match ipc::recv::<crate::running::ResultUpdate>(&result_channel) {
+            Ok((crate::running::ResultUpdate::Main(observed), fds)) if fds.is_empty() => {
+                main = observed;
+                let mut state = result_state.state.lock().unwrap_or_else(|e| e.into_inner());
+                state.status = crate::RunStatus::Stopping;
+                drop(state);
+                if let Err(cause) = ipc::send(&result_channel, &(), &[]) {
+                    break Err(cause);
+                }
+            }
+            Ok((crate::running::ResultUpdate::Finished(outcome, next), fds)) if fds.is_empty() => {
+                event_count = Some(next);
+                break Ok(outcome);
+            }
+            Ok(_) => {
+                break Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "unexpected result descriptors",
+                ))
+            }
+            Err(cause) => break Err(cause),
+        }
+    };
+    drop(result_channel);
+    result_state
+        .control
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    done.store(true, Ordering::Release);
+    let events_ok = event_reader.is_ok_and(|reader| reader.join().is_ok());
+    let mut owner = reaper.lock().unwrap_or_else(|error| error.into_inner());
+    let waited = owner.0.as_mut().map(Child::wait);
+    owner.0 = None;
+    let mut outcome = match received {
+        Ok(outcome) => outcome,
+        _ => crate::RunOutcome {
+            main,
+            reason: crate::ExitReason::InfrastructureFailure,
+            network,
+            processes: crate::ProcessCleanup::Unconfirmed,
+            diagnostics: vec![DiagnosticRecord {
+                detail: "worker result connection lost".into(),
+                os_error: None,
+            }],
+        },
+    };
+    if !matches!(&waited, Some(Ok(status)) if status.success()) {
+        outcome.processes = crate::ProcessCleanup::Unconfirmed;
+        outcome.reason = crate::ExitReason::InfrastructureFailure;
+        outcome.diagnostics.push(DiagnosticRecord {
+            detail: match &waited {
+                Some(Err(cause)) if cause.raw_os_error() == Some(libc::ECHILD) => {
+                    "worker was reaped externally".into()
+                }
+                _ => "worker wait failed or worker did not exit successfully".into(),
+            },
+            os_error: waited
+                .as_ref()
+                .and_then(|result| result.as_ref().err())
+                .and_then(io::Error::raw_os_error),
+        });
+    }
+    if !events_ok {
+        outcome.reason = crate::ExitReason::InfrastructureFailure;
+        outcome.diagnostics.push(DiagnosticRecord {
+            detail: "event receiver unavailable".into(),
+            os_error: None,
+        });
+    }
+    result_state
+        .state
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .worker_reaped = matches!(waited, Some(Ok(_)));
+    result_state.finish(outcome);
+    result_state.events.close(event_count);
+}
+
+/// Keeps every event the worker sends until `done`, then reads what is left without
+/// waiting.
+fn read_events(
+    event_channel: &UnixDatagram,
+    history: &crate::events::EventHistory,
+    event_done: &std::sync::atomic::AtomicBool,
+) {
+    use std::sync::atomic::Ordering;
+    let mut buffer = [0; crate::events::MAX_EVENT + 1];
+    loop {
+        if event_done.load(Ordering::Acquire) {
+            let _ = event_channel.set_nonblocking(true);
+        }
+        match event_channel.recv(&mut buffer) {
+            Ok(size) if size <= crate::events::MAX_EVENT => {
+                if let Ok(event) = serde_json::from_slice(&buffer[..size]) {
+                    history.push(event, size);
+                }
+            }
+            Ok(_) => {}
+            Err(cause) if cause.kind() == io::ErrorKind::Interrupted => continue,
+            Err(cause)
+                if matches!(
+                    cause.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
+                if event_done.load(Ordering::Acquire) {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+}
+
 fn bytes(value: &std::ffi::OsStr) -> Vec<u8> {
     value.as_bytes().to_vec()
 }
@@ -387,125 +522,7 @@ pub fn prepare(request: RunRequest) -> Result<PreparedRun, PrepareError> {
     let reaper = child.clone();
     if let Err(cause) = std::thread::Builder::new()
         .name("kakoi-reaper".into())
-        .spawn(move || {
-            use std::sync::atomic::{AtomicBool, Ordering};
-            let done = Arc::new(AtomicBool::new(false));
-            let event_done = done.clone();
-            let history = result_state.events.clone();
-            let event_reader = std::thread::Builder::new()
-                .name("kakoi-events".into())
-                .spawn(move || {
-                    let mut buffer = [0; crate::events::MAX_EVENT + 1];
-                    loop {
-                        if event_done.load(Ordering::Acquire) {
-                            let _ = event_channel.set_nonblocking(true);
-                        }
-                        match event_channel.recv(&mut buffer) {
-                            Ok(size) if size <= crate::events::MAX_EVENT => {
-                                if let Ok(event) = serde_json::from_slice(&buffer[..size]) {
-                                    history.push(event, size);
-                                }
-                            }
-                            Ok(_) => {}
-                            Err(cause) if cause.kind() == io::ErrorKind::Interrupted => continue,
-                            Err(cause)
-                                if matches!(
-                                    cause.kind(),
-                                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-                                ) =>
-                            {
-                                if event_done.load(Ordering::Acquire) {
-                                    break;
-                                }
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                });
-            let mut main = crate::MainOutcome::Unknown;
-            let mut event_count = None;
-            let received = loop {
-                match ipc::recv::<crate::running::ResultUpdate>(&result_channel) {
-                    Ok((crate::running::ResultUpdate::Main(observed), fds)) if fds.is_empty() => {
-                        main = observed;
-                        let mut state =
-                            result_state.state.lock().unwrap_or_else(|e| e.into_inner());
-                        state.status = crate::RunStatus::Stopping;
-                        drop(state);
-                        if let Err(cause) = ipc::send(&result_channel, &(), &[]) {
-                            break Err(cause);
-                        }
-                    }
-                    Ok((crate::running::ResultUpdate::Finished(outcome, next), fds))
-                        if fds.is_empty() =>
-                    {
-                        event_count = Some(next);
-                        break Ok(outcome);
-                    }
-                    Ok(_) => {
-                        break Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "unexpected result descriptors",
-                        ))
-                    }
-                    Err(cause) => break Err(cause),
-                }
-            };
-            drop(result_channel);
-            result_state
-                .control
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .take();
-            done.store(true, Ordering::Release);
-            let events_ok = event_reader.is_ok_and(|reader| reader.join().is_ok());
-            let mut owner = reaper.lock().unwrap_or_else(|error| error.into_inner());
-            let waited = owner.0.as_mut().map(Child::wait);
-            owner.0 = None;
-            let mut outcome = match received {
-                Ok(outcome) => outcome,
-                _ => crate::RunOutcome {
-                    main,
-                    reason: crate::ExitReason::InfrastructureFailure,
-                    network,
-                    processes: crate::ProcessCleanup::Unconfirmed,
-                    diagnostics: vec![DiagnosticRecord {
-                        detail: "worker result connection lost".into(),
-                        os_error: None,
-                    }],
-                },
-            };
-            if !matches!(&waited, Some(Ok(status)) if status.success()) {
-                outcome.processes = crate::ProcessCleanup::Unconfirmed;
-                outcome.reason = crate::ExitReason::InfrastructureFailure;
-                outcome.diagnostics.push(DiagnosticRecord {
-                    detail: match &waited {
-                        Some(Err(cause)) if cause.raw_os_error() == Some(libc::ECHILD) => {
-                            "worker was reaped externally".into()
-                        }
-                        _ => "worker wait failed or worker did not exit successfully".into(),
-                    },
-                    os_error: waited
-                        .as_ref()
-                        .and_then(|result| result.as_ref().err())
-                        .and_then(io::Error::raw_os_error),
-                });
-            }
-            if !events_ok {
-                outcome.reason = crate::ExitReason::InfrastructureFailure;
-                outcome.diagnostics.push(DiagnosticRecord {
-                    detail: "event receiver unavailable".into(),
-                    os_error: None,
-                });
-            }
-            result_state
-                .state
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .worker_reaped = matches!(waited, Some(Ok(_)));
-            result_state.finish(outcome);
-            result_state.events.close(event_count);
-        })
+        .spawn(move || reap(result_state, reaper, result_channel, event_channel, network))
     {
         let mut error = io_error(Phase::Worker, cause);
         error.cleanup = child
