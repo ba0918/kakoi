@@ -3,7 +3,10 @@
 //! Embedded consumers use RunRequest/PreparedRun/Running, not this connection layer.
 pub use crate::cli_first_process::run_if_first_process;
 pub use crate::cli_guard::run_if_guard;
-pub use crate::{layers, planning};
+pub use crate::layers;
+pub mod planning {
+    pub use crate::planning::{home_and_config_dir, locate_command, plan_for, Request};
+}
 pub use kakoi_linux::{
     executables, landlock, launch, mount_facts, mount_list, real_paths, scan, seccomp,
     secret_facts, shared_files, workspace_facts,
