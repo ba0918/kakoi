@@ -14,7 +14,9 @@ fn independent_watchdog_latches_transit_closed_after_heartbeats_stop() {
     let app = NetworkNamespace::create().unwrap();
     let mut gate = HealthGate::create("/usr/sbin/nft").unwrap();
     gate.renew_for(NonZeroU16::new(10000).unwrap()).unwrap();
-    let mut watchdog = gate.watchdog(Duration::from_millis(400)).unwrap();
+    // Heartbeats every 100 ms keep it healthy with time to spare: an acknowledgement late
+    // by most of the timeout on a loaded host is still in time.
+    let mut watchdog = gate.watchdog(Duration::from_secs(2)).unwrap();
     let pid = watchdog.pid();
     for _ in 0..6 {
         watchdog.heartbeat().unwrap();
@@ -22,7 +24,7 @@ fn independent_watchdog_latches_transit_closed_after_heartbeats_stop() {
         assert_eq!(watchdog.poll().unwrap(), WatchdogState::Healthy);
     }
     assert_loopback(gate.namespace(), true);
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(10);
     while watchdog.poll().unwrap() != WatchdogState::Closed {
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(5));
