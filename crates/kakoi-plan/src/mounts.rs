@@ -426,9 +426,7 @@ pub fn skipped_paths(expanded: &ExpandedPolicy, facts: &MountFacts) -> Vec<Skipp
     values
         .filter_map(|(role, written, expansion)| {
             let reason = match expansion {
-                Expansion::Valueless(variable) => {
-                    format!("`${{{}}}` has no value", variable.name())
-                }
+                Expansion::Valueless(variable) => valueless_reason(*variable),
                 Expansion::Path(path) if facts.entry(path) == RealEntry::Missing => {
                     "does not exist".to_string()
                 }
@@ -482,7 +480,7 @@ pub fn resolve_written(
                     directive: item.directive,
                     written: item.written.to_string(),
                     origin: item.origin.clone(),
-                    reason: format!("`${{{}}}` has no value", variable.name()),
+                    reason: valueless_reason(*variable),
                 });
                 continue;
             }
@@ -528,18 +526,14 @@ pub fn resolve_written(
         return Err(diagnostic);
     }
     for candidate in merged {
-        let (real, kind) = match candidate.entry {
-            RealEntry::Missing => {
-                resolved.skipped.push(SkippedItem {
-                    directive: candidate.directive,
-                    written: candidate.written,
-                    origin: candidate.origin,
-                    reason: "does not exist".to_string(),
-                });
-                continue;
-            }
-            RealEntry::Directory(real) => (real, EntryKind::Directory),
-            RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
+        let Some((real, kind)) = real_and_kind(candidate.entry) else {
+            resolved.skipped.push(SkippedItem {
+                directive: candidate.directive,
+                written: candidate.written,
+                origin: candidate.origin,
+                reason: "does not exist".to_string(),
+            });
+            continue;
         };
         resolved.items.push(ResolvedItem {
             directive: candidate.directive,
@@ -776,11 +770,7 @@ struct Candidate {
 
 /// A generated `hide` on what exists at `written`; nothing when nothing exists.
 fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<ResolvedItem> {
-    let (real, kind) = match entry {
-        RealEntry::Missing => return None,
-        RealEntry::Directory(real) => (real, EntryKind::Directory),
-        RealEntry::NotDirectory(real) => (real, EntryKind::NotDirectory),
-    };
+    let (real, kind) = real_and_kind(entry)?;
     Some(ResolvedItem {
         directive: Directive::Hide,
         real,
@@ -788,6 +778,20 @@ fn hidden(written: &Path, origin: ItemOrigin, entry: RealEntry) -> Option<Resolv
         origin,
         written: written.display().to_string(),
     })
+}
+
+/// The real path of what exists and whether it is a directory; nothing when nothing exists.
+fn real_and_kind(entry: RealEntry) -> Option<(PathBuf, EntryKind)> {
+    match entry {
+        RealEntry::Missing => None,
+        RealEntry::Directory(real) => Some((real, EntryKind::Directory)),
+        RealEntry::NotDirectory(real) => Some((real, EntryKind::NotDirectory)),
+    }
+}
+
+/// Why a path whose variable has no value is skipped.
+pub(crate) fn valueless_reason(variable: Variable) -> String {
+    format!("`${{{}}}` has no value", variable.name())
 }
 
 /// `rw` takes a directory and `rw-file` anything else (specification section 6.1).
