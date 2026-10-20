@@ -1,17 +1,6 @@
+use crate::dns_wire::{a_answer, query};
 use kakoi_net::dns::{DnsError, DnsGate};
 use kakoi_runtime::cli::network::{Allow, Destination, Protocol};
-
-fn query(name: &str, kind: u16) -> Vec<u8> {
-    let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    for label in name.split('.') {
-        wire.push(label.len() as u8);
-        wire.extend(label.as_bytes());
-    }
-    wire.push(0);
-    wire.extend(kind.to_be_bytes());
-    wire.extend([0, 1]);
-    wire
-}
 
 fn rule(pattern: &str) -> Allow {
     Allow {
@@ -313,11 +302,8 @@ fn authorized_requests_share_work_and_return_individual_answers_without_resettin
         assert_eq!(reply.recipient, peer);
         assert_eq!(reply.wire[3] & 15, code);
     }
-    let mut answer = first.clone();
-    answer[2] |= 0x80;
-    answer[7] = 1;
     // No time to live: the same question afterwards is new work, not cached.
-    answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 1, 1, 1, 1]);
+    let answer = a_answer(&first, 0, [1, 1, 1, 1]);
     let replies = requests.complete(task.id, Ok(answer), now + Duration::from_millis(950));
     assert_eq!(replies.len(), 2);
     for (reply, wire, peer) in [(&replies[0], &first, 10), (&replies[1], &second, 11)] {
@@ -580,17 +566,6 @@ fn a_failed_resolution_is_held_for_the_failure_cache_time() {
     ));
 }
 
-/// An answer to `question` with one A record of `ttl` seconds.
-fn answered(question: &[u8], ttl: u32) -> Vec<u8> {
-    let mut answer = question.to_vec();
-    answer[2] |= 0x80;
-    answer[7] = 1;
-    answer.extend([0xc0, 0x0c, 0, 1, 0, 1]);
-    answer.extend(ttl.to_be_bytes());
-    answer.extend([0, 4, 1, 1, 1, 1]);
-    answer
-}
-
 // A valid answer is used again for the same question until its time to live
 // runs out, counted down, with the asker's own ID; an answer with no time to
 // live is not kept, and new settings do not use what the old ones cached.
@@ -612,7 +587,7 @@ fn a_valid_answer_is_reused_until_its_time_to_live_runs_out() {
     let AcceptedRequest::Start(task) = requests.accept(&question, 1, now).unwrap() else {
         panic!("the first question starts a resolution")
     };
-    requests.complete(task.id, Ok(answered(&question, 30)), now);
+    requests.complete(task.id, Ok(a_answer(&question, 30, [1, 1, 1, 1])), now);
     let mut again = query("API.example.com", 1);
     again[..2].copy_from_slice(&[0x55, 0x66]);
     let AcceptedRequest::Answer(reply) = requests
@@ -641,7 +616,7 @@ fn a_valid_answer_is_reused_until_its_time_to_live_runs_out() {
     let AcceptedRequest::Start(task) = requests.accept(&other, 4, now).unwrap() else {
         panic!()
     };
-    requests.complete(task.id, Ok(answered(&other, 0)), now);
+    requests.complete(task.id, Ok(a_answer(&other, 0, [1, 1, 1, 1])), now);
     assert!(matches!(
         requests.accept(&other, 5, now).unwrap(),
         AcceptedRequest::Start(_)
@@ -651,7 +626,7 @@ fn a_valid_answer_is_reused_until_its_time_to_live_runs_out() {
     let AcceptedRequest::Start(task) = requests.accept(&third, 6, now).unwrap() else {
         panic!()
     };
-    requests.complete(task.id, Ok(answered(&third, 30)), now);
+    requests.complete(task.id, Ok(a_answer(&third, 30, [1, 1, 1, 1])), now);
     requests.advance_generation();
     assert!(matches!(
         requests.accept(&third, 7, now).unwrap(),
@@ -781,7 +756,7 @@ fn only_answers_under_the_current_settings_are_kept() {
         if rekeyed {
             requests.rekey(task.id);
         }
-        requests.complete(task.id, Ok(answered(&question, 30)), now);
+        requests.complete(task.id, Ok(a_answer(&question, 30, [1, 1, 1, 1])), now);
         let reused = matches!(
             requests.accept(&question, 2, now).unwrap(),
             AcceptedRequest::Answer(_)
@@ -827,7 +802,7 @@ fn a_question_under_new_settings_joins_the_resolution_re_keyed_for_them() {
         requests.accept(&question, 2, now).unwrap(),
         AcceptedRequest::Waiting
     ));
-    let replies = requests.complete(task.id, Ok(answered(&question, 30)), now);
+    let replies = requests.complete(task.id, Ok(a_answer(&question, 30, [1, 1, 1, 1])), now);
     assert_eq!(replies.len(), 2);
 }
 
@@ -862,7 +837,7 @@ fn a_running_new_settings_resolution_remains_joinable_after_an_older_retry_fails
     ));
     assert_eq!(
         requests
-            .complete(newer.id, Ok(answered(&question, 30)), now)
+            .complete(newer.id, Ok(a_answer(&question, 30, [1, 1, 1, 1])), now)
             .len(),
         2
     );

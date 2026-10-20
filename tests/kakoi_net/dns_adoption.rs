@@ -1,3 +1,4 @@
+use crate::dns_wire::a_answer;
 use kakoi_net::{
     dns::{
         AcceptedRequest, DnsRequests, EnforcedDnsError, PreparedAnswer, ResolutionId,
@@ -43,11 +44,9 @@ fn candidate(requests: &mut DnsRequests<()>, name: u8) -> (ResolutionId, Prepare
     let upstream = std::thread::spawn(move || {
         let mut bytes = [0; 512];
         let (size, peer) = socket.recv_from(&mut bytes).unwrap();
-        let mut answer = bytes[..size].to_vec();
-        answer[2] |= 0x80;
-        answer[7] = 1;
-        answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-        socket.send_to(&answer, peer).unwrap();
+        socket
+            .send_to(&a_answer(&bytes[..size], 30, [1, 1, 1, 1]), peer)
+            .unwrap();
     });
     let resolver = UpstreamResolver::new(
         rules(),

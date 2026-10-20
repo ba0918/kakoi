@@ -1,0 +1,34 @@
+//! DNS messages built by hand for the tests, independent of the product's own encoding.
+
+/// `owner` as uncompressed labels, ending with the root label.
+pub(crate) fn name(owner: &str) -> Vec<u8> {
+    let mut wire = Vec::new();
+    for label in owner.split('.') {
+        wire.push(label.len() as u8);
+        wire.extend(label.as_bytes());
+    }
+    wire.push(0);
+    wire
+}
+
+/// A query with ID 0x1234 and recursion desired, for `owner` of type `kind` in class IN.
+pub(crate) fn query(owner: &str, kind: u16) -> Vec<u8> {
+    let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
+    wire.extend(name(owner));
+    wire.extend(kind.to_be_bytes());
+    wire.extend([0, 1]);
+    wire
+}
+
+/// The response to `question` with one A record of `address` for `ttl` seconds, its owner
+/// a pointer to the question's name.
+pub(crate) fn a_answer(question: &[u8], ttl: u32, address: [u8; 4]) -> Vec<u8> {
+    let mut answer = question.to_vec();
+    answer[2] |= 0x80;
+    answer[7] = 1;
+    answer.extend([0xc0, 0x0c, 0, 1, 0, 1]);
+    answer.extend(ttl.to_be_bytes());
+    answer.extend([0, 4]);
+    answer.extend(address);
+    answer
+}

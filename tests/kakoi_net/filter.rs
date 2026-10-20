@@ -1,3 +1,4 @@
+use crate::dns_wire::query;
 use kakoi_net::{
     filter::{self, FilterRule},
     namespace::NetworkNamespace,
@@ -358,10 +359,7 @@ for af, address, kind in [(socket.AF_INET, sys.argv[2], socket.SOCK_STREAM), (so
     )
     .unwrap();
     for kind in [1u16, 28u16] {
-        let mut question = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-        question.extend(b"\x03api\x07example\x03com\0");
-        question.extend(kind.to_be_bytes());
-        question.extend([0, 1]);
+        let question = query("api.example.com", kind);
         let expired = resolver
             .resolve_enforced_until(
                 &question,
@@ -581,8 +579,7 @@ fn enforced_dns_reports_an_uncertain_kernel_owner_before_contacting_upstream() {
         ..NetworkLimits::default()
     };
     let resolver = UpstreamResolver::new(rules, config.network.dns_upstream, limits, None).unwrap();
-    let mut question = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    question.extend(b"\x03api\x07example\x03com\0\0\x01\0\x01");
+    let question = query("api.example.com", 1);
     assert!(matches!(
         resolver.resolve_enforced(
             &question,
@@ -667,8 +664,8 @@ fn prepared_answers_reject_stopped_expired_or_mismatched_adoption_and_surface_ke
         .unwrap();
         let mut requests =
             DnsRequests::new(rules.clone(), 0, 1, 1, Duration::from_millis(500)).unwrap();
-        let wire = b"\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x01";
-        let AcceptedRequest::Start(task) = requests.accept(wire, (), Instant::now()).unwrap()
+        let wire = query("api.example.com", 1);
+        let AcceptedRequest::Start(task) = requests.accept(&wire, (), Instant::now()).unwrap()
         else {
             panic!()
         };

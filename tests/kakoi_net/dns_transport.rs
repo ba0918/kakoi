@@ -7,9 +7,7 @@ use std::{
 };
 
 fn query() -> Vec<u8> {
-    let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    wire.extend(b"\x03api\x07example\x03com\0\0\x01\0\x01");
-    wire
+    crate::dns_wire::query("api.example.com", 1)
 }
 
 fn signed_query() -> Vec<u8> {

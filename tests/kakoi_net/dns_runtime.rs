@@ -1,3 +1,4 @@
+use crate::dns_wire::{a_answer, name};
 use kakoi_net::{
     dns_runtime::{DnsRuntime, DnsRuntimeConfig},
     filter,
@@ -78,7 +79,7 @@ s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x01',('127.0.0.53',53))
 "#]).status().unwrap().success());
         let deadline = Instant::now() + Duration::from_secs(2);
-        let (mut answer, peer) = loop {
+        let (question, peer) = loop {
             runtime.poll(Instant::now()).unwrap();
             let mut bytes = [0; 512];
             match socket.recv_from(&mut bytes) {
@@ -91,10 +92,9 @@ s.sendto(b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x01\0\x
         if mode == "stop" {
             runtime.stop();
         } else {
-            answer[2] |= 0x80;
-            answer[7] = 1;
-            answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4, 1, 1, 1, 1]);
-            socket.send_to(&answer, peer).unwrap();
+            socket
+                .send_to(&a_answer(&question, 30, [1, 1, 1, 1]), peer)
+                .unwrap();
         }
         let deadline = Instant::now() + Duration::from_secs(1);
         let mut fault = false;
@@ -488,16 +488,6 @@ impl Reply {
     }
 }
 
-fn encode_name(name: &str) -> Vec<u8> {
-    let mut wire = Vec::new();
-    for label in name.split('.') {
-        wire.push(label.len() as u8);
-        wire.extend(label.as_bytes());
-    }
-    wire.push(0);
-    wire
-}
-
 /// What happened to each question, in order: its RCODE and record count, and
 /// the kakoi_policy table afterwards.
 struct Resolved {
@@ -662,7 +652,7 @@ fn a_record(address: [u8; 4]) -> (u16, u32, Vec<u8>) {
 }
 
 fn alias(target: &str) -> (u16, u32, Vec<u8>) {
-    (5, 30, encode_name(target))
+    (5, 30, name(target))
 }
 
 /// `c0.example.com` is an alias of `c1.example.com`, and so on down to

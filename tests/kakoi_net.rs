@@ -25,6 +25,8 @@ mod dns_response;
 mod dns_runtime;
 #[path = "kakoi_net/dns_transport.rs"]
 mod dns_transport;
+#[path = "kakoi_net/dns_wire.rs"]
+mod dns_wire;
 #[path = "kakoi_net/dns_workers.rs"]
 mod dns_workers;
 #[path = "kakoi_net/fake_host.rs"]

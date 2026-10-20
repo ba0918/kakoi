@@ -256,12 +256,7 @@ print(data[3] & 15, '.'.join(str(b) for b in data[-4:]) if count else '-')
     }
 
     fn answer(query: &[u8], address: [u8; 4]) -> Vec<u8> {
-        let mut answer = query.to_vec();
-        answer[2] |= 0x80;
-        answer[7] = 1;
-        answer.extend([0xc0, 0x0c, 0, 1, 0, 1, 0, 0, 0, 30, 0, 4]);
-        answer.extend(address);
-        answer
+        crate::dns_wire::a_answer(query, 30, address)
     }
 
     fn finish(mut child: Child, runtime: &mut DnsRuntime) -> String {

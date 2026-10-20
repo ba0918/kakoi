@@ -1,3 +1,4 @@
+use crate::dns_wire::{name, query as query_name};
 use kakoi_net::dns::AddressProgress;
 use kakoi_net::dns::{DnsError, Question, ResponseDisposition};
 use kakoi_net::scope::DnsAdmission;
@@ -5,24 +6,6 @@ use std::time::{Duration, Instant};
 
 fn query(kind: u16) -> Vec<u8> {
     query_name("api.example.com", kind)
-}
-
-fn name(name: &str) -> Vec<u8> {
-    let mut wire = Vec::new();
-    for label in name.split('.') {
-        wire.push(label.len() as u8);
-        wire.extend(label.as_bytes());
-    }
-    wire.push(0);
-    wire
-}
-
-fn query_name(owner: &str, kind: u16) -> Vec<u8> {
-    let mut wire = vec![0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    wire.extend(name(owner));
-    wire.extend(kind.to_be_bytes());
-    wire.extend([0, 1]);
-    wire
 }
 
 fn answer(wire: &mut Vec<u8>, owner: &str, kind: u16, ttl: u32, data: &[u8]) {
