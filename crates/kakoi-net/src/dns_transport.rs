@@ -16,7 +16,7 @@ use std::{
 };
 
 mod control;
-use crate::dns_workers::Cancellation;
+use crate::cancellation::Cancellation;
 use control::ExchangeDeadline;
 mod tls;
 pub use tls::TlsClient;

@@ -115,7 +115,7 @@ impl Transport {
     pub(crate) fn restart_controlled(
         &mut self,
         deadline: Instant,
-        cancellation: Option<&crate::dns_workers::Cancellation>,
+        cancellation: Option<&crate::cancellation::Cancellation>,
     ) -> io::Result<()> {
         self.close_until(deadline)?;
         self.forwarders.take();

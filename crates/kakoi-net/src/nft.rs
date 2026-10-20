@@ -44,7 +44,7 @@ pub(crate) fn apply_cancellable(
     executable: &Path,
     script: &str,
     deadline: Instant,
-    cancellation: &crate::dns_workers::Cancellation,
+    cancellation: &crate::cancellation::Cancellation,
 ) -> io::Result<()> {
     run(
         namespace,
@@ -99,7 +99,7 @@ fn run(
     executable: &Path,
     request: Request,
     deadline: Instant,
-    cancellation: Option<&crate::dns_workers::Cancellation>,
+    cancellation: Option<&crate::cancellation::Cancellation>,
 ) -> io::Result<Vec<u8>> {
     let capture = matches!(request, Request::List(_));
     let check_cancel = || {

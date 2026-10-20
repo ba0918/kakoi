@@ -173,7 +173,7 @@ impl Pasta {
         stage: PastaStage,
         publications: &[FixedPublication],
         timeout: Duration,
-        cancellation: Option<&crate::dns_workers::Cancellation>,
+        cancellation: Option<&crate::cancellation::Cancellation>,
     ) -> io::Result<Self> {
         let publications = merge_publications(publications.iter().copied())
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
@@ -265,7 +265,7 @@ impl Pasta {
     fn await_ready(
         &mut self,
         deadline: Instant,
-        cancellation: Option<&crate::dns_workers::Cancellation>,
+        cancellation: Option<&crate::cancellation::Cancellation>,
     ) -> Result<(), Failure> {
         let mut received = Vec::new();
         // An exiting pasta may close its end of the pipe before its exit is

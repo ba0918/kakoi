@@ -1,5 +1,5 @@
 use super::remaining;
-use crate::dns_workers::Cancellation;
+use crate::cancellation::Cancellation;
 use std::{
     io,
     net::{SocketAddr, TcpStream},

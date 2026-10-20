@@ -1,7 +1,7 @@
 use super::{resolve_addresses, DnsError, DnsGate, PreparedAnswer, Question};
 use crate::{
+    cancellation::Cancellation,
     dns_transport::{exchange_upstreams_cancellable, TlsClient},
-    dns_workers::Cancellation,
     dynamic::DynamicPermissions,
     leases::ActiveGrant,
     resolution::{QueryAllowance, ResolutionBudget, UpstreamWait},

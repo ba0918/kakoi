@@ -1,30 +1,11 @@
 //! Physical worker accounting, independent of expired client/request slots.
+use crate::cancellation::Cancellation;
 use crate::dns::{ResolutionId, ResolutionTask};
 use kakoi_policy::network::MAX_DNS_CONCURRENT_RESOLUTIONS;
 use std::{
     io,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
     thread::{self, JoinHandle},
 };
-
-#[derive(Clone)]
-pub struct Cancellation(Arc<AtomicBool>);
-
-impl Cancellation {
-    pub(crate) fn new() -> Self {
-        Self(Arc::new(AtomicBool::new(false)))
-    }
-    pub(crate) fn cancel(&self) {
-        self.0.store(true, Ordering::Release);
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Acquire)
-    }
-}
 
 pub enum WorkResult<R> {
     Finished(R),
