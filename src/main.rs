@@ -21,11 +21,11 @@ use std::process::Stdio;
 fn main() -> ExitCode {
     // A command guard is this executable too, and is told apart before anything else:
     // inside the isolation the nesting mark would otherwise make it a nested run.
-    if let Some(code) = kakoi::guard::run_if_guard() {
+    if let Some(code) = kakoi_runtime::cli::run_if_guard() {
         return code;
     }
     // So is the isolation's first process of the "listed" command mode.
-    if let Some(code) = kakoi::first_process::run_if_first_process() {
+    if let Some(code) = kakoi_runtime::cli::run_if_first_process() {
         return code;
     }
     // The isolation's process 1 of a filtered run is this executable (kakoi-net).

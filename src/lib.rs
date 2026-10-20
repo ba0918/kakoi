@@ -4,8 +4,6 @@
 //! under `crates/`.
 
 pub mod cli;
-pub mod first_process;
-pub mod guard;
 pub mod init;
 pub mod plan_json;
 pub mod plan_text;
