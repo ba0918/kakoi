@@ -1,4 +1,6 @@
-//! DNS wire validation, independent of sockets, upstream selection and kernel rules.
+//! DNS wire validation and the decisions made on questions and answers, kept apart from
+//! sockets and kernel rules. Only `engine` and `prepared` join those decisions to the
+//! upstream transport and the dynamic permissions.
 
 use hickory_proto::{
     op::{Message, MessageType, OpCode, ResponseCode},
