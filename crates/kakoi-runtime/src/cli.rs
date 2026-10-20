@@ -18,3 +18,11 @@ pub mod plan {
     pub use kakoi_linux::bwrap_arguments::bwrap_arguments;
     pub use kakoi_plan::plan::*;
 }
+
+/// Writes `diagnostic` on standard error, one line, and gives its exit code (specification
+/// section 13). Every role of this executable ends a failed run this way.
+pub fn report(diagnostic: diagnostic::Diagnostic) -> std::process::ExitCode {
+    use std::io::Write;
+    let _ = writeln!(std::io::stderr(), "{diagnostic}");
+    std::process::ExitCode::from(diagnostic.exit_code() as u8)
+}

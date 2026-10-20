@@ -12,6 +12,7 @@ use kakoi_runtime::cli::launch::{self, BwrapCommand};
 use kakoi_runtime::cli::net::{filtered, notification::NotificationWriter, run};
 use kakoi_runtime::cli::plan::Plan;
 use kakoi_runtime::cli::policy::NetworkMode;
+use kakoi_runtime::cli::report;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::os::fd::AsFd;
@@ -43,13 +44,13 @@ fn main() -> ExitCode {
                 let _ = stdout.write_all(b"\n");
                 ExitCode::SUCCESS
             }
-            Err(diagnostic) => exit_with(diagnostic),
+            Err(diagnostic) => report(diagnostic),
         },
         Ok(Outcome::Nested(nested)) => {
             print_warnings(std::slice::from_ref(&nested.warning));
             let command = match nested.command {
                 Ok(command) => command,
-                Err(diagnostic) => return exit_with(diagnostic),
+                Err(diagnostic) => return report(diagnostic),
             };
             // The process sees `COMMAND` as given as its argv[0]; the resolved path is only
             // what is executed (specification section 4.2). Only reached when the exec
@@ -59,7 +60,7 @@ fn main() -> ExitCode {
                 .arg0(&nested.given)
                 .args(&nested.arguments)
                 .exec();
-            exit_with(Diagnostic::new(
+            report(Diagnostic::new(
                 Kind::CommandNotExecutable,
                 format!("{}: {error}", command.display()),
             ))
@@ -74,15 +75,15 @@ fn main() -> ExitCode {
             if prepared.plan.policy.network_mode == NetworkMode::Filtered {
                 return match filtered(&prepared.plan) {
                     Ok(code) => ExitCode::from(code),
-                    Err(diagnostic) => exit_with(diagnostic),
+                    Err(diagnostic) => report(diagnostic),
                 };
             }
             match launch::assemble(&prepared.plan) {
-                Ok(bwrap) => exit_with(execute(bwrap)),
-                Err(diagnostic) => exit_with(diagnostic),
+                Ok(bwrap) => report(execute(bwrap)),
+                Err(diagnostic) => report(diagnostic),
             }
         }
-        Err(diagnostic) => exit_with(diagnostic),
+        Err(diagnostic) => report(diagnostic),
     }
 }
 
@@ -114,12 +115,6 @@ fn execute(mut bwrap: BwrapCommand) -> Diagnostic {
         "{} could not be executed: {error}",
         Path::new(bwrap.command.get_program()).display()
     ))
-}
-
-/// The diagnostic on standard error and its exit code (specification section 13).
-fn exit_with(diagnostic: Diagnostic) -> ExitCode {
-    let _ = writeln!(std::io::stderr(), "{diagnostic}");
-    ExitCode::from(diagnostic.exit_code() as u8)
 }
 
 /// Warnings precede whatever follows them, one line each (specification section 13).
