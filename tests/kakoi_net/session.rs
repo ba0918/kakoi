@@ -443,9 +443,12 @@ fn session_automatically_rebuilds_original_policy_without_reviving_old_dns_permi
     )
     .unwrap();
     assert!(!String::from_utf8(rules).unwrap().contains("stale"));
+    // The recovery closed transit once and reopened it: the explicit closure must
+    // close it again rather than take the earlier closure as still standing.
     session
         .close_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
+    assert_transit(original[0].1, false);
     while !session.is_drained() {
         session.poll().unwrap();
         assert!(Instant::now() < deadline);
