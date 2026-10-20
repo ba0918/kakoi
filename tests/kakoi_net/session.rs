@@ -364,23 +364,27 @@ fn both_transport_stages_share_one_recovery_deadline() {
     let (mut transport, original) = transport(&directory);
     let executable = directory.path().join("pasta");
     let script = std::fs::read_to_string(&executable).unwrap();
+    // The outer stage takes a second and the inner one never answers. One shared
+    // deadline ends the attempt at 3 s; a deadline restarted for the inner stage
+    // would end it no earlier than 4 s. The 2 s left for the outer stage's start
+    // keeps the inner stage starting even on a loaded machine.
     crate::common::write_executable(
         &executable,
         script.replace(
             "print(os.getpid(), flush=True)",
-            "time.sleep(0.4 if 'app0' not in sys.argv else 30)\nprint(os.getpid(), flush=True)",
+            "time.sleep(1 if 'app0' not in sys.argv else 30)\nprint(os.getpid(), flush=True)",
         ),
     );
     let start = Instant::now();
     assert_eq!(
         transport
-            .restart_closed_until(start + Duration::from_millis(600))
+            .restart_closed_until(start + Duration::from_secs(3))
             .unwrap_err()
             .kind(),
         std::io::ErrorKind::TimedOut
     );
     assert!(
-        start.elapsed() < Duration::from_millis(850),
+        start.elapsed() < Duration::from_millis(3700),
         "second stage restarted the timeout"
     );
     assert!(!transport.is_running().unwrap());
