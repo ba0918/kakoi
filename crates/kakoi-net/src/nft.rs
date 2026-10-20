@@ -17,7 +17,8 @@ impl Drop for OwnedChild {
     }
 }
 
-/// How long one nft run may take when the caller has no deadline of its own.
+/// The longest one nft run is given: its deadline when the caller has none, and the cap on
+/// a caller's longer one.
 pub(crate) const COMMAND_BUDGET: Duration = Duration::from_secs(2);
 
 /// A failure does not prove that the kernel rejected the transaction: a timeout

@@ -97,8 +97,8 @@ fn shift_layout(layout: &mut LaunchLayout, from: usize, delta: isize) {
     }
 }
 
-/// Puts `image` at `path` and makes it the isolation's first process, in place of the
-/// command: its directory is made private to the isolation's user.
+/// Puts `image` at `path`, readable and executable by the isolation's user only, and makes
+/// it the isolation's first process in place of the command.
 pub fn place_init(plan: &mut Plan, image: FileContent, path: &str) {
     let directory = Path::new(path)
         .parent()
