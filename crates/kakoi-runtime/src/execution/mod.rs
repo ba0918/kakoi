@@ -17,6 +17,7 @@ use crate::{
     ipc, Cleanup, DiagnosticRecord, Dispatch, ErrorKind, ExitReason, MainOutcome, NetworkCleanup,
     Phase, PrepareError, ProcessCleanup, RunOutcome, StartError,
 };
+use kakoi_linux::bwrap_arguments::{covered_after, operations};
 use kakoi_linux::retained_mounts::{Identity, RetainedMount};
 use kakoi_plan::{
     copies::FileContent,
@@ -141,14 +142,13 @@ fn pipe() -> io::Result<[OwnedFd; 2]> {
 fn checks(plan: &Plan, mounts: &[RetainedMount]) -> io::Result<Vec<Check>> {
     let separator = plan.launch_layout.command_separator.unwrap();
     let mut result = Vec::new();
+    if mounts.is_empty() {
+        return Ok(result);
+    }
+    let operations = operations(&plan.arguments[..separator])?;
     for mount in mounts {
         // A later mount of an ancestor intentionally covers an earlier publication.
-        let covered = data_covered(
-            &plan.arguments[..separator],
-            mount.argument_index(),
-            &mount.destination,
-        )?;
-        if covered {
+        if covered_after(&operations, mount.argument_index(), &mount.destination) {
             continue;
         }
         let id = Identity::of_fd(&mount.descriptor)?;
@@ -161,15 +161,6 @@ fn checks(plan: &Plan, mounts: &[RetainedMount]) -> io::Result<Vec<Check>> {
         });
     }
     Ok(result)
-}
-
-fn data_covered(arguments: &[Argument], index: usize, path: &Path) -> io::Result<bool> {
-    Ok(kakoi_linux::bwrap_arguments::operations(arguments)?.into_iter().any(|(later,args)| {
-        later > index && (matches!(args, [Argument::Literal(option), _, Argument::Literal(dest)]
-            if matches!(option.to_str(),Some("--bind" | "--ro-bind" | "--dev-bind" | "--ro-bind-data" | "--bind-data")) && path.starts_with(Path::new(dest)))
-        || matches!(args,[Argument::Literal(option), Argument::Literal(dest)]
-            if matches!(option.to_str(),Some("--tmpfs" | "--proc" | "--dev")) && path.starts_with(Path::new(dest))))
-    }))
 }
 
 struct ChildGuard(std::process::Child);
@@ -571,14 +562,15 @@ fn launch(
     let image = crate::helper_image::copy(crate::helper_image::Role::Init)?;
     kakoi_linux::helper_placement::place_init(plan, FileContent::new(image), INIT);
     let mut expected_data = Vec::new();
-    for (index, args) in kakoi_linux::bwrap_arguments::operations(&plan.arguments)? {
+    let operations = operations(&plan.arguments)?;
+    for &(index, args) in &operations {
         let [Argument::Literal(option), content, Argument::Literal(path)] = args else {
             continue;
         };
         if !matches!(option.to_str(), Some("--ro-bind-data" | "--bind-data")) {
             continue;
         }
-        if data_covered(&plan.arguments, index, Path::new(path))? {
+        if covered_after(&operations, index, Path::new(path)) {
             continue;
         }
         let bytes = match content {
