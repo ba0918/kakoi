@@ -210,10 +210,22 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
         std::path::Path::new("upstream.toml"),
     )
     .unwrap();
+    let temp = crate::common::TempDir::new();
+    let rejections_read = temp.path().join("rejections-read");
+    let marker = rejections_read.clone();
     let upstream = thread::spawn(move || {
         let mut wire = [0; 512];
         let (size, peer) = socket.recv_from(&mut wire).unwrap();
-        thread::sleep(Duration::from_millis(300));
+        // The rejections are answered while this resolution runs: answer only once the
+        // client has read all three, so that they come first.
+        let waited = Instant::now() + Duration::from_secs(30);
+        while !marker.exists() {
+            assert!(
+                Instant::now() < waited,
+                "the client never read the rejections"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
         wire[2] |= 0x80;
         socket.send_to(&wire[..size], peer).unwrap();
         socket.set_nonblocking(true).unwrap();
@@ -252,7 +264,7 @@ fn service_shares_udp_tcp_resolution_while_rejections_remain_responsive() {
     )
     .unwrap();
     let mut client = namespace.command("/usr/bin/python3").unwrap().args(["-c", r#"
-import socket, struct
+import socket, struct, sys
 base = b'\x12\x34\x01\0\0\x01\0\0\0\0\0\0\x03api\x07example\x03com\0\0\x10\0\x01'
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, socket.create_connection(('127.0.0.53',53),timeout=2) as tcp:
     udp.settimeout(2)
@@ -271,6 +283,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, socket.create_conn
     udp.sendto(unsupported, ('127.0.0.53',53))
     answer = udp.recv(512)
     assert answer[:2] == unsupported[:2] and answer[3]&15 == 4, answer
+    open(sys.argv[1], 'w').close()
     answer = udp.recv(512)
     assert answer[:2] == base[:2] and answer[3]&15 == 0, answer
     def read(n):
@@ -281,10 +294,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp, socket.create_conn
         return data
     answer=read(struct.unpack('!H',read(2))[0])
     assert answer[:2] == second[:2] and answer[3]&15 == 0, answer
-"#]).spawn().unwrap();
+"#]).arg(&rejections_read).spawn().unwrap();
     let start = Instant::now();
     loop {
-        assert!(start.elapsed() < Duration::from_secs(4));
+        // Only guards against a hang.
+        assert!(start.elapsed() < Duration::from_secs(30));
         runtime.poll(Instant::now()).unwrap();
         if let Some(status) = client.try_wait().unwrap() {
             assert!(status.success());
