@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use kakoi_runtime::cli::diagnostic::Kind;
+use kakoi_runtime::cli::diagnostic::{escape_control, Kind};
 use kakoi_runtime::cli::policy::{
     parse_policy, EnvMode, ListMode, NetworkMode, PolicyPath, Variable,
 };
@@ -266,6 +266,15 @@ fn a_control_character_in_a_variable_name_is_escaped_in_the_diagnostic() {
     assert!(
         !rendered.bytes().any(|byte| byte < 0x20 || byte == 0x7f),
         "{rendered:?}"
+    );
+}
+
+// @kotowari[REQ-289]
+#[test]
+fn control_characters_are_written_visibly_and_unicode_separators_are_kept() {
+    assert_eq!(
+        escape_control("a\nb\rc\td\u{0}e\u{1b}f\u{7f}g\u{2028}h\u{85}"),
+        "a\\nb\\rc\\td\\x00e\\x1Bf\\x7Fg\u{2028}h\u{85}"
     );
 }
 
