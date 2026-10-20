@@ -113,8 +113,8 @@ pub fn run(
         session.flush_notifications(writer);
         std::thread::sleep(INTERVAL);
     };
-    if !closed && !block(session, application, &mut fault) {
-        fault = true;
+    if !closed {
+        block(session, application, &mut fault);
     }
     let settle = Instant::now() + SETTLE;
     while Instant::now() < settle && !(session.is_drained() && session.pending_notifications() == 0)
