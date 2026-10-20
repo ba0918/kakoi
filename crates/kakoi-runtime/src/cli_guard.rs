@@ -10,10 +10,10 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, ExitCode};
 
-use crate::cli::diagnostic::{Diagnostic, Kind};
-use crate::cli::guard::evaluate;
-use crate::cli::guard_placement::{GuardTable, TableEntry, GUARD_TABLE};
 use crate::cli::report;
+use crate::diagnostic::{Diagnostic, Kind};
+use crate::guard_placement::{GuardTable, TableEntry, GUARD_TABLE};
+use kakoi_policy::guard::evaluate;
 
 /// Acts as the guard when this executable was started from a path the table lists, and
 /// returns the exit code; `None` otherwise, and kakoi goes on as itself.
