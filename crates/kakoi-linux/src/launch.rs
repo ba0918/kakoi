@@ -307,29 +307,23 @@ fn numbered_arguments(
     for argument in arguments {
         let text = match argument {
             Argument::Literal(text) => text.clone(),
-            Argument::EmptyFile => {
-                let fd = memory_file("kakoi-empty", &[])?;
-                let number = OsString::from(fd.as_raw_fd().to_string());
-                descriptors.push(fd);
-                number
-            }
-            Argument::Seccomp => {
-                let fd = memory_file("kakoi-seccomp", &filter_bytes())?;
-                let number = OsString::from(fd.as_raw_fd().to_string());
-                descriptors.push(fd);
-                number
-            }
+            Argument::EmptyFile => kept(memory_file("kakoi-empty", &[])?, descriptors),
+            Argument::Seccomp => kept(memory_file("kakoi-seccomp", &filter_bytes())?, descriptors),
             Argument::CopiedFile(content) => {
-                let fd = memory_file("kakoi-copy", content.bytes())?;
-                let number = OsString::from(fd.as_raw_fd().to_string());
-                descriptors.push(fd);
-                number
+                kept(memory_file("kakoi-copy", content.bytes())?, descriptors)
             }
             Argument::SharedFile { path, .. } => path.clone().into_os_string(),
         };
         numbered.push(text);
     }
     Ok(numbered)
+}
+
+/// Keeps `fd` for the exec and gives the number bwrap reads it by.
+fn kept(fd: OwnedFd, descriptors: &mut Vec<OwnedFd>) -> OsString {
+    let number = OsString::from(fd.as_raw_fd().to_string());
+    descriptors.push(fd);
+    number
 }
 
 /// A file in memory holding `content`, positioned at its start. It is created
