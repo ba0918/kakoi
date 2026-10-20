@@ -200,6 +200,25 @@ pub fn assert_diagnostic(output: &Output, code: i32, kind: &str) -> String {
     diagnostic
 }
 
+/// A command guard that denies `git push`.
+pub const GIT_PUSH: &str =
+    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
+
+/// The line on standard error for a `git push` that [`GIT_PUSH`] denies.
+pub const GIT_PUSH_DENIED: &str = "kakoi: guard: git push: push は人が行う";
+
+/// Exit 126, nothing on standard output, and one line on standard error that is `line`.
+pub fn assert_denied(output: &Output, line: &str) {
+    let report = output_report(output);
+    assert_eq!(output.status.code(), Some(126), "{report}");
+    assert!(output.stdout.is_empty(), "{report}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!("{line}\n"),
+        "{report}"
+    );
+}
+
 /// The profile of a binary test that reaches the plan without a warning: the workspace is
 /// `rw` (specification section 6.5).
 pub const RW_WORKSPACE: &str = "[mounts]\nrw = [\"${workspace}\"]\n";

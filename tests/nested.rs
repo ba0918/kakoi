@@ -7,8 +7,8 @@ use std::process::Output;
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, profile, run_inside, TempDir,
-    KAKOI, RW_WORKSPACE,
+    assert_denied, assert_diagnostic, binary, home_with_workspace, output_report, profile,
+    run_inside, TempDir, GIT_PUSH, GIT_PUSH_DENIED, KAKOI, RW_WORKSPACE,
 };
 
 /// The name of the nesting mark inside an isolation.
@@ -948,9 +948,6 @@ fn req_315_the_tun_device_follows_the_mark() {
 
 // The outer run's command guards inside a nested isolation.
 
-const GIT_PUSH: &str =
-    "[[commands.guard]]\nprogram = \"git\"\ndeny = [[\"push\"]]\nreason = \"push は人が行う\"\n";
-
 /// Runs `script` inside the isolation of `home`'s profile with `outer` added, where it
 /// starts a nested isolation of the profile with `inner` added, and in that the shell
 /// command `inner_script`.
@@ -988,14 +985,7 @@ fn ex_899_the_outer_guard_still_denies_inside_a_nested_isolation() {
         "-- /bin/sh -c 'git push origin main'",
     );
 
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(126), "{report}");
-    assert!(output.stdout.is_empty(), "{report}");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        "kakoi: guard: git push: push は人が行う\n",
-        "{report}"
-    );
+    assert_denied(&output, GIT_PUSH_DENIED);
 }
 
 /// Runs `git push` by name in a nested isolation whose own policy is `inner`, under an
@@ -1015,14 +1005,7 @@ fn outer_guard_denies_push_under(inner: &str) {
         "-- /bin/sh -c 'git push origin main'",
     );
 
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(126), "{report}");
-    assert!(output.stdout.is_empty(), "{report}");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr),
-        "kakoi: guard: git push: push は人が行う\n",
-        "{report}"
-    );
+    assert_denied(&output, GIT_PUSH_DENIED);
 }
 
 // @kotowari[REQ-465]
@@ -1123,7 +1106,7 @@ fn assert_version_then_denied_push(output: &Output) {
     assert_eq!(output.stdout, git_version(), "{report}");
     assert_eq!(
         String::from_utf8_lossy(&output.stderr),
-        "kakoi: guard: git push: push は人が行う\n",
+        format!("{GIT_PUSH_DENIED}\n"),
         "{report}"
     );
 }
