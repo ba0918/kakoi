@@ -3,11 +3,11 @@
 #[cfg(not(target_arch = "x86_64"))]
 compile_error!("kakoi supports only x86_64 (specification section 3)");
 
-pub use kakoi_plan::{
+use kakoi_plan::{
     command, command_limits, copies, environment, guard_placement, isolated_env, listed, mounts,
-    placement, plan, variables,
+    plan, variables,
 };
-pub use kakoi_policy::{diagnostic, guard, layers, network, policy, wildcard};
+use kakoi_policy::{diagnostic, layers, policy, wildcard};
 
 pub mod bwrap_arguments;
 pub mod command_location;

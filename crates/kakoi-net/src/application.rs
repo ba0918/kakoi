@@ -1,11 +1,9 @@
 //! Application privilege boundary inside an already controlled network namespace.
 
 use crate::{init, namespace::NetworkNamespace};
-use kakoi_linux::{
-    diagnostic::Diagnostic,
-    launch::{self, BwrapCommand},
-    plan::Plan,
-};
+use kakoi_linux::launch::{self, BwrapCommand};
+use kakoi_plan::plan::Plan;
+use kakoi_policy::diagnostic::Diagnostic;
 use std::{os::fd::RawFd, time::Duration};
 
 /// Connects the library's descriptor-mounted init to the same network boundary
