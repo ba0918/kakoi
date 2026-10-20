@@ -215,7 +215,6 @@ mod following {
                 nft: nft_program.into(),
                 trust: None,
                 scope: AddressContext::default(),
-                generation: 0,
                 host_dns: Some(host_dns),
             },
             |_| None,

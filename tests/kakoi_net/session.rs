@@ -61,7 +61,6 @@ pub(crate) fn config(nft: &str) -> DnsRuntimeConfig {
         trust: None,
         nft: nft.into(),
         scope: AddressContext::default(),
-        generation: 0,
         host_dns: None,
     }
 }

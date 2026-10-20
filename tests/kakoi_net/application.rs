@@ -188,7 +188,6 @@ fn ordinary_application_name_resolution_uses_the_managed_dns_runtime() {
             trust: None,
             nft: "/usr/sbin/nft".into(),
             scope: AddressContext::default(),
-            generation: 0,
             host_dns: None,
         },
         |_| None,

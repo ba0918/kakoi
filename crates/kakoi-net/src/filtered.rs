@@ -162,7 +162,6 @@ pub fn prepare_session(policy: &Policy, tools: &Tools) -> Result<Session, Prepar
             host_loopback_v6: Some(HOST_LOOPBACK_V6),
             ..AddressContext::default()
         },
-        generation: 0,
         host_dns: following,
     };
     let transport = Transport::start_closed(

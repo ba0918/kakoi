@@ -35,7 +35,6 @@ pub struct DnsRuntimeConfig {
     pub trust: Option<TlsClient>,
     pub nft: PathBuf,
     pub scope: AddressContext,
-    pub generation: u64,
     /// Upstreams that follow the host's DNS configuration rather than a policy.
     pub host_dns: Option<HostDns>,
 }
@@ -98,7 +97,7 @@ impl DnsRuntime {
         let timeout = Duration::from_secs(u64::from(config.limits.dns_resolution_timeout_seconds));
         let requests = DnsRequests::new(
             config.policy.clone(),
-            config.generation,
+            0,
             limit,
             config.limits.dns_max_waiters_per_resolution as usize,
             timeout,
