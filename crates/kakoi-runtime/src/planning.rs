@@ -353,7 +353,7 @@ fn plan_guards(
         })
         .collect();
     let kakoi = executable.and_then(crate::mount_facts::real_path);
-    let guards = place_guards(
+    let mut guards = place_guards(
         &policy.guards,
         path.is_some(),
         &facts,
@@ -361,7 +361,6 @@ fn plan_guards(
         kakoi.as_deref().filter(|_| exclude_self),
         kakoi.as_deref().filter(|_| exclude_self).and_then(file_id),
     );
-    let mut guards = guards;
     guards.executable = kakoi.clone();
     if !guards.placed.is_empty() && kakoi.is_none() {
         return Err(Diagnostic::bwrap(

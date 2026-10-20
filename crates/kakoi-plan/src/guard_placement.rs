@@ -163,7 +163,8 @@ impl GuardTable {
 /// Decides the guards of `guards` (the merged rules) from the names found on `PATH`
 /// (`facts`, by program, in the order of `PATH`; `path_present` false when the isolation
 /// has no `PATH`), the mount items as resolved, and the real path of kakoi itself and
-/// which file it is.
+/// which file it is when kakoi is not to be guarded. Where kakoi's executable is (the
+/// plan's `executable`) is left to the caller, which knows it also when kakoi is guarded.
 pub fn place_guards(
     guards: &[GuardEntry],
     path_present: bool,
@@ -172,10 +173,7 @@ pub fn place_guards(
     kakoi: Option<&Path>,
     kakoi_file: Option<FileId>,
 ) -> GuardPlan {
-    let mut plan = GuardPlan {
-        executable: kakoi.map(Path::to_path_buf),
-        ..GuardPlan::default()
-    };
+    let mut plan = GuardPlan::default();
     // The programs with their real path, in the order their first rule is written.
     let mut found: Vec<(String, PathBuf, PathBuf)> = Vec::new();
     for program in programs(guards) {
