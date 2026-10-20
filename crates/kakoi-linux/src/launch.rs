@@ -113,16 +113,7 @@ pub fn assemble_retained_network(
             "expected filtered plan",
         ));
     }
-    assemble_retained_arguments(
-        plan,
-        mounts,
-        &[
-            "--uid".into(),
-            uid.to_string().into(),
-            "--gid".into(),
-            gid.to_string().into(),
-        ],
-    )
+    assemble_retained_arguments(plan, mounts, &identity(uid, gid))
 }
 
 fn assemble_retained_arguments(
@@ -214,16 +205,17 @@ pub fn assemble_network(
         arguments.push(Argument::Literal(given));
         arguments.extend(command);
     }
-    assemble_with_arguments(
-        plan,
-        &[
-            "--uid".into(),
-            uid.to_string().into(),
-            "--gid".into(),
-            gid.to_string().into(),
-        ],
-        &arguments,
-    )
+    assemble_with_arguments(plan, &identity(uid, gid), &arguments)
+}
+
+/// The identity a filtered launch maps inside, ahead of the plan's arguments.
+fn identity(uid: u32, gid: u32) -> [OsString; 4] {
+    [
+        "--uid".into(),
+        uid.to_string().into(),
+        "--gid".into(),
+        gid.to_string().into(),
+    ]
 }
 
 fn assemble_with_arguments(
