@@ -748,6 +748,29 @@ fn slow_nft(temp: &crate::common::TempDir) -> (std::path::PathBuf, std::path::Pa
     (wrapper, slow)
 }
 
+// An answer whose staging is given up before activation (its deadline or a
+// cancellation) takes the staged sets away again, and the owner stays usable for
+// the next answer.
+// @kotowari[REQ-014]
+#[test]
+fn a_staging_dropped_before_activation_removes_its_sets_and_leaves_the_owner_usable() {
+    use kakoi_net::{dynamic::DynamicPermissions, leases::ActiveGrant};
+    let namespace = dns_owner_namespace();
+    let mut owner = DynamicPermissions::new(&namespace, Path::new("/usr/sbin/nft"), api_rule());
+    let grant = ActiveGrant {
+        rule: 0,
+        address: "1.1.1.1".parse().unwrap(),
+        deadline: Instant::now() + Duration::from_secs(30),
+    };
+    let staged = owner.stage(&[grant]).unwrap();
+    assert_eq!(dns_sets(&namespace).len(), 1);
+    drop(staged);
+    assert!(dns_sets(&namespace).is_empty());
+    assert!(!owner.requires_reconciliation());
+    owner.stage(&[grant]).unwrap().activate().unwrap();
+    assert_eq!(dns_sets(&namespace).len(), 1);
+}
+
 fn dns_sets(namespace: &NetworkNamespace) -> Vec<String> {
     let json = nft::inspect(
         namespace,
