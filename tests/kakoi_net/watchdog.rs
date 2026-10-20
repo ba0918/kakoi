@@ -72,7 +72,13 @@ fn controller_process_loss_is_independently_blocked() {
         loop {
             match watchdog.poll().unwrap() {
                 WatchdogState::Closed => break,
-                WatchdogState::Healthy => watchdog.heartbeat().unwrap(),
+                // The stop can land between this poll and the heartbeat. The
+                // watchdog that closed transit meanwhile refuses the heartbeat,
+                // and the next poll reports the closure.
+                WatchdogState::Healthy => match watchdog.heartbeat() {
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+                    result => result.unwrap(),
+                },
                 WatchdogState::Unresponsive => {}
             }
             std::thread::sleep(Duration::from_millis(20));
