@@ -60,16 +60,6 @@ fn every_network_limit_rejects_out_of_range_and_noninteger_values() {
                 "{text}"
             );
         }
-        for value in [min - 1, max + 1] {
-            let text = format!("[network]\nmode='none'\n{key}={value}");
-            let diagnostic = parse_policy(&text, Path::new("limits.toml"))
-                .unwrap_err()
-                .to_string();
-            assert!(
-                diagnostic.contains(&format!("network.{key} must be in {min}..={max}")),
-                "{diagnostic}"
-            );
-        }
         for value in [
             (min - 1).to_string(),
             (max + 1).to_string(),
