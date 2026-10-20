@@ -645,23 +645,22 @@ fn scan_items(
             .collect();
         // Any swappable `ro` around the target stops the run, even inside one that cannot be
         // swapped: the swappable one is what the next start could be made to re-point.
-        let into_ro = containing_ro
+        if let Some(ro) = containing_ro
             .iter()
             .find(|ro| swappable_ro.contains(&ro.real))
-            .or(containing_ro.first());
-        match into_ro {
-            Some(ro) if swappable_ro.contains(&ro.real) => {
-                return Err(Diagnostic::path(format!(
-                    "the scan found the symbolic link {} pointing at {}, inside the `ro` item \
-                     `{}` at {}, whose resolution passes through a writable item, so the link \
-                     and the item could be re-pointed from inside the isolation and the next \
-                     start made to empty another file",
-                    hit.found_at.display(),
-                    real.display(),
-                    ro.written,
-                    ro.real.display()
-                )));
-            }
+        {
+            return Err(Diagnostic::path(format!(
+                "the scan found the symbolic link {} pointing at {}, inside the `ro` item \
+                 `{}` at {}, whose resolution passes through a writable item, so the link \
+                 and the item could be re-pointed from inside the isolation and the next \
+                 start made to empty another file",
+                hit.found_at.display(),
+                real.display(),
+                ro.written,
+                ro.real.display()
+            )));
+        }
+        match containing_ro.first() {
             Some(ro) => scanned.left_visible.push(LeftVisible {
                 link: hit.found_at.clone(),
                 reason: format!(
