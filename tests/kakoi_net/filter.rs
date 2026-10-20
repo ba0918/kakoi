@@ -480,9 +480,14 @@ fn staging_rejects_elements_without_a_kernel_expiration() {
         address: "1.1.1.1".parse().unwrap(),
         deadline: Instant::now() + Duration::from_secs(3),
     }]);
-    assert!(
-        result.is_err(),
-        "an immortal element was accepted for activation"
+    // The kernel accepted the elements without a timeout; the readback must be what
+    // refuses them, not nft.
+    assert_eq!(
+        result
+            .err()
+            .expect("an immortal element was accepted for activation")
+            .kind(),
+        std::io::ErrorKind::InvalidData
     );
 }
 
