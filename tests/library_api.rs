@@ -721,7 +721,7 @@ fn survivors(pids: &[u32]) -> Vec<u32> {
         if live.is_empty() || Instant::now() >= deadline {
             return live;
         }
-        std::thread::yield_now();
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -835,7 +835,7 @@ fn preparation_reaps_a_worker_killed_or_disconnected_before_the_handshake() {
                     child.kill().unwrap();
                     panic!("worker did not reach the ELF initialization barrier");
                 }
-                std::thread::yield_now();
+                std::thread::sleep(Duration::from_millis(1));
             }
         }
         let output = child.wait_with_output().unwrap();
