@@ -2048,6 +2048,9 @@ fn a_scanned_link_to_a_directory_is_not_hidden() {
     let target = home.path().join("target");
     std::fs::create_dir(&target).unwrap();
     std::os::unix::fs::symlink(&target, workspace.join(".env")).unwrap();
+    // A regular file of the same name, so that the scan is seen hiding what it should.
+    std::fs::create_dir(workspace.join("sub")).unwrap();
+    std::fs::write(workspace.join("sub/.env"), "").unwrap();
     profile(
         &home,
         &format!("{RW_WORKSPACE}[[mounts.scan]]\nroot = \"${{workspace}}\"\nnames = [\".env\"]\n"),
@@ -2061,7 +2064,11 @@ fn a_scanned_link_to_a_directory_is_not_hidden() {
         .iter()
         .filter(|item| item["directive"] == "hide")
         .collect();
-    assert!(hidden.is_empty(), "{plan}");
+    assert_eq!(hidden.len(), 1, "{plan}");
+    assert!(
+        hidden[0]["path"].as_str().unwrap().ends_with("/sub/.env"),
+        "{plan}"
+    );
 }
 
 // @kotowari[EX-344]
