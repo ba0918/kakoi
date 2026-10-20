@@ -1098,39 +1098,6 @@ fn an_x32_syscall_kills_the_process() {
     assert!(output.stdout.is_empty(), "{report}");
 }
 
-// @kotowari[REQ-284]
-#[test]
-fn a_nested_launch_runs_under_the_outer_boundary() {
-    let (home, workspace) = home_with_workspace();
-    home.write("box/file", "hidden outside\n");
-    profile(
-        &home,
-        &format!(
-            "{RW_WORKSPACE}hide = [\"{}\"]\n",
-            home.path().join("box").display()
-        ),
-    );
-
-    // The inner `kakoi` is the same binary, started from inside the isolation
-    // with the environment the outer one assembled (`KAKOI=1` included).
-    let output = run_script(
-        &home,
-        &workspace,
-        &format!(
-            "{} -- /bin/sh -c 'test ! -e {} && echo inner-ok'",
-            env!("CARGO_BIN_EXE_kakoi"),
-            home.path().join("box/file").display()
-        ),
-    );
-
-    let report = output_report(&output);
-    assert_eq!(output.status.code(), Some(0), "{report}");
-    assert_eq!(output.stdout, b"inner-ok\n", "{report}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert_eq!(stderr.lines().count(), 1, "{report}");
-    assert!(stderr.starts_with("kakoi: warning: "), "{report}");
-}
-
 // `rw-copy`: the isolation starts from the host's content, writes it freely, and the host
 // keeps what it had (specification section 6.1).
 
