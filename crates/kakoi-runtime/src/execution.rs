@@ -304,206 +304,30 @@ pub(crate) fn run_worker(
     if unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) } != 0 {
         return Err(prepare_failure(io::Error::last_os_error()));
     }
-    let mut network = if plan.policy.network_mode == crate::NetworkMode::Filtered {
-        let prepared = kakoi_net::filtered::Tools::locate(host)
-            .map_err(kakoi_net::filtered::PreparationError::from)
-            .and_then(|tools| {
-                kakoi_net::filtered::check_publications(&plan.policy)?;
-                kakoi_net::filtered::prepare_session(&plan.policy, &tools)
-            });
-        match prepared {
-            Ok(session) => Some(session),
-            Err(cause) => {
-                let mut error = failure(
-                    if cause.resource_conflict {
-                        ErrorKind::ResourceConflict
-                    } else if cause.unsupported_environment {
-                        ErrorKind::UnsupportedEnvironment
-                    } else {
-                        ErrorKind::HelperFailure
-                    },
-                    io::Error::other(cause.diagnostic.to_string()),
-                    MainOutcome::NotStarted,
-                );
-                error.diagnostics[0].os_error = cause.os_error;
-                let mut diagnostics = Vec::new();
-                error.cleanup = if drain_network(&mut None, &mut diagnostics) {
-                    Cleanup::Confirmed
-                } else {
-                    Cleanup::Unconfirmed
-                };
-                error.diagnostics.extend(diagnostics);
-                error.phase = Phase::Execution;
-                ipc::send(control, &Started::Failed(error), &[]).map_err(prepare_failure)?;
-                return Ok(());
-            }
+    let mut network = match open_network(&plan, host) {
+        Ok(network) => network,
+        Err(error) => {
+            ipc::send(control, &Started::Failed(error), &[]).map_err(prepare_failure)?;
+            return Ok(());
         }
-    } else {
-        None
     };
-    let prepared = (|| -> io::Result<_> {
-        for source in sources {
-            if Identity::of_path(&source.path)
-                .map_err(|cause| io::Error::new(io::ErrorKind::InvalidData, cause))?
-                != source.identity
-            {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "original mount resolution changed",
-                ));
-            }
-        }
-        plan.arguments = kakoi_linux::retained_mounts::settle_shared(&plan.arguments, &mut mounts)?;
-        let mut inherited_resolver = None;
-        if network.is_some() {
-            if let Some(target) = kakoi_linux::launch::network_resolver_target(&plan)
-                .map_err(|cause| io::Error::other(cause.to_string()))?
-            {
-                kakoi_linux::helper_placement::retarget_resolver(&mut plan, target)?;
-            }
-            if plan.nested {
-                let index = plan
-                    .launch_layout
-                    .resolver_destination
-                    .ok_or_else(|| io::Error::other("missing managed resolver"))?;
-                if let (Argument::CopiedFile(content), Argument::Literal(path)) =
-                    (&plan.arguments[index - 1], &plan.arguments[index])
-                {
-                    let check = DataCheck {
-                        path: path.as_bytes().to_vec(),
-                        readonly: true,
-                    };
-                    let expected =
-                        kakoi_linux::launch::memory_file("kakoi-resolver", content.bytes())?;
-                    if verify_data(&check, expected).is_ok() {
-                        // An inherited read-only managed resolver already has the
-                        // required bytes. Overmounting bwrap's unlinked data file
-                        // cannot work on all supported versions; verify the same
-                        // final data below instead of changing its contents.
-                        inherited_resolver = Some((check, content.bytes().to_vec()));
-                        kakoi_linux::helper_placement::reuse_resolver(&mut plan, &mut mounts)?;
-                    }
-                }
-            }
-        }
-        let checks = checks(&plan, &mounts)?;
-        let command = plan.command.as_ref().unwrap();
-        let mut request = InitRequest {
-            terminal_blocked: kakoi_linux::supervisor_signals::blocked()?,
-            program: command.path.as_os_str().as_bytes().to_vec(),
-            argv0: command.command.as_bytes().to_vec(),
-            arguments: command
-                .arguments
-                .iter()
-                .map(|arg| arg.as_bytes().to_vec())
-                .collect(),
-            checks,
-            grace_ms: u64::from(plan.policy.shutdown_grace_seconds) * 1000,
-            guards: plan
-                .guards
-                .table
-                .entries
-                .iter()
-                .map(|entry| entry.location.clone())
-                .collect(),
-            allowed: plan.commands.as_ref().map(|limits| {
-                limits
-                    .allowed
-                    .iter()
-                    .chain(&limits.relocated)
-                    .chain(&limits.outer_guards)
-                    .map(|path| path.as_os_str().as_bytes().to_vec())
-                    .collect()
-            }),
-            data: Vec::new(),
-        };
-        let image = crate::helper_image::copy(crate::helper_image::Role::Init)?;
-        kakoi_linux::helper_placement::place_init(&mut plan, FileContent::new(image), INIT);
-        let mut expected_data = Vec::new();
-        for (index, args) in kakoi_linux::bwrap_arguments::operations(&plan.arguments)? {
-            let [Argument::Literal(option), content, Argument::Literal(path)] = args else {
-                continue;
-            };
-            if !matches!(option.to_str(), Some("--ro-bind-data" | "--bind-data")) {
-                continue;
-            }
-            if data_covered(&plan.arguments, index, Path::new(path))? {
-                continue;
-            }
-            let bytes = match content {
-                Argument::CopiedFile(content) => content.bytes(),
-                Argument::EmptyFile => &[],
-                _ => continue,
-            };
-            request.data.push(DataCheck {
-                path: path.as_bytes().to_vec(),
-                readonly: option == "--ro-bind-data",
-            });
-            expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", bytes)?);
-        }
-        if let Some((check, bytes)) = inherited_resolver {
-            request.data.push(check);
-            expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", &bytes)?);
-        }
-        let mut bwrap = match &network {
-            Some(session) => {
-                kakoi_net::application::prepare_retained(&plan, &mounts, session.namespace())?
-            }
-            None => kakoi_linux::launch::assemble_retained(&plan, &mounts)?,
-        };
-        crate::preparation::remove_helper_environment(&mut bwrap.command);
-        let (init_control, child_control) = UnixStream::pair()?;
-        let fd = child_control.as_raw_fd();
-        bwrap.command.env(INIT_FD, fd.to_string());
-        let mut pipes = Vec::new();
-        let mut slots = [None; 3];
-        for (index, input) in stdio.into_iter().enumerate() {
-            let endpoint = match input {
-                IoInput::Null => Stdio::null(),
-                IoInput::Descriptor(number) => Stdio::from(descriptors[number].try_clone()?),
-                IoInput::Pipe => {
-                    let [reader, writer] = pipe()?;
-                    slots[index] = Some(pipes.len());
-                    if index == 0 {
-                        pipes.push(writer);
-                        Stdio::from(reader)
-                    } else {
-                        pipes.push(reader);
-                        Stdio::from(writer)
-                    }
-                }
-            };
-            match index {
-                0 => {
-                    bwrap.command.stdin(endpoint);
-                }
-                1 => {
-                    bwrap.command.stdout(endpoint);
-                }
-                _ => {
-                    bwrap.command.stderr(endpoint);
-                }
-            }
-        }
-        let mut inherited = bwrap
-            .descriptors
-            .iter()
-            .map(AsRawFd::as_raw_fd)
-            .collect::<Vec<_>>();
-        inherited.push(fd);
-        unsafe {
-            bwrap.command.pre_exec(move || {
-                // bwrap is also a supervisor: it must outlive terminal interrupts.
-                kakoi_linux::supervisor_signals::block()?;
-                kakoi_linux::launch::inherit_only(&inherited)
-            });
-        }
-        let child = bwrap.command.spawn()?;
-        drop(child_control);
-        Ok((child, init_control, request, expected_data, pipes, slots))
-    })();
-    let (child, init_control, request, expected_data, pipes, slots) = match prepared {
-        Ok(prepared) => prepared,
+    let launched = launch(
+        &mut plan,
+        &mut mounts,
+        sources,
+        network.as_ref(),
+        stdio,
+        &descriptors,
+    );
+    let Launched {
+        child,
+        init_control,
+        request,
+        expected_data,
+        pipes,
+        slots,
+    } = match launched {
+        Ok(launched) => launched,
         Err(cause) => {
             let kind = if cause.kind() == io::ErrorKind::InvalidData {
                 ErrorKind::PlanChanged
@@ -752,6 +576,238 @@ pub(crate) fn run_worker(
         &[],
     )
     .map_err(prepare_failure)
+}
+
+/// What a launch leaves for the start of init: the bwrap process, the control socket to
+/// its init, the request and the generated contents init checks, and the caller's ends of
+/// the pipes with the slots they stand for.
+struct Launched {
+    child: std::process::Child,
+    init_control: UnixStream,
+    request: InitRequest,
+    expected_data: Vec<OwnedFd>,
+    pipes: Vec<OwnedFd>,
+    slots: [Option<usize>; 3],
+}
+
+/// Checks that the mount sources are still what prepare saw, places init in the plan, and
+/// starts bwrap with the requested standard streams, inside the network session if any.
+fn launch(
+    plan: &mut Plan,
+    mounts: &mut Vec<RetainedMount>,
+    sources: Vec<SourceCheck>,
+    network: Option<&kakoi_net::session::Session>,
+    stdio: [IoInput; 3],
+    descriptors: &[OwnedFd],
+) -> io::Result<Launched> {
+    for source in sources {
+        if Identity::of_path(&source.path)
+            .map_err(|cause| io::Error::new(io::ErrorKind::InvalidData, cause))?
+            != source.identity
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "original mount resolution changed",
+            ));
+        }
+    }
+    plan.arguments = kakoi_linux::retained_mounts::settle_shared(&plan.arguments, mounts)?;
+    let mut inherited_resolver = None;
+    if network.is_some() {
+        if let Some(target) = kakoi_linux::launch::network_resolver_target(plan)
+            .map_err(|cause| io::Error::other(cause.to_string()))?
+        {
+            kakoi_linux::helper_placement::retarget_resolver(plan, target)?;
+        }
+        if plan.nested {
+            let index = plan
+                .launch_layout
+                .resolver_destination
+                .ok_or_else(|| io::Error::other("missing managed resolver"))?;
+            if let (Argument::CopiedFile(content), Argument::Literal(path)) =
+                (&plan.arguments[index - 1], &plan.arguments[index])
+            {
+                let check = DataCheck {
+                    path: path.as_bytes().to_vec(),
+                    readonly: true,
+                };
+                let expected = kakoi_linux::launch::memory_file("kakoi-resolver", content.bytes())?;
+                if verify_data(&check, expected).is_ok() {
+                    // An inherited read-only managed resolver already has the
+                    // required bytes. Overmounting bwrap's unlinked data file
+                    // cannot work on all supported versions; verify the same
+                    // final data below instead of changing its contents.
+                    inherited_resolver = Some((check, content.bytes().to_vec()));
+                    kakoi_linux::helper_placement::reuse_resolver(plan, mounts)?;
+                }
+            }
+        }
+    }
+    let checks = checks(plan, mounts)?;
+    let command = plan.command.as_ref().unwrap();
+    let mut request = InitRequest {
+        terminal_blocked: kakoi_linux::supervisor_signals::blocked()?,
+        program: command.path.as_os_str().as_bytes().to_vec(),
+        argv0: command.command.as_bytes().to_vec(),
+        arguments: command
+            .arguments
+            .iter()
+            .map(|arg| arg.as_bytes().to_vec())
+            .collect(),
+        checks,
+        grace_ms: u64::from(plan.policy.shutdown_grace_seconds) * 1000,
+        guards: plan
+            .guards
+            .table
+            .entries
+            .iter()
+            .map(|entry| entry.location.clone())
+            .collect(),
+        allowed: plan.commands.as_ref().map(|limits| {
+            limits
+                .allowed
+                .iter()
+                .chain(&limits.relocated)
+                .chain(&limits.outer_guards)
+                .map(|path| path.as_os_str().as_bytes().to_vec())
+                .collect()
+        }),
+        data: Vec::new(),
+    };
+    let image = crate::helper_image::copy(crate::helper_image::Role::Init)?;
+    kakoi_linux::helper_placement::place_init(plan, FileContent::new(image), INIT);
+    let mut expected_data = Vec::new();
+    for (index, args) in kakoi_linux::bwrap_arguments::operations(&plan.arguments)? {
+        let [Argument::Literal(option), content, Argument::Literal(path)] = args else {
+            continue;
+        };
+        if !matches!(option.to_str(), Some("--ro-bind-data" | "--bind-data")) {
+            continue;
+        }
+        if data_covered(&plan.arguments, index, Path::new(path))? {
+            continue;
+        }
+        let bytes = match content {
+            Argument::CopiedFile(content) => content.bytes(),
+            Argument::EmptyFile => &[],
+            _ => continue,
+        };
+        request.data.push(DataCheck {
+            path: path.as_bytes().to_vec(),
+            readonly: option == "--ro-bind-data",
+        });
+        expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", bytes)?);
+    }
+    if let Some((check, bytes)) = inherited_resolver {
+        request.data.push(check);
+        expected_data.push(kakoi_linux::launch::memory_file("kakoi-check", &bytes)?);
+    }
+    let mut bwrap = match network {
+        Some(session) => {
+            kakoi_net::application::prepare_retained(plan, mounts, session.namespace())?
+        }
+        None => kakoi_linux::launch::assemble_retained(plan, mounts)?,
+    };
+    crate::preparation::remove_helper_environment(&mut bwrap.command);
+    let (init_control, child_control) = UnixStream::pair()?;
+    let fd = child_control.as_raw_fd();
+    bwrap.command.env(INIT_FD, fd.to_string());
+    let mut pipes = Vec::new();
+    let mut slots = [None; 3];
+    for (index, input) in stdio.into_iter().enumerate() {
+        let endpoint = match input {
+            IoInput::Null => Stdio::null(),
+            IoInput::Descriptor(number) => Stdio::from(descriptors[number].try_clone()?),
+            IoInput::Pipe => {
+                let [reader, writer] = pipe()?;
+                slots[index] = Some(pipes.len());
+                if index == 0 {
+                    pipes.push(writer);
+                    Stdio::from(reader)
+                } else {
+                    pipes.push(reader);
+                    Stdio::from(writer)
+                }
+            }
+        };
+        match index {
+            0 => {
+                bwrap.command.stdin(endpoint);
+            }
+            1 => {
+                bwrap.command.stdout(endpoint);
+            }
+            _ => {
+                bwrap.command.stderr(endpoint);
+            }
+        }
+    }
+    let mut inherited = bwrap
+        .descriptors
+        .iter()
+        .map(AsRawFd::as_raw_fd)
+        .collect::<Vec<_>>();
+    inherited.push(fd);
+    unsafe {
+        bwrap.command.pre_exec(move || {
+            // bwrap is also a supervisor: it must outlive terminal interrupts.
+            kakoi_linux::supervisor_signals::block()?;
+            kakoi_linux::launch::inherit_only(&inherited)
+        });
+    }
+    let child = bwrap.command.spawn()?;
+    drop(child_control);
+    Ok(Launched {
+        child,
+        init_control,
+        request,
+        expected_data,
+        pipes,
+        slots,
+    })
+}
+
+/// The prepared network session of a filtered run; none for the other modes. A session
+/// that cannot be prepared is the start failure to report, its cleanup already confirmed
+/// or not.
+fn open_network(
+    plan: &Plan,
+    host: &std::collections::BTreeMap<OsString, OsString>,
+) -> Result<Option<kakoi_net::session::Session>, StartError> {
+    if plan.policy.network_mode != crate::NetworkMode::Filtered {
+        return Ok(None);
+    }
+    let prepared = kakoi_net::filtered::Tools::locate(host)
+        .map_err(kakoi_net::filtered::PreparationError::from)
+        .and_then(|tools| {
+            kakoi_net::filtered::check_publications(&plan.policy)?;
+            kakoi_net::filtered::prepare_session(&plan.policy, &tools)
+        });
+    let cause = match prepared {
+        Ok(session) => return Ok(Some(session)),
+        Err(cause) => cause,
+    };
+    let mut error = failure(
+        if cause.resource_conflict {
+            ErrorKind::ResourceConflict
+        } else if cause.unsupported_environment {
+            ErrorKind::UnsupportedEnvironment
+        } else {
+            ErrorKind::HelperFailure
+        },
+        io::Error::other(cause.diagnostic.to_string()),
+        MainOutcome::NotStarted,
+    );
+    error.diagnostics[0].os_error = cause.os_error;
+    let mut diagnostics = Vec::new();
+    error.cleanup = if drain_network(&mut None, &mut diagnostics) {
+        Cleanup::Confirmed
+    } else {
+        Cleanup::Unconfirmed
+    };
+    error.diagnostics.extend(diagnostics);
+    error.phase = Phase::Execution;
+    Err(error)
 }
 
 fn close_network(
