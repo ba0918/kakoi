@@ -253,7 +253,8 @@ fn ex_911_a_written_rw_place_can_be_written_and_the_host_keeps_it() {
 #[test]
 fn ex_912_the_isolation_has_an_empty_tmp_of_its_own() {
     let scene = Scene::new(&[], "");
-    let host_file = TempDir::new();
+    // Under the host's own /tmp whatever TMPDIR says, so that the host's /tmp is not empty.
+    let host_file = TempDir::under(Path::new("/tmp"));
     let made = format!("kakoi-listed-made-{}", std::process::id());
 
     let output = scene.run(&format!(
@@ -269,7 +270,7 @@ fn ex_912_the_isolation_has_an_empty_tmp_of_its_own() {
 // @kotowari[EX-913]
 #[test]
 fn ex_913_a_place_under_tmp_written_rw_is_shared_with_the_host() {
-    let shared = TempDir::new();
+    let shared = TempDir::under(Path::new("/tmp"));
     let shared_path = shared.path().to_str().unwrap();
     let scene = Scene::new(&[shared_path], "");
 
