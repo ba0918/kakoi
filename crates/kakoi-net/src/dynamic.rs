@@ -262,7 +262,7 @@ fn discard_sets(namespace: &NetworkNamespace, executable: &Path, script: &str) -
         namespace,
         executable,
         script,
-        Instant::now() + Duration::from_secs(2),
+        Instant::now() + crate::nft::COMMAND_BUDGET,
     )
 }
 
@@ -327,7 +327,7 @@ impl PreparedGrants<'_, '_> {
             self.owner.namespace,
             self.owner.nft,
             &self.activation,
-            Instant::now() + Duration::from_secs(2),
+            Instant::now() + crate::nft::COMMAND_BUDGET,
         ) {
             // The kernel may have committed despite losing the acknowledgement.
             self.owner.failed = true;
@@ -367,7 +367,7 @@ fn remove_sets(namespace: &NetworkNamespace, executable: &Path, sets: &[String])
         namespace,
         executable,
         &script,
-        Instant::now() + Duration::from_secs(2),
+        Instant::now() + crate::nft::COMMAND_BUDGET,
     )
 }
 

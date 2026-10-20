@@ -153,6 +153,6 @@ impl Transport {
 impl Drop for Transport {
     fn drop(&mut self) {
         // Process teardown follows even if the explicit close cannot be confirmed.
-        let _ = self.close_until(Instant::now() + Duration::from_secs(2));
+        let _ = self.close_until(Instant::now() + crate::nft::COMMAND_BUDGET);
     }
 }

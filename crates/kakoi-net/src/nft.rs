@@ -17,6 +17,9 @@ impl Drop for OwnedChild {
     }
 }
 
+/// How long one nft run may take when the caller has no deadline of its own.
+pub(crate) const COMMAND_BUDGET: Duration = Duration::from_secs(2);
+
 /// A failure does not prove that the kernel rejected the transaction: a timeout
 /// can lose the success acknowledgement. The supervisor must then retain/restore
 /// the closed gate or verify kernel state before permitting application traffic.

@@ -64,7 +64,7 @@ impl HealthGate {
     /// The caller must first replace/verify failed controllers and policy behind
     /// the guard. Routine heartbeats never invoke this operation.
     pub fn reopen_after_validation(&mut self, milliseconds: NonZeroU16) -> io::Result<()> {
-        self.reopen_until(milliseconds, Instant::now() + Duration::from_secs(2))
+        self.reopen_until(milliseconds, Instant::now() + crate::nft::COMMAND_BUDGET)
     }
 
     pub(crate) fn reopen_until(
@@ -84,7 +84,7 @@ impl HealthGate {
     }
 
     pub fn close(&mut self) -> io::Result<()> {
-        self.close_until(Instant::now() + Duration::from_secs(2))
+        self.close_until(Instant::now() + crate::nft::COMMAND_BUDGET)
     }
 
     /// Use the controller's absolute closure deadline, without starting another
@@ -104,7 +104,7 @@ impl HealthGate {
             &self.namespace,
             &self.nft,
             script,
-            Instant::now() + Duration::from_secs(2),
+            Instant::now() + crate::nft::COMMAND_BUDGET,
         )
     }
 }

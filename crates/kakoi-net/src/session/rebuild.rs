@@ -40,7 +40,7 @@ impl Rebuild {
                             &cleanup,
                             attempt
                                 .deadline()
-                                .min(Instant::now() + Duration::from_secs(2)),
+                                .min(Instant::now() + crate::nft::COMMAND_BUDGET),
                             &cancel,
                         )?;
                         retired_guards.clear();
@@ -52,7 +52,7 @@ impl Rebuild {
                         &format!("delete table inet kakoi_policy\n{script}"),
                         attempt
                             .deadline()
-                            .min(Instant::now() + Duration::from_secs(2)),
+                            .min(Instant::now() + crate::nft::COMMAND_BUDGET),
                         &cancel,
                     )?;
                     if cancel.is_cancelled() || Instant::now() >= attempt.deadline() {
