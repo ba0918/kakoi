@@ -231,8 +231,10 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
         .unwrap();
         let mut installed = false;
         let response = resolver
-            .resolve(
+            .resolve_until(
                 &query("api.example.com", 1),
+                // Far off: the configured resolution timeout decides.
+                Instant::now() + Duration::from_secs(3600),
                 &AddressContext::default(),
                 |_| None,
                 |grants| {
@@ -266,8 +268,9 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
         ); // CNAME + allowed A.
         server.join().unwrap();
         let refused = resolver
-            .resolve(
+            .resolve_until(
                 &query("unlisted.example.net", 1),
+                Instant::now() + Duration::from_secs(3600),
                 &AddressContext::default(),
                 |_| None,
                 |_| panic!("unauthorized install"),

@@ -222,13 +222,12 @@ fn stopping_workers_interrupts_udp_tcp_and_tls_waits_without_waiting_for_dns_dea
         let mut workers = DnsWorkers::new(1).unwrap();
         workers
             .start(task, move |task, cancel| {
-                resolver.resolve_cancellable_until(
+                resolver.prepare_until(
                     &task.wire,
                     task.deadline,
-                    &cancel,
+                    Some(&cancel),
                     &AddressContext::default(),
                     |_| None,
-                    |_| panic!("cancelled resolution must not grant IPs"),
                 )
             })
             .unwrap();

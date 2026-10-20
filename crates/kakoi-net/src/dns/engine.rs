@@ -171,18 +171,6 @@ impl UpstreamResolver {
     /// `install` must atomically adopt the absolute-deadline grants or report a
     /// failure; it must not revive expired grants during a delayed kernel commit.
     /// No successful DNS reply is returned before that adoption succeeds.
-    pub fn resolve(
-        &self,
-        wire: &[u8],
-        scope: &AddressContext,
-        route: impl Fn(IpAddr) -> Option<String>,
-        install: impl FnOnce(&[ActiveGrant]) -> Result<(), DnsError>,
-    ) -> Result<Vec<u8>, DnsError> {
-        let deadline = self.default_deadline();
-        self.resolve_until(wire, deadline, scope, route, install)
-    }
-
-    /// Use the admission deadline when a controller schedules this worker later.
     /// A caller-supplied deadline can shorten, but never extend, configured limits.
     pub fn resolve_until(
         &self,
@@ -193,26 +181,6 @@ impl UpstreamResolver {
         install: impl FnOnce(&[ActiveGrant]) -> Result<(), DnsError>,
     ) -> Result<Vec<u8>, DnsError> {
         self.resolve_controlled(wire, deadline, None, None, scope, route, install)
-    }
-
-    pub fn resolve_cancellable_until(
-        &self,
-        wire: &[u8],
-        deadline: Instant,
-        cancellation: &Cancellation,
-        scope: &AddressContext,
-        route: impl Fn(IpAddr) -> Option<String>,
-        install: impl FnOnce(&[ActiveGrant]) -> Result<(), DnsError>,
-    ) -> Result<Vec<u8>, DnsError> {
-        self.resolve_controlled(
-            wire,
-            deadline,
-            None,
-            Some(cancellation),
-            scope,
-            route,
-            install,
-        )
     }
 
     #[allow(clippy::too_many_arguments)]
