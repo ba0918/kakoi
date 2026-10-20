@@ -72,3 +72,26 @@ pub(super) fn io_error(phase: Phase, cause: io::Error) -> PrepareError {
     error.diagnostics[0].os_error = cause.raw_os_error();
     error
 }
+
+/// What `cause` says, kept as data.
+pub(crate) fn record(cause: &io::Error) -> DiagnosticRecord {
+    DiagnosticRecord {
+        detail: cause.to_string(),
+        os_error: cause.raw_os_error(),
+    }
+}
+
+/// A start that failed for `cause`, with what was started for it not known to be gone.
+pub(crate) fn launch_failure(
+    kind: ErrorKind,
+    cause: io::Error,
+    main: crate::MainOutcome,
+) -> crate::StartError {
+    crate::StartError {
+        phase: Phase::Launch,
+        kind,
+        diagnostics: vec![record(&cause)],
+        cleanup: Cleanup::Unconfirmed,
+        main,
+    }
+}

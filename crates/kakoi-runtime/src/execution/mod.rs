@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
-use crate::preparation::IoInput;
+use crate::preparation::{launch_failure as failure, record, IoInput};
 use crate::running::{Control, Started};
 use crate::{
     ipc, Cleanup, DiagnosticRecord, Dispatch, ErrorKind, ExitReason, MainOutcome, NetworkCleanup,
@@ -61,21 +61,6 @@ pub(crate) fn source_checks(
         });
     }
     Ok(checks)
-}
-fn record(cause: &io::Error) -> DiagnosticRecord {
-    DiagnosticRecord {
-        detail: cause.to_string(),
-        os_error: cause.raw_os_error(),
-    }
-}
-fn failure(kind: ErrorKind, cause: io::Error, main: MainOutcome) -> StartError {
-    StartError {
-        phase: Phase::Launch,
-        kind,
-        diagnostics: vec![record(&cause)],
-        cleanup: Cleanup::Unconfirmed,
-        main,
-    }
 }
 fn prepare_failure(cause: io::Error) -> PrepareError {
     PrepareError {

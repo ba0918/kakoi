@@ -24,6 +24,7 @@ pub use description::{MountDescription, PlanDescription, SkippedDescription};
 pub(crate) use dispatch::inherited_socket;
 pub use dispatch::{dispatch_helper, Dispatch, DispatchError};
 use error::{error, io_error};
+pub(crate) use error::{launch_failure, record};
 pub use error::{Cleanup, DiagnosticRecord, ErrorKind, Phase, PrepareError};
 
 const WORKER: &str = "KAKOI_RUNTIME_WORKER_FD";
@@ -57,15 +58,8 @@ impl PreparedRun {
     }
     pub fn spawn(mut self) -> Result<crate::Running, crate::StartError> {
         use crate::running::{Control, Started};
-        let failure = |cause: io::Error| crate::StartError {
-            phase: Phase::Launch,
-            kind: ErrorKind::Protocol,
-            diagnostics: vec![DiagnosticRecord {
-                detail: cause.to_string(),
-                os_error: cause.raw_os_error(),
-            }],
-            cleanup: Cleanup::Unconfirmed,
-            main: crate::MainOutcome::Unknown,
+        let failure = |cause: io::Error| {
+            launch_failure(ErrorKind::Protocol, cause, crate::MainOutcome::Unknown)
         };
         ipc::send(&self.control, &Control::Start, &[]).map_err(failure)?;
         let (reply, mut fds): (Started, _) = ipc::recv(&self.control).map_err(failure)?;
