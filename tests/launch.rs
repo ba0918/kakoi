@@ -156,31 +156,6 @@ fn adjacent_stages_yield_the_earlier_diagnostic() {
     assert_diagnostic(&output, 125, "bwrap");
 }
 
-// @kotowari[REQ-310]
-#[test]
-fn a_fifo_policy_file_ends_in_a_diagnostic_from_the_binary() {
-    let (home, workspace) = home_with_workspace();
-    let fifo = home.path().join("policy.fifo");
-    let c_path = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
-    // SAFETY: `mkfifo` reads the NUL-terminated path and touches nothing else.
-    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
-
-    // Nothing ever writes to the FIFO: a blocking open would never return.
-    let output = run(
-        home.path(),
-        [
-            "--workspace",
-            workspace.to_str().unwrap(),
-            "--policy-file",
-            fifo.to_str().unwrap(),
-            "--",
-            "/bin/true",
-        ],
-    );
-
-    assert_diagnostic(&output, 125, "policy");
-}
-
 // @kotowari[REQ-311, EX-544]
 #[test]
 fn a_policy_file_over_the_reading_limit_ends_in_a_diagnostic_from_the_binary() {
@@ -2338,7 +2313,7 @@ fn more_hidden_files_than_the_soft_limit_start_and_the_command_gets_the_raised_l
     assert!(soft > 1024, "{}", output_report(&output));
 }
 
-// @kotowari[EX-543]
+// @kotowari[REQ-310, EX-543]
 #[test]
 fn a_fifo_policy_file_is_a_policy_diagnostic_without_waiting() {
     let (home, workspace) = home_with_workspace();
