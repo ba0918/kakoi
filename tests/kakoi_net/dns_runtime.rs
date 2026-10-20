@@ -780,8 +780,9 @@ fn a_and_aaaa_are_separate_resolutions() {
         &[("c0.example.com", 1, 0), ("c0.example.com", 28, 0)],
     );
     assert_eq!(resolved.answers, [(0, 4), (0, 4)]);
-    // The A resolution times out at 3 seconds; the AAAA one, asked a second
-    // later and answered at 3.5 seconds, still has its own time.
+    // The A resolution times out at 3 seconds; the AAAA one, asked two seconds
+    // later and answered no earlier than 3.5 seconds, still has its own time,
+    // with 1.5 seconds of it left for the answer to be adopted.
     let resolved = resolve_questions(
         "*.example.com",
         NetworkLimits {
@@ -801,10 +802,10 @@ fn a_and_aaaa_are_separate_resolutions() {
                         .octets()
                         .to_vec(),
                 )],
-                delay: Duration::from_millis(2500),
+                delay: Duration::from_millis(1500),
             })
         },
-        &[("api.example.com", 1, 0), ("api.example.com", 28, 1000)],
+        &[("api.example.com", 1, 0), ("api.example.com", 28, 2000)],
     );
     assert_eq!(resolved.answers, [(2, 0), (0, 1)]);
 }
