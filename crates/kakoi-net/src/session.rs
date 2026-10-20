@@ -179,7 +179,6 @@ impl Session {
         self.transport
             .as_mut()
             .expect("live transport")
-            .gate_mut()
             .renew_for(HEALTH_WINDOW_MS)?;
         self.verify()?;
         self.next_health = Instant::now() + HEALTH_INTERVAL;
@@ -285,7 +284,6 @@ impl Session {
                 self.transport
                     .as_mut()
                     .expect("returned transport")
-                    .gate_mut()
                     .reopen_until(
                         HEALTH_WINDOW_MS,
                         attempt

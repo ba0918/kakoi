@@ -9,6 +9,7 @@ use crate::{
 use kakoi_policy::network::FixedPublication;
 use std::{
     io,
+    num::NonZeroU16,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -72,9 +73,22 @@ impl Transport {
         &self.gate
     }
 
-    pub(crate) fn gate_mut(&mut self) -> &mut HealthGate {
+    /// Extends the health lease. A closure flushes the lease that this refills, so a
+    /// closure confirmed earlier no longer stands in full and is made again next time.
+    pub(crate) fn renew_for(&mut self, milliseconds: NonZeroU16) -> io::Result<()> {
         self.closed_confirmed = false;
-        &mut self.gate
+        self.gate.renew_for(milliseconds)
+    }
+
+    /// Opens transit again after the controllers and the policy were validated; the
+    /// next closure is made again.
+    pub(crate) fn reopen_until(
+        &mut self,
+        milliseconds: NonZeroU16,
+        deadline: Instant,
+    ) -> io::Result<()> {
+        self.closed_confirmed = false;
+        self.gate.reopen_until(milliseconds, deadline)
     }
 
     pub(crate) fn close_until(&mut self, deadline: Instant) -> io::Result<()> {
