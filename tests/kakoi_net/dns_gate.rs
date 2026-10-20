@@ -181,7 +181,9 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
         thread,
         time::{Duration, Instant},
     };
-    for (install_succeeds, delay_ms) in [(true, 0), (false, 0), (true, 150)] {
+    // The third case answers with no lifetime, and the install outlasts the grace it
+    // gives: the answer must not be returned once its permission is no longer live.
+    for (install_succeeds, outlasted) in [(true, false), (false, false), (true, true)] {
         let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         socket
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -198,7 +200,7 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
                     response.extend([0xc0, 0x0c]);
                     response.extend(kind.to_be_bytes());
                     response.extend([0, 1]);
-                    response.extend(if delay_ms == 0 { 30u32 } else { 0u32 }.to_be_bytes());
+                    response.extend(if outlasted { 0u32 } else { 30u32 }.to_be_bytes());
                     response.extend((data.len() as u16).to_be_bytes());
                     response.extend(data);
                 };
@@ -221,7 +223,7 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
             vec![rule("api.example.com")],
             policy.network.dns_upstream,
             NetworkLimits {
-                dns_zero_ttl_grace_milliseconds: 100,
+                dns_zero_ttl_grace_milliseconds: 1000,
                 ..NetworkLimits::default()
             },
             None,
@@ -239,7 +241,12 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
                     assert_eq!(grants[0].rule, 0);
                     assert_eq!(grants[0].address.to_string(), "1.1.1.1");
                     assert!(grants[0].deadline > Instant::now());
-                    thread::sleep(Duration::from_millis(delay_ms));
+                    if outlasted {
+                        thread::sleep(
+                            grants[0].deadline.saturating_duration_since(Instant::now())
+                                + Duration::from_millis(1),
+                        );
+                    }
                     if install_succeeds {
                         Ok(())
                     } else {
@@ -251,19 +258,11 @@ fn explicit_resolution_installs_only_screened_rule_grants_before_answering() {
         assert!(installed);
         assert_eq!(
             response[3] & 15,
-            if install_succeeds && delay_ms == 0 {
-                0
-            } else {
-                2
-            }
+            if install_succeeds && !outlasted { 0 } else { 2 }
         );
         assert_eq!(
             response[7],
-            if install_succeeds && delay_ms == 0 {
-                2
-            } else {
-                0
-            }
+            if install_succeeds && !outlasted { 2 } else { 0 }
         ); // CNAME + allowed A.
         server.join().unwrap();
         let refused = resolver
