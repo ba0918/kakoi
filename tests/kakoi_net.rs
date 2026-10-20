@@ -61,6 +61,8 @@ mod notification;
 mod outbound;
 #[path = "kakoi_net/pasta.rs"]
 mod pasta;
+#[path = "kakoi_net/pasta_diagnostics.rs"]
+mod pasta_diagnostics;
 #[path = "kakoi_net/plan.rs"]
 mod plan;
 #[path = "kakoi_net/ports.rs"]
