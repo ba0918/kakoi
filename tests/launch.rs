@@ -331,7 +331,26 @@ fn the_isolated_process_inherits_the_raised_soft_limit() {
     let lines: Vec<&str> = stdout.lines().collect();
     assert_eq!(lines.len(), 2, "{}", output_report(&output));
     assert_eq!(lines[0], lines[1], "{}", output_report(&output));
-    assert_ne!(lines[0], "1024", "{}", output_report(&output));
+    // Lowering the soft limit to 1024 keeps the hard limit this process has, whatever it is.
+    assert_eq!(
+        lines[1],
+        open_files_hard_limit().to_string(),
+        "{}",
+        output_report(&output)
+    );
+}
+
+/// This process's hard limit on open files.
+fn open_files_hard_limit() -> libc::rlim_t {
+    let mut limit = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    assert_eq!(
+        unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) },
+        0
+    );
+    limit.rlim_max
 }
 
 // A `bwrap` that passes the lookup on PATH but cannot be executed fails while kakoi is
