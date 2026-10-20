@@ -8,22 +8,11 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use crate::environment::{PathState, RealEntry};
+use crate::real_paths::{real_entry, real_path};
 use crate::regular_file::{read_regular_file, Links, ReadError};
 use crate::variables::{
     core_worktree, worktree_marker, Ancestor, GitEntry, GitFileLinks, Reference, WorkspaceFacts,
 };
-
-/// What exists behind `path`, following symbolic links.
-pub fn real_entry(path: &Path) -> RealEntry {
-    let Some(real) = crate::mount_facts::real_path(path) else {
-        return RealEntry::Missing;
-    };
-    match fs::metadata(&real) {
-        Ok(metadata) if metadata.is_dir() => RealEntry::Directory(real),
-        Ok(_) => RealEntry::NotDirectory(real),
-        Err(_) => RealEntry::Missing,
-    }
-}
 
 /// What is at `path` itself: nothing by that name, something that exists but reaches no
 /// real path, or the real entry behind it. Only `ErrorKind::NotFound` says the name is not
@@ -114,7 +103,7 @@ fn read_links(worktree: &Path) -> GitFileLinks {
                 .find_map(|line| line.strip_prefix("gitdir:"))
                 .map(|rest| rest.trim().to_string())
         })
-        .and_then(|target| crate::mount_facts::real_path(&worktree.join(target)));
+        .and_then(|target| real_path(&worktree.join(target)));
     let Some(gitdir) = gitdir else {
         return GitFileLinks {
             gitdir: None,
@@ -191,5 +180,5 @@ fn read_git_file(path: &Path) -> GitFile {
 
 /// The real path of `target` taken relative to `base`; `None` when nothing exists there.
 fn resolve_from(base: &Path, target: &str) -> Option<PathBuf> {
-    crate::mount_facts::real_path(&base.join(target))
+    real_path(&base.join(target))
 }

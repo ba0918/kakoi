@@ -18,6 +18,7 @@ pub mod landlock;
 pub mod launch;
 pub mod mount_facts;
 pub mod mount_list;
+pub mod real_paths;
 pub mod regular_file;
 pub mod retained_mounts;
 pub mod scan;

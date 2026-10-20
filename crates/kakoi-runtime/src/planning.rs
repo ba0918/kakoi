@@ -34,8 +34,9 @@ use crate::policy::{ListMode, NetworkMode};
 use crate::secret_facts::read_secret_files;
 use crate::shared_files;
 use crate::variables::derive_variables;
-use crate::workspace_facts::{collect_workspace_facts, probe_path, real_entry};
+use crate::workspace_facts::{collect_workspace_facts, probe_path};
 pub use kakoi_linux::command_location::locate_command;
+use kakoi_linux::real_paths::real_entry;
 
 /// What a run asks for once the command line is interpreted and its paths are anchored:
 /// where the written layers come from, the `--workspace` path as given (made absolute)
@@ -278,7 +279,7 @@ fn command_limits(
     let executable = request
         .executable
         .as_deref()
-        .and_then(crate::mount_facts::real_path)
+        .and_then(kakoi_linux::real_paths::real_path)
         .ok_or_else(|| {
             Diagnostic::bwrap(
                 "the executable of kakoi itself, which the isolation's first process is, \
@@ -360,7 +361,7 @@ fn plan_guards(
             (program.clone(), names)
         })
         .collect();
-    let kakoi = executable.and_then(crate::mount_facts::real_path);
+    let kakoi = executable.and_then(kakoi_linux::real_paths::real_path);
     let mut guards = place_guards(
         &policy.guards,
         path.is_some(),

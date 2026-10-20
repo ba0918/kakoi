@@ -7,8 +7,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 use crate::mounts::ScanHit;
+use crate::real_paths::real_entry;
 use crate::wildcard::matches;
-use crate::workspace_facts::real_entry;
 
 /// Walks `root` and reports every entry whose name matches one of `names` and none of
 /// `exclude`, with what is behind it. Does not enter a directory whose name matches

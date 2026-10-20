@@ -5,8 +5,8 @@ pub use crate::cli_first_process::run_if_first_process;
 pub use crate::cli_guard::run_if_guard;
 pub use crate::{layers, planning};
 pub use kakoi_linux::{
-    executables, landlock, launch, mount_facts, mount_list, scan, seccomp, secret_facts,
-    shared_files, workspace_facts,
+    executables, landlock, launch, mount_facts, mount_list, real_paths, scan, seccomp,
+    secret_facts, shared_files, workspace_facts,
 };
 pub use kakoi_net as net;
 pub use kakoi_plan::{
