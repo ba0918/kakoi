@@ -1,6 +1,6 @@
 use crate::{
     common::TempDir,
-    dns_fixture::{a_answer, dns_rule},
+    dns_fixture::{a_answer, dns_rule, local_upstream},
     health::assert_loopback_command,
 };
 use kakoi_net::{
@@ -59,10 +59,7 @@ time.sleep(60)
 pub(crate) fn config(nft: &str) -> DnsRuntimeConfig {
     DnsRuntimeConfig {
         policy: vec![],
-        upstreams: vec![serde_json::from_value(
-            serde_json::json!({"transport":"plain", "ip":"127.0.0.1", "port":9}),
-        )
-        .unwrap()],
+        upstreams: local_upstream(9),
         limits: NetworkLimits::default(),
         trust: None,
         nft: nft.into(),
@@ -81,6 +78,45 @@ pub(crate) fn assert_transit(keeper: i32, expected: bool) {
         "/usr/bin/python3",
     ]);
     assert_loopback_command(command, expected);
+}
+
+/// Polls `session` until it is drained, which must happen before `deadline`.
+fn drain(session: &mut Session, deadline: Instant) {
+    while !session.is_drained() {
+        session.poll().unwrap();
+        assert!(Instant::now() < deadline);
+    }
+}
+
+/// Every process of `records`, the forwarders and their keepers, is gone.
+fn assert_reaped(records: &[(i32, i32)]) {
+    for (process, keeper) in records {
+        for pid in [process, keeper] {
+            assert!(!Path::new(&format!("/proc/{pid}")).exists());
+        }
+    }
+}
+
+/// An nft that passes requests to the real one, except a policy rebuild's: that one
+/// writes its PID to `marker`, renamed into place so that the marker never appears
+/// without it, and sleeps.
+fn rebuild_stalling_nft(directory: &TempDir, marker: &Path) -> std::path::PathBuf {
+    directory.write_executable(
+        "nft",
+        format!(
+            r#"#!/usr/bin/python3
+import os, subprocess, sys
+rules = sys.stdin.read()
+if 'delete table inet kakoi_policy' in rules:
+    with open({marker:?} + '.partial', 'w') as out:
+        out.write(str(os.getpid()))
+    os.rename({marker:?} + '.partial', {marker:?})
+    os.execl('/bin/sleep', 'sleep', '30')
+sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).returncode)
+"#,
+            marker = marker.to_str().unwrap()
+        ),
+    )
 }
 
 // @kotowari[REQ-057, REQ-058, REQ-150, EX-176]
@@ -121,11 +157,7 @@ fn session_opens_only_after_preparation_and_latches_closed_on_transport_failure(
             assert!(Instant::now() < deadline + Duration::from_secs(2));
         }
         drop(session);
-        for (process, keeper) in records {
-            for pid in [process, keeper] {
-                assert!(!Path::new(&format!("/proc/{pid}")).exists());
-            }
-        }
+        assert_reaped(&records);
     }
 }
 
@@ -135,11 +167,7 @@ fn failed_session_policy_preparation_reaps_transport_without_opening_it() {
     let directory = TempDir::new();
     let (transport, records) = transport(&directory);
     assert!(Session::prepare(transport, config("/bin/false"), &[], |_| None).is_err());
-    for (process, keeper) in records {
-        for pid in [process, keeper] {
-            assert!(!Path::new(&format!("/proc/{pid}")).exists());
-        }
-    }
+    assert_reaped(&records);
 }
 
 // @kotowari[REQ-116, REQ-131, REQ-058, EX-053]
@@ -204,16 +232,9 @@ assert answer[-4:] == b'\x01\x01\x01\x01', answer
         .unwrap();
     assert_eq!(session.state(), SessionState::Isolated);
     assert_transit(records[0].1, false);
-    while !session.is_drained() {
-        session.poll().unwrap();
-        assert!(Instant::now() < deadline);
-    }
+    drain(&mut session, deadline);
     drop(session);
-    for (process, keeper) in records {
-        for pid in [process, keeper] {
-            assert!(!Path::new(&format!("/proc/{pid}")).exists());
-        }
-    }
+    assert_reaped(&records);
 }
 
 // @kotowari[REQ-058]
@@ -235,10 +256,7 @@ fn unconfirmed_session_closure_requires_termination_instead_of_claiming_isolatio
         .unwrap();
     assert_eq!(session.state(), SessionState::Isolated);
     let deadline = Instant::now() + Duration::from_secs(1);
-    while !session.is_drained() {
-        session.poll().unwrap();
-        assert!(Instant::now() < deadline);
-    }
+    drain(&mut session, deadline);
 }
 
 // @kotowari[REQ-058, REQ-150]
@@ -271,10 +289,7 @@ sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).re
         .close_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(1);
-    while !session.is_drained() {
-        session.poll().unwrap();
-        assert!(Instant::now() < deadline);
-    }
+    drain(&mut session, deadline);
     let start = Instant::now();
     drop(session);
     assert!(
@@ -448,10 +463,7 @@ fn session_automatically_rebuilds_original_policy_without_reviving_old_dns_permi
         .close_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
     assert_transit(original[0].1, false);
-    while !session.is_drained() {
-        session.poll().unwrap();
-        assert!(Instant::now() < deadline);
-    }
+    drain(&mut session, deadline);
     let records = std::fs::read_to_string(directory.path().join("processes")).unwrap();
     assert_eq!(records.lines().count(), 4);
     drop(session);
@@ -529,23 +541,7 @@ fn explicit_shutdown_cancels_a_stalled_recovery_and_never_reopens_transit() {
 fn shutdown_cancels_a_stalled_policy_rebuild_without_waiting_for_nft_timeout() {
     let directory = TempDir::new();
     let marker = directory.path().join("blocked-nft");
-    let nft = directory.write_executable(
-        "nft",
-        format!(
-            r#"#!/usr/bin/python3
-import os, subprocess, sys
-rules = sys.stdin.read()
-if 'delete table inet kakoi_policy' in rules:
-    # Renamed into place, so that the marker never appears without the PID.
-    with open({marker:?} + '.partial', 'w') as out:
-        out.write(str(os.getpid()))
-    os.rename({marker:?} + '.partial', {marker:?})
-    os.execl('/bin/sleep', 'sleep', '30')
-sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).returncode)
-"#,
-            marker = marker.to_str().unwrap()
-        ),
-    );
+    let nft = rebuild_stalling_nft(&directory, &marker);
     let (transport, original) = transport_with_nft(&directory, &nft);
     let mut session =
         Session::prepare(transport, config(nft.to_str().unwrap()), &[], |_| None).unwrap();
@@ -589,22 +585,7 @@ sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).re
 fn dropping_a_session_during_a_rebuild_ends_the_rebuilt_environment() {
     let directory = TempDir::new();
     let marker = directory.path().join("blocked-nft");
-    let nft = directory.write_executable(
-        "nft",
-        format!(
-            r#"#!/usr/bin/python3
-import os, subprocess, sys
-rules = sys.stdin.read()
-if 'delete table inet kakoi_policy' in rules:
-    with open({marker:?} + '.partial', 'w') as out:
-        out.write(str(os.getpid()))
-    os.rename({marker:?} + '.partial', {marker:?})
-    os.execl('/bin/sleep', 'sleep', '30')
-sys.exit(subprocess.run(['/usr/sbin/nft', '-f', '-'], input=rules, text=True).returncode)
-"#,
-            marker = marker.to_str().unwrap()
-        ),
-    );
+    let nft = rebuild_stalling_nft(&directory, &marker);
     let (transport, original) = transport_with_nft(&directory, &nft);
     let mut session =
         Session::prepare(transport, config(nft.to_str().unwrap()), &[], |_| None).unwrap();
@@ -698,10 +679,7 @@ fn automatic_recovery_waits_after_failure_and_retries_without_user_input() {
         .close_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
     let deadline = Instant::now() + RECOVERY_PHASE_LIMIT;
-    while !session.is_drained() {
-        session.poll().unwrap();
-        assert!(Instant::now() < deadline);
-    }
+    drain(&mut session, deadline);
     let records = std::fs::read_to_string(directory.path().join("processes")).unwrap();
     assert_eq!(records.lines().count(), 6);
     // The failed restart is not taken for an old pasta.
@@ -757,10 +735,7 @@ fn recovery_removes_only_a_retired_watchdogs_guard_before_opening() {
     session
         .close_until(Instant::now() + Duration::from_secs(1))
         .unwrap();
-    while !session.is_drained() {
-        session.poll().unwrap();
-        assert!(Instant::now() < deadline);
-    }
+    drain(&mut session, deadline);
 }
 
 // @kotowari[REQ-058, REQ-066, REQ-069, EX-132, EX-133]
