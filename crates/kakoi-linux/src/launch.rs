@@ -80,7 +80,7 @@ pub fn assemble(plan: &Plan) -> Result<BwrapCommand, Diagnostic> {
             "filtered launch requires a prepared kakoi-net session",
         ));
     }
-    assemble_with_prefix(plan, &[])
+    assemble_with_arguments(plan, &[], &plan.arguments)
 }
 
 /// Descriptor-based launch assembly for the library worker. The caller must
@@ -149,17 +149,6 @@ fn assemble_retained_arguments(
         crate::retained_mounts::descriptor_arguments(&plan.arguments, mounts)?;
     assemble_with_owned_arguments(plan, prefix, &arguments, descriptors)
         .map_err(|cause| io::Error::other(cause.to_string()))
-}
-
-/// Assembly entry for the network executor, which must enter the prepared user
-/// and network namespaces before executing bwrap. This function performs no
-/// namespace operation and does not establish or verify network permissions.
-pub fn assemble_for_network_executor(
-    plan: &Plan,
-    uid: u32,
-    gid: u32,
-) -> Result<BwrapCommand, Diagnostic> {
-    assemble_network(plan, uid, gid, None, None)
 }
 
 /// A supervisor replaces only the command tail; mount choices stay in the plan.
@@ -235,10 +224,6 @@ pub fn assemble_network(
         ],
         &arguments,
     )
-}
-
-fn assemble_with_prefix(plan: &Plan, prefix: &[OsString]) -> Result<BwrapCommand, Diagnostic> {
-    assemble_with_arguments(plan, prefix, &plan.arguments)
 }
 
 fn assemble_with_arguments(
