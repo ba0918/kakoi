@@ -7,17 +7,12 @@ use std::process::Output;
 mod common;
 
 use common::{
-    assert_diagnostic, binary, home_with_workspace, output_report, run_inside, TempDir, KAKOI,
-    RW_WORKSPACE,
+    assert_diagnostic, binary, home_with_workspace, output_report, profile, run_inside, TempDir,
+    KAKOI, RW_WORKSPACE,
 };
 
 /// The name of the nesting mark inside an isolation.
 const MARK: &str = "/dev/kakoi-isolated";
-
-/// Overwrites the `default` profile of `home` with `text`.
-fn profile(home: &TempDir, text: &str) {
-    home.write(".config/kakoi/profile/default.toml", text);
-}
 
 /// Standard error as lines.
 fn stderr_lines(output: &Output) -> Vec<String> {

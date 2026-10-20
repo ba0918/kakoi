@@ -165,6 +165,11 @@ pub fn home_with_workspace() -> (TempDir, PathBuf) {
     (home, workspace)
 }
 
+/// Overwrites the `default` profile of `home` with `text`.
+pub fn profile(home: &TempDir, text: &str) {
+    home.write(".config/kakoi/profile/default.toml", text);
+}
+
 /// A fresh directory, removed when dropped.
 pub struct TempDir(PathBuf);
 
