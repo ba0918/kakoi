@@ -67,7 +67,7 @@ fn main() -> ExitCode {
         }
         Ok(Outcome::Prepared(prepared)) => {
             print_warnings(&prepared.plan.warnings);
-            if let Some(form) = prepared.invocation.print_plan {
+            if let Some(form) = prepared.print_plan {
                 let text = plan_text::render(&prepared.plan, form);
                 let _ = std::io::stdout().write_all(text.as_bytes());
                 return ExitCode::SUCCESS;
