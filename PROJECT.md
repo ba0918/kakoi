@@ -74,10 +74,13 @@ isolation has to do, so the tests that nest `filtered` in `filtered` start the o
 user 1000 in a user namespace of its own (`unshare --map-user`), as on a real host. The verified build is Debian trixie-backports
 `passt 0.0~git20260728.f8df3f1-1~bpo13+1`, which CI fetches and checks by digest.
 
+The tests run as an ordinary user: the ones about unreadable files make a file of mode 000,
+which root reads anyway.
 The tests that start the built binary need `bwrap` 0.9.0 or later, `git` 2.x, and `python3` on
 the machine; they fail rather than skip when any of them is missing. The tests of the "listed" modes
 also need Landlock in the kernel with the scope on abstract UNIX sockets (ABI 6, Linux 6.12 or
-later), and fail rather than skip without it. Inside the isolation they start `/usr/bin/cat`,
+later), and fail rather than skip without it; one of them also needs a socket directly in the
+host's `/run` or one level below. Inside the isolation they start `/usr/bin/cat`,
 `/usr/bin/ls`, `/usr/bin/touch`, `/usr/bin/readlink`, `/usr/bin/ln`, `/usr/bin/id`, and
 `/usr/bin/true` by absolute path, `git`, `id`, and small `/bin/sh` scripts by name through
 `PATH`, and the `git` found on `PATH` by its absolute path. Their homes and workspaces are placed under the build's own temporary directory
