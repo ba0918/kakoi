@@ -45,18 +45,6 @@ fn resolve(
     resolve_with(layers, variables, facts.mount_facts())
 }
 
-/// A scan hit at `found_at` with `target` behind it; the entry is a link when the target's
-/// real path is somewhere else.
-fn hit(found_at: &str, target: RealEntry) -> ScanHit {
-    ScanHit {
-        is_link: target
-            .path()
-            .is_some_and(|real| real != Path::new(found_at)),
-        found_at: PathBuf::from(found_at),
-        target,
-    }
-}
-
 fn file_at(path: &str) -> RealEntry {
     RealEntry::NotDirectory(PathBuf::from(path))
 }
@@ -367,15 +355,11 @@ fn scan_hides_matching_non_directory_entries() {
     let resolved = resolve_with(
         &layers(SCAN_ENV, None, &[], &[]),
         &variables(),
-        MountFacts {
-            paths: Facts::new().dir("/home/u/proj").paths,
-            scan_hits: vec![
-                hit("/home/u/proj/.env", file_at("/home/u/proj/.env")),
-                hit("/home/u/proj/.env.d", dir_at("/home/u/proj/.env.d")),
-            ],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new()
+            .dir("/home/u/proj")
+            .scan_hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))
+            .scan_hit("/home/u/proj/.env.d", dir_at("/home/u/proj/.env.d"))
+            .mount_facts(),
     )
     .unwrap();
 
@@ -397,23 +381,17 @@ fn scan_skips_loaded_policy_files() {
             &[],
         ),
         &variables(),
-        MountFacts {
-            paths: Facts::new()
-                .dir("/home/u")
-                .link_to_file(PROFILE, "/home/u/dotfiles/default.toml")
-                .file(POLICY_FILE)
-                .paths,
-            scan_hits: vec![
-                hit(
-                    "/home/u/dotfiles/default.toml",
-                    file_at("/home/u/dotfiles/default.toml"),
-                ),
-                hit(POLICY_FILE, file_at(POLICY_FILE)),
-                hit("/home/u/other.toml", file_at("/home/u/other.toml")),
-            ],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new()
+            .dir("/home/u")
+            .link_to_file(PROFILE, "/home/u/dotfiles/default.toml")
+            .file(POLICY_FILE)
+            .scan_hit(
+                "/home/u/dotfiles/default.toml",
+                file_at("/home/u/dotfiles/default.toml"),
+            )
+            .scan_hit(POLICY_FILE, file_at(POLICY_FILE))
+            .scan_hit("/home/u/other.toml", file_at("/home/u/other.toml"))
+            .mount_facts(),
     )
     .unwrap();
 
@@ -431,12 +409,10 @@ fn scan_hides_the_target_of_a_matching_symlink() {
     let resolved = resolve_with(
         &layers(SCAN_ENV, None, &[], &[]),
         &variables(),
-        MountFacts {
-            paths: Facts::new().dir("/home/u/proj").paths,
-            scan_hits: vec![hit("/home/u/proj/.env", file_at("/home/u/secrets/env"))],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new()
+            .dir("/home/u/proj")
+            .scan_hit("/home/u/proj/.env", file_at("/home/u/secrets/env"))
+            .mount_facts(),
     )
     .unwrap();
 
@@ -452,15 +428,11 @@ fn scan_skips_a_matching_symlink_to_a_directory() {
     let resolved = resolve_with(
         &layers(SCAN_ENV, None, &[], &[]),
         &variables(),
-        MountFacts {
-            paths: Facts::new().dir("/home/u/proj").paths,
-            scan_hits: vec![
-                hit("/home/u/proj/.env", dir_at("/home/u/envs")),
-                hit("/home/u/proj/.env.broken", RealEntry::Missing),
-            ],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new()
+            .dir("/home/u/proj")
+            .scan_hit("/home/u/proj/.env", dir_at("/home/u/envs"))
+            .scan_hit("/home/u/proj/.env.broken", RealEntry::Missing)
+            .mount_facts(),
     )
     .unwrap();
 
@@ -770,15 +742,11 @@ fn generated_items_replace_written_items() {
             &["/home/u/proj/.env"],
         ),
         &variables(),
-        MountFacts {
-            paths: Facts::new()
-                .dir("/home/u/proj")
-                .file("/home/u/proj/.env")
-                .paths,
-            scan_hits: vec![hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new()
+            .dir("/home/u/proj")
+            .file("/home/u/proj/.env")
+            .scan_hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))
+            .mount_facts(),
     )
     .unwrap();
 
@@ -856,15 +824,11 @@ fn a_scanned_env_file_inside_an_rw_worktree_is_hidden() {
             &[],
         ),
         &variables(),
-        MountFacts {
-            paths: Facts::new()
-                .dir("/home/u/proj")
-                .file("/home/u/proj/.env")
-                .paths,
-            scan_hits: vec![hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new()
+            .dir("/home/u/proj")
+            .file("/home/u/proj/.env")
+            .scan_hit("/home/u/proj/.env", file_at("/home/u/proj/.env"))
+            .mount_facts(),
     )
     .unwrap();
 
@@ -912,15 +876,7 @@ fn a_scanned_env_file_under_an_rw_cache_is_hidden() {
             &[],
         ),
         &variables(),
-        MountFacts {
-            paths: Facts::new()
-                .dir("/home/u/.cache")
-                .file("/home/u/.cache/x/.env")
-                .paths,
-            scan_hits: vec![hit("/home/u/.cache/x/.env", file_at("/home/u/.cache/x/.env"))],
-            mounts: Vec::new(),
-            ..MountFacts::default()
-        },
+        Facts::new().dir("/home/u/.cache").file("/home/u/.cache/x/.env").scan_hit("/home/u/.cache/x/.env", file_at("/home/u/.cache/x/.env")).mount_facts(),
     )
     .unwrap();
 

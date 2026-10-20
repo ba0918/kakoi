@@ -112,6 +112,19 @@ impl Facts {
         self
     }
 
+    /// A scan found `found_at`, whose real entry is `target`: a link when its real path is
+    /// another.
+    pub fn scan_hit(mut self, found_at: &str, target: RealEntry) -> Self {
+        self.scan_hits.push(ScanHit {
+            is_link: target
+                .path()
+                .is_some_and(|real| real != Path::new(found_at)),
+            found_at: PathBuf::from(found_at),
+            target,
+        });
+        self
+    }
+
     /// A scan found the symbolic link `found_at`, pointing at the non-directory `target`.
     pub fn scan_link_to_file(mut self, found_at: &str, target: &str) -> Self {
         self.scan_hits.push(ScanHit {
