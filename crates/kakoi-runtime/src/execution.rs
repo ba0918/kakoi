@@ -350,6 +350,9 @@ pub(crate) fn run_worker(
             return Ok(());
         }
     };
+    // The plan holds the init image and any guard images, each as large as the
+    // executable; bwrap has its own copies now, and the run may last long.
+    drop(plan);
     let mut child = ChildGuard(child);
     let startup = (|| -> io::Result<InitReply> {
         let watches = [owner.as_raw_fd(), control.as_raw_fd()];
@@ -373,6 +376,8 @@ pub(crate) fn run_worker(
         }
         Ok(reply)
     })();
+    // Init holds the contents to check against now; these copies are only memory.
+    drop(expected_data);
     if !matches!(startup, Ok(InitReply::Ready)) {
         let reported = matches!(startup, Ok(InitReply::Failed(_)));
         let mut error = match startup {
