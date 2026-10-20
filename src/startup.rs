@@ -10,11 +10,9 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::{self, Example, Invocation, Nesting, Parsed};
 use kakoi_runtime::cli::diagnostic::{Diagnostic, Warning};
-use kakoi_runtime::cli::environment::{HostEnvironment, RealEntry};
 use kakoi_runtime::cli::guard_placement::{GUARD_ROOT, GUARD_TABLE};
 use kakoi_runtime::cli::plan::{Plan, NESTING_MARK};
-use kakoi_runtime::cli::planning::{locate_command, plan_for, Request};
-use kakoi_runtime::cli::workspace_facts::real_entry;
+use kakoi_runtime::cli::planning::{home_and_config_dir, locate_command, plan_for, Request};
 
 /// What the start-up ends with: text to print (the usage or the version), a nested run
 /// that goes straight to the command, or everything the start needs.
@@ -71,11 +69,9 @@ where
         // stage 2), because a machine without `bwrap`, and a shell inside an isolation,
         // can still put the configuration in place.
         Parsed::Init(name, example) => {
-            let env = HostEnvironment::from_variables(&host);
-            let home =
-                env.home_directory(&env.home.as_deref().map_or(RealEntry::Missing, real_entry))?;
+            let (_, config_dir) = home_and_config_dir(&host)?;
             return Ok(Outcome::Init(InitRequest {
-                config_dir: env.config_dir(&home),
+                config_dir,
                 name,
                 example,
             }));
