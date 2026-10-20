@@ -207,7 +207,7 @@ for name in ('own.example', 'far.example'):
 // @kotowari[REQ-425, EX-817]
 #[test]
 fn an_address_the_host_gains_after_the_start_opens_by_a_dns_permission() {
-    use crate::publish::{CONTROL, SERVICES};
+    use crate::fake_host::{CONTROL, SERVICES};
     let host = FakeHost::new(
         "\n[[network.allow]]\ndestination = { dns = '*.example' }\nprotocol = 'tcp'\nports = ['8080']\n",
         &["11.0.0.5/32"],

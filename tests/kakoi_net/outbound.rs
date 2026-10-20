@@ -1,4 +1,4 @@
-use crate::{fake_host::FakeHost, publish::CONTROL};
+use crate::fake_host::{FakeHost, CONTROL};
 
 /// The application tries each exchange at once, since every refused one
 /// waits out its whole wait, and prints the results in order. A refused TCP

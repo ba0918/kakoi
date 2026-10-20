@@ -1,7 +1,4 @@
-use crate::{
-    fake_host::{FakeHost, CLIENT},
-    publish::{CONTROL, SERVICES, TCP_V4},
-};
+use crate::fake_host::{FakeHost, CLIENT, CONTROL, SERVICES, TCP_V4};
 
 /// Host-side helpers that break the transport: the outer pasta is killed, and
 /// the name kakoi starts pasta by is pointed at a program that fails at once,

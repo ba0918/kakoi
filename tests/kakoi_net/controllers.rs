@@ -1,7 +1,4 @@
-use crate::{
-    fake_host::FakeHost,
-    publish::{CONTROL, SERVICES, TCP_V4},
-};
+use crate::fake_host::{FakeHost, CONTROL, SERVICES, TCP_V4};
 
 fn host() -> FakeHost {
     FakeHost::new(
