@@ -269,13 +269,20 @@ fn a_control_character_in_a_variable_name_is_escaped_in_the_diagnostic() {
     );
 }
 
+// How each control character is written is left to the implementation; that every one
+// is written as something visible, and that the Unicode separators are not, is not.
 // @kotowari[REQ-289]
 #[test]
 fn control_characters_are_written_visibly_and_unicode_separators_are_kept() {
-    assert_eq!(
-        escape_control("a\nb\rc\td\u{0}e\u{1b}f\u{7f}g\u{2028}h\u{85}"),
-        "a\\nb\\rc\\td\\x00e\\x1Bf\\x7Fg\u{2028}h\u{85}"
-    );
+    for character in ('\u{0}'..='\u{1f}').chain(['\u{7f}']) {
+        let escaped = escape_control(&format!("a{character}b"));
+        assert!(
+            escaped.len() > 2 && !escaped.chars().any(|other| other.is_ascii_control()),
+            "{character:?}: {escaped:?}"
+        );
+    }
+    let separators = "a\u{2028}b\u{2029}c\u{85}d";
+    assert_eq!(escape_control(separators), separators);
 }
 
 // @kotowari[REQ-467, REQ-474, REQ-151]
