@@ -18,3 +18,30 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+  # The examples keep their own lockfiles and depend on the crates by path,
+  # so one grouped update has to touch every directory or `--locked` breaks.
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /examples/library-async
+      - /examples/library-policy
+      - /examples/library-sync
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        applies-to: version-updates
+        patterns:
+          - '*'
+      cargo-security:
+        applies-to: security-updates
+        patterns:
+          - '*'
+  - package-ecosystem: pip
+    directory: /tools/net-probes
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
