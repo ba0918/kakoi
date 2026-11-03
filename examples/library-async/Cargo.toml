@@ -9,5 +9,5 @@ publish = false
 
 [dependencies]
 kakoi-runtime = { path = "../../crates/kakoi-runtime" }
-tokio = { version = "=1.48.0", features = ["rt", "net", "macros"] }
-libc = "=0.2.189"
+tokio = { version = "=1.54.1", features = ["rt", "net", "macros"] }
+libc = "=0.2.191"
