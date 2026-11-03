@@ -30,7 +30,9 @@ fn async_pipe(fd: OwnedFd) -> io::Result<AsyncFd<File>> {
     {
         return Err(io::Error::last_os_error());
     }
-    AsyncFd::new(file)
+    // SAFETY: `File` owns the descriptor, keeps it open and reports the same number until
+    // the `AsyncFd` drops it; nothing else closes or replaces it meanwhile.
+    unsafe { AsyncFd::register(file) }.map_err(io::Error::from)
 }
 
 async fn write_input(pipe: AsyncFd<File>, bytes: &[u8]) -> io::Result<()> {
